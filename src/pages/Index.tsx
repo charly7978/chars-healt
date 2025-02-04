@@ -2,14 +2,14 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import HeartShape from "@/components/HeartShape";
 import VitalSign from "@/components/VitalSign";
-import { useVitalSigns } from "@/hooks/useVitalSigns";
+import { useVitalMeasurement } from "@/hooks/useVitalMeasurement";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
-  const { heartRate, spo2, bloodPressure, arrhythmias } = useVitalSigns(isMonitoring);
+  const { heartRate, spo2, pressure, arrhythmiaCount } = useVitalMeasurement(isMonitoring);
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-8">
+    <div className="min-h-screen bg-black text-white p-8">
       <div className="max-w-4xl mx-auto">
         <h1 className="text-4xl font-bold text-center mb-12">Health Monitor</h1>
         
@@ -26,10 +26,10 @@ const Index = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <VitalSign label="Heart Rate" value={heartRate} unit="BPM" />
           <VitalSign label="SpO2" value={spo2} unit="%" />
-          <VitalSign label="Blood Pressure" value={bloodPressure} unit="mmHg" />
+          <VitalSign label="Blood Pressure" value={pressure} unit="mmHg" />
           <VitalSign
             label="Arrhythmias Detected"
-            value={arrhythmias}
+            value={arrhythmiaCount}
             unit="events"
           />
         </div>
