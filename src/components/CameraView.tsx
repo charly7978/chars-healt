@@ -98,7 +98,9 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20">
           <Fingerprint
             size={64}
-            className="text-gray-400"
+            className={`transition-colors duration-300 ${
+              isFingerDetected ? 'text-green-500' : 'text-gray-400'
+            }`}
           />
         </div>
       )}
