@@ -8,6 +8,7 @@ import CameraView from "@/components/CameraView";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
+  const [isCameraOn, setIsCameraOn] = useState(false);
   const [signalQuality, setSignalQuality] = useState(0);
   const { heartRate, spo2, pressure, arrhythmiaCount, elapsedTime, isComplete } = useVitalMeasurement(isMonitoring);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -15,6 +16,7 @@ const Index = () => {
   useEffect(() => {
     const handleMeasurementComplete = () => {
       setIsMonitoring(false);
+      // Ya no apagamos la cámara aquí
     };
 
     window.addEventListener('measurementComplete', handleMeasurementComplete);
@@ -23,6 +25,13 @@ const Index = () => {
       window.removeEventListener('measurementComplete', handleMeasurementComplete);
     };
   }, []);
+
+  // Efecto para manejar el encendido/apagado de la cámara
+  useEffect(() => {
+    if (isMonitoring && !isCameraOn) {
+      setIsCameraOn(true);
+    }
+  }, [isMonitoring]);
 
   useEffect(() => {
     if (canvasRef.current && isMonitoring) {
@@ -55,9 +64,15 @@ const Index = () => {
     console.log("Camera stream ready", stream);
   };
 
+  const handleReset = () => {
+    setIsMonitoring(false);
+    setSignalQuality(0);
+    setIsCameraOn(false); // Solo apagamos la cámara cuando se presiona Reset
+  };
+
   return (
     <div className="relative h-screen w-full overflow-hidden">
-      <CameraView onStreamReady={handleStreamReady} isMonitoring={isMonitoring} />
+      <CameraView onStreamReady={handleStreamReady} isMonitoring={isCameraOn} />
 
       <div className="relative z-10 h-screen bg-black/10 backdrop-blur-sm text-white p-4">
         <div className="h-full flex flex-col justify-between">
@@ -125,10 +140,7 @@ const Index = () => {
             </Button>
 
             <Button
-              onClick={() => {
-                setIsMonitoring(false);
-                setSignalQuality(0);
-              }}
+              onClick={handleReset}
               variant="outline"
               className="bg-gray-700/30 hover:bg-gray-700/50 text-white backdrop-blur-sm text-sm px-3 py-1"
             >
