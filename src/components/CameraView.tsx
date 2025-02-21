@@ -22,8 +22,8 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
     const imageData = ctx.getImageData(0, 0, canvasRef.current.width, canvasRef.current.height);
     const data = imageData.data;
     
-    let darkPixels = 0;
-    let redPixels = 0;
+    let totalBrightness = 0;
+    let redIntensitySum = 0;
     const totalPixels = data.length / 4;
     
     for (let i = 0; i < data.length; i += 4) {
@@ -31,22 +31,26 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
       const g = data[i + 1];
       const b = data[i + 2];
       
-      // Condición 1: Dedo apoyado (oscuro)
-      const brightness = (r + g + b) / 3;
-      if (brightness < 50) { // Más oscuro para detectar
-        darkPixels++;
-      }
+      // Calcula la luminosidad usando la fórmula estándar de luminancia
+      const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+      totalBrightness += luminance;
 
-      // Condición 2: Rojo predominante (luz atravesando el dedo)
-      if (r > 180 && r > g * 2 && r > b * 2) { // Más rojo y mayor diferencia con otros colores
-        redPixels++;
+      // Calcula la intensidad relativa del rojo
+      const totalColor = r + g + b;
+      if (totalColor > 0) {
+        redIntensitySum += r / totalColor;
       }
     }
 
-    const darkPercentage = (darkPixels / totalPixels) * 100;
-    const redPercentage = (redPixels / totalPixels) * 100;
+    // Condición 1: Luminosidad promedio
+    const avgBrightness = totalBrightness / totalPixels;
+    const isDark = avgBrightness < 85; // Umbral de oscuridad
     
-    const fingerDetected = darkPercentage > 40 || redPercentage > 25; // Umbrales más altos
+    // Condición 2: Proporción promedio de rojo
+    const avgRedIntensity = redIntensitySum / totalPixels;
+    const hasHighRed = avgRedIntensity > 0.45; // Umbral de proporción de rojo
+    
+    const fingerDetected = isDark || hasHighRed;
     setIsFingerDetected(fingerDetected);
     return fingerDetected;
   };
