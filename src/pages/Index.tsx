@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import HeartShape from "@/components/HeartShape";
@@ -43,80 +44,74 @@ const Index = () => {
   };
 
   return (
-    <div className="relative min-h-screen w-full overflow-hidden">
-      {/* Componente de cámara */}
+    <div className="relative h-screen w-full overflow-hidden">
       <CameraView onStreamReady={handleStreamReady} isMonitoring={isMonitoring} />
 
-      {/* Contenido con transparencia */}
-      <div className="relative z-10 min-h-screen bg-black/40 backdrop-blur-sm text-white p-8">
-        <div className="max-w-4xl mx-auto">
-          <h1 className="text-4xl font-bold text-center mb-8 text-white/90">PPG Monitor</h1>
+      <div className="relative z-10 h-screen bg-black/40 backdrop-blur-sm text-white p-4">
+        <div className="h-full flex flex-col justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-center mb-2 text-white/90">PPG Monitor</h1>
 
-          <div className="grid grid-cols-1 gap-6">
             {/* Indicador de calidad de señal */}
-            <div className="flex justify-between items-center bg-gray-800/50 backdrop-blur-md p-4 rounded-lg">
+            <div className="bg-gray-800/50 backdrop-blur-md p-2 rounded-lg mb-2">
               <div className="flex items-center gap-2">
                 <div 
-                  className="w-4 h-4 rounded-full" 
+                  className="w-3 h-3 rounded-full" 
                   style={{
                     backgroundColor: signalQuality > 75 ? '#00ff00' : 
                                    signalQuality > 50 ? '#ffff00' : '#ff0000'
                   }}
                 />
-                <span>Signal Quality: {signalQuality}%</span>
+                <span className="text-sm">Signal Quality: {signalQuality}%</span>
               </div>
             </div>
 
             {/* Monitor cardíaco */}
-            <div className="bg-gray-800/50 backdrop-blur-md p-4 rounded-lg">
+            <div className="bg-gray-800/50 backdrop-blur-md p-2 rounded-lg mb-2">
               <canvas 
                 ref={canvasRef} 
                 width={800} 
-                height={200} 
-                className="w-full bg-black/50 rounded"
+                height={100} 
+                className="w-full h-24 bg-black/50 rounded"
               />
             </div>
 
             {/* Mediciones principales */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-2 gap-2">
               <VitalSign label="Heart Rate" value={heartRate} unit="BPM" />
               <VitalSign label="SpO2" value={spo2} unit="%" />
               <VitalSign label="Blood Pressure" value={pressure} unit="mmHg" />
-              <VitalSign
-                label="Arrhythmias"
-                value={arrhythmiaCount}
-                unit="events"
-              />
+              <VitalSign label="Arrhythmias" value={arrhythmiaCount} unit="events" />
             </div>
+          </div>
 
-            {/* Controles */}
-            <div className="flex justify-center gap-4">
-              <Button
-                onClick={() => setSignalQuality(Math.min(signalQuality + 10, 100))}
-                variant="outline"
-                className="bg-gray-700/70 hover:bg-gray-700/90 text-white backdrop-blur-sm"
-              >
-                Calibrar
-              </Button>
-              
-              <Button
-                onClick={() => setIsMonitoring(!isMonitoring)}
-                className={`${isMonitoring ? 'bg-medical-red/90' : 'bg-medical-blue/90'} hover:bg-opacity-100 text-white backdrop-blur-sm`}
-              >
-                {isMonitoring ? 'Detener' : 'Iniciar'}
-              </Button>
+          {/* Controles */}
+          <div className="flex justify-center gap-2 pb-4">
+            <Button
+              onClick={() => setSignalQuality(Math.min(signalQuality + 10, 100))}
+              variant="outline"
+              className="bg-gray-700/70 hover:bg-gray-700/90 text-white backdrop-blur-sm text-sm px-3 py-1"
+            >
+              Calibrar
+            </Button>
+            
+            <Button
+              onClick={() => setIsMonitoring(!isMonitoring)}
+              className={`${isMonitoring ? 'bg-medical-red/90' : 'bg-medical-blue/90'} hover:bg-opacity-100 text-white backdrop-blur-sm text-sm px-3 py-1`}
+            >
+              {isMonitoring ? 'Detener' : 'Iniciar'}
+            </Button>
 
-              <Button
-                onClick={() => {
-                  setIsMonitoring(false);
-                  setSignalQuality(0);
-                }}
-                variant="outline"
-                className="bg-gray-700/70 hover:bg-gray-700/90 text-white backdrop-blur-sm"
-              >
-                Reset
-              </Button>
-            </div>
+            <Button
+              onClick={() => {
+                setIsMonitoring(false);
+                setSignalQuality(0);
+              }}
+              variant="outline"
+              className="bg-gray-700/70 hover:bg-gray-700/90 text-white backdrop-blur-sm text-sm px-3 py-1"
+            >
+              Reset
+            </Button>
           </div>
         </div>
       </div>
