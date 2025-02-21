@@ -6,23 +6,35 @@ import VitalSign from "@/components/VitalSign";
 import { useVitalMeasurement } from "@/hooks/useVitalMeasurement";
 import CameraView from "@/components/CameraView";
 import SignalQualityIndicator from "@/components/SignalQualityIndicator";
+import { toast } from "@/components/ui/use-toast";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const { heartRate, spo2, pressure, arrhythmiaCount, elapsedTime } = useVitalMeasurement(isMonitoring);
 
   const handleStartStop = () => {
-    console.log('BOTÓN:', isMonitoring ? 'DETENIENDO' : 'INICIANDO');
     setIsMonitoring(!isMonitoring);
+    if (!isMonitoring) {
+      toast({
+        title: "Monitoreo iniciado",
+        description: "Iniciando medición de signos vitales...",
+      });
+    }
   };
 
   const handleReset = () => {
-    console.log('BOTÓN: RESET');
     setIsMonitoring(false);
+    toast({
+      title: "Reiniciado",
+      description: "Se han reiniciado todas las mediciones",
+    });
   };
 
   const handleStreamReady = (stream: MediaStream) => {
-    console.log('CÁMARA CONECTADA');
+    toast({
+      title: "Cámara lista",
+      description: "La cámara se ha iniciado correctamente",
+    });
   };
 
   return (
@@ -42,6 +54,7 @@ const Index = () => {
 
           <div className="flex-1 flex flex-col justify-center gap-2 max-w-md mx-auto w-full">
             <SignalQualityIndicator quality={0} />
+            <HeartShape isActive={isMonitoring} />
 
             <div className="grid grid-cols-2 gap-2">
               <VitalSign label="Heart Rate" value={heartRate} unit="BPM" />
