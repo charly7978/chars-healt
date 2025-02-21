@@ -32,10 +32,17 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
 
           // Activar la linterna si está disponible
           const track = stream.getVideoTracks()[0];
-          if (track?.getCapabilities?.().torch) {
-            await track.applyConstraints({
-              advanced: [{ torch: true }]
-            });
+          const capabilities = track.getCapabilities();
+          
+          // Verificar si la linterna está disponible antes de intentar usarla
+          if (capabilities && 'torch' in capabilities) {
+            try {
+              await track.applyConstraints({
+                advanced: [{ torch: true } as MediaTrackConstraintSet]
+              });
+            } catch (err) {
+              console.error("Error activating torch:", err);
+            }
           }
 
           if (onStreamReady) {
@@ -61,10 +68,16 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
         
         // Desactivar la linterna y detener la cámara
         for (const track of tracks) {
-          if (track.getCapabilities?.().torch) {
-            await track.applyConstraints({
-              advanced: [{ torch: false }]
-            });
+          const capabilities = track.getCapabilities();
+          
+          if (capabilities && 'torch' in capabilities) {
+            try {
+              await track.applyConstraints({
+                advanced: [{ torch: false } as MediaTrackConstraintSet]
+              });
+            } catch (err) {
+              console.error("Error deactivating torch:", err);
+            }
           }
           track.stop();
         }
