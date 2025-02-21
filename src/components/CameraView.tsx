@@ -13,6 +13,43 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [isFingerDetected, setIsFingerDetected] = useState(false);
 
+  const detectFinger = () => {
+    if (!videoRef.current || !canvasRef.current) return;
+    const ctx = canvasRef.current.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return;
+
+    // Capturar imagen del video
+    ctx.drawImage(videoRef.current, 0, 0, canvasRef.current.width, canvasRef.current.height);
+    const imageData = ctx.getImageData(0, 0, canvasRef.current.width, canvasRef.current.height);
+    const data = imageData.data;
+    
+    let validPixels = 0;
+    const totalPixels = data.length / 4;
+
+    // Analizar cada pixel
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      
+      // Un pixel es válido si:
+      // 1. Es muy oscuro (cerca del negro)
+      // 2. O es rojo intenso con muy poco verde y azul
+      if (
+        (r < 30 && g < 30 && b < 30) || // Negro/muy oscuro
+        (r > 150 && g < 30 && b < 30)    // Rojo intenso
+      ) {
+        validPixels++;
+      }
+    }
+
+    // Calcular el porcentaje de cobertura
+    const coverage = (validPixels / totalPixels) * 100;
+    
+    // La detección es positiva solo si más del 95% de los píxeles son válidos
+    setIsFingerDetected(coverage > 95);
+  };
+
   const stopCamera = async () => {
     if (stream) {
       const tracks = stream.getTracks();
@@ -77,6 +114,13 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
       stopCamera();
     };
   }, [isMonitoring]);
+
+  useEffect(() => {
+    if (!stream || !isMonitoring) return;
+
+    const interval = setInterval(detectFinger, 200);
+    return () => clearInterval(interval);
+  }, [stream, isMonitoring]);
 
   return (
     <>
