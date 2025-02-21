@@ -5,6 +5,7 @@ import HeartShape from "@/components/HeartShape";
 import VitalSign from "@/components/VitalSign";
 import { useVitalMeasurement } from "@/hooks/useVitalMeasurement";
 import CameraView from "@/components/CameraView";
+import { useSignalProcessor } from "@/hooks/useSignalProcessor";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -12,11 +13,12 @@ const Index = () => {
   const [signalQuality, setSignalQuality] = useState(0);
   const { heartRate, spo2, pressure, arrhythmiaCount, elapsedTime, isComplete } = useVitalMeasurement(isMonitoring);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
 
   // Manejo de la finalización de la medición
   useEffect(() => {
     const handleMeasurementComplete = (e: Event) => {
-      e.preventDefault(); // Prevenir cualquier comportamiento por defecto
+      e.preventDefault();
       setIsMonitoring(false);
     };
 
@@ -24,16 +26,24 @@ const Index = () => {
     return () => window.removeEventListener('measurementComplete', handleMeasurementComplete);
   }, []);
 
+  // Actualización de la calidad de señal cuando recibimos nueva información
+  useEffect(() => {
+    if (lastSignal) {
+      setSignalQuality(lastSignal.quality);
+    }
+  }, [lastSignal]);
+
   const handleStartStop = (e: React.MouseEvent) => {
-    e.preventDefault(); // Prevenir navegación
-    e.stopPropagation(); // Detener propagación del evento
+    e.preventDefault();
+    e.stopPropagation();
     
     if (!isMonitoring && !isCameraOn) {
       setIsCameraOn(true);
-      // Pequeño delay para asegurar que la cámara esté lista
+      startProcessing();
       setTimeout(() => setIsMonitoring(true), 500);
     } else if (isMonitoring) {
       setIsMonitoring(false);
+      stopProcessing();
     }
   };
 
@@ -41,6 +51,7 @@ const Index = () => {
     e.preventDefault();
     e.stopPropagation();
     setIsMonitoring(false);
+    stopProcessing();
     setSignalQuality(0);
     setIsCameraOn(false);
   };
@@ -57,11 +68,14 @@ const Index = () => {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
         ctx.fillRect(0, 0, canvasRef.current!.width, canvasRef.current!.height);
         
+        // Usar la señal procesada para la animación si está disponible
+        const signalValue = lastSignal ? lastSignal.filteredValue : Math.sin(x * 0.1) * 50;
+        
         ctx.beginPath();
         ctx.strokeStyle = '#00ff00';
         ctx.lineWidth = 2;
         ctx.moveTo(x - 1, canvasRef.current!.height / 2);
-        ctx.lineTo(x, canvasRef.current!.height / 2 + Math.sin(x * 0.1) * 50);
+        ctx.lineTo(x, canvasRef.current!.height / 2 + signalValue);
         ctx.stroke();
         
         x = (x + 1) % canvasRef.current!.width;
@@ -70,7 +84,7 @@ const Index = () => {
 
       animate();
     }
-  }, [isMonitoring]);
+  }, [isMonitoring, lastSignal]);
 
   const handleStreamReady = (stream: MediaStream) => {
     console.log("Camera stream ready", stream);
@@ -131,9 +145,11 @@ const Index = () => {
           <div className="flex justify-center gap-2 pb-4">
             <Button
               type="button"
-              onClick={(e) => {
+              onClick={async (e) => {
                 e.preventDefault();
-                setSignalQuality(Math.min(signalQuality + 10, 100));
+                const processor = await import('../modules/SignalProcessor');
+                const signalProcessor = new processor.PPGSignalProcessor();
+                await signalProcessor.calibrate();
               }}
               variant="outline"
               className="bg-gray-700/30 hover:bg-gray-700/50 text-white backdrop-blur-sm text-sm px-3 py-1"
