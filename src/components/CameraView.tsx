@@ -23,6 +23,7 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
     const data = imageData.data;
     
     let darkPixels = 0;
+    let redPixels = 0;
     const totalPixels = data.length / 4;
     
     for (let i = 0; i < data.length; i += 4) {
@@ -30,14 +31,22 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
       const g = data[i + 1];
       const b = data[i + 2];
       
+      // Condición 1: Dedo apoyado (oscuro)
       const brightness = (r + g + b) / 3;
       if (brightness < 60) {
         darkPixels++;
       }
+
+      // Condición 2: Rojo predominante (luz atravesando el dedo)
+      if (r > 150 && r > g * 1.5 && r > b * 1.5) {
+        redPixels++;
+      }
     }
 
     const darkPercentage = (darkPixels / totalPixels) * 100;
-    const fingerDetected = darkPercentage > 30;
+    const redPercentage = (redPixels / totalPixels) * 100;
+    
+    const fingerDetected = darkPercentage > 30 || redPercentage > 15;
     setIsFingerDetected(fingerDetected);
     return fingerDetected;
   };
