@@ -89,38 +89,38 @@ const Index = () => {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-900 p-4">
-      <div className="relative w-full max-w-md bg-gray-800 rounded-xl shadow-xl overflow-hidden">
+    <div className="flex items-center justify-center min-h-screen bg-gray-900 p-2">
+      <div className="relative w-full max-w-sm bg-gray-800 rounded-lg shadow-xl overflow-hidden">
         {/* Cámara en segundo plano */}
         <div className="absolute inset-0 opacity-30">
           <CameraView onStreamReady={handleStreamReady} isMonitoring={isCameraOn} />
         </div>
 
         {/* Contenido principal */}
-        <div className="relative z-10 p-4 space-y-4">
-          {/* Cabecera */}
-          <div className="flex items-center justify-between">
-            <h1 className="text-xl font-bold text-white">PPG Monitor</h1>
-            <div className="text-lg font-mono text-medical-blue">
+        <div className="relative z-10 p-2 space-y-2">
+          {/* Cabecera y tiempo */}
+          <div className="flex items-center justify-between mb-1">
+            <h1 className="text-lg font-bold text-white">PPG Monitor</h1>
+            <div className="text-base font-mono text-medical-blue bg-black/20 px-2 py-1 rounded">
               {isMonitoring ? `${Math.ceil(22 - elapsedTime)}s` : '22s'}
             </div>
           </div>
 
-          {/* Indicador de calidad */}
-          <SignalQualityIndicator quality={signalQuality} />
-
-          {/* Gráfico PPG */}
-          <div className="bg-black/40 rounded-lg p-2">
+          {/* Monitor cardíaco */}
+          <div className="bg-black/40 rounded p-1 mb-1">
             <canvas 
               ref={canvasRef} 
               width={400} 
-              height={100} 
-              className="w-full h-20 rounded"
+              height={80} 
+              className="w-full h-16 rounded"
             />
           </div>
 
-          {/* Mediciones vitales */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* Indicador de calidad y mediciones en grid */}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="col-span-2">
+              <SignalQualityIndicator quality={signalQuality} />
+            </div>
             <VitalSign label="Heart Rate" value={heartRate} unit="BPM" />
             <VitalSign label="SpO2" value={spo2} unit="%" />
             <VitalSign label="Blood Pressure" value={pressure} unit="mmHg" />
@@ -128,7 +128,7 @@ const Index = () => {
           </div>
 
           {/* Botones de control */}
-          <div className="flex justify-between gap-3 pt-2">
+          <div className="flex justify-between gap-2 pt-1">
             <Button
               onClick={async (e) => {
                 e.preventDefault();
@@ -136,14 +136,16 @@ const Index = () => {
                 const signalProcessor = new processor.PPGSignalProcessor();
                 await signalProcessor.calibrate();
               }}
-              className="flex-1 bg-medical-blue hover:bg-medical-blue/80 text-white"
+              size="sm"
+              className="flex-1 bg-medical-blue hover:bg-medical-blue/80 text-white text-xs py-1"
             >
               Calibrar
             </Button>
             
             <Button
               onClick={handleStartStop}
-              className={`flex-1 ${isMonitoring ? 'bg-medical-red' : 'bg-medical-blue'} hover:opacity-80 text-white`}
+              size="sm"
+              className={`flex-1 ${isMonitoring ? 'bg-medical-red' : 'bg-medical-blue'} hover:opacity-80 text-white text-xs py-1`}
               disabled={isComplete && !isMonitoring}
             >
               {isMonitoring ? 'Detener' : 'Iniciar'}
@@ -151,7 +153,8 @@ const Index = () => {
 
             <Button
               onClick={handleReset}
-              className="flex-1 bg-gray-600 hover:bg-gray-600/80 text-white"
+              size="sm"
+              className="flex-1 bg-gray-600 hover:bg-gray-600/80 text-white text-xs py-1"
             >
               Reset
             </Button>

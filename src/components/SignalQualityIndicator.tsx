@@ -19,38 +19,41 @@ const SignalQualityIndicator = ({ quality }: SignalQualityIndicatorProps) => {
   };
 
   return (
-    <div className="bg-black/30 backdrop-blur-md rounded-lg p-4 w-full">
-      <div className="flex flex-col items-center gap-2">
-        <div className="text-sm font-semibold text-white/90">Calidad de Señal</div>
-        
-        {/* Indicador circular grande */}
+    <div className="bg-black/30 backdrop-blur-md rounded p-2 w-full">
+      <div className="flex items-center gap-2">
+        {/* Indicador circular */}
         <div 
-          className="w-24 h-24 rounded-full border-4 flex items-center justify-center transition-all duration-300"
+          className="w-12 h-12 rounded-full border-2 flex items-center justify-center shrink-0 transition-all duration-300"
           style={{
             borderColor: getQualityColor(quality),
             backgroundColor: `${getQualityColor(quality)}33`
           }}
         >
-          <span className="text-2xl font-bold text-white">{quality}%</span>
+          <span className="text-sm font-bold text-white">{quality}%</span>
         </div>
 
-        {/* Texto de calidad */}
-        <div 
-          className="text-sm font-medium"
-          style={{ color: getQualityColor(quality) }}
-        >
-          {getQualityText(quality)}
-        </div>
+        <div className="flex-1">
+          {/* Texto de calidad */}
+          <div className="flex justify-between items-center mb-1">
+            <span className="text-xs font-semibold text-white/90">Calidad de Señal</span>
+            <span 
+              className="text-xs font-medium"
+              style={{ color: getQualityColor(quality) }}
+            >
+              {getQualityText(quality)}
+            </span>
+          </div>
 
-        {/* Barra de progreso */}
-        <div className="w-full h-2 bg-gray-700/50 rounded-full overflow-hidden">
-          <div 
-            className="h-full transition-all duration-300"
-            style={{
-              width: `${quality}%`,
-              backgroundColor: getQualityColor(quality)
-            }}
-          />
+          {/* Barra de progreso */}
+          <div className="w-full h-1.5 bg-gray-700/50 rounded-full overflow-hidden">
+            <div 
+              className="h-full transition-all duration-300"
+              style={{
+                width: `${quality}%`,
+                backgroundColor: getQualityColor(quality)
+              }}
+            />
+          </div>
         </div>
       </div>
     </div>
