@@ -1,3 +1,4 @@
+
 import React, { useRef, useEffect, useState } from 'react';
 import { Fingerprint } from 'lucide-react';
 
@@ -32,12 +33,12 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
       
       // Condición 1: Dedo apoyado (oscuro)
       const brightness = (r + g + b) / 3;
-      if (brightness < 50) { // Más oscuro para detectar
+      if (brightness < 35) { // Bajado de 50 a 35 - requiere más oscuridad
         darkPixels++;
       }
 
       // Condición 2: Rojo predominante (luz atravesando el dedo)
-      if (r > 180 && r > g * 2 && r > b * 2) { // Más rojo y mayor diferencia con otros colores
+      if (r > 200 && r > g * 2.5 && r > b * 2.5) { // Subido umbrales de rojo y diferencia
         redPixels++;
       }
     }
@@ -45,7 +46,7 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
     const darkPercentage = (darkPixels / totalPixels) * 100;
     const redPercentage = (redPixels / totalPixels) * 100;
     
-    const fingerDetected = darkPercentage > 40 || redPercentage > 25; // Umbrales más altos
+    const fingerDetected = darkPercentage > 50 || redPercentage > 35; // Subidos los porcentajes necesarios
     setIsFingerDetected(fingerDetected);
     return fingerDetected;
   };
