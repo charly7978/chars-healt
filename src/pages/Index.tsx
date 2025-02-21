@@ -101,12 +101,29 @@ const Index = () => {
     const videoTrack = stream.getVideoTracks()[0];
     const imageCapture = new ImageCapture(videoTrack);
     
+    // Creamos un canvas temporal para la conversión
+    const tempCanvas = document.createElement('canvas');
+    const tempCtx = tempCanvas.getContext('2d');
+    if (!tempCtx) return;
+    
     const processImage = async () => {
       if (!isMonitoring) return;
       
       try {
         const frame = await imageCapture.grabFrame();
-        processFrame(frame);
+        
+        // Configuramos el tamaño del canvas temporal
+        tempCanvas.width = frame.width;
+        tempCanvas.height = frame.height;
+        
+        // Dibujamos el ImageBitmap en el canvas temporal
+        tempCtx.drawImage(frame, 0, 0);
+        
+        // Obtenemos los datos de la imagen como ImageData
+        const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
+        
+        // Ahora sí pasamos ImageData al procesador
+        processFrame(imageData);
       } catch (error) {
         console.error("Error capturando frame:", error);
       }
