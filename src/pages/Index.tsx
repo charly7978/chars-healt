@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import HeartShape from "@/components/HeartShape";
@@ -41,13 +40,12 @@ const Index = () => {
 
   const handleStreamReady = (stream: MediaStream) => {
     console.log("Camera stream ready", stream);
-    // Aquí puedes procesar el stream de la cámara si lo necesitas
   };
 
   return (
     <div className="relative min-h-screen w-full overflow-hidden">
       {/* Componente de cámara */}
-      <CameraView onStreamReady={handleStreamReady} />
+      <CameraView onStreamReady={handleStreamReady} isMonitoring={isMonitoring} />
 
       {/* Contenido con transparencia */}
       <div className="relative z-10 min-h-screen bg-black/40 backdrop-blur-sm text-white p-8">
