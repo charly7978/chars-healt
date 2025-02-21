@@ -1,57 +1,35 @@
-import { useState, useRef } from "react";
+
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import HeartShape from "@/components/HeartShape";
 import VitalSign from "@/components/VitalSign";
 import { useVitalMeasurement } from "@/hooks/useVitalMeasurement";
 import CameraView from "@/components/CameraView";
-import { useSignalProcessor } from "@/hooks/useSignalProcessor";
 import SignalQualityIndicator from "@/components/SignalQualityIndicator";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
-  const [isCameraOn, setIsCameraOn] = useState(false);
-  const [signalQuality, setSignalQuality] = useState(0);
   const { heartRate, spo2, pressure, arrhythmiaCount, elapsedTime } = useVitalMeasurement(isMonitoring);
 
   const handleStartStop = () => {
-    console.log('BOTÓN: Click en Start/Stop');
-    console.log('ESTADO ACTUAL:', { isMonitoring, isCameraOn });
-    
-    if (!isMonitoring && !isCameraOn) {
-      console.log('ACCIÓN: Iniciando monitoreo...');
-      setIsCameraOn(true);
-      setTimeout(() => {
-        console.log('ACCIÓN: Activando isMonitoring después del delay');
-        setIsMonitoring(true);
-      }, 500);
-    } else if (isMonitoring) {
-      console.log('ACCIÓN: Deteniendo monitoreo...');
-      setIsMonitoring(false);
-    }
+    console.log('BOTÓN:', isMonitoring ? 'DETENIENDO' : 'INICIANDO');
+    setIsMonitoring(!isMonitoring);
   };
 
   const handleReset = () => {
-    console.log('BOTÓN: Click en Reset');
+    console.log('BOTÓN: RESET');
     setIsMonitoring(false);
-    setSignalQuality(0);
-    setIsCameraOn(false);
-    console.log('ESTADO RESETEADO');
   };
 
   const handleStreamReady = (stream: MediaStream) => {
-    console.log('STREAM: Cámara lista y conectada');
-    console.log('STREAM INFO:', {
-      active: stream.active,
-      id: stream.id,
-      tracks: stream.getTracks().length
-    });
+    console.log('CÁMARA CONECTADA');
   };
 
   return (
     <div className="w-screen h-screen bg-gray-900 overflow-hidden">
       <div className="relative w-full h-full">
         <div className="absolute inset-0">
-          <CameraView onStreamReady={handleStreamReady} isMonitoring={isCameraOn} />
+          <CameraView onStreamReady={handleStreamReady} isMonitoring={isMonitoring} />
         </div>
 
         <div className="relative z-10 h-full flex flex-col justify-between p-4">
@@ -63,11 +41,7 @@ const Index = () => {
           </div>
 
           <div className="flex-1 flex flex-col justify-center gap-2 max-w-md mx-auto w-full">
-            <div className="bg-black/40 rounded p-1">
-              {/* Panel de monitoreo */}
-            </div>
-
-            <SignalQualityIndicator quality={signalQuality} />
+            <SignalQualityIndicator quality={0} />
 
             <div className="grid grid-cols-2 gap-2">
               <VitalSign label="Heart Rate" value={heartRate} unit="BPM" />
