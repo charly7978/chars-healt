@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
@@ -47,8 +48,9 @@ const Index = () => {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
         ctx.fillRect(0, 0, canvasRef.current!.width, canvasRef.current!.height);
         
-        const signalValue = lastSignal ? lastSignal.filteredValue * 50 : 0;
-        const currentY = (canvasRef.current!.height / 2) - signalValue;
+        // Amplificamos más la señal y la invertimos para que suba cuando detecte más rojo
+        const signalValue = lastSignal ? -lastSignal.filteredValue * 100 : 0;
+        const currentY = (canvasRef.current!.height / 2) + signalValue;
         
         const gradient = ctx.createLinearGradient(x-1, previousY, x, currentY);
         gradient.addColorStop(0, '#00ff00');
@@ -63,8 +65,6 @@ const Index = () => {
         
         previousY = currentY;
         x = (x + 1) % canvasRef.current!.width;
-
-        console.log("Animando señal:", { x, signalValue, quality: lastSignal?.quality });
         
         requestAnimationFrame(animate);
       };
