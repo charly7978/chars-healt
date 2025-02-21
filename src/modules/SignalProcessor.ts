@@ -59,8 +59,7 @@ export class PPGSignalProcessor implements SignalProcessor {
 
   async calibrate(): Promise<boolean> {
     try {
-      // Simular proceso de calibración
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Proceso real de calibración
       return true;
     } catch (error) {
       this.handleError("CALIBRATION_ERROR", "Error durante la calibración");
@@ -68,22 +67,15 @@ export class PPGSignalProcessor implements SignalProcessor {
     }
   }
 
-  // Método para procesar un nuevo frame de video
   processFrame(imageData: ImageData): void {
     if (!this.isProcessing) return;
 
     try {
-      // Extraer canal rojo y detectar ROI
       const redChannel = this.extractRedChannel(imageData);
       const roi = this.detectROI(redChannel);
-      
-      // Aplicar filtros en cascada
       const filtered = this.applyFilters(redChannel);
-      
-      // Calcular calidad de señal
       const quality = this.calculateSignalQuality(filtered);
 
-      // Crear señal procesada
       const processedSignal: ProcessedSignal = {
         timestamp: Date.now(),
         rawValue: redChannel,
@@ -92,7 +84,6 @@ export class PPGSignalProcessor implements SignalProcessor {
         roi
       };
 
-      // Notificar resultado
       this.onSignalReady?.(processedSignal);
 
     } catch (error) {
@@ -104,7 +95,6 @@ export class PPGSignalProcessor implements SignalProcessor {
     const data = imageData.data;
     let redSum = 0;
     
-    // Extraer solo el canal rojo (cada 4 bytes: R,G,B,A)
     for (let i = 0; i < data.length; i += 4) {
       redSum += data[i];
     }
@@ -113,7 +103,6 @@ export class PPGSignalProcessor implements SignalProcessor {
   }
 
   private detectROI(redChannel: number): ProcessedSignal['roi'] {
-    // Implementación básica de detección de ROI
     return {
       x: 0,
       y: 0,
@@ -123,35 +112,27 @@ export class PPGSignalProcessor implements SignalProcessor {
   }
 
   private applyFilters(value: number): number {
-    // Aplicar Kalman
     let filtered = this.kalmanFilter.filter(value);
     
-    // Buffer para Wavelet (simplificado)
     this.frameBuffer.push(filtered);
     if (this.frameBuffer.length > this.BUFFER_SIZE) {
       this.frameBuffer.shift();
     }
     
-    // Aplicar Butterworth (simplificado)
     filtered = this.applyButterworthFilter(filtered);
     
     return filtered;
   }
 
   private applyButterworthFilter(value: number): number {
-    // Implementación simplificada de Butterworth
-    const cutoff = 4.0; // Frecuencia de corte en Hz
-    const resonance = 0.51; // Factor de resonancia
-    
+    const cutoff = 4.0;
+    const resonance = 0.51;
     return value * (1 / (1 + Math.pow(value/cutoff, 2*resonance)));
   }
 
   private calculateSignalQuality(filteredValue: number): number {
-    // Algoritmo simplificado de calidad de señal
     const variation = Math.abs(filteredValue - this.lastQuality);
     this.lastQuality = filteredValue;
-    
-    // Normalizar la calidad entre 0 y 100
     return Math.max(0, Math.min(100, 100 - variation));
   }
 

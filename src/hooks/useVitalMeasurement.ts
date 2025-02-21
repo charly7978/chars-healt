@@ -29,8 +29,7 @@ export const useVitalMeasurement = (isMeasuring: boolean) => {
       return;
     }
 
-    let prevSignal = 75;
-    let startTime = Date.now();
+    const startTime = Date.now();
     const MEASUREMENT_DURATION = 22000; // 22 segundos en milisegundos
 
     const interval = setInterval(() => {
@@ -46,46 +45,6 @@ export const useVitalMeasurement = (isMeasuring: boolean) => {
         window.dispatchEvent(event);
         return;
       }
-
-      // Simulación más realista de señales PPG
-      const signal = Math.min(
-        Math.max(
-          prevSignal + (Math.random() - 0.5) * 10,
-          60
-        ),
-        100
-      );
-      prevSignal = signal;
-
-      const spo2Value = Math.min(
-        Math.max(
-          98.5 - (Math.abs(signal - 75) / 50.0 * 3.5),
-          95
-        ),
-        99
-      );
-
-      const systolic = Math.min(
-        Math.max(
-          120 + Math.pow(Math.abs(signal - 75), 0.35) * 12,
-          110
-        ),
-        140
-      );
-      const diastolic = Math.min(
-        Math.max(
-          80 + Math.pow(Math.abs(signal - 75), 0.35) * 6,
-          70
-        ),
-        100
-      );
-
-      setMeasurements({
-        heartRate: Math.round(signal),
-        spo2: Number(spo2Value.toFixed(1)),
-        pressure: `${Math.round(systolic)}/${Math.round(diastolic)}`,
-        arrhythmiaCount: Math.abs(signal - 75) > 15 ? 1 : 0,
-      });
     }, 1000);
 
     return () => clearInterval(interval);
@@ -93,7 +52,7 @@ export const useVitalMeasurement = (isMeasuring: boolean) => {
 
   return {
     ...measurements,
-    elapsedTime: Math.min(elapsedTime, 22), // Asegurarse de que no exceda los 22 segundos
+    elapsedTime: Math.min(elapsedTime, 22),
     isComplete: elapsedTime >= 22
   };
 };
