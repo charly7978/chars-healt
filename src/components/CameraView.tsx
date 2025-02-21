@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, useState } from 'react';
 import { Fingerprint } from 'lucide-react';
 
@@ -35,9 +34,10 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
       // Un pixel es válido si:
       // 1. Es muy oscuro (cerca del negro)
       // 2. O es rojo intenso con muy poco verde y azul
+      // Ajuste sutil: bajamos el umbral del rojo de 150 a 140 y aumentamos ligeramente la tolerancia para verde y azul
       if (
         (r < 30 && g < 30 && b < 30) || // Negro/muy oscuro
-        (r > 150 && g < 30 && b < 30)    // Rojo intenso
+        (r > 140 && g < 35 && b < 35)    // Rojo intenso (umbral más sensible)
       ) {
         validPixels++;
       }
