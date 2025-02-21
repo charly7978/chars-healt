@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, useState } from 'react';
 import { Fingerprint } from 'lucide-react';
 
@@ -18,10 +17,7 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
     const ctx = canvasRef.current.getContext('2d', { willReadFrequently: true });
     if (!ctx) return false;
 
-    // Dibujamos el frame actual del video en el canvas
     ctx.drawImage(videoRef.current, 0, 0, canvasRef.current.width, canvasRef.current.height);
-    
-    // Obtenemos los datos de la imagen
     const imageData = ctx.getImageData(0, 0, canvasRef.current.width, canvasRef.current.height);
     const data = imageData.data;
     
@@ -29,31 +25,25 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
     let darkPixels = 0;
     const totalPixels = data.length / 4;
     
-    // Analizamos cada píxel usando solo DOS criterios
     for (let i = 0; i < data.length; i += 4) {
       const r = data[i];
       const g = data[i + 1];
       const b = data[i + 2];
       
-      // CRITERIO 1: Figura apoyada en el lente (oscuridad)
       const brightness = (r + g + b) / 3;
       if (brightness < 60) {
         darkPixels++;
       }
       
-      // CRITERIO 2: Detección de rojo (luz atravesando el dedo)
       if (r > 150 && r > g * 1.5 && r > b * 1.5) {
         redPixels++;
       }
     }
     
-    // Calculamos porcentajes
     const darkPercentage = (darkPixels / totalPixels) * 100;
     const redPercentage = (redPixels / totalPixels) * 100;
     
-    // Un dedo es detectado si CUALQUIERA de los dos criterios se cumple
     const fingerDetected = darkPercentage > 30 || redPercentage > 15;
-    
     setIsFingerDetected(fingerDetected);
     return fingerDetected;
   };
@@ -92,7 +82,6 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
 
       const videoTrack = newStream.getVideoTracks()[0];
       
-      // Intentar activar la linterna
       if (videoTrack.getCapabilities()?.torch) {
         await videoTrack.applyConstraints({
           advanced: [{ torch: true }]
@@ -119,7 +108,6 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
     } else if (!isMonitoring && stream) {
       stopCamera();
     }
-
     return () => {
       stopCamera();
     };
@@ -127,11 +115,9 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
 
   useEffect(() => {
     if (!stream || !isMonitoring) return;
-
     const analyzeInterval = setInterval(() => {
       detectFinger();
     }, 500);
-
     return () => {
       clearInterval(analyzeInterval);
     };
