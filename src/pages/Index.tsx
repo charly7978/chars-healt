@@ -9,8 +9,20 @@ import CameraView from "@/components/CameraView";
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [signalQuality, setSignalQuality] = useState(0);
-  const { heartRate, spo2, pressure, arrhythmiaCount } = useVitalMeasurement(isMonitoring);
+  const { heartRate, spo2, pressure, arrhythmiaCount, elapsedTime, isComplete } = useVitalMeasurement(isMonitoring);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const handleMeasurementComplete = () => {
+      setIsMonitoring(false);
+    };
+
+    window.addEventListener('measurementComplete', handleMeasurementComplete);
+
+    return () => {
+      window.removeEventListener('measurementComplete', handleMeasurementComplete);
+    };
+  }, []);
 
   useEffect(() => {
     if (canvasRef.current && isMonitoring) {
@@ -51,6 +63,15 @@ const Index = () => {
         <div className="h-full flex flex-col justify-between">
           <div>
             <h1 className="text-2xl font-bold text-center mb-2 text-white/90">PPG Monitor</h1>
+
+            {/* Tiempo restante */}
+            <div className="bg-gray-800/20 backdrop-blur-md p-2 rounded-lg mb-2">
+              <div className="flex items-center justify-center">
+                <span className="text-lg font-bold text-white/90">
+                  {isMonitoring ? `${Math.ceil(22 - elapsedTime)}s` : '22s'}
+                </span>
+              </div>
+            </div>
 
             {/* Indicador de calidad de señal */}
             <div className="bg-gray-800/20 backdrop-blur-md p-2 rounded-lg mb-2">
@@ -98,6 +119,7 @@ const Index = () => {
             <Button
               onClick={() => setIsMonitoring(!isMonitoring)}
               className={`${isMonitoring ? 'bg-medical-red/50' : 'bg-medical-blue/50'} hover:bg-opacity-70 text-white backdrop-blur-sm text-sm px-3 py-1`}
+              disabled={isComplete && !isMonitoring}
             >
               {isMonitoring ? 'Detener' : 'Iniciar'}
             </Button>

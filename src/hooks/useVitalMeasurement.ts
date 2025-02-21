@@ -15,6 +15,7 @@ export const useVitalMeasurement = (isMeasuring: boolean) => {
     pressure: "--/--",
     arrhythmiaCount: 0
   });
+  const [elapsedTime, setElapsedTime] = useState(0);
 
   useEffect(() => {
     if (!isMeasuring) {
@@ -24,11 +25,28 @@ export const useVitalMeasurement = (isMeasuring: boolean) => {
         pressure: "--/--",
         arrhythmiaCount: 0
       });
+      setElapsedTime(0);
       return;
     }
 
     let prevSignal = 75;
+    let startTime = Date.now();
+    const MEASUREMENT_DURATION = 22000; // 22 segundos en milisegundos
+
     const interval = setInterval(() => {
+      const currentTime = Date.now();
+      const elapsed = currentTime - startTime;
+      setElapsedTime(elapsed / 1000);
+
+      // Si han pasado 22 segundos, detener la medición
+      if (elapsed >= MEASUREMENT_DURATION) {
+        clearInterval(interval);
+        // Disparar un evento personalizado para notificar que la medición ha terminado
+        const event = new CustomEvent('measurementComplete');
+        window.dispatchEvent(event);
+        return;
+      }
+
       // Simulación más realista de señales PPG
       const signal = Math.min(
         Math.max(
@@ -73,5 +91,9 @@ export const useVitalMeasurement = (isMeasuring: boolean) => {
     return () => clearInterval(interval);
   }, [isMeasuring]);
 
-  return measurements;
+  return {
+    ...measurements,
+    elapsedTime: Math.min(elapsedTime, 22), // Asegurarse de que no exceda los 22 segundos
+    isComplete: elapsedTime >= 22
+  };
 };
