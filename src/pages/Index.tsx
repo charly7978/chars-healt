@@ -1,7 +1,6 @@
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import HeartShape from "@/components/HeartShape";
 import VitalSign from "@/components/VitalSign";
 import { useVitalMeasurement } from "@/hooks/useVitalMeasurement";
 import CameraView from "@/components/CameraView";
@@ -15,22 +14,6 @@ const Index = () => {
   const { heartRate, spo2, pressure, arrhythmiaCount, elapsedTime, isComplete } = useVitalMeasurement(isMonitoring);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
-
-  useEffect(() => {
-    const handleMeasurementComplete = (e: Event) => {
-      e.preventDefault();
-      setIsMonitoring(false);
-    };
-
-    window.addEventListener('measurementComplete', handleMeasurementComplete);
-    return () => window.removeEventListener('measurementComplete', handleMeasurementComplete);
-  }, []);
-
-  useEffect(() => {
-    if (lastSignal) {
-      setSignalQuality(lastSignal.quality);
-    }
-  }, [lastSignal]);
 
   const handleStartStop = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -54,35 +37,6 @@ const Index = () => {
     setSignalQuality(0);
     setIsCameraOn(false);
   };
-
-  useEffect(() => {
-    if (canvasRef.current && isMonitoring) {
-      const ctx = canvasRef.current.getContext('2d');
-      if (!ctx) return;
-
-      let x = 0;
-      const animate = () => {
-        if (!isMonitoring) return;
-        
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
-        ctx.fillRect(0, 0, canvasRef.current!.width, canvasRef.current!.height);
-        
-        const signalValue = lastSignal ? lastSignal.filteredValue : 0;
-        
-        ctx.beginPath();
-        ctx.strokeStyle = '#00ff00';
-        ctx.lineWidth = 2;
-        ctx.moveTo(x - 1, canvasRef.current!.height / 2);
-        ctx.lineTo(x, canvasRef.current!.height / 2 + signalValue);
-        ctx.stroke();
-        
-        x = (x + 1) % canvasRef.current!.width;
-        requestAnimationFrame(animate);
-      };
-
-      animate();
-    }
-  }, [isMonitoring, lastSignal]);
 
   const handleStreamReady = (stream: MediaStream) => {
     console.log("Camera stream ready", stream);
