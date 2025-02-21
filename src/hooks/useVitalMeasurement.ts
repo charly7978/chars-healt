@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 
 interface VitalMeasurements {
@@ -16,14 +17,22 @@ export const useVitalMeasurement = (isMeasuring: boolean) => {
   });
 
   useEffect(() => {
-    if (!isMeasuring) return;
+    if (!isMeasuring) {
+      setMeasurements({
+        heartRate: 0,
+        spo2: 0,
+        pressure: "--/--",
+        arrhythmiaCount: 0
+      });
+      return;
+    }
 
     let prevSignal = 75;
     const interval = setInterval(() => {
-      // Simulate vital measurements following the original logic
+      // Simulación más realista de señales PPG
       const signal = Math.min(
         Math.max(
-          prevSignal + Math.floor(Math.random() * 5) + 1,
+          prevSignal + (Math.random() - 0.5) * 10,
           60
         ),
         100
@@ -54,7 +63,7 @@ export const useVitalMeasurement = (isMeasuring: boolean) => {
       );
 
       setMeasurements({
-        heartRate: signal,
+        heartRate: Math.round(signal),
         spo2: Number(spo2Value.toFixed(1)),
         pressure: `${Math.round(systolic)}/${Math.round(diastolic)}`,
         arrhythmiaCount: Math.abs(signal - 75) > 15 ? 1 : 0,
