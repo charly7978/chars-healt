@@ -54,7 +54,7 @@ const Index = () => {
 
           <div className="flex-1 flex flex-col justify-center gap-2 max-w-md mx-auto w-full">
             <SignalQualityIndicator quality={0} />
-            <HeartShape isActive={isMonitoring} />
+            <HeartShape isBeating={isMonitoring} />
 
             <div className="grid grid-cols-2 gap-2">
               <VitalSign label="Heart Rate" value={heartRate} unit="BPM" />
