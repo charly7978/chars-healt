@@ -13,44 +13,6 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [isFingerDetected, setIsFingerDetected] = useState(false);
 
-  const detectFinger = () => {
-    if (!videoRef.current || !canvasRef.current) return false;
-    const ctx = canvasRef.current.getContext('2d', { willReadFrequently: true });
-    if (!ctx) return false;
-
-    ctx.drawImage(videoRef.current, 0, 0, canvasRef.current.width, canvasRef.current.height);
-    const imageData = ctx.getImageData(0, 0, canvasRef.current.width, canvasRef.current.height);
-    const data = imageData.data;
-    
-    let darkPixels = 0;
-    let redPixels = 0;
-    const totalPixels = data.length / 4;
-    
-    for (let i = 0; i < data.length; i += 4) {
-      const r = data[i];
-      const g = data[i + 1];
-      const b = data[i + 2];
-      
-      // Condición 1: Dedo apoyado (oscuro)
-      const brightness = (r + g + b) / 3;
-      if (brightness < 25) { // Bajado a 25 - requiere mucha más oscuridad
-        darkPixels++;
-      }
-
-      // Condición 2: Rojo predominante (luz atravesando el dedo)
-      if (r > 220 && r > g * 3 && r > b * 3) { // Subido aún más los umbrales
-        redPixels++;
-      }
-    }
-
-    const darkPercentage = (darkPixels / totalPixels) * 100;
-    const redPercentage = (redPixels / totalPixels) * 100;
-    
-    const fingerDetected = darkPercentage > 65 || redPercentage > 45; // Subidos significativamente los porcentajes
-    setIsFingerDetected(fingerDetected);
-    return fingerDetected;
-  };
-
   const stopCamera = async () => {
     if (stream) {
       const tracks = stream.getTracks();
@@ -116,16 +78,6 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
     };
   }, [isMonitoring]);
 
-  useEffect(() => {
-    if (!stream || !isMonitoring) return;
-    const analyzeInterval = setInterval(() => {
-      detectFinger();
-    }, 500);
-    return () => {
-      clearInterval(analyzeInterval);
-    };
-  }, [stream, isMonitoring]);
-
   return (
     <>
       <video
@@ -146,9 +98,7 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20">
           <Fingerprint
             size={64}
-            className={`transition-colors duration-300 ${
-              isFingerDetected ? 'text-green-500' : 'text-gray-400'
-            }`}
+            className="text-gray-400"
           />
         </div>
       )}
