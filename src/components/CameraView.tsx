@@ -13,17 +13,19 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
 
   useEffect(() => {
     const startCamera = async () => {
+      console.log('Intentando iniciar cámara...');
+      
+      // Si hay un stream previo, limpiarlo primero
       if (streamRef.current) {
-        console.log('Cámara ya iniciada, evitando reinicio');
-        return;
+        console.log('Limpiando stream previo...');
+        streamRef.current.getTracks().forEach(track => {
+          track.stop();
+        });
+        streamRef.current = null;
       }
 
       try {
-        if (!navigator.mediaDevices?.getUserMedia) {
-          console.error('getUserMedia no disponible');
-          return;
-        }
-
+        console.log('Solicitando permisos de cámara...');
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { 
             facingMode: 'user',
@@ -32,31 +34,55 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
           }
         });
         
-        if (videoRef.current && !streamRef.current) {
+        console.log('Permisos concedidos, configurando video...');
+        
+        if (videoRef.current) {
           videoRef.current.srcObject = stream;
           streamRef.current = stream;
           
           videoRef.current.onloadedmetadata = () => {
+            console.log('Metadata cargada, iniciando reproducción...');
             if (videoRef.current) {
               videoRef.current.play()
                 .then(() => {
+                  console.log('Reproducción iniciada con éxito');
                   setIsInitialized(true);
                   if (onStreamReady) {
                     onStreamReady(stream);
                   }
                 })
-                .catch(console.error);
+                .catch(error => {
+                  console.error('Error al iniciar reproducción:', error);
+                  // Intentar limpiar y reiniciar
+                  if (streamRef.current) {
+                    streamRef.current.getTracks().forEach(track => {
+                      track.stop();
+                    });
+                    streamRef.current = null;
+                  }
+                  setIsInitialized(false);
+                });
             }
           };
         }
       } catch (err) {
-        console.error('Error al iniciar la cámara:', err);
+        console.error('Error al conectar con la cámara:', err);
+        // Asegurar limpieza en caso de error
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach(track => {
+            track.stop();
+          });
+          streamRef.current = null;
+        }
+        setIsInitialized(false);
       }
     };
 
     const stopCamera = () => {
+      console.log('Deteniendo cámara...');
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => {
+          console.log('Deteniendo track:', track.kind);
           track.stop();
         });
         if (videoRef.current) {
@@ -67,18 +93,16 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
       }
     };
 
-    if (isMonitoring && !isInitialized) {
+    if (isMonitoring && !streamRef.current) {
       startCamera();
-    } else if (!isMonitoring && isInitialized) {
+    } else if (!isMonitoring && streamRef.current) {
       stopCamera();
     }
 
     return () => {
-      if (streamRef.current) {
-        stopCamera();
-      }
+      stopCamera();
     };
-  }, [isMonitoring, onStreamReady, isInitialized]);
+  }, [isMonitoring, onStreamReady]);
 
   return (
     <video
