@@ -33,12 +33,12 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
       
       // Condición 1: Dedo apoyado (oscuro)
       const brightness = (r + g + b) / 3;
-      if (brightness < 60) {
+      if (brightness < 50) { // Más oscuro para detectar
         darkPixels++;
       }
 
       // Condición 2: Rojo predominante (luz atravesando el dedo)
-      if (r > 150 && r > g * 1.5 && r > b * 1.5) {
+      if (r > 180 && r > g * 2 && r > b * 2) { // Más rojo y mayor diferencia con otros colores
         redPixels++;
       }
     }
@@ -46,7 +46,7 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
     const darkPercentage = (darkPixels / totalPixels) * 100;
     const redPercentage = (redPixels / totalPixels) * 100;
     
-    const fingerDetected = darkPercentage > 30 || redPercentage > 15;
+    const fingerDetected = darkPercentage > 40 || redPercentage > 25; // Umbrales más altos
     setIsFingerDetected(fingerDetected);
     return fingerDetected;
   };
