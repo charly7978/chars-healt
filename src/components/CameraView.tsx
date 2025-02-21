@@ -26,41 +26,35 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
     const data = imageData.data;
     
     let redPixels = 0;
-    let totalPixels = data.length / 4;
     let darkPixels = 0;
+    const totalPixels = data.length / 4;
     
-    // Analizamos cada píxel
+    // Analizamos cada píxel usando solo DOS criterios
     for (let i = 0; i < data.length; i += 4) {
       const r = data[i];
       const g = data[i + 1];
       const b = data[i + 2];
       
-      // Criterio 1: Detectar píxeles predominantemente rojos
-      if (r > 150 && r > g * 1.5 && r > b * 1.5) {
-        redPixels++;
-      }
-      
-      // Criterio 2: Detectar píxeles oscuros (figura apoyada en el lente)
+      // CRITERIO 1: Figura apoyada en el lente (oscuridad)
       const brightness = (r + g + b) / 3;
       if (brightness < 60) {
         darkPixels++;
       }
+      
+      // CRITERIO 2: Detección de rojo (luz atravesando el dedo)
+      if (r > 150 && r > g * 1.5 && r > b * 1.5) {
+        redPixels++;
+      }
     }
     
     // Calculamos porcentajes
-    const redPercentage = (redPixels / totalPixels) * 100;
     const darkPercentage = (darkPixels / totalPixels) * 100;
+    const redPercentage = (redPixels / totalPixels) * 100;
     
-    // Si hay suficientes píxeles rojos o oscuros, consideramos que hay un dedo
-    const fingerDetected = redPercentage > 15 || darkPercentage > 30;
+    // Un dedo es detectado si CUALQUIERA de los dos criterios se cumple
+    const fingerDetected = darkPercentage > 30 || redPercentage > 15;
     
     setIsFingerDetected(fingerDetected);
-    
-    // Enviamos el evento de detección
-    if (fingerDetected) {
-      window.dispatchEvent(new CustomEvent('fingerDetected', { detail: { redPercentage, darkPercentage } }));
-    }
-
     return fingerDetected;
   };
 
