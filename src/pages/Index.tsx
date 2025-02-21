@@ -47,13 +47,13 @@ const Index = () => {
     <div className="relative h-screen w-full overflow-hidden">
       <CameraView onStreamReady={handleStreamReady} isMonitoring={isMonitoring} />
 
-      <div className="relative z-10 h-screen bg-black/40 backdrop-blur-sm text-white p-4">
+      <div className="relative z-10 h-screen bg-black/10 backdrop-blur-sm text-white p-4">
         <div className="h-full flex flex-col justify-between">
           <div>
             <h1 className="text-2xl font-bold text-center mb-2 text-white/90">PPG Monitor</h1>
 
             {/* Indicador de calidad de señal */}
-            <div className="bg-gray-800/50 backdrop-blur-md p-2 rounded-lg mb-2">
+            <div className="bg-gray-800/20 backdrop-blur-md p-2 rounded-lg mb-2">
               <div className="flex items-center gap-2">
                 <div 
                   className="w-3 h-3 rounded-full" 
@@ -62,17 +62,17 @@ const Index = () => {
                                    signalQuality > 50 ? '#ffff00' : '#ff0000'
                   }}
                 />
-                <span className="text-sm">Signal Quality: {signalQuality}%</span>
+                <span className="text-sm text-white/90">Signal Quality: {signalQuality}%</span>
               </div>
             </div>
 
             {/* Monitor cardíaco */}
-            <div className="bg-gray-800/50 backdrop-blur-md p-2 rounded-lg mb-2">
+            <div className="bg-gray-800/20 backdrop-blur-md p-2 rounded-lg mb-2">
               <canvas 
                 ref={canvasRef} 
                 width={800} 
                 height={100} 
-                className="w-full h-24 bg-black/50 rounded"
+                className="w-full h-24 bg-black/20 rounded"
               />
             </div>
 
@@ -90,14 +90,14 @@ const Index = () => {
             <Button
               onClick={() => setSignalQuality(Math.min(signalQuality + 10, 100))}
               variant="outline"
-              className="bg-gray-700/70 hover:bg-gray-700/90 text-white backdrop-blur-sm text-sm px-3 py-1"
+              className="bg-gray-700/30 hover:bg-gray-700/50 text-white backdrop-blur-sm text-sm px-3 py-1"
             >
               Calibrar
             </Button>
             
             <Button
               onClick={() => setIsMonitoring(!isMonitoring)}
-              className={`${isMonitoring ? 'bg-medical-red/90' : 'bg-medical-blue/90'} hover:bg-opacity-100 text-white backdrop-blur-sm text-sm px-3 py-1`}
+              className={`${isMonitoring ? 'bg-medical-red/50' : 'bg-medical-blue/50'} hover:bg-opacity-70 text-white backdrop-blur-sm text-sm px-3 py-1`}
             >
               {isMonitoring ? 'Detener' : 'Iniciar'}
             </Button>
@@ -108,7 +108,7 @@ const Index = () => {
                 setSignalQuality(0);
               }}
               variant="outline"
-              className="bg-gray-700/70 hover:bg-gray-700/90 text-white backdrop-blur-sm text-sm px-3 py-1"
+              className="bg-gray-700/30 hover:bg-gray-700/50 text-white backdrop-blur-sm text-sm px-3 py-1"
             >
               Reset
             </Button>
