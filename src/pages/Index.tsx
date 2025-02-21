@@ -4,26 +4,13 @@ import { Button } from "@/components/ui/button";
 import HeartShape from "@/components/HeartShape";
 import VitalSign from "@/components/VitalSign";
 import { useVitalMeasurement } from "@/hooks/useVitalMeasurement";
+import CameraView from "@/components/CameraView";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [signalQuality, setSignalQuality] = useState(0);
   const { heartRate, spo2, pressure, arrhythmiaCount } = useVitalMeasurement(isMonitoring);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-
-  useEffect(() => {
-    // Inicializar la cámara
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      navigator.mediaDevices.getUserMedia({ video: true })
-        .then(stream => {
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-          }
-        })
-        .catch(err => console.error("Error accessing camera:", err));
-    }
-  }, []);
 
   useEffect(() => {
     if (canvasRef.current && isMonitoring) {
@@ -52,16 +39,15 @@ const Index = () => {
     }
   }, [isMonitoring]);
 
+  const handleStreamReady = (stream: MediaStream) => {
+    console.log("Camera stream ready", stream);
+    // Aquí puedes procesar el stream de la cámara si lo necesitas
+  };
+
   return (
     <div className="relative min-h-screen w-full overflow-hidden">
-      {/* Cámara de fondo */}
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        muted
-        className="absolute top-0 left-0 min-w-full min-h-full w-auto h-auto object-cover z-0"
-      />
+      {/* Componente de cámara */}
+      <CameraView onStreamReady={handleStreamReady} />
 
       {/* Contenido con transparencia */}
       <div className="relative z-10 min-h-screen bg-black/40 backdrop-blur-sm text-white p-8">
