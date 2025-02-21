@@ -1,3 +1,4 @@
+
 import React, { useRef, useEffect, useState } from 'react';
 import { Fingerprint } from 'lucide-react';
 
@@ -21,7 +22,6 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
     const imageData = ctx.getImageData(0, 0, canvasRef.current.width, canvasRef.current.height);
     const data = imageData.data;
     
-    let redPixels = 0;
     let darkPixels = 0;
     const totalPixels = data.length / 4;
     
@@ -34,16 +34,10 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
       if (brightness < 60) {
         darkPixels++;
       }
-      
-      if (r > 150 && r > g * 1.5 && r > b * 1.5) {
-        redPixels++;
-      }
     }
-    
+
     const darkPercentage = (darkPixels / totalPixels) * 100;
-    const redPercentage = (redPixels / totalPixels) * 100;
-    
-    const fingerDetected = darkPercentage > 30 || redPercentage > 15;
+    const fingerDetected = darkPercentage > 30;
     setIsFingerDetected(fingerDetected);
     return fingerDetected;
   };
