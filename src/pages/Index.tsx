@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import HeartShape from "@/components/HeartShape";
@@ -6,6 +5,7 @@ import VitalSign from "@/components/VitalSign";
 import { useVitalMeasurement } from "@/hooks/useVitalMeasurement";
 import CameraView from "@/components/CameraView";
 import { useSignalProcessor } from "@/hooks/useSignalProcessor";
+import SignalQualityIndicator from "@/components/SignalQualityIndicator";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -15,7 +15,6 @@ const Index = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
 
-  // Manejo de la finalización de la medición
   useEffect(() => {
     const handleMeasurementComplete = (e: Event) => {
       e.preventDefault();
@@ -26,7 +25,6 @@ const Index = () => {
     return () => window.removeEventListener('measurementComplete', handleMeasurementComplete);
   }, []);
 
-  // Actualización de la calidad de señal cuando recibimos nueva información
   useEffect(() => {
     if (lastSignal) {
       setSignalQuality(lastSignal.quality);
@@ -68,7 +66,6 @@ const Index = () => {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
         ctx.fillRect(0, 0, canvasRef.current!.width, canvasRef.current!.height);
         
-        // Usar la señal procesada para la animación si está disponible
         const signalValue = lastSignal ? lastSignal.filteredValue : Math.sin(x * 0.1) * 50;
         
         ctx.beginPath();
@@ -99,7 +96,6 @@ const Index = () => {
           <div>
             <h1 className="text-2xl font-bold text-center mb-2 text-white/90">PPG Monitor</h1>
 
-            {/* Tiempo restante */}
             <div className="bg-gray-800/20 backdrop-blur-md p-2 rounded-lg mb-2">
               <div className="flex items-center justify-center">
                 <span className="text-lg font-bold text-white/90">
@@ -108,21 +104,10 @@ const Index = () => {
               </div>
             </div>
 
-            {/* Indicador de calidad de señal */}
-            <div className="bg-gray-800/20 backdrop-blur-md p-2 rounded-lg mb-2">
-              <div className="flex items-center gap-2">
-                <div 
-                  className="w-3 h-3 rounded-full" 
-                  style={{
-                    backgroundColor: signalQuality > 75 ? '#00ff00' : 
-                                   signalQuality > 50 ? '#ffff00' : '#ff0000'
-                  }}
-                />
-                <span className="text-sm text-white/90">Signal Quality: {signalQuality}%</span>
-              </div>
+            <div className="mb-4">
+              <SignalQualityIndicator quality={signalQuality} />
             </div>
 
-            {/* Monitor cardíaco */}
             <div className="bg-gray-800/20 backdrop-blur-md p-2 rounded-lg mb-2">
               <canvas 
                 ref={canvasRef} 
@@ -132,7 +117,6 @@ const Index = () => {
               />
             </div>
 
-            {/* Mediciones principales */}
             <div className="grid grid-cols-2 gap-2">
               <VitalSign label="Heart Rate" value={heartRate} unit="BPM" />
               <VitalSign label="SpO2" value={spo2} unit="%" />
@@ -141,7 +125,6 @@ const Index = () => {
             </div>
           </div>
 
-          {/* Controles */}
           <div className="flex justify-center gap-2 pb-4">
             <Button
               type="button"
