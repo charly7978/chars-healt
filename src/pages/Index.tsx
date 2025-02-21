@@ -13,25 +13,37 @@ const Index = () => {
   const { heartRate, spo2, pressure, arrhythmiaCount, elapsedTime, isComplete } = useVitalMeasurement(isMonitoring);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  // Manejo de la finalización de la medición
   useEffect(() => {
-    const handleMeasurementComplete = () => {
+    const handleMeasurementComplete = (e: Event) => {
+      e.preventDefault(); // Prevenir cualquier comportamiento por defecto
       setIsMonitoring(false);
-      // Ya no apagamos la cámara aquí
     };
 
     window.addEventListener('measurementComplete', handleMeasurementComplete);
-
-    return () => {
-      window.removeEventListener('measurementComplete', handleMeasurementComplete);
-    };
+    return () => window.removeEventListener('measurementComplete', handleMeasurementComplete);
   }, []);
 
-  // Efecto para manejar el encendido/apagado de la cámara
-  useEffect(() => {
-    if (isMonitoring && !isCameraOn) {
+  const handleStartStop = (e: React.MouseEvent) => {
+    e.preventDefault(); // Prevenir navegación
+    e.stopPropagation(); // Detener propagación del evento
+    
+    if (!isMonitoring && !isCameraOn) {
       setIsCameraOn(true);
+      // Pequeño delay para asegurar que la cámara esté lista
+      setTimeout(() => setIsMonitoring(true), 500);
+    } else if (isMonitoring) {
+      setIsMonitoring(false);
     }
-  }, [isMonitoring]);
+  };
+
+  const handleReset = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsMonitoring(false);
+    setSignalQuality(0);
+    setIsCameraOn(false);
+  };
 
   useEffect(() => {
     if (canvasRef.current && isMonitoring) {
@@ -62,12 +74,6 @@ const Index = () => {
 
   const handleStreamReady = (stream: MediaStream) => {
     console.log("Camera stream ready", stream);
-  };
-
-  const handleReset = () => {
-    setIsMonitoring(false);
-    setSignalQuality(0);
-    setIsCameraOn(false); // Solo apagamos la cámara cuando se presiona Reset
   };
 
   return (
@@ -124,7 +130,11 @@ const Index = () => {
           {/* Controles */}
           <div className="flex justify-center gap-2 pb-4">
             <Button
-              onClick={() => setSignalQuality(Math.min(signalQuality + 10, 100))}
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                setSignalQuality(Math.min(signalQuality + 10, 100));
+              }}
               variant="outline"
               className="bg-gray-700/30 hover:bg-gray-700/50 text-white backdrop-blur-sm text-sm px-3 py-1"
             >
@@ -132,7 +142,8 @@ const Index = () => {
             </Button>
             
             <Button
-              onClick={() => setIsMonitoring(!isMonitoring)}
+              type="button"
+              onClick={handleStartStop}
               className={`${isMonitoring ? 'bg-medical-red/50' : 'bg-medical-blue/50'} hover:bg-opacity-70 text-white backdrop-blur-sm text-sm px-3 py-1`}
               disabled={isComplete && !isMonitoring}
             >
@@ -140,6 +151,7 @@ const Index = () => {
             </Button>
 
             <Button
+              type="button"
               onClick={handleReset}
               variant="outline"
               className="bg-gray-700/30 hover:bg-gray-700/50 text-white backdrop-blur-sm text-sm px-3 py-1"
