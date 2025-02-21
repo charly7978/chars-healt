@@ -1,5 +1,6 @@
 
 import React, { useRef, useEffect, useState } from 'react';
+import { Fingerprint } from 'lucide-react';
 
 interface CameraViewProps {
   onStreamReady?: (stream: MediaStream) => void;
@@ -130,13 +131,12 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
     };
   }, [isMonitoring]);
 
-  // Efecto para el análisis continuo de detección de dedo
   useEffect(() => {
     if (!stream || !isMonitoring) return;
 
     const analyzeInterval = setInterval(() => {
       detectFinger();
-    }, 500); // Analizar cada 500ms
+    }, 500);
 
     return () => {
       clearInterval(analyzeInterval);
@@ -157,11 +157,16 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
         ref={canvasRef}
         width={320}
         height={240}
-        className="hidden" // Canvas oculto usado solo para análisis
+        className="hidden"
       />
-      {isMonitoring && !isFingerDetected && (
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-black/50 p-4 rounded-lg z-20">
-          <p className="text-white text-center">Coloque su dedo sobre la cámara</p>
+      {isMonitoring && (
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20">
+          <Fingerprint
+            size={64}
+            className={`transition-colors duration-300 ${
+              isFingerDetected ? 'text-green-500' : 'text-gray-400'
+            }`}
+          />
         </div>
       )}
     </>
