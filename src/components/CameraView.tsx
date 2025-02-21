@@ -1,5 +1,5 @@
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 
 interface CameraViewProps {
   onStreamReady?: (stream: MediaStream) => void;
@@ -8,95 +8,74 @@ interface CameraViewProps {
 
 const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+
+  const stopCamera = async () => {
+    if (stream) {
+      const tracks = stream.getTracks();
+      tracks.forEach(track => {
+        if (track.getCapabilities()?.torch) {
+          track.applyConstraints({
+            advanced: [{ torch: false }]
+          }).catch(err => console.error("Error desactivando linterna:", err));
+        }
+        track.stop();
+      });
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+      setStream(null);
+    }
+  };
+
+  const startCamera = async () => {
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("getUserMedia no está soportado");
+      }
+
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'environment',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }
+      });
+
+      const videoTrack = newStream.getVideoTracks()[0];
+      
+      // Intentar activar la linterna
+      if (videoTrack.getCapabilities()?.torch) {
+        await videoTrack.applyConstraints({
+          advanced: [{ torch: true }]
+        });
+      }
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = newStream;
+      }
+
+      setStream(newStream);
+      
+      if (onStreamReady) {
+        onStreamReady(newStream);
+      }
+    } catch (err) {
+      console.error("Error al iniciar la cámara:", err);
+    }
+  };
 
   useEffect(() => {
-    const setupCamera = async () => {
-      // Si ya hay un stream activo y estamos monitoreando, no hacer nada
-      if (streamRef.current && isMonitoring) {
-        return;
-      }
+    if (isMonitoring && !stream) {
+      startCamera();
+    } else if (!isMonitoring && stream) {
+      stopCamera();
+    }
 
-      // Si hay un stream activo pero no estamos monitoreando, detener la cámara
-      if (streamRef.current && !isMonitoring) {
-        await stopCamera();
-        return;
-      }
-
-      // Si no hay stream y estamos monitoreando, iniciar la cámara
-      if (!streamRef.current && isMonitoring && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-              facingMode: 'environment',
-              width: { ideal: 1280 },
-              height: { ideal: 720 }
-            }
-          });
-
-          streamRef.current = stream;
-          
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-          }
-
-          // Activar la linterna si está disponible
-          const track = stream.getVideoTracks()[0];
-          const capabilities = track.getCapabilities();
-          
-          if (capabilities && 'torch' in capabilities) {
-            try {
-              await track.applyConstraints({
-                advanced: [{ torch: true } as MediaTrackConstraintSet]
-              });
-            } catch (err) {
-              console.error("Error activating torch:", err);
-            }
-          }
-
-          if (onStreamReady) {
-            onStreamReady(stream);
-          }
-
-        } catch (err) {
-          console.error("Error accessing camera:", err);
-        }
-      }
-    };
-
-    const stopCamera = async () => {
-      if (streamRef.current) {
-        const tracks = streamRef.current.getTracks();
-        
-        for (const track of tracks) {
-          const capabilities = track.getCapabilities();
-          
-          if (capabilities && 'torch' in capabilities) {
-            try {
-              await track.applyConstraints({
-                advanced: [{ torch: false } as MediaTrackConstraintSet]
-              });
-            } catch (err) {
-              console.error("Error deactivating torch:", err);
-            }
-          }
-          track.stop();
-        }
-        
-        if (videoRef.current) {
-          videoRef.current.srcObject = null;
-        }
-        streamRef.current = null;
-      }
-    };
-
-    setupCamera();
-
-    // Cleanup function
     return () => {
       stopCamera();
     };
-  }, [isMonitoring, onStreamReady]); // Solo se ejecuta cuando cambia isMonitoring u onStreamReady
+  }, [isMonitoring]);
 
   return (
     <video
@@ -104,7 +83,8 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
       autoPlay
       playsInline
       muted
-      className="absolute top-0 left-0 min-w-full min-h-full w-auto h-auto object-cover z-0"
+      style={{ objectFit: 'cover' }}
+      className="absolute top-0 left-0 min-w-full min-h-full w-auto h-auto z-0"
     />
   );
 };
