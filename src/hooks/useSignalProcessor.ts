@@ -10,17 +10,17 @@ export const useSignalProcessor = () => {
   const [error, setError] = useState<ProcessingError | null>(null);
 
   useEffect(() => {
-    // Configurar callbacks
     processor.onSignalReady = (signal: ProcessedSignal) => {
+      console.log("Signal quality:", signal.quality);
       setLastSignal(signal);
       setError(null);
     };
 
     processor.onError = (error: ProcessingError) => {
+      console.error("Signal processing error:", error);
       setError(error);
     };
 
-    // Inicializar procesador
     processor.initialize().catch(error => {
       console.error("Error initializing signal processor:", error);
     });
@@ -42,7 +42,8 @@ export const useSignalProcessor = () => {
 
   const calibrate = useCallback(async () => {
     try {
-      return await processor.calibrate();
+      await processor.calibrate();
+      return true;
     } catch (error) {
       console.error("Calibration error:", error);
       return false;

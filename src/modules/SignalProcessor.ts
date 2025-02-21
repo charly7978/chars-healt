@@ -24,9 +24,10 @@ class KalmanFilter {
 export class PPGSignalProcessor implements SignalProcessor {
   private isProcessing: boolean = false;
   private kalmanFilter: KalmanFilter;
-  private lastQuality: number = 0;
+  private lastValue: number = 0;
   private frameBuffer: number[] = [];
   private readonly BUFFER_SIZE = 30;
+  private readonly QUALITY_THRESHOLD = 10;
   
   constructor(
     public onSignalReady?: (signal: ProcessedSignal) => void,
@@ -38,7 +39,7 @@ export class PPGSignalProcessor implements SignalProcessor {
   async initialize(): Promise<void> {
     try {
       this.frameBuffer = [];
-      this.lastQuality = 0;
+      this.lastValue = 0;
       console.log("Inicializando procesador de señales PPG");
     } catch (error) {
       this.handleError("INIT_ERROR", "Error al inicializar el procesador");
@@ -54,12 +55,14 @@ export class PPGSignalProcessor implements SignalProcessor {
   stop(): void {
     this.isProcessing = false;
     this.frameBuffer = [];
+    this.lastValue = 0;
     console.log("Deteniendo procesamiento de señales");
   }
 
   async calibrate(): Promise<boolean> {
     try {
-      // Proceso real de calibración
+      this.frameBuffer = [];
+      this.lastValue = 0;
       return true;
     } catch (error) {
       this.handleError("CALIBRATION_ERROR", "Error durante la calibración");
@@ -71,19 +74,20 @@ export class PPGSignalProcessor implements SignalProcessor {
     if (!this.isProcessing) return;
 
     try {
-      const redChannel = this.extractRedChannel(imageData);
-      const roi = this.detectROI(redChannel);
-      const filtered = this.applyFilters(redChannel);
+      const redValue = this.extractRedChannel(imageData);
+      const roi = this.detectROI(redValue);
+      const filtered = this.applyFilters(redValue);
       const quality = this.calculateSignalQuality(filtered);
 
       const processedSignal: ProcessedSignal = {
         timestamp: Date.now(),
-        rawValue: redChannel,
+        rawValue: redValue,
         filteredValue: filtered,
         quality,
         roi
       };
 
+      this.lastValue = filtered;
       this.onSignalReady?.(processedSignal);
 
     } catch (error) {
@@ -94,12 +98,14 @@ export class PPGSignalProcessor implements SignalProcessor {
   private extractRedChannel(imageData: ImageData): number {
     const data = imageData.data;
     let redSum = 0;
+    let count = 0;
     
     for (let i = 0; i < data.length; i += 4) {
       redSum += data[i];
+      count++;
     }
     
-    return redSum / (data.length / 4);
+    return redSum / count;
   }
 
   private detectROI(redChannel: number): ProcessedSignal['roi'] {
@@ -119,9 +125,7 @@ export class PPGSignalProcessor implements SignalProcessor {
       this.frameBuffer.shift();
     }
     
-    filtered = this.applyButterworthFilter(filtered);
-    
-    return filtered;
+    return this.applyButterworthFilter(filtered);
   }
 
   private applyButterworthFilter(value: number): number {
@@ -130,10 +134,28 @@ export class PPGSignalProcessor implements SignalProcessor {
     return value * (1 / (1 + Math.pow(value/cutoff, 2*resonance)));
   }
 
-  private calculateSignalQuality(filteredValue: number): number {
-    const variation = Math.abs(filteredValue - this.lastQuality);
-    this.lastQuality = filteredValue;
-    return Math.max(0, Math.min(100, 100 - variation));
+  private calculateSignalQuality(currentValue: number): number {
+    if (this.frameBuffer.length < 2) return 0;
+
+    // Calcular la variación de la señal
+    const variation = Math.abs(currentValue - this.lastValue);
+    
+    // Calcular la estabilidad de la señal
+    const recentValues = this.frameBuffer.slice(-5);
+    const avgVariation = recentValues.reduce((sum, val, i, arr) => {
+      if (i === 0) return 0;
+      return sum + Math.abs(val - arr[i-1]);
+    }, 0) / (recentValues.length - 1);
+
+    // Normalizar la calidad
+    const stability = Math.max(0, 100 - (avgVariation * 10));
+    const variationQuality = Math.max(0, 100 - (variation * 10));
+    
+    // Combinar métricas
+    const quality = Math.min(stability, variationQuality);
+    
+    // Suavizar cambios bruscos
+    return Math.round(quality);
   }
 
   private handleError(code: string, message: string): void {
