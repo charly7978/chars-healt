@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import HeartShape from "@/components/HeartShape";
@@ -66,7 +67,7 @@ const Index = () => {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
         ctx.fillRect(0, 0, canvasRef.current!.width, canvasRef.current!.height);
         
-        const signalValue = lastSignal ? lastSignal.filteredValue : Math.sin(x * 0.1) * 50;
+        const signalValue = lastSignal ? lastSignal.filteredValue : 0;
         
         ctx.beginPath();
         ctx.strokeStyle = '#00ff00';
@@ -88,72 +89,69 @@ const Index = () => {
   };
 
   return (
-    <div className="relative h-screen w-full overflow-hidden">
-      <CameraView onStreamReady={handleStreamReady} isMonitoring={isCameraOn} />
+    <div className="flex items-center justify-center min-h-screen bg-gray-900 p-4">
+      <div className="relative w-full max-w-md bg-gray-800 rounded-xl shadow-xl overflow-hidden">
+        {/* Cámara en segundo plano */}
+        <div className="absolute inset-0 opacity-30">
+          <CameraView onStreamReady={handleStreamReady} isMonitoring={isCameraOn} />
+        </div>
 
-      <div className="relative z-10 h-screen bg-black/10 backdrop-blur-sm text-white p-4">
-        <div className="h-full flex flex-col justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-center mb-2 text-white/90">PPG Monitor</h1>
-
-            <div className="bg-gray-800/20 backdrop-blur-md p-2 rounded-lg mb-2">
-              <div className="flex items-center justify-center">
-                <span className="text-lg font-bold text-white/90">
-                  {isMonitoring ? `${Math.ceil(22 - elapsedTime)}s` : '22s'}
-                </span>
-              </div>
-            </div>
-
-            <div className="mb-4">
-              <SignalQualityIndicator quality={signalQuality} />
-            </div>
-
-            <div className="bg-gray-800/20 backdrop-blur-md p-2 rounded-lg mb-2">
-              <canvas 
-                ref={canvasRef} 
-                width={800} 
-                height={100} 
-                className="w-full h-24 bg-black/20 rounded"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <VitalSign label="Heart Rate" value={heartRate} unit="BPM" />
-              <VitalSign label="SpO2" value={spo2} unit="%" />
-              <VitalSign label="Blood Pressure" value={pressure} unit="mmHg" />
-              <VitalSign label="Arrhythmias" value={arrhythmiaCount} unit="events" />
+        {/* Contenido principal */}
+        <div className="relative z-10 p-4 space-y-4">
+          {/* Cabecera */}
+          <div className="flex items-center justify-between">
+            <h1 className="text-xl font-bold text-white">PPG Monitor</h1>
+            <div className="text-lg font-mono text-medical-blue">
+              {isMonitoring ? `${Math.ceil(22 - elapsedTime)}s` : '22s'}
             </div>
           </div>
 
-          <div className="flex justify-center gap-2 pb-4">
+          {/* Indicador de calidad */}
+          <SignalQualityIndicator quality={signalQuality} />
+
+          {/* Gráfico PPG */}
+          <div className="bg-black/40 rounded-lg p-2">
+            <canvas 
+              ref={canvasRef} 
+              width={400} 
+              height={100} 
+              className="w-full h-20 rounded"
+            />
+          </div>
+
+          {/* Mediciones vitales */}
+          <div className="grid grid-cols-2 gap-3">
+            <VitalSign label="Heart Rate" value={heartRate} unit="BPM" />
+            <VitalSign label="SpO2" value={spo2} unit="%" />
+            <VitalSign label="Blood Pressure" value={pressure} unit="mmHg" />
+            <VitalSign label="Arrhythmias" value={arrhythmiaCount} unit="events" />
+          </div>
+
+          {/* Botones de control */}
+          <div className="flex justify-between gap-3 pt-2">
             <Button
-              type="button"
               onClick={async (e) => {
                 e.preventDefault();
                 const processor = await import('../modules/SignalProcessor');
                 const signalProcessor = new processor.PPGSignalProcessor();
                 await signalProcessor.calibrate();
               }}
-              variant="outline"
-              className="bg-gray-700/30 hover:bg-gray-700/50 text-white backdrop-blur-sm text-sm px-3 py-1"
+              className="flex-1 bg-medical-blue hover:bg-medical-blue/80 text-white"
             >
               Calibrar
             </Button>
             
             <Button
-              type="button"
               onClick={handleStartStop}
-              className={`${isMonitoring ? 'bg-medical-red/50' : 'bg-medical-blue/50'} hover:bg-opacity-70 text-white backdrop-blur-sm text-sm px-3 py-1`}
+              className={`flex-1 ${isMonitoring ? 'bg-medical-red' : 'bg-medical-blue'} hover:opacity-80 text-white`}
               disabled={isComplete && !isMonitoring}
             >
               {isMonitoring ? 'Detener' : 'Iniciar'}
             </Button>
 
             <Button
-              type="button"
               onClick={handleReset}
-              variant="outline"
-              className="bg-gray-700/30 hover:bg-gray-700/50 text-white backdrop-blur-sm text-sm px-3 py-1"
+              className="flex-1 bg-gray-600 hover:bg-gray-600/80 text-white"
             >
               Reset
             </Button>
