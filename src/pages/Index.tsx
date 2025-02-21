@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
@@ -36,23 +35,37 @@ const Index = () => {
       const ctx = canvasRef.current.getContext('2d');
       if (!ctx) return;
 
+      ctx.fillStyle = 'black';
+      ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+
       let x = 0;
+      let previousY = canvasRef.current.height / 2;
+
       const animate = () => {
         if (!isMonitoring) return;
         
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
         ctx.fillRect(0, 0, canvasRef.current!.width, canvasRef.current!.height);
         
-        const signalValue = lastSignal ? lastSignal.filteredValue : 0;
+        const signalValue = lastSignal ? lastSignal.filteredValue * 50 : 0;
+        const currentY = (canvasRef.current!.height / 2) - signalValue;
+        
+        const gradient = ctx.createLinearGradient(x-1, previousY, x, currentY);
+        gradient.addColorStop(0, '#00ff00');
+        gradient.addColorStop(1, '#39FF14');
         
         ctx.beginPath();
-        ctx.strokeStyle = '#00ff00';
+        ctx.strokeStyle = gradient;
         ctx.lineWidth = 2;
-        ctx.moveTo(x - 1, canvasRef.current!.height / 2);
-        ctx.lineTo(x, canvasRef.current!.height / 2 + signalValue);
+        ctx.moveTo(x-1, previousY);
+        ctx.lineTo(x, currentY);
         ctx.stroke();
         
+        previousY = currentY;
         x = (x + 1) % canvasRef.current!.width;
+
+        console.log("Animando señal:", { x, signalValue, quality: lastSignal?.quality });
+        
         requestAnimationFrame(animate);
       };
 
@@ -84,20 +97,36 @@ const Index = () => {
   };
 
   const handleStreamReady = (stream: MediaStream) => {
-    console.log("Camera stream ready", stream);
+    console.log("Camera stream ready");
+    const videoTrack = stream.getVideoTracks()[0];
+    const imageCapture = new ImageCapture(videoTrack);
+    
+    const processImage = async () => {
+      if (!isMonitoring) return;
+      
+      try {
+        const frame = await imageCapture.grabFrame();
+        processFrame(frame);
+      } catch (error) {
+        console.error("Error capturando frame:", error);
+      }
+      
+      if (isMonitoring) {
+        requestAnimationFrame(processImage);
+      }
+    };
+
+    processImage();
   };
 
   return (
     <div className="w-screen h-screen bg-gray-900 overflow-hidden">
       <div className="relative w-full h-full">
-        {/* Cámara en segundo plano */}
         <div className="absolute inset-0">
           <CameraView onStreamReady={handleStreamReady} isMonitoring={isCameraOn} />
         </div>
 
-        {/* Contenido principal */}
         <div className="relative z-10 h-full flex flex-col justify-between p-4">
-          {/* Contenedor superior */}
           <div className="flex justify-between items-start w-full">
             <h1 className="text-lg font-bold text-white bg-black/30 px-3 py-1 rounded">PPG Monitor</h1>
             <div className="text-base font-mono text-medical-blue bg-black/30 px-3 py-1 rounded">
@@ -105,22 +134,18 @@ const Index = () => {
             </div>
           </div>
 
-          {/* Contenedor central */}
           <div className="flex-1 flex flex-col justify-center gap-2 max-w-md mx-auto w-full">
-            {/* Monitor cardíaco */}
-            <div className="bg-black/40 rounded p-1">
+            <div className="bg-black/40 backdrop-blur-sm rounded-lg p-2">
               <canvas 
                 ref={canvasRef} 
                 width={400} 
-                height={80} 
-                className="w-full h-16 rounded"
+                height={100}
+                className="w-full h-20 rounded bg-black/60"
               />
             </div>
 
-            {/* Indicador de calidad */}
             <SignalQualityIndicator quality={signalQuality} />
 
-            {/* Grid de signos vitales */}
             <div className="grid grid-cols-2 gap-2">
               <VitalSign label="Heart Rate" value={heartRate} unit="BPM" />
               <VitalSign label="SpO2" value={spo2} unit="%" />
@@ -129,7 +154,6 @@ const Index = () => {
             </div>
           </div>
 
-          {/* Contenedor inferior */}
           <div className="flex justify-center gap-2 w-full max-w-md mx-auto">
             <Button
               onClick={async (e) => {
