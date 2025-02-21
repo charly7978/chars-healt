@@ -11,14 +11,24 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
   const streamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
-    let timeoutId: NodeJS.Timeout;
-
     const setupCamera = async () => {
-      if (isMonitoring && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      // Si ya hay un stream activo y estamos monitoreando, no hacer nada
+      if (streamRef.current && isMonitoring) {
+        return;
+      }
+
+      // Si hay un stream activo pero no estamos monitoreando, detener la cámara
+      if (streamRef.current && !isMonitoring) {
+        await stopCamera();
+        return;
+      }
+
+      // Si no hay stream y estamos monitoreando, iniciar la cámara
+      if (!streamRef.current && isMonitoring && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         try {
           const stream = await navigator.mediaDevices.getUserMedia({
             video: {
-              facingMode: 'environment', // Usar cámara trasera
+              facingMode: 'environment',
               width: { ideal: 1280 },
               height: { ideal: 720 }
             }
@@ -34,7 +44,6 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
           const track = stream.getVideoTracks()[0];
           const capabilities = track.getCapabilities();
           
-          // Verificar si la linterna está disponible antes de intentar usarla
           if (capabilities && 'torch' in capabilities) {
             try {
               await track.applyConstraints({
@@ -49,16 +58,9 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
             onStreamReady(stream);
           }
 
-          // Configurar el temporizador de 20 segundos
-          timeoutId = setTimeout(() => {
-            stopCamera();
-          }, 20000); // 20 segundos
-
         } catch (err) {
           console.error("Error accessing camera:", err);
         }
-      } else {
-        stopCamera();
       }
     };
 
@@ -66,7 +68,6 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
       if (streamRef.current) {
         const tracks = streamRef.current.getTracks();
         
-        // Desactivar la linterna y detener la cámara
         for (const track of tracks) {
           const capabilities = track.getCapabilities();
           
@@ -91,13 +92,11 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
 
     setupCamera();
 
+    // Cleanup function
     return () => {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
       stopCamera();
     };
-  }, [isMonitoring, onStreamReady]);
+  }, [isMonitoring, onStreamReady]); // Solo se ejecuta cuando cambia isMonitoring u onStreamReady
 
   return (
     <video
