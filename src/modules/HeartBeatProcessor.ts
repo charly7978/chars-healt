@@ -11,7 +11,8 @@ export class HeartBeatProcessor {
   private readonly DERIVATIVE_THRESHOLD = -0.001;
 
   private signalBuffer: number[] = [];
-  private lastPeakTime: number = 0;
+  private lastPeakTime: number | null = null;
+  private previousPeakTime: number | null = null;
   private audioContext: AudioContext | null = null;
   private bpmHistory: number[] = [];
   private lastBeepTime: number = 0;
@@ -82,36 +83,17 @@ export class HeartBeatProcessor {
     confidence: number;
     isPeak: boolean;
   } {
-    console.log("[ProcessSignal] Inicio", {
-      inputValue: value,
-      bufferSize: this.signalBuffer.length,
-      baseline: this.baseline,
-      lastValue: this.lastValue,
-      bpmHistoryLength: this.bpmHistory.length
-    });
-
     this.signalBuffer.push(value);
     if (this.signalBuffer.length > this.WINDOW_SIZE) {
       this.signalBuffer.shift();
     }
 
     if (this.signalBuffer.length < 30) {
-      console.log("[ProcessSignal] Buffer insuficiente", {
-        currentSize: this.signalBuffer.length,
-        required: 30
-      });
       return { bpm: 0, confidence: 0, isPeak: false };
     }
 
     this.baseline = this.baseline * 0.98 + value * 0.02;
     const normalizedValue = value - this.baseline;
-
-    console.log("[ProcessSignal] Valores normalizados", {
-      rawValue: value,
-      baseline: this.baseline,
-      normalizedValue: normalizedValue,
-      threshold: this.SIGNAL_THRESHOLD
-    });
 
     this.values.push(value);
     if (this.values.length > 3) this.values.shift();
@@ -124,25 +106,17 @@ export class HeartBeatProcessor {
     this.lastValue = value;
 
     if (isPeak && confidence > this.MIN_CONFIDENCE) {
-      console.log("[ProcessSignal] ¡PICO DETECTADO!", {
-        time: Date.now(),
-        timeSinceLastPeak: Date.now() - this.lastPeakTime,
-        normalizedValue,
-        confidence
+      console.log("[ProcessSignal] Peak detected", {
+        currentTime: Date.now(),
+        lastPeakTime: this.lastPeakTime,
+        previousPeakTime: this.previousPeakTime
       });
+      
       this.playBeep(0.1);
-      this.updateBPM();
+      this.updateBPM(Date.now());
     }
 
     const bpm = this.calculateCurrentBPM();
-
-    console.log("[ProcessSignal] Resultado final", {
-      bpm,
-      confidence,
-      isPeak,
-      bpmHistoryLength: this.bpmHistory.length,
-      bpmHistory: this.bpmHistory
-    });
 
     return {
       bpm,
@@ -153,7 +127,7 @@ export class HeartBeatProcessor {
 
   private detectPeak(normalizedValue: number, derivative: number): { isPeak: boolean; confidence: number } {
     const currentTime = Date.now();
-    const timeSinceLastPeak = currentTime - this.lastPeakTime;
+    const timeSinceLastPeak = this.lastPeakTime ? currentTime - this.lastPeakTime : Infinity;
     
     if (timeSinceLastPeak < 250) {
       return { isPeak: false, confidence: 0 };
@@ -164,6 +138,7 @@ export class HeartBeatProcessor {
                    this.lastValue > this.baseline;
 
     if (isPeak) {
+      this.previousPeakTime = this.lastPeakTime;
       this.lastPeakTime = currentTime;
     }
 
@@ -171,79 +146,65 @@ export class HeartBeatProcessor {
     const derivativeConfidence = Math.min(Math.max(Math.abs(derivative) / Math.abs(this.DERIVATIVE_THRESHOLD), 0), 1);
     const confidence = (amplitudeConfidence + derivativeConfidence) / 2;
 
-    console.log("[DetectPeak] Resultado", {
-      isPeak,
-      confidence,
-      timeSinceLastPeak,
-      currentTime,
-      lastPeakTime: this.lastPeakTime
-    });
-
     return { isPeak, confidence };
   }
 
-  private updateBPM() {
-    const currentTime = Date.now();
+  private updateBPM(currentTime: number) {
+    if (!this.lastPeakTime || !this.previousPeakTime) {
+      return;
+    }
+
+    const interval = this.lastPeakTime - this.previousPeakTime;
     
-    console.log("[UpdateBPM] Inicio", {
-      currentTime,
-      lastPeakTime: this.lastPeakTime,
-      currentHistoryLength: this.bpmHistory.length
+    if (interval <= 0) {
+      console.log("[UpdateBPM] Invalid interval", { interval });
+      return;
+    }
+
+    const instantBPM = 60000 / interval;
+
+    console.log("[UpdateBPM] Calculation", {
+      interval,
+      instantBPM,
+      isValid: instantBPM >= this.MIN_BPM && instantBPM <= this.MAX_BPM
     });
 
-    if (this.lastPeakTime > 0) {
-      const timeSinceLastPeak = currentTime - this.lastPeakTime;
-      const instantBPM = 60000 / timeSinceLastPeak;
+    if (instantBPM >= this.MIN_BPM && instantBPM <= this.MAX_BPM) {
+      this.bpmHistory.push(instantBPM);
       
-      console.log("[UpdateBPM] Cálculo instantáneo", {
-        timeSinceLastPeak,
-        instantBPM,
-        isInRange: instantBPM >= this.MIN_BPM && instantBPM <= this.MAX_BPM
-      });
-
-      if (instantBPM >= this.MIN_BPM && instantBPM <= this.MAX_BPM) {
-        this.bpmHistory.push(instantBPM);
-        
-        if (this.bpmHistory.length > 5) {
-          this.bpmHistory.shift();
-        }
-        
-        console.log("[UpdateBPM] Historia actualizada", {
-          newLength: this.bpmHistory.length,
-          history: this.bpmHistory
-        });
+      if (this.bpmHistory.length > 5) {
+        this.bpmHistory.shift();
       }
+
+      console.log("[UpdateBPM] History updated", {
+        historyLength: this.bpmHistory.length,
+        history: this.bpmHistory
+      });
     }
   }
 
   private calculateCurrentBPM(): number {
-    console.log("[CalculateBPM] Inicio", {
-      historyLength: this.bpmHistory.length,
-      history: this.bpmHistory
-    });
-
     if (this.bpmHistory.length < 2) {
       return 0;
     }
 
-    const sum = this.bpmHistory.reduce((acc, curr) => acc + curr, 0);
-    const averageBPM = sum / this.bpmHistory.length;
-    const roundedBPM = Math.round(averageBPM);
+    const sortedBPMs = [...this.bpmHistory].sort((a, b) => a - b);
+    const medianBPM = sortedBPMs[Math.floor(sortedBPMs.length / 2)];
 
-    console.log("[CalculateBPM] Resultado", {
-      sum,
-      average: averageBPM,
-      roundedBPM,
-      bpmHistory: this.bpmHistory
+    console.log("[CalculateBPM] Result", {
+      historyLength: this.bpmHistory.length,
+      sortedBPMs,
+      medianBPM
     });
 
-    return roundedBPM;
+    return Math.round(medianBPM);
   }
 
   reset() {
-    console.log("HeartBeatProcessor: Reseteando procesador");
+    console.log("HeartBeatProcessor: Resetting");
     this.signalBuffer = [];
-    this.lastPeakTime = 0;
+    this.lastPeakTime = null;
+    this.previousPeakTime = null;
     this.bpmHistory = [];
     this.lastBeepTime = 0;
     this.baseline = 0;
