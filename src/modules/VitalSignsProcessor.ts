@@ -255,6 +255,15 @@ export class VitalSignsProcessor {
   private readonly SPO2_BUFFER_SIZE = 10;
 
   /**
+   * Buffer para presión arterial
+   * Guarda últimas 10 mediciones para promedio exponencial
+   */
+  private systolicBuffer: number[] = [];
+  private diastolicBuffer: number[] = [];
+  private readonly BP_BUFFER_SIZE = 10;
+  private readonly BP_ALPHA = 0.7;
+
+  /**
    * calculateSpO2
    * Calcula la saturación de oxígeno con transiciones suaves
    * y mediciones reales.
@@ -339,7 +348,7 @@ export class VitalSignsProcessor {
   /**
    * calculateBloodPressure
    * Calcula presión arterial basada en PTT y amplitud PPG
-   * con ajustes más finos para mejor precisión
+   * con ajustes más finos para mejor precisión y memoria
    */
   private calculateBloodPressure(values: number[]): {
     systolic: number;
@@ -351,72 +360,87 @@ export class VitalSignsProcessor {
 
     const { peakIndices, valleyIndices } = this.localFindPeaksAndValleys(values);
     if (peakIndices.length < 2) {
-      // Valores base más realistas
       return { systolic: 120, diastolic: 80 };
     }
 
-    // Asumimos ~30 FPS => ~33ms / muestra
     const fps = 30;
     const msPerSample = 1000 / fps;
 
-    // PTT (tiempo en ms entre picos consecutivos)
     const pttValues: number[] = [];
     for (let i = 1; i < peakIndices.length; i++) {
       const dt = (peakIndices[i] - peakIndices[i - 1]) * msPerSample;
       pttValues.push(dt);
     }
     
-    // Media móvil ponderada para PTT
     const weightedPTT = pttValues.reduce((acc, val, idx) => {
-      const weight = (idx + 1) / pttValues.length; // Más peso a valores recientes
+      const weight = (idx + 1) / pttValues.length;
       return acc + val * weight;
     }, 0) / pttValues.reduce((acc, _, idx) => acc + (idx + 1) / pttValues.length, 0);
 
-    // Normalizar PTT a rangos fisiológicos
     const normalizedPTT = Math.max(300, Math.min(1200, weightedPTT));
-    
-    // Calcular amplitud con mejor precisión
     const amplitude = this.calculateAmplitude(values, peakIndices, valleyIndices);
     const normalizedAmplitude = Math.min(100, Math.max(0, amplitude * 5));
 
-    /**
-     * Nueva fórmula mejorada:
-     * - Base más realista (120/80)
-     * - PTT influye inversamente en la presión
-     * - Amplitud afecta más a la sistólica que a la diastólica
-     * - Factores de escala ajustados para mejor rango
-     */
-    const pttFactor = (600 - normalizedPTT) * 0.08;  // PTT más corto → presión más alta
-    const ampFactor = normalizedAmplitude * 0.3;     // Mayor amplitud → presión más alta
+    const pttFactor = (600 - normalizedPTT) * 0.08;
+    const ampFactor = normalizedAmplitude * 0.3;
     
-    // Valores base realistas + ajustes por PTT y amplitud
-    let estimatedSystolic = 120 + pttFactor + ampFactor;
-    let estimatedDiastolic = 80 + (pttFactor * 0.5) + (ampFactor * 0.2);
+    // Cálculo instantáneo
+    let instantSystolic = 120 + pttFactor + ampFactor;
+    let instantDiastolic = 80 + (pttFactor * 0.5) + (ampFactor * 0.2);
 
-    // Garantizar rangos fisiológicos y mantener diferencial realista
-    estimatedSystolic = Math.max(90, Math.min(180, estimatedSystolic));
-    estimatedDiastolic = Math.max(60, Math.min(110, estimatedDiastolic));
+    // Aplicar límites fisiológicos
+    instantSystolic = Math.max(90, Math.min(180, instantSystolic));
+    instantDiastolic = Math.max(60, Math.min(110, instantDiastolic));
     
-    // Mantener diferencial sistólica-diastólica realista
-    const differential = estimatedSystolic - estimatedDiastolic;
+    // Mantener diferencial realista
+    const differential = instantSystolic - instantDiastolic;
     if (differential < 20) {
-      estimatedDiastolic = estimatedSystolic - 20;
+      instantDiastolic = instantSystolic - 20;
     } else if (differential > 80) {
-      estimatedDiastolic = estimatedSystolic - 80;
+      instantDiastolic = instantSystolic - 80;
     }
 
+    // Actualizar buffers
+    this.systolicBuffer.push(instantSystolic);
+    this.diastolicBuffer.push(instantDiastolic);
+    
+    if (this.systolicBuffer.length > this.BP_BUFFER_SIZE) {
+      this.systolicBuffer.shift();
+      this.diastolicBuffer.shift();
+    }
+
+    // Calcular promedio exponencial ponderado
+    let finalSystolic = 0;
+    let finalDiastolic = 0;
+    let weightSum = 0;
+
+    for (let i = 0; i < this.systolicBuffer.length; i++) {
+      const weight = Math.pow(this.BP_ALPHA, this.systolicBuffer.length - 1 - i);
+      finalSystolic += this.systolicBuffer[i] * weight;
+      finalDiastolic += this.diastolicBuffer[i] * weight;
+      weightSum += weight;
+    }
+
+    finalSystolic = finalSystolic / weightSum;
+    finalDiastolic = finalDiastolic / weightSum;
+
     console.log("VitalSignsProcessor: Cálculo de presión arterial", {
+      instant: {
+        systolic: Math.round(instantSystolic),
+        diastolic: Math.round(instantDiastolic)
+      },
+      buffered: {
+        systolic: Math.round(finalSystolic),
+        diastolic: Math.round(finalDiastolic)
+      },
+      bufferSize: this.systolicBuffer.length,
       ptt: normalizedPTT,
-      amplitude: normalizedAmplitude,
-      pttFactor,
-      ampFactor,
-      systolic: Math.round(estimatedSystolic),
-      diastolic: Math.round(estimatedDiastolic)
+      amplitude: normalizedAmplitude
     });
 
     return {
-      systolic: Math.round(estimatedSystolic),
-      diastolic: Math.round(estimatedDiastolic)
+      systolic: Math.round(finalSystolic),
+      diastolic: Math.round(finalDiastolic)
     };
   }
 
@@ -562,6 +586,8 @@ export class VitalSignsProcessor {
     this.isLearningPhase = true;
     this.arrhythmiaDetected = false;
     this.measurementStartTime = Date.now();
+    this.systolicBuffer = [];
+    this.diastolicBuffer = [];
     console.log("VitalSignsProcessor: Reset completo");
   }
 }
