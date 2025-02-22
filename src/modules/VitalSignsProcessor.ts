@@ -249,65 +249,64 @@ export class VitalSignsProcessor {
 
   /**
    * calculateSpO2
-   * Calcula la saturación de oxígeno basada en:
-   * - Ratio AC/DC de la señal PPG
-   * - Índice de perfusión
-   * - Media móvil para estabilidad
+   * Calcula la saturación de oxígeno con límites fisiológicos realistas
+   * y respuesta más gradual a cambios.
    */
   private calculateSpO2(values: number[]): number {
-    // Se requieren al menos 30 muestras para estabilidad
+    // Mínimo de muestras para estabilidad
     if (values.length < 30) {
-      return this.lastValue;
+      return this.lastValue || 95; // Valor inicial razonable
     }
 
     // Calcular componentes AC y DC
     const dc = this.calculateDC(values);
-    if (dc === 0) return this.lastValue;
+    if (dc === 0) return this.lastValue || 95;
 
     const ac = this.calculateAC(values);
     
-    // Calcular índice de perfusión (PI)
+    // Índice de perfusión más sensible
     const perfusionIndex = ac / dc;
     
-    // Si la perfusión es muy baja, mantener último valor válido
     if (perfusionIndex < this.PERFUSION_INDEX_THRESHOLD) {
-      return this.lastValue;
+      // Con mala perfusión, degradamos gradualmente
+      return Math.max(88, this.lastValue - 1);
     }
 
-    // Calcular R (ratio de ratios) usando AC/DC
-    const R = (ac / dc) * this.SPO2_CALIBRATION_FACTOR;
+    // Ratio R normalizado [0-1] para mejor control
+    const R = Math.min(1, (ac / dc) / this.SPO2_CALIBRATION_FACTOR);
+    
+    // Base SpO2 más conservadora
+    let spO2 = Math.round(98 - (10 * R));
 
-    // Ecuación empírica mejorada para SpO2
-    // SpO2 = 110 - 25R (aproximación de curva de calibración)
-    let spO2 = Math.round(110 - (25 * R));
-
-    // Ajustar basado en el índice de perfusión
-    if (perfusionIndex > 0.15) {  // Buena perfusión
-      spO2 = Math.min(spO2 + 2, 100);  // Ajuste positivo
-    } else if (perfusionIndex < 0.08) {  // Perfusión pobre
-      spO2 = Math.max(spO2 - 2, 88);    // Ajuste negativo
+    // Ajustes más graduales según perfusión
+    if (perfusionIndex > 0.15) {
+      // Buena perfusión: ajuste suave hacia arriba
+      spO2 = Math.min(98, spO2 + 1);
+    } else if (perfusionIndex < 0.08) {
+      // Perfusión pobre: ajuste suave hacia abajo
+      spO2 = Math.max(88, spO2 - 1);
     }
 
-    // Aplicar límites fisiológicos [88, 100]
-    spO2 = Math.max(88, Math.min(100, spO2));
+    // Límites fisiológicos estrictos [88-98]
+    spO2 = Math.max(88, Math.min(98, spO2));
 
-    // Media móvil para estabilidad
+    // Media móvil más suave (70% nuevo, 30% anterior)
     if (this.lastValue > 0) {
-      spO2 = Math.round((spO2 + this.lastValue) / 2);
+      spO2 = Math.round((spO2 * 0.7) + (this.lastValue * 0.3));
     }
 
-    // Actualizar último valor válido
-    this.lastValue = spO2;
-
+    // Log detallado para debugging
     console.log("VitalSignsProcessor: Cálculo SpO2", {
       ac,
       dc,
       ratio: R,
       perfusionIndex,
       rawSpO2: spO2,
-      finalSpO2: this.lastValue
+      previousValue: this.lastValue,
+      finalSpO2: spO2
     });
 
+    this.lastValue = spO2;
     return spO2;
   }
 
