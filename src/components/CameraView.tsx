@@ -133,7 +133,7 @@ const CameraView = ({
       {isMonitoring && buttonPosition && (
         <div className="absolute bottom-24 left-1/2 transform -translate-x-1/2 z-20 flex flex-col items-center">
           <Fingerprint
-            size={20}
+            size={32}
             className={`transition-colors duration-300 ${getFingerColor()}`}
           />
           <span className={`text-xs mt-1 transition-colors duration-300 ${

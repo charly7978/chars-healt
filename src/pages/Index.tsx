@@ -59,8 +59,15 @@ const Index = () => {
     try {
       stopMonitoring();
       await supabase.auth.signOut();
+      window.location.href = "/auth";
     } catch (error) {
       console.error("Error al cerrar sesión:", error);
+    }
+  };
+
+  const handleCalibrationClick = () => {
+    if (isMonitoring) {
+      setShowCalibrationDialog(true);
     }
   };
 
@@ -249,7 +256,7 @@ const Index = () => {
                 variant="ghost"
                 size="icon"
                 className="bg-black/30 text-gray-300 hover:text-white h-8 w-8"
-                onClick={() => setShowCalibrationDialog(true)}
+                onClick={handleCalibrationClick}
                 disabled={!isMonitoring}
               >
                 <Settings className="h-4 w-4" />
