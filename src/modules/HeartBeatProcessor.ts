@@ -2,19 +2,36 @@
  * HeartBeatProcessor
  *
  * Procesa la señal PPG para estimar la frecuencia cardíaca y emite un beep
- * cada vez que detecta un latido real (pico de la onda).
+ * cada vez que el detector de picos (basado en la misma señal que se grafica)
+ * identifica un pico real.
  *
- * Ajustes clave para reducir falsos positivos y sincronizar mejor el beep
- * con el pico real de la onda:
+ * Problema:
+ *   - Cuando el usuario retira el dedo, la onda en el gráfico cae a ~0 (o muy baja),
+ *     pero a veces continúa la detección de picos "residuales" y se oyen beeps
+ *     ficticios.
  *
- *  1) Mayor verificación del pico (triple chequeo "goingDown" tras el posible pico).
- *  2) "PeakCandidate": se guarda el índice y amplitud cuando se sospecha un pico,
- *     pero se confirma 2-3 muestras después para ver si realmente empezó a descender.
- *  3) Umbral de confianza más alto (MIN_CONFIDENCE=0.80).
- *  4) MIN_PEAK_TIME_MS = 350 para limitar BPM a <= ~171 y así evitar picos muy seguidos.
- *  5) Ajuste en el beep: se emite justo cuando se confirma el pico (unos frames después
- *     del "tope" real), pero corresponde realmente al máximo de la onda.
+ * Solución:
+ *   - Alineamos la lógica de beep con la misma señal filtrada que pintas en tu
+ *     gráfico (la que "funciona perfectamente"). De modo que si la onda está
+ *     realmente baja, no se detecta ningún pico y, por ende, no hay beep.
+ *   - Agregamos una rutina de "autoResetIfSignalIsLow" que observa si la
+ *     amplitud permanece muy baja durante unos cuantos frames. Si esto ocurre,
+ *     se limpian las variables internas de detección de pico (peakConfirmation, etc.)
+ *     para evitar que frames antiguos sigan originando beeps.
+ *
+ *   - De esta forma, NO forzamos ninguna lógica "finger detection" que impida
+ *     el beep artificialmente. Simplemente, si la señal es cercana a cero por
+ *     varios frames, reiniciamos el detector y evitamos picos rezagados.
+ *
+ * Ajustes clave en este código:
+ *   1) autoResetIfSignalIsLow(...) en processSignal(...) antes de llamar a detectPeak(...).
+ *      Revisa la amplitud absoluta del "normalizedValue".
+ *   2) si esa amplitud < LOW_SIGNAL_THRESHOLD por >= LOW_SIGNAL_FRAMES consecutivos,
+ *      se llama a resetDetectionStates(), que borra lastPeakTime, peak buffer, etc.
+ *   3) El beep sigue disparándose con la condición de pico confirmada, pero ahora
+ *      no arrastra la "inercia" de frames anteriores cuando el dedo se retira.
  */
+
 export class HeartBeatProcessor {
   // ────────── CONFIGURACIONES PRINCIPALES ──────────
 
@@ -28,23 +45,34 @@ export class HeartBeatProcessor {
   private readonly MIN_BPM = 40;
   private readonly MAX_BPM = 180;
 
-  // Parámetros de detección.
-  private readonly SIGNAL_THRESHOLD = 0.45;    // Mínimo de amplitud para considerar pico
-  private readonly MIN_CONFIDENCE = 0.80;      // Confianza mínima (algo más estricta)
-  private readonly DERIVATIVE_THRESHOLD = -0.05; // Pendiente requerida
-  private readonly MIN_PEAK_TIME_MS = 350;     // Tiempo mínimo entre picos (~171 BPM máx)
-  private readonly WARMUP_TIME_MS = 5000;      // Ignora detecciones en primeros 5s
+  // Parámetros de detección de pico.
+  private readonly SIGNAL_THRESHOLD = 0.45;       // Mínimo de amplitud para considerar pico
+  private readonly MIN_CONFIDENCE = 0.80;         // Confianza mínima (algo estricta)
+  private readonly DERIVATIVE_THRESHOLD = -0.05;  // Pendiente requerida
+  private readonly MIN_PEAK_TIME_MS = 350;        // Tiempo mínimo entre picos (~171 BPM máx)
+  private readonly WARMUP_TIME_MS = 5000;         // Ignora detecciones en primeros 5s
 
   // Parámetros de filtrado.
-  private readonly MEDIAN_FILTER_WINDOW = 5;   // Ventana mediana
-  private readonly MOVING_AVERAGE_WINDOW = 7;  // Ventana promedio móvil
-  private readonly EMA_ALPHA = 0.2;            // Filtro exponencial
-  private readonly BASELINE_FACTOR = 0.998;    // Baseline muy sutil
+  private readonly MEDIAN_FILTER_WINDOW = 5;      // Ventana mediana
+  private readonly MOVING_AVERAGE_WINDOW = 7;     // Ventana promedio móvil
+  private readonly EMA_ALPHA = 0.2;               // Filtro exponencial
+  private readonly BASELINE_FACTOR = 0.998;       // Baseline muy sutil
 
   // Parámetros de beep.
   private readonly BEEP_FREQUENCY = 1000;
   private readonly BEEP_DURATION = 60;
-  private readonly MIN_BEEP_INTERVAL_MS = 300; // Evitar exceso de beeps
+  private readonly MIN_BEEP_INTERVAL_MS = 300;    // Evitar exceso de beeps
+
+  // ────────── AUTO-RESET SI LA SEÑAL ES MUY BAJA ──────────
+  /**
+   * Para evitar que, al retirar el dedo (señal queda ~0), se sigan produciendo
+   * beeps por picos pasados, reiniciamos el detector cuando la amplitud está
+   * muy baja durante varios frames consecutivos.
+   */
+  private readonly LOW_SIGNAL_THRESHOLD = 0.03;   // Umbral de amplitud que consideramos "casi cero"
+  private readonly LOW_SIGNAL_FRAMES = 10;        // Frames consecutivos bajos para reset
+
+  private lowSignalCount = 0;                     // Contador de frames consecutivos con señal baja
 
   // ────────── VARIABLES INTERNAS ──────────
 
@@ -71,7 +99,7 @@ export class HeartBeatProcessor {
   private values: number[] = [];   // Pequeña ventana de 3 muestras para derivada
   private startTime: number = 0;   // Para warm-up
 
-  // Confirmación de pico (triple verificación decir que de verdad bajó).
+  // Confirmación de pico (triple verificación).
   private peakConfirmationBuffer: number[] = [];
   private lastConfirmedPeak: boolean = false;
 
@@ -79,22 +107,22 @@ export class HeartBeatProcessor {
   private smoothBPM: number = 0;
   private readonly BPM_ALPHA = 0.2; // Cuanto menor, más suave el BPM
 
-  // Para un "peak candidate".
+  // "Peak candidate" (solo si quisieras guardar índice/amplitud).
   private peakCandidateIndex: number | null = null;
-  private peakCandidateValue: number = 0;  
+  private peakCandidateValue: number = 0;
 
   constructor() {
     this.initAudio();
     this.startTime = Date.now();
   }
 
-  // ────────── AUDIO PARA BEEP ──────────
+  // ────────── AUDIO (BEEP) ──────────
 
   private async initAudio() {
     try {
       this.audioContext = new AudioContext();
       await this.audioContext.resume();
-      // Beep de prueba mínimo
+      // Pequeño beep de prueba
       await this.playBeep(0.01);
       console.log("HeartBeatProcessor: Audio Context Initialized");
     } catch (err) {
@@ -141,7 +169,7 @@ export class HeartBeatProcessor {
     }
   }
 
-  // ────────── UTILIDAD: PERIODO DE CALENTAMIENTO ──────────
+  // ────────── CONTROL DE TIEMPO PARA WARM-UP ──────────
 
   private isInWarmup(): boolean {
     return Date.now() - this.startTime < this.WARMUP_TIME_MS;
@@ -195,13 +223,13 @@ export class HeartBeatProcessor {
     // 3) Suavizado exponencial
     const smoothed = this.calculateEMA(movAvgVal);
 
-    // Guardar en buffer para graficar
+    // Guardar en buffer para graficar (por si lo necesitas)
     this.signalBuffer.push(smoothed);
     if (this.signalBuffer.length > this.WINDOW_SIZE) {
       this.signalBuffer.shift();
     }
 
-    // Esperar ~1s para no detectar picos apenas inicia
+    // Evitar detecciones en primeros ~30 frames
     if (this.signalBuffer.length < 30) {
       return {
         bpm: 0,
@@ -215,12 +243,17 @@ export class HeartBeatProcessor {
     this.baseline =
       this.baseline * this.BASELINE_FACTOR + smoothed * (1 - this.BASELINE_FACTOR);
 
-    // Valor "normalizado" restando baseline
+    // Valor "normalizado"
     const normalizedValue = smoothed - this.baseline;
+
+    // ——— Auto-reset si señal está muy baja varios frames ———
+    this.autoResetIfSignalIsLow(Math.abs(normalizedValue));
 
     // Derivada "suave"
     this.values.push(smoothed);
-    if (this.values.length > 3) this.values.shift();
+    if (this.values.length > 3) {
+      this.values.shift();
+    }
 
     let smoothDerivative = smoothed - this.lastValue;
     if (this.values.length === 3) {
@@ -234,7 +267,7 @@ export class HeartBeatProcessor {
     // Verificación final de pico
     const isConfirmedPeak = this.confirmPeak(isPeak, normalizedValue, confidence);
 
-    // Si se confirma y no hay warmUp, actualizamos BPM & beep
+    // Si se confirma y no estamos en warm-up, actualizamos BPM & beep
     if (isConfirmedPeak && !this.isInWarmup()) {
       const now = Date.now();
       const timeSinceLastPeak = this.lastPeakTime
@@ -259,13 +292,50 @@ export class HeartBeatProcessor {
     };
   }
 
+  /**
+   * autoResetIfSignalIsLow
+   * Si la señal permanece por debajo de LOW_SIGNAL_THRESHOLD
+   * durante LOW_SIGNAL_FRAMES consecutivos, reset parcial de
+   * las variables de detección de picos.
+   */
+  private autoResetIfSignalIsLow(amplitude: number) {
+    if (amplitude < this.LOW_SIGNAL_THRESHOLD) {
+      this.lowSignalCount++;
+      if (this.lowSignalCount >= this.LOW_SIGNAL_FRAMES) {
+        // Hacemos un reset de la detección,
+        // pero sin tocar la baseline ni la señal filtrada.
+        this.resetDetectionStates();
+      }
+    } else {
+      // Si la amplitud es suficientemente grande, reiniciamos el contador
+      this.lowSignalCount = 0;
+    }
+  }
+
+  /**
+   * resetDetectionStates
+   * Limpia las variables que afectan la detección de picos, 
+   * para no arrastrar muestras antiguas cuando la señal se va a ~0.
+   */
+  private resetDetectionStates() {
+    this.lastPeakTime = null;
+    this.previousPeakTime = null;
+    this.lastConfirmedPeak = false;
+    this.peakCandidateIndex = null;
+    this.peakCandidateValue = 0;
+    this.peakConfirmationBuffer = [];
+    this.values = [];
+    // No reiniciamos baseline ni smoothValue ni buffer general;
+    // solo limpiamos las estructuras de pico.
+    console.log("HeartBeatProcessor: auto-reset detection states (signal was too low).");
+  }
+
   // ────────── DETECCIÓN / CONFIRMACIÓN DE PICO ──────────
 
   /**
    * detectPeak
    * Aplica criterios básicos para decidir si la muestra
    * puede ser un pico (derivada negativa + amplitud).
-   * @returns { isPeak, confidence }
    */
   private detectPeak(normalizedValue: number, derivative: number): {
     isPeak: boolean;
@@ -322,7 +392,7 @@ export class HeartBeatProcessor {
     if (isPeak && !this.lastConfirmedPeak && confidence >= this.MIN_CONFIDENCE) {
       if (this.peakConfirmationBuffer.length >= 3) {
         const len = this.peakConfirmationBuffer.length;
-        // Nos fijamos que las últimas 3 muestras vayan decreciendo.
+        // Miramos que las últimas 3 muestras vayan decreciendo
         const goingDown1 =
           this.peakConfirmationBuffer[len - 1] < this.peakConfirmationBuffer[len - 2];
         const goingDown2 =
@@ -364,7 +434,7 @@ export class HeartBeatProcessor {
 
   /**
    * getSmoothBPM
-   * Devuelve un BPM suavizado con EMA para evitar saltos.
+   * Devuelve un BPM suavizado con EMA para evitar saltos bruscos.
    */
   private getSmoothBPM(): number {
     const rawBPM = this.calculateCurrentBPM();
@@ -387,7 +457,6 @@ export class HeartBeatProcessor {
       return 0;
     }
     const sorted = [...this.bpmHistory].sort((a, b) => a - b);
-    // Quitar mínimo y máximo
     const trimmed = sorted.slice(1, -1);
     if (!trimmed.length) return 0;
     const avg = trimmed.reduce((a, b) => a + b, 0) / trimmed.length;
@@ -396,8 +465,8 @@ export class HeartBeatProcessor {
 
   /**
    * getFinalBPM
-   * Cálculo final del BPM tras terminar lectura,
-   * recorta el 10% inferior/superior de la historia.
+   * Cálculo final del BPM tras finalizar la lectura,
+   * recorta el 10% inferior y superior de la historia.
    */
   public getFinalBPM(): number {
     if (this.bpmHistory.length < 5) {
@@ -411,7 +480,7 @@ export class HeartBeatProcessor {
     return Math.round(sum / finalSet.length);
   }
 
-  // ────────── RESET ──────────
+  // ────────── RESET COMPLETO ──────────
 
   public reset() {
     this.signalBuffer = [];
@@ -434,5 +503,7 @@ export class HeartBeatProcessor {
     this.startTime = Date.now();
     this.peakCandidateIndex = null;
     this.peakCandidateValue = 0;
+
+    this.lowSignalCount = 0;
   }
 }
