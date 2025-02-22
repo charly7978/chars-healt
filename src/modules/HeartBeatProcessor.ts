@@ -2,17 +2,20 @@
 export class HeartBeatProcessor {
   private readonly SAMPLE_RATE = 30;
   private readonly WINDOW_SIZE = 60;
-  private readonly MIN_PEAK_DISTANCE = 10;
+  private readonly MIN_PEAK_DISTANCE = 9;  // Ajustado de 10 a 9 para permitir hasta 190 BPM
   private readonly MAX_BPM = 190;
   private readonly MIN_BPM = 40;
   private readonly BEEP_FREQUENCY = 1000;
   private readonly BEEP_DURATION = 50;
-  private readonly SIGNAL_THRESHOLD = 0.40;  
+  private readonly SIGNAL_THRESHOLD = 0.45;  // Ajustado a un punto medio entre 0.4 y 0.5
   private readonly MIN_CONFIDENCE = 0.80;
-  private readonly DERIVATIVE_THRESHOLD = -0.040;  // Único cambio: de -0.005 a -0.010 para exigir cambios aún más pronunciados
-  private readonly MIN_PEAK_TIME_MS = 400;
+  private readonly DERIVATIVE_THRESHOLD = -0.045;  // Ajustado para exigir una bajada más pronunciada
+  private readonly MIN_PEAK_TIME_MS = 315;  // Ajustado de 400 a 315 para permitir hasta 190 BPM
+  private readonly WARMUP_TIME_MS = 5000;  // Tiempo de calentamiento de 5 segundos
+  private readonly MOVING_AVERAGE_WINDOW = 5;  // Ventana para el promedio móvil
 
   private signalBuffer: number[] = [];
+  private movingAverageBuffer: number[] = [];
   private lastPeakTime: number | null = null;
   private previousPeakTime: number | null = null;
   private audioContext: AudioContext | null = null;
@@ -21,9 +24,11 @@ export class HeartBeatProcessor {
   private baseline: number = 0;
   private lastValue: number = 0;
   private values: number[] = [];
+  private startTime: number = 0;
 
   constructor() {
     this.initAudio();
+    this.startTime = Date.now();
   }
 
   private async initAudio() {
@@ -38,6 +43,14 @@ export class HeartBeatProcessor {
     } catch (error) {
       console.error("HeartBeatProcessor: Error initializing audio", error);
     }
+  }
+
+  private calculateMovingAverage(value: number): number {
+    this.movingAverageBuffer.push(value);
+    if (this.movingAverageBuffer.length > this.MOVING_AVERAGE_WINDOW) {
+      this.movingAverageBuffer.shift();
+    }
+    return this.movingAverageBuffer.reduce((a, b) => a + b, 0) / this.movingAverageBuffer.length;
   }
 
   private async playBeep(volume: number = 0.1) {
@@ -70,11 +83,6 @@ export class HeartBeatProcessor {
       oscillator.stop(this.audioContext.currentTime + 0.05);
 
       this.lastBeepTime = currentTime;
-      console.log("HeartBeatProcessor: Beep reproducido", {
-        volume,
-        frequency: this.BEEP_FREQUENCY,
-        time: currentTime
-      });
     } catch (error) {
       console.error("HeartBeatProcessor: Error playing beep", error);
     }
@@ -85,7 +93,10 @@ export class HeartBeatProcessor {
     confidence: number;
     isPeak: boolean;
   } {
-    this.signalBuffer.push(value);
+    // Aplicar promedio móvil para suavizar la señal
+    const smoothedValue = this.calculateMovingAverage(value);
+
+    this.signalBuffer.push(smoothedValue);
     if (this.signalBuffer.length > this.WINDOW_SIZE) {
       this.signalBuffer.shift();
     }
@@ -94,20 +105,23 @@ export class HeartBeatProcessor {
       return { bpm: 0, confidence: 0, isPeak: false };
     }
 
-    this.baseline = this.baseline * 0.98 + value * 0.02;
-    const normalizedValue = value - this.baseline;
+    this.baseline = this.baseline * 0.98 + smoothedValue * 0.02;
+    const normalizedValue = smoothedValue - this.baseline;
 
-    this.values.push(value);
+    this.values.push(smoothedValue);
     if (this.values.length > 3) this.values.shift();
 
     const smoothDerivative = this.values.length > 2 ? 
       (this.values[2] - this.values[0]) / 2 : 
-      value - this.lastValue;
+      smoothedValue - this.lastValue;
 
     const { isPeak, confidence } = this.detectPeak(normalizedValue, smoothDerivative);
-    this.lastValue = value;
+    this.lastValue = smoothedValue;
 
-    if (isPeak && confidence > this.MIN_CONFIDENCE) {
+    // Verificar si estamos en el período de calentamiento
+    const isWarmupPeriod = Date.now() - this.startTime < this.WARMUP_TIME_MS;
+
+    if (isPeak && confidence > this.MIN_CONFIDENCE && !isWarmupPeriod) {
       const currentTime = Date.now();
       const timeSinceLastPeak = this.lastPeakTime ? currentTime - this.lastPeakTime : Infinity;
       
@@ -124,7 +138,7 @@ export class HeartBeatProcessor {
     return {
       bpm,
       confidence,
-      isPeak
+      isPeak: isPeak && !isWarmupPeriod
     };
   }
 
@@ -153,7 +167,6 @@ export class HeartBeatProcessor {
     }
 
     const interval = this.lastPeakTime - this.previousPeakTime;
-    
     if (interval <= 0) {
       console.log("[UpdateBPM] Invalid interval", { interval });
       return;
@@ -163,7 +176,6 @@ export class HeartBeatProcessor {
 
     if (instantBPM >= this.MIN_BPM && instantBPM <= this.MAX_BPM) {
       this.bpmHistory.push(instantBPM);
-      
       if (this.bpmHistory.length > 5) {
         this.bpmHistory.shift();
       }
@@ -183,6 +195,7 @@ export class HeartBeatProcessor {
 
   reset() {
     this.signalBuffer = [];
+    this.movingAverageBuffer = [];
     this.lastPeakTime = null;
     this.previousPeakTime = null;
     this.bpmHistory = [];
@@ -190,5 +203,6 @@ export class HeartBeatProcessor {
     this.baseline = 0;
     this.lastValue = 0;
     this.values = [];
+    this.startTime = Date.now(); // Reiniciar el tiempo de calentamiento
   }
 }
