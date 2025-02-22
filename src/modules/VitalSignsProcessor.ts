@@ -1,4 +1,3 @@
-
 export class VitalSignsProcessor {
   private ppgValues: number[] = [];
   private readonly WINDOW_SIZE = 300;
@@ -155,11 +154,16 @@ export class VitalSignsProcessor {
         return values[peak] - values[valleys[i]];
       }
       return 0;
-    });
+    }).filter(a => a > 0);
+
+    const mean = amplitudes.reduce((a, b) => a + b, 0) / amplitudes.length;
+    
+    const variance = amplitudes.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / amplitudes.length;
+    const standardDeviation = Math.sqrt(variance);
 
     return {
-      amplitude: Math.mean(amplitudes.filter(a => a > 0)),
-      variation: Math.std(amplitudes.filter(a => a > 0))
+      amplitude: mean,
+      variation: standardDeviation
     };
   }
 
