@@ -24,18 +24,28 @@ export class HeartBeatProcessor {
   private async initAudio() {
     try {
       this.audioContext = new AudioContext();
+      await this.audioContext.resume();
       await this.playBeep(0.01); // Warm up
-      console.log("HeartBeatProcessor: Audio initialized");
+      console.log("HeartBeatProcessor: Audio initialized successfully", {
+        sampleRate: this.audioContext.sampleRate,
+        state: this.audioContext.state
+      });
     } catch (error) {
       console.error("HeartBeatProcessor: Error initializing audio", error);
     }
   }
 
   private async playBeep(volume: number = 0.1) {
-    if (!this.audioContext) return;
+    if (!this.audioContext) {
+      console.warn("HeartBeatProcessor: AudioContext no disponible");
+      return;
+    }
 
     const currentTime = Date.now();
-    if (currentTime - this.lastBeepTime < 200) return; // Prevenir spam
+    if (currentTime - this.lastBeepTime < 200) {
+      console.log("HeartBeatProcessor: Beep ignorado (muy cercano al anterior)");
+      return;
+    }
 
     try {
       const oscillator = this.audioContext.createOscillator();
@@ -55,6 +65,11 @@ export class HeartBeatProcessor {
       oscillator.stop(this.audioContext.currentTime + 0.05);
 
       this.lastBeepTime = currentTime;
+      console.log("HeartBeatProcessor: Beep reproducido", {
+        volume,
+        frequency: this.BEEP_FREQUENCY,
+        time: currentTime
+      });
     } catch (error) {
       console.error("HeartBeatProcessor: Error playing beep", error);
     }
@@ -65,6 +80,13 @@ export class HeartBeatProcessor {
     confidence: number;
     isPeak: boolean;
   } {
+    console.log("HeartBeatProcessor: Procesando señal", {
+      inputValue: value,
+      bufferSize: this.signalBuffer.length,
+      lastValue: this.lastValue,
+      baseline: this.baseline
+    });
+
     // Actualizar buffer
     this.signalBuffer.push(value);
     if (this.signalBuffer.length > this.WINDOW_SIZE) {
@@ -73,6 +95,10 @@ export class HeartBeatProcessor {
 
     // Necesitamos suficientes muestras
     if (this.signalBuffer.length < 30) {
+      console.log("HeartBeatProcessor: Buffer insuficiente", {
+        currentSize: this.signalBuffer.length,
+        required: 30
+      });
       return { bpm: 0, confidence: 0, isPeak: false };
     }
 
@@ -87,16 +113,24 @@ export class HeartBeatProcessor {
 
     if (isPeak) {
       console.log("HeartBeatProcessor: Pico detectado", {
-        value,
+        rawValue: value,
         normalizedValue,
         derivative,
-        confidence
+        confidence,
+        timeSinceLastPeak: Date.now() - this.lastPeakTime
       });
       this.playBeep(0.1);
       this.updateBPM();
     }
 
     const bpm = this.calculateCurrentBPM();
+
+    console.log("HeartBeatProcessor: Resultado del procesamiento", {
+      bpm,
+      confidence,
+      isPeak,
+      historyLength: this.bpmHistory.length
+    });
 
     return {
       bpm,
@@ -109,6 +143,14 @@ export class HeartBeatProcessor {
     const currentTime = Date.now();
     const timeSinceLastPeak = currentTime - this.lastPeakTime;
     
+    console.log("HeartBeatProcessor: Analizando pico", {
+      normalizedValue,
+      derivative,
+      timeSinceLastPeak,
+      threshold: this.SIGNAL_THRESHOLD,
+      baseline: this.baseline
+    });
+
     // Verificar tiempo mínimo entre picos
     if (timeSinceLastPeak < (1000 * this.MIN_PEAK_DISTANCE) / this.SAMPLE_RATE) {
       return { isPeak: false, confidence: 0 };
@@ -145,23 +187,44 @@ export class HeartBeatProcessor {
         
         console.log("HeartBeatProcessor: BPM actualizado", {
           instantBPM,
-          historyLength: this.bpmHistory.length
+          historyLength: this.bpmHistory.length,
+          bpmHistory: this.bpmHistory,
+          timeSinceLastPeak
+        });
+      } else {
+        console.log("HeartBeatProcessor: BPM fuera de rango", {
+          instantBPM,
+          min: this.MIN_BPM,
+          max: this.MAX_BPM
         });
       }
     }
   }
 
   private calculateCurrentBPM(): number {
-    if (this.bpmHistory.length < 3) return 0;
+    if (this.bpmHistory.length < 3) {
+      console.log("HeartBeatProcessor: Historia BPM insuficiente", {
+        currentLength: this.bpmHistory.length,
+        required: 3
+      });
+      return 0;
+    }
 
     // Usar mediana para estabilidad
     const sortedBPMs = [...this.bpmHistory].sort((a, b) => a - b);
     const medianBPM = sortedBPMs[Math.floor(sortedBPMs.length / 2)];
     
+    console.log("HeartBeatProcessor: BPM calculado", {
+      medianBPM,
+      history: this.bpmHistory,
+      sorted: sortedBPMs
+    });
+
     return Math.round(medianBPM);
   }
 
   reset() {
+    console.log("HeartBeatProcessor: Reseteando procesador");
     this.signalBuffer = [];
     this.lastPeakTime = 0;
     this.bpmHistory = [];
