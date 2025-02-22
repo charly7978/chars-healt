@@ -83,16 +83,6 @@ const Index = () => {
       if (vitals) {
         setVitalSigns(vitals);
         setArrhythmiaCount(vitals.arrhythmiaStatus);
-
-        console.log("Index: Actualización de signos vitales", {
-          timestamp: new Date().toISOString(),
-          heartRate: heartBeatResult.bpm,
-          spo2: vitals.spo2,
-          bloodPressure: vitals.pressure,
-          arrhythmiaStatus: vitals.arrhythmiaStatus,
-          signalQuality: lastSignal.quality,
-          rrData: heartBeatResult.rrData
-        });
       }
     }
   }, [lastSignal, processHeartBeat, processVitalSigns]);
@@ -192,7 +182,6 @@ const Index = () => {
     setVitalSigns({ spo2: 0, pressure: "--/--", arrhythmiaStatus: "--" });
     setHeartRate(0);
     setArrhythmiaCount("--");
-    console.log("Index: Medición reiniciada, valores reseteados");
   };
 
   const handleSignOut = async () => {
