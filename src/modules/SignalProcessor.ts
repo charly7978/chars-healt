@@ -1,5 +1,5 @@
+
 import { ProcessedSignal, ProcessingError, SignalProcessor } from '../types/signal';
-import { VitalSignalProcessor } from './VitalSignalProcessor';
 
 class KalmanFilter {
   private R: number = 0.01;
@@ -25,25 +25,21 @@ class KalmanFilter {
 export class PPGSignalProcessor implements SignalProcessor {
   private isProcessing: boolean = false;
   private kalmanFilter: KalmanFilter;
-  private vitalProcessor: VitalSignalProcessor;
   private lastValues: number[] = [];
   private readonly BUFFER_SIZE = 10;
-  private readonly MIN_RED_THRESHOLD = 30;
-  private readonly MAX_RED_THRESHOLD = 250;
-  private readonly STABILITY_WINDOW = 5;
-  private readonly MIN_STABILITY_COUNT = 3;
+  private readonly MIN_RED_THRESHOLD = 30;  // Bajamos el umbral mínimo para Android
+  private readonly MAX_RED_THRESHOLD = 250; // Aumentamos el máximo para más tolerancia
+  private readonly STABILITY_WINDOW = 5;    // Ventana para calcular estabilidad
+  private readonly MIN_STABILITY_COUNT = 3;  // Mínimo de frames estables para considerar dedo presente
   private stableFrameCount: number = 0;
   private lastStableValue: number = 0;
-  private lastBPM: number = 0;
-  private lastConfidence: number = 0;
   
   constructor(
     public onSignalReady?: (signal: ProcessedSignal) => void,
     public onError?: (error: ProcessingError) => void
   ) {
     this.kalmanFilter = new KalmanFilter();
-    this.vitalProcessor = new VitalSignalProcessor();
-    console.log("PPGSignalProcessor: Instancia creada con procesador vital");
+    console.log("PPGSignalProcessor: Instancia creada");
   }
 
   async initialize(): Promise<void> {
@@ -52,9 +48,6 @@ export class PPGSignalProcessor implements SignalProcessor {
       this.stableFrameCount = 0;
       this.lastStableValue = 0;
       this.kalmanFilter.reset();
-      this.vitalProcessor.reset();
-      this.lastBPM = 0;
-      this.lastConfidence = 0;
       console.log("PPGSignalProcessor: Inicializado");
     } catch (error) {
       console.error("PPGSignalProcessor: Error de inicialización", error);
@@ -75,7 +68,6 @@ export class PPGSignalProcessor implements SignalProcessor {
     this.stableFrameCount = 0;
     this.lastStableValue = 0;
     this.kalmanFilter.reset();
-    this.vitalProcessor.reset();
     console.log("PPGSignalProcessor: Detenido");
   }
 
@@ -92,6 +84,7 @@ export class PPGSignalProcessor implements SignalProcessor {
 
   processFrame(imageData: ImageData): void {
     if (!this.isProcessing) {
+      console.log("PPGSignalProcessor: No está procesando");
       return;
     }
 
@@ -106,25 +99,13 @@ export class PPGSignalProcessor implements SignalProcessor {
 
       const { isFingerDetected, quality } = this.analyzeSignal(filtered, redValue);
 
-      let heartRate = 0;
-      let confidence = 0;
-
-      if (isFingerDetected) {
-        const vitalSigns = this.vitalProcessor.processSignal(filtered);
-        
-        if (vitalSigns.isValid) {
-          heartRate = vitalSigns.bpm;
-          confidence = vitalSigns.confidence;
-          
-          console.log("PPGSignalProcessor: Vital signs calculados", {
-            heartRate,
-            confidence,
-            quality,
-            isValid: vitalSigns.isValid,
-            peaks: vitalSigns.peaks.length
-          });
-        }
-      }
+      console.log("PPGSignalProcessor: Análisis", {
+        redValue,
+        filtered,
+        isFingerDetected,
+        quality,
+        stableFrames: this.stableFrameCount
+      });
 
       const processedSignal: ProcessedSignal = {
         timestamp: Date.now(),
@@ -132,8 +113,6 @@ export class PPGSignalProcessor implements SignalProcessor {
         filteredValue: filtered,
         quality: quality,
         fingerDetected: isFingerDetected,
-        heartRate: heartRate,
-        confidence: confidence,
         roi: this.detectROI(redValue)
       };
 
@@ -150,6 +129,7 @@ export class PPGSignalProcessor implements SignalProcessor {
     let redSum = 0;
     let count = 0;
     
+    // Analizar solo el centro de la imagen (25% central)
     const startX = Math.floor(imageData.width * 0.375);
     const endX = Math.floor(imageData.width * 0.625);
     const startY = Math.floor(imageData.height * 0.375);
@@ -158,7 +138,7 @@ export class PPGSignalProcessor implements SignalProcessor {
     for (let y = startY; y < endY; y++) {
       for (let x = startX; x < endX; x++) {
         const i = (y * imageData.width + x) * 4;
-        redSum += data[i];
+        redSum += data[i];  // Canal rojo
         count++;
       }
     }
@@ -175,6 +155,7 @@ export class PPGSignalProcessor implements SignalProcessor {
       return { isFingerDetected: false, quality: 0 };
     }
 
+    // Calcular estabilidad
     if (this.lastValues.length < this.STABILITY_WINDOW) {
       return { isFingerDetected: false, quality: 0 };
     }
@@ -185,7 +166,7 @@ export class PPGSignalProcessor implements SignalProcessor {
       return sum + Math.abs(val - arr[i-1]);
     }, 0) / (recentValues.length - 1);
 
-    const isStable = avgVariation < 5;
+    const isStable = avgVariation < 5; // Umbral de variación para considerar señal estable
 
     if (isStable) {
       this.stableFrameCount++;
@@ -196,6 +177,7 @@ export class PPGSignalProcessor implements SignalProcessor {
 
     const isFingerDetected = this.stableFrameCount >= this.MIN_STABILITY_COUNT;
     
+    // Calcular calidad solo si el dedo está detectado
     let quality = 0;
     if (isFingerDetected) {
       const stabilityScore = Math.min(this.stableFrameCount / 10, 1);
