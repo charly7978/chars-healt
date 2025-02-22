@@ -24,8 +24,8 @@
  *    evitando saltos abruptos y permitiendo que el valor se mueva gradualmente.
  * 3) Se han reducido ligeramente los pesos en la fusión de SpO2 para hacerlo 
  *    un poco más reactivo (en lugar de quedarse fijo en 98).
- * 4) Se mantiene el pequeño filtro SMA (applySMAFilter) y la supresión de outliers 
- *    en SpO2, junto con la verificación de baseline para no utilizar datos antes 
+ * 4) Se mantiene el pequeño filtro SMA (Smooth Moving Average) 
+ *    y la supresión de outliers en SpO2, junto con la verificación de baseline para no utilizar datos antes 
  *    de tener ~2s de muestras filtradas (60 muestras con ~30FPS).
  *
  */
@@ -273,35 +273,40 @@ export class VitalSignsProcessor {
       return { systolic: this.lastSystolic, diastolic: this.lastDiastolic };
     }
 
-    // Análisis del tiempo de tránsito del pulso (PTT)
+    // Análisis real del tiempo entre picos (PTT)
     const pttValues = [];
     for (let i = 1; i < peakTimes.length; i++) {
-      pttValues.push(peakTimes[i] - peakTimes[i-1]);
+      const interval = peakTimes[i] - peakTimes[i-1];
+      if (interval > 5 && interval < 200) { // Filtro de intervalos fisiológicamente posibles
+        pttValues.push(interval);
+      }
     }
     
-    // Promedio del PTT con más variabilidad natural
+    if (pttValues.length === 0) {
+      return { systolic: this.lastSystolic, diastolic: this.lastDiastolic };
+    }
+
+    // Cálculo real del PTT promedio
     const avgPTT = pttValues.reduce((a, b) => a + b, 0) / pttValues.length;
-    const pttVariability = Math.random() * 2 - 1; // Añade ±1ms de variabilidad natural
 
-    // Análisis de la forma de onda con componente dinámico
-    const { amplitude, variation } = this.calculateWaveformAmplitudes(ppgValues, peakTimes, valleys);
+    // Análisis real de la forma de onda
+    const { amplitude } = this.calculateWaveformAmplitudes(ppgValues, peakTimes, valleys);
+
+    // Cálculo basado únicamente en mediciones reales
+    // La relación entre PTT y presión sistólica está inversamente relacionada
+    const systolic = Math.round(120 + ((1000 / avgPTT) - 8) * 2);
     
-    // Factor de variabilidad fisiológica (respiración, variabilidad natural)
-    const physiologicalFactor = Math.sin(Date.now() / 5000) * 3; // Variación suave de ±3 mmHg
-    
-    // Cálculo de presión más dinámico
-    let systolic = Math.round(120 + ((1000 / (avgPTT + pttVariability) - 8) * 2) + physiologicalFactor);
-    let diastolic = Math.round(systolic - (40 + amplitude * 0.2 + variation));
+    // La presión diastólica se relaciona con la amplitud de la onda y la sistólica
+    const diastolic = Math.round(systolic - (40 + amplitude * 0.2));
 
-    // Suavizado para evitar cambios demasiado bruscos
-    systolic = Math.round(0.7 * systolic + 0.3 * this.lastSystolic);
-    diastolic = Math.round(0.7 * diastolic + 0.3 * this.lastDiastolic);
+    // Límites fisiológicos seguros
+    const finalSystolic = Math.min(180, Math.max(90, systolic));
+    const finalDiastolic = Math.min(110, Math.max(60, diastolic));
 
-    // Límites fisiológicos
-    systolic = Math.min(180, Math.max(90, systolic));
-    diastolic = Math.min(110, Math.max(60, diastolic));
-
-    return { systolic, diastolic };
+    return { 
+      systolic: finalSystolic, 
+      diastolic: finalDiastolic 
+    };
   }
 
   // ───────────────────── Cálculos internos ─────────────────────
