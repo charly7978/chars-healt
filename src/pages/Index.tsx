@@ -27,6 +27,8 @@ const Index = () => {
   const [email, setEmail] = useState<string>("");
   const [elapsedTime, setElapsedTime] = useState(0);
   const measurementTimerRef = useRef<number | null>(null);
+  const frameRequestRef = useRef<number>();
+  const processingRef = useRef(false);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
@@ -180,53 +182,49 @@ const Index = () => {
   const handleStreamReady = (stream: MediaStream) => {
     if (!isMonitoring) return;
     
-    console.log("Index: Camera stream ready", stream.getVideoTracks()[0].getSettings());
     const videoTrack = stream.getVideoTracks()[0];
     const imageCapture = new ImageCapture(videoTrack);
-    
-    if (videoTrack.getCapabilities()?.torch) {
-      videoTrack.applyConstraints({
-        advanced: [{ torch: true }]
-      }).catch(err => console.error("Error activando linterna:", err));
-    }
-    
     const tempCanvas = document.createElement('canvas');
     const tempCtx = tempCanvas.getContext('2d');
+    
     if (!tempCtx) {
-      console.error("Index: No se pudo obtener el contexto 2D del canvas temporal");
+      console.error("No se pudo obtener el contexto 2D");
       return;
     }
     
     const processImage = async () => {
-      if (!isMonitoring) {
-        console.log("Index: Monitoreo detenido, no se procesan más frames");
+      if (!isMonitoring || isPaused) {
+        frameRequestRef.current = requestAnimationFrame(processImage);
         return;
       }
-      
+
       try {
-        const frame = await imageCapture.grabFrame();
-        tempCanvas.width = frame.width;
-        tempCanvas.height = frame.height;
-        tempCtx.drawImage(frame, 0, 0);
-        const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
-        processFrame(imageData);
-        
-        if (isMonitoring) {
-          requestAnimationFrame(processImage);
+        if (!processingRef.current) {
+          processingRef.current = true;
+          
+          const frame = await imageCapture.grabFrame();
+          tempCanvas.width = frame.width;
+          tempCanvas.height = frame.height;
+          tempCtx.drawImage(frame, 0, 0);
+          
+          const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
+          processFrame(imageData);
+          
+          processingRef.current = false;
         }
       } catch (error) {
-        console.error("Index: Error capturando frame:", error);
-        if (isMonitoring) {
-          requestAnimationFrame(processImage);
-        }
+        processingRef.current = false;
+        console.error("Error capturando frame:", error);
       }
+
+      frameRequestRef.current = requestAnimationFrame(processImage);
     };
 
     processImage();
   };
 
   useEffect(() => {
-    if (lastSignal && lastSignal.fingerDetected && isMonitoring) {
+    if (lastSignal && lastSignal.fingerDetected && isMonitoring && !isPaused) {
       const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
       setHeartRate(heartBeatResult.bpm);
       
@@ -238,7 +236,15 @@ const Index = () => {
       
       setSignalQuality(lastSignal.quality);
     }
-  }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
+  }, [lastSignal, isMonitoring, isPaused, processHeartBeat, processVitalSigns]);
+
+  useEffect(() => {
+    return () => {
+      if (frameRequestRef.current) {
+        cancelAnimationFrame(frameRequestRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div className="w-screen h-screen bg-gray-900 overflow-hidden">
