@@ -10,6 +10,7 @@ import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import CalibrationDialog from "@/components/CalibrationDialog";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { LogOut, Settings } from "lucide-react";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -23,47 +24,77 @@ const Index = () => {
   const [elapsedTime, setElapsedTime] = useState(0);
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState<string | number>("--");
-  const [isCalibrating, setIsCalibrating] = useState(false);
   const [showCalibrationDialog, setShowCalibrationDialog] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [wasMeasuring, setWasMeasuring] = useState(false);
+  const [email, setEmail] = useState<string>("");
   
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { startProcessing, stopProcessing, lastSignal, processFrame, calibrate } = useSignalProcessor();
-  const processingRef = useRef<boolean>(false);
+  const { toast } = useToast();
+  const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
-  const { toast } = useToast();
 
+  // Control de visibilidad de la página
   useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { session }, error } = await supabase.auth.getSession();
-      setIsAuthenticated(!!session);
-      if (error) {
-        console.error("Error verificando autenticación:", error);
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        stopProcessing();
+        setIsMonitoring(false);
+      } else {
+        startProcessing();
+        setIsMonitoring(true);
       }
     };
 
-    checkAuth();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setIsAuthenticated(!!session);
-    });
-
-    return () => subscription.unsubscribe();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, []);
 
+  // Control de sesión
   useEffect(() => {
-    processingRef.current = isMonitoring;
-  }, [isMonitoring]);
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        window.location.href = "/auth";
+      } else {
+        setEmail(session.user.email || "");
+        startProcessing();
+        setIsMonitoring(true);
+      }
+    };
+
+    checkSession();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) {
+        window.location.href = "/auth";
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+      stopProcessing();
+    };
+  }, []);
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      toast({
+        title: "Sesión cerrada",
+        description: "Has cerrado sesión correctamente"
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No se pudo cerrar la sesión"
+      });
+    }
+  };
 
   useEffect(() => {
     if (!isMonitoring) {
-      if (!isCalibrating) {
-        setElapsedTime(0);
-        setArrhythmiaCount("--");
-        setVitalSigns(prev => ({ ...prev, arrhythmiaStatus: "--" }));
-      }
       return;
     }
 
@@ -72,15 +103,10 @@ const Index = () => {
       const currentTime = Date.now();
       const elapsed = (currentTime - startTime) / 1000;
       setElapsedTime(elapsed);
-
-      if (elapsed >= 30) {
-        const event = new CustomEvent('measurementComplete');
-        window.dispatchEvent(event);
-      }
     }, 200);
 
     return () => clearInterval(interval);
-  }, [isMonitoring, isCalibrating]);
+  }, [isMonitoring]);
 
   useEffect(() => {
     if (lastSignal) {
@@ -118,16 +144,6 @@ const Index = () => {
     }
   }, [lastSignal, processHeartBeat, processVitalSigns]);
 
-  useEffect(() => {
-    const handleMeasurementComplete = (e: Event) => {
-      e.preventDefault();
-      handleStopMeasurement();
-    };
-
-    window.addEventListener('measurementComplete', handleMeasurementComplete);
-    return () => window.removeEventListener('measurementComplete', handleMeasurementComplete);
-  }, []);
-
   const handleStreamReady = (stream: MediaStream) => {
     console.log("Index: Camera stream ready", stream.getVideoTracks()[0].getSettings());
     const videoTrack = stream.getVideoTracks()[0];
@@ -147,7 +163,7 @@ const Index = () => {
     }
     
     const processImage = async () => {
-      if (!processingRef.current && !isCalibrating) {
+      if (!isMonitoring) {
         console.log("Index: Monitoreo detenido, no se procesan más frames");
         return;
       }
@@ -162,12 +178,12 @@ const Index = () => {
         const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
         processFrame(imageData);
         
-        if (processingRef.current || isCalibrating) {
+        if (isMonitoring) {
           requestAnimationFrame(processImage);
         }
       } catch (error) {
         console.error("Index: Error capturando frame:", error);
-        if (processingRef.current || isCalibrating) {
+        if (isMonitoring) {
           requestAnimationFrame(processImage);
         }
       }
@@ -175,100 +191,7 @@ const Index = () => {
 
     console.log("Index: Iniciando monitoreo de signos vitales");
     setIsCameraOn(true);
-    if (!isCalibrating) {
-      setIsMonitoring(true);
-      processingRef.current = true;
-    }
     processImage();
-  };
-
-  const handleStartMeasurement = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    console.log("Index: Iniciando nueva medición");
-    startProcessing();
-    setIsCameraOn(true);
-  };
-
-  const handleStopMeasurement = () => {
-    console.log("Index: Deteniendo medición", {
-      finalMeasurements: {
-        heartRate,
-        spo2: vitalSigns.spo2,
-        bloodPressure: vitalSigns.pressure,
-        arrhythmiaStatus: vitalSigns.arrhythmiaStatus
-      }
-    });
-    
-    setIsMonitoring(false);
-    processingRef.current = false;
-    stopProcessing();
-    setSignalQuality(0);
-    if (!isCalibrating) {
-      setIsCameraOn(false);
-    }
-  };
-
-  const handleReset = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!isCalibrating) {
-      handleStopMeasurement();
-      resetVitalSigns();
-      setVitalSigns({ spo2: 0, pressure: "--/--", arrhythmiaStatus: "--" });
-      setHeartRate(0);
-      setArrhythmiaCount("--");
-      console.log("Index: Medición reiniciada, valores reseteados");
-    }
-  };
-
-  const handleCalibration = async () => {
-    if (!isAuthenticated) {
-      toast({
-        variant: "destructive",
-        title: "Error de Acceso",
-        description: "Debe iniciar sesión para realizar la calibración"
-      });
-      return;
-    }
-
-    try {
-      setWasMeasuring(isMonitoring);
-      setIsMonitoring(false);
-      processingRef.current = false;
-      
-      setIsCalibrating(true);
-      setShowCalibrationDialog(true);
-      
-      const success = await calibrate();
-      
-      if (success) {
-        toast({
-          title: "Calibración Exitosa",
-          description: "Los parámetros han sido ajustados para esta sesión.",
-          duration: 3000,
-        });
-        
-        if (wasMeasuring) {
-          setIsMonitoring(true);
-          processingRef.current = true;
-        }
-      } else {
-        throw new Error("Error en el proceso de calibración");
-      }
-    } catch (error) {
-      console.error("Error durante la calibración:", error);
-      toast({
-        variant: "destructive",
-        title: "Error de Calibración",
-        description: "Ocurrió un error inesperado.",
-        duration: 3000,
-      });
-    } finally {
-      setIsCalibrating(false);
-      setShowCalibrationDialog(false);
-    }
   };
 
   return (
@@ -286,8 +209,26 @@ const Index = () => {
         <div className="relative z-10 h-full flex flex-col justify-between p-4">
           <div className="flex justify-between items-start w-full">
             <h1 className="text-lg font-bold text-white bg-black/30 px-3 py-1 rounded">PPG Monitor</h1>
-            <div className="text-base font-mono text-medical-blue bg-black/30 px-3 py-1 rounded">
-              {isMonitoring ? `${Math.ceil(30 - elapsedTime)}s` : '30s'}
+            <div className="flex gap-2">
+              <div className="text-sm text-gray-300 bg-black/30 px-3 py-1 rounded">
+                {email}
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="bg-black/30 text-gray-300 hover:text-white"
+                onClick={() => setShowCalibrationDialog(true)}
+              >
+                <Settings className="h-5 w-5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="bg-black/30 text-gray-300 hover:text-white"
+                onClick={handleLogout}
+              >
+                <LogOut className="h-5 w-5" />
+              </Button>
             </div>
           </div>
 
@@ -310,28 +251,25 @@ const Index = () => {
 
           <div className="flex justify-center gap-2 w-full max-w-md mx-auto">
             <Button
-              onClick={handleCalibration}
+              onClick={() => setShowCalibrationDialog(true)}
               size="sm"
               className="flex-1 bg-medical-blue/80 hover:bg-medical-blue text-white text-xs py-1.5"
-              disabled={isCalibrating || !isCameraOn || !isAuthenticated}
             >
-              {isCalibrating ? "Calibrando..." : "Calibrar"}
+              Calibrar
             </Button>
             
             <Button
-              onClick={isMonitoring ? handleStopMeasurement : handleStartMeasurement}
+              onClick={isMonitoring ? stopProcessing : startProcessing}
               size="sm"
               className={`flex-1 ${isMonitoring ? 'bg-medical-red/80 hover:bg-medical-red' : 'bg-medical-blue/80 hover:bg-medical-blue'} text-white text-xs py-1.5`}
-              disabled={(elapsedTime >= 30 && !isMonitoring) || isCalibrating}
             >
               {isMonitoring ? 'Detener' : 'Iniciar'}
             </Button>
 
             <Button
-              onClick={handleReset}
+              onClick={resetVitalSigns}
               size="sm"
               className="flex-1 bg-gray-600/80 hover:bg-gray-600 text-white text-xs py-1.5"
-              disabled={isCalibrating}
             >
               Reset
             </Button>
@@ -341,15 +279,7 @@ const Index = () => {
 
       <CalibrationDialog
         isOpen={showCalibrationDialog}
-        onClose={() => {
-          setShowCalibrationDialog(false);
-          if (wasMeasuring) {
-            console.log("Reanudando medición al cerrar diálogo");
-            setIsMonitoring(true);
-            processingRef.current = true;
-          }
-        }}
-        isCalibrating={isCalibrating}
+        onClose={() => setShowCalibrationDialog(false)}
       />
     </div>
   );
