@@ -30,17 +30,15 @@ export const useVitalMeasurement = (isMeasuring: boolean) => {
     }
 
     const startTime = Date.now();
-    const MEASUREMENT_DURATION = 22000; // 22 segundos en milisegundos
+    const MEASUREMENT_DURATION = 30000; // Aumentado a 30 segundos
 
     const interval = setInterval(() => {
       const currentTime = Date.now();
       const elapsed = currentTime - startTime;
       setElapsedTime(elapsed / 1000);
 
-      // Si han pasado 22 segundos, detener la medición
       if (elapsed >= MEASUREMENT_DURATION) {
         clearInterval(interval);
-        // Disparar un evento personalizado para notificar que la medición ha terminado
         const event = new CustomEvent('measurementComplete');
         window.dispatchEvent(event);
         return;
@@ -52,7 +50,7 @@ export const useVitalMeasurement = (isMeasuring: boolean) => {
 
   return {
     ...measurements,
-    elapsedTime: Math.min(elapsedTime, 22),
-    isComplete: elapsedTime >= 22
+    elapsedTime: Math.min(elapsedTime, 30), // Ajustado a 30 segundos
+    isComplete: elapsedTime >= 30 // Ajustado a 30 segundos
   };
 };

@@ -1,4 +1,3 @@
-
 export class HeartBeatProcessor {
   private readonly SAMPLE_RATE = 30;
   private readonly WINDOW_SIZE = 60;
@@ -187,10 +186,16 @@ export class HeartBeatProcessor {
       return 0;
     }
 
-    const sortedBPMs = [...this.bpmHistory].sort((a, b) => a - b);
-    const medianBPM = sortedBPMs[Math.floor(sortedBPMs.length / 2)];
+    if (this.bpmHistory.length > 8) {
+      this.bpmHistory.shift();
+    }
 
-    return Math.round(medianBPM);
+    const sortedBPMs = [...this.bpmHistory].sort((a, b) => a - b);
+    const filteredBPMs = sortedBPMs.slice(1, -1);
+
+    const average = filteredBPMs.reduce((a, b) => a + b, 0) / filteredBPMs.length;
+    
+    return Math.round(average);
   }
 
   reset() {
