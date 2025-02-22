@@ -11,6 +11,7 @@ const PPGSignalMeter = ({ value, quality, isFingerDetected }: PPGSignalMeterProp
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dataRef = useRef<number[]>([]);
   const MAX_POINTS = 150;
+  const SIGNAL_SCALE = 2; // Aumentamos la escala para ver mejor los picos
 
   useEffect(() => {
     if (!canvasRef.current || !isFingerDetected) return;
@@ -25,6 +26,9 @@ const PPGSignalMeter = ({ value, quality, isFingerDetected }: PPGSignalMeterProp
       dataRef.current.shift();
     }
 
+    // Calcular media móvil para centrar la señal
+    const mean = dataRef.current.reduce((a, b) => a + b, 0) / dataRef.current.length;
+
     // Limpiar canvas
     ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -36,11 +40,11 @@ const PPGSignalMeter = ({ value, quality, isFingerDetected }: PPGSignalMeterProp
 
     const points = dataRef.current;
     const step = canvas.width / (MAX_POINTS - 1);
-    const scale = canvas.height / 400; // Ajustar escala según rango de señal
 
     points.forEach((point, i) => {
       const x = i * step;
-      const y = canvas.height / 2 + (point - 200) * scale;
+      // Centramos la señal alrededor del punto medio y aplicamos escala
+      const y = canvas.height / 2 + (point - mean) * SIGNAL_SCALE;
       if (i === 0) {
         ctx.moveTo(x, y);
       } else {
@@ -49,6 +53,16 @@ const PPGSignalMeter = ({ value, quality, isFingerDetected }: PPGSignalMeterProp
     });
 
     ctx.stroke();
+
+    // Dibujar línea central
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.setLineDash([5, 5]);
+    ctx.moveTo(0, canvas.height / 2);
+    ctx.lineTo(canvas.width, canvas.height / 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
   }, [value, quality, isFingerDetected]);
 
   return (
