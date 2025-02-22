@@ -38,13 +38,23 @@ const CameraView = ({ onStreamReady, isMonitoring, isFingerDetected = false, sig
         throw new Error("getUserMedia no está soportado");
       }
 
-      const newStream = await navigator.mediaDevices.getUserMedia({
+      const isAndroid = /Android/i.test(navigator.userAgent);
+      
+      const constraints = {
         video: {
           facingMode: 'environment',
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
+          width: isAndroid ? { ideal: 640 } : { ideal: 1280 },
+          height: isAndroid ? { ideal: 480 } : { ideal: 720 }
         }
+      };
+
+      console.log("Camera constraints:", { 
+        isAndroid, 
+        constraints,
+        userAgent: navigator.userAgent 
       });
+
+      const newStream = await navigator.mediaDevices.getUserMedia(constraints);
 
       const videoTrack = newStream.getVideoTracks()[0];
       
