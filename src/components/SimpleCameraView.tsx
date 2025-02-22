@@ -75,10 +75,7 @@ const SimpleCameraView = ({
             height: { ideal: 480 },
             frameRate: { ideal: 30 },
             aspectRatio: { ideal: 1.3333333333 }, // 4:3 aspect ratio
-            brightness: { ideal: 100 },
-            saturation: { ideal: 100 },
-            sharpness: { ideal: 100 },
-          } as MediaTrackConstraints
+          }
         };
 
         // Detener stream anterior
@@ -102,22 +99,9 @@ const SimpleCameraView = ({
           const capabilities = track.getCapabilities();
           console.log("Capacidades de la cámara:", capabilities);
           
-          // Intentar optimizar la configuración del track con los ajustes disponibles
-          try {
-            const currentSettings = track.getSettings();
-            console.log("Configuración actual de la cámara:", currentSettings);
-            
-            // Aplicar configuraciones básicas que sabemos que son seguras
-            await track.applyConstraints({
-              advanced: [{
-                brightness: 100,
-                saturation: 100,
-                sharpness: 100
-              }]
-            });
-          } catch (err) {
-            console.log("No se pudieron aplicar configuraciones avanzadas:", err);
-          }
+          // Mostrar configuración actual para debug
+          const currentSettings = track.getSettings();
+          console.log("Configuración actual de la cámara:", currentSettings);
         }
       } catch (err) {
         console.error("Error al iniciar la cámara:", err);
