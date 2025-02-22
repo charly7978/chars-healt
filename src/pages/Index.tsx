@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
@@ -7,7 +8,6 @@ import { useSignalProcessor } from "@/hooks/useSignalProcessor";
 import SignalQualityIndicator from "@/components/SignalQualityIndicator";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
-import HeartRateDisplay from "@/components/HeartRateDisplay";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -17,7 +17,7 @@ const Index = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const processingRef = useRef<boolean>(false);
-  const { currentBPM, confidence, processSignal, reset: resetHeartBeat } = useHeartBeatProcessor();
+  const { processSignal, reset: resetHeartBeat } = useHeartBeatProcessor();
 
   useEffect(() => {
     processingRef.current = isMonitoring;
@@ -165,7 +165,6 @@ const Index = () => {
             />
 
             <SignalQualityIndicator quality={signalQuality} />
-            <HeartRateDisplay bpm={currentBPM} confidence={confidence} />
 
             <div className="grid grid-cols-2 gap-2">
               <VitalSign label="Heart Rate" value={heartRate} unit="BPM" />
