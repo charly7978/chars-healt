@@ -36,18 +36,34 @@ const CameraView = ({
         throw new Error("getUserMedia no está soportado");
       }
 
+      // Ajustamos los constraints para mejor calidad de señal PPG
       const constraints: MediaStreamConstraints = {
         video: {
           facingMode: 'environment',
-          width: { ideal: 640, max: 1280 },
-          height: { ideal: 480, max: 720 },
-          frameRate: { min: 20, ideal: 30 },
-          aspectRatio: { ideal: 4/3 }
+          width: { ideal: 1280, min: 720 },  // Aumentamos la resolución mínima
+          height: { ideal: 720, min: 480 },  // Mantenemos una buena resolución base
+          frameRate: { min: 25, ideal: 30 }, // Aumentamos el frame rate mínimo
+          aspectRatio: { ideal: 16/9 }       // Cambiamos a 16:9 para mejor calidad
         }
       };
 
       const newStream = await navigator.mediaDevices.getUserMedia(constraints);
       
+      // Intentamos optimizar el track de video sin forzar configuraciones
+      const videoTrack = newStream.getVideoTracks()[0];
+      if (videoTrack) {
+        try {
+          await videoTrack.applyConstraints({
+            advanced: [{
+              brightness: 1,
+              saturation: 100
+            }]
+          });
+        } catch (err) {
+          console.log("No se pudieron aplicar configuraciones avanzadas:", err);
+        }
+      }
+
       if (videoRef.current) {
         videoRef.current.srcObject = newStream;
       }
