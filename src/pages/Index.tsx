@@ -200,14 +200,19 @@ const Index = () => {
       setIsCalibrating(true);
       setShowCalibrationDialog(true);
       
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      
       const success = await calibrate();
       
       if (success) {
-        toast({
-          title: "Calibración Exitosa",
-          description: "Los parámetros han sido ajustados para esta sesión.",
-          duration: 3000,
-        });
+        setIsCalibrating(false);
+        setTimeout(() => {
+          toast({
+            title: "Calibración Exitosa",
+            description: "Los parámetros han sido ajustados para esta sesión.",
+            duration: 3000,
+          });
+        }, 500);
       } else {
         toast({
           variant: "destructive",
@@ -215,6 +220,8 @@ const Index = () => {
           description: "Por favor, intente nuevamente.",
           duration: 3000,
         });
+        setIsCalibrating(false);
+        setShowCalibrationDialog(false);
       }
     } catch (error) {
       console.error("Error durante la calibración:", error);
@@ -224,11 +231,8 @@ const Index = () => {
         description: "Ocurrió un error inesperado.",
         duration: 3000,
       });
-    } finally {
       setIsCalibrating(false);
-      setTimeout(() => {
-        setShowCalibrationDialog(false);
-      }, 1500);
+      setShowCalibrationDialog(false);
     }
   };
 
