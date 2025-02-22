@@ -249,39 +249,65 @@ export class VitalSignsProcessor {
 
   /**
    * calculateSpO2
-   * @param values
-   * @returns {number}
+   * Calcula la saturación de oxígeno basada en:
+   * - Ratio AC/DC de la señal PPG
+   * - Índice de perfusión
+   * - Media móvil para estabilidad
    */
   private calculateSpO2(values: number[]): number {
-    // Se requiere al menos ~30 muestras para estabilidad.
+    // Se requieren al menos 30 muestras para estabilidad
     if (values.length < 30) {
       return this.lastValue;
     }
 
-    // DC (promedio)
+    // Calcular componentes AC y DC
     const dc = this.calculateDC(values);
-    if (dc === 0) {
-      return this.lastValue;
-    }
+    if (dc === 0) return this.lastValue;
 
-    // AC (rango)
     const ac = this.calculateAC(values);
-    const perfusionIndex = (ac / dc) * 100;
-
-    // Si la perfusión es demasiado baja, regresar último SpO2.
-    if (perfusionIndex < this.PERFUSION_INDEX_THRESHOLD * 100) {
+    
+    // Calcular índice de perfusión (PI)
+    const perfusionIndex = ac / dc;
+    
+    // Si la perfusión es muy baja, mantener último valor válido
+    if (perfusionIndex < this.PERFUSION_INDEX_THRESHOLD) {
       return this.lastValue;
     }
 
-    // Cálculo base a partir del promedio, con factor de calibración.
-    const mean = dc; // (dc es ya el promedio).
-    const rawSpO2 = mean * this.SPO2_CALIBRATION_FACTOR;
+    // Calcular R (ratio de ratios) usando AC/DC
+    const R = (ac / dc) * this.SPO2_CALIBRATION_FACTOR;
 
-    // Limitamos entre [88, 98].
-    const spO2 = Math.round(Math.max(88, Math.min(98, rawSpO2)));
+    // Ecuación empírica mejorada para SpO2
+    // SpO2 = 110 - 25R (aproximación de curva de calibración)
+    let spO2 = Math.round(110 - (25 * R));
 
-    // Guardamos por si la señal empeora
+    // Ajustar basado en el índice de perfusión
+    if (perfusionIndex > 0.15) {  // Buena perfusión
+      spO2 = Math.min(spO2 + 2, 100);  // Ajuste positivo
+    } else if (perfusionIndex < 0.08) {  // Perfusión pobre
+      spO2 = Math.max(spO2 - 2, 88);    // Ajuste negativo
+    }
+
+    // Aplicar límites fisiológicos [88, 100]
+    spO2 = Math.max(88, Math.min(100, spO2));
+
+    // Media móvil para estabilidad
+    if (this.lastValue > 0) {
+      spO2 = Math.round((spO2 + this.lastValue) / 2);
+    }
+
+    // Actualizar último valor válido
     this.lastValue = spO2;
+
+    console.log("VitalSignsProcessor: Cálculo SpO2", {
+      ac,
+      dc,
+      ratio: R,
+      perfusionIndex,
+      rawSpO2: spO2,
+      finalSpO2: this.lastValue
+    });
+
     return spO2;
   }
 
@@ -439,20 +465,20 @@ export class VitalSignsProcessor {
 
   /**
    * calculateAC
-   * AC = (max - min) de la ventana actual.
+   * Calcula componente AC como pico a pico en ventana actual
    */
   private calculateAC(values: number[]): number {
+    if (values.length === 0) return 0;
     return Math.max(...values) - Math.min(...values);
   }
 
   /**
    * calculateDC
-   * DC = promedio de la ventana actual.
+   * Calcula componente DC como media en ventana actual
    */
   private calculateDC(values: number[]): number {
     if (values.length === 0) return 0;
-    const sum = values.reduce((a, b) => a + b, 0) / values.length;
-    return sum / values.length;
+    return values.reduce((a, b) => a + b, 0) / values.length;
   }
 
   /**
