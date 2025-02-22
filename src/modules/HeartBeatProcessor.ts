@@ -535,6 +535,7 @@ export class HeartBeatProcessor {
 
   private analyzeRhythm(currentTime: number) {
     if (!this.lastRhythmTime) {
+      console.log('HeartBeatProcessor - Rhythm: Primera medición, iniciando ritmo base');
       this.lastRhythmTime = currentTime;
       return;
     }
@@ -542,9 +543,22 @@ export class HeartBeatProcessor {
     const interval = currentTime - this.lastRhythmTime;
     const timeSinceStart = currentTime - this.measurementStartTime;
 
+    console.log('HeartBeatProcessor - Rhythm: Análisis de intervalo', {
+      interval,
+      timeSinceStart,
+      isLearningPhase: this.isLearningPhase,
+      baselineRhythm: this.baselineRhythm,
+      rhythmLearningIntervals: this.rhythmLearningIntervals.length
+    });
+
     // Fase de aprendizaje (primeros 10 segundos)
     if (this.isLearningPhase && timeSinceStart <= this.LEARNING_PERIOD_MS) {
       this.rhythmLearningIntervals.push(interval);
+      console.log('HeartBeatProcessor - Learning: Agregando intervalo', {
+        interval,
+        totalIntervals: this.rhythmLearningIntervals.length,
+        timeRemaining: this.LEARNING_PERIOD_MS - timeSinceStart
+      });
       
       // Al final de la fase de aprendizaje, calculamos el ritmo base
       if (timeSinceStart > this.LEARNING_PERIOD_MS) {
@@ -557,14 +571,23 @@ export class HeartBeatProcessor {
       // Calculamos la desviación del intervalo actual respecto al ritmo base
       const deviation = Math.abs(interval - this.baselineRhythm) / this.baselineRhythm;
       
+      console.log('HeartBeatProcessor - Detection: Analizando desviación', {
+        intervaloActual: interval,
+        ritmoBase: this.baselineRhythm,
+        desviacion: deviation,
+        tolerancia: this.RHYTHM_TOLERANCE,
+        arritmiasPrevias: this.arrhythmiaCount
+      });
+      
       // Si la desviación supera la tolerancia, es una arritmia
       if (deviation > this.RHYTHM_TOLERANCE) {
         this.arrhythmiaCount++;
-        console.log('Arritmia detectada:', {
+        console.log('HeartBeatProcessor - ARRITMIA DETECTADA:', {
           intervalo: interval,
           ritmoBase: this.baselineRhythm,
           desviacion: deviation,
-          total: this.arrhythmiaCount
+          total: this.arrhythmiaCount,
+          timestamp: new Date().toISOString()
         });
       }
     }
@@ -574,7 +597,11 @@ export class HeartBeatProcessor {
 
   private calculateBaselineRhythm() {
     if (this.rhythmLearningIntervals.length < 5) {
-      return; // Necesitamos al menos 5 intervalos para un cálculo confiable
+      console.log('HeartBeatProcessor - Baseline: Insuficientes intervalos para calcular', {
+        intervalosRequeridos: 5,
+        intervalosActuales: this.rhythmLearningIntervals.length
+      });
+      return;
     }
 
     // Ordenamos los intervalos y removemos outliers (10% superior e inferior)
@@ -585,9 +612,11 @@ export class HeartBeatProcessor {
     // Calculamos la media de los intervalos restantes
     this.baselineRhythm = filtered.reduce((sum, val) => sum + val, 0) / filtered.length;
     
-    console.log('Ritmo base calculado:', {
+    console.log('HeartBeatProcessor - Baseline: Ritmo base calculado', {
       baselineRhythm: this.baselineRhythm,
       intervalsAnalyzed: this.rhythmLearningIntervals.length,
+      intervalosOriginales: sorted,
+      intervalosFiltrados: filtered,
       toleranceMs: this.baselineRhythm * this.RHYTHM_TOLERANCE
     });
   }
