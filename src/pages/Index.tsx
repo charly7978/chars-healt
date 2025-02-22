@@ -237,6 +237,7 @@ const Index = () => {
             isMonitoring={isCameraOn}
             isFingerDetected={lastSignal?.fingerDetected}
             signalQuality={signalQuality}
+            buttonPosition={document.querySelector('.measure-button')?.getBoundingClientRect()}
           />
         </div>
 
@@ -283,15 +284,15 @@ const Index = () => {
             </div>
           </div>
 
-          <div className="flex flex-col items-center gap-2 w-full max-w-md mx-auto">
+          <div className="flex flex-col items-center gap-1 w-full max-w-md mx-auto">
             {isMonitoring && (
-              <div className="text-sm font-medium text-white bg-black/50 px-3 py-1 rounded mb-2">
-                {elapsedTime}s / 30s
+              <div className="text-xs font-medium text-gray-300 mb-1">
+                Tiempo de medición: {elapsedTime}s / 30s
               </div>
             )}
             <Button
               onClick={isMonitoring ? stopMonitoring : startMonitoring}
-              className={`flex-1 w-full ${
+              className={`flex-1 w-full measure-button ${
                 isMonitoring 
                   ? 'bg-red-600/80 hover:bg-red-600' 
                   : 'bg-green-600/80 hover:bg-green-600'

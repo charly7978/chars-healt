@@ -7,9 +7,16 @@ interface CameraViewProps {
   isMonitoring: boolean;
   isFingerDetected?: boolean;
   signalQuality?: number;
+  buttonPosition?: DOMRect;
 }
 
-const CameraView = ({ onStreamReady, isMonitoring, isFingerDetected = false, signalQuality = 0 }: CameraViewProps) => {
+const CameraView = ({ 
+  onStreamReady, 
+  isMonitoring, 
+  isFingerDetected = false, 
+  signalQuality = 0,
+  buttonPosition 
+}: CameraViewProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
@@ -123,8 +130,8 @@ const CameraView = ({ onStreamReady, isMonitoring, isFingerDetected = false, sig
         height={240}
         className="hidden"
       />
-      {isMonitoring && (
-        <div className="absolute top-[41%] left-[48%] transform -translate-x-1/2 -translate-y-1/2 z-20 flex flex-col items-center">
+      {isMonitoring && buttonPosition && (
+        <div className="absolute bottom-24 left-1/2 transform -translate-x-1/2 z-20 flex flex-col items-center">
           <Fingerprint
             size={20}
             className={`transition-colors duration-300 ${getFingerColor()}`}
