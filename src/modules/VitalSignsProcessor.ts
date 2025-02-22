@@ -94,6 +94,19 @@ export class VitalSignsProcessor {
   /** Fase de aprendizaje */
   private isLearningPhase = true;
 
+  constructor() {
+    // Inicializamos todas las propiedades
+    this.ppgValues = [];
+    this.lastValue = 0;
+    this.smaBuffer = [];
+    this.rrIntervals = [];
+    this.arrhythmiaDetected = false;
+    this.arrhythmiaCount = 0;
+    this.measurementStartTime = Date.now();
+    this.lastPeakTime = null;
+    this.isLearningPhase = true;
+  }
+
   /**
    * Algoritmo de detección de arritmias basado en RMSSD
    */
