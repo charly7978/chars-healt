@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
@@ -9,6 +10,7 @@ import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import CalibrationDialog from "@/components/CalibrationDialog";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -74,11 +76,9 @@ const Index = () => {
         quality: lastSignal.quality
       });
       
-      // Procesar señal cardíaca
       const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
       setHeartRate(heartBeatResult.bpm);
       
-      // Procesar signos vitales (SpO2, presión y arritmias)
       const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
       if (vitals) {
         setVitalSigns(vitals);
@@ -195,13 +195,16 @@ const Index = () => {
     console.log("Index: Medición reiniciada, valores reseteados");
   };
 
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+  };
+
   const handleCalibration = async () => {
     try {
       console.log("Index: Iniciando proceso de calibración");
       setIsCalibrating(true);
       setShowCalibrationDialog(true);
       
-      // Asegurar que el sistema tenga suficientes muestras antes de calibrar
       await new Promise(resolve => setTimeout(resolve, 2000));
       
       console.log("Index: Ejecutando calibración del procesador");
@@ -255,8 +258,17 @@ const Index = () => {
         <div className="relative z-10 h-full flex flex-col justify-between p-4">
           <div className="flex justify-between items-start w-full">
             <h1 className="text-lg font-bold text-white bg-black/30 px-3 py-1 rounded">PPG Monitor</h1>
-            <div className="text-base font-mono text-medical-blue bg-black/30 px-3 py-1 rounded">
-              {isMonitoring ? `${Math.ceil(30 - elapsedTime)}s` : '30s'}
+            <div className="flex gap-2">
+              <div className="text-base font-mono text-medical-blue bg-black/30 px-3 py-1 rounded">
+                {isMonitoring ? `${Math.ceil(30 - elapsedTime)}s` : '30s'}
+              </div>
+              <Button
+                onClick={handleSignOut}
+                variant="ghost"
+                className="text-white hover:bg-white/20"
+              >
+                Cerrar Sesión
+              </Button>
             </div>
           </div>
 
@@ -277,43 +289,4 @@ const Index = () => {
             </div>
           </div>
 
-          <div className="flex justify-center gap-2 w-full max-w-md mx-auto">
-            <Button
-              onClick={handleCalibration}
-              size="sm"
-              className="flex-1 bg-medical-blue/80 hover:bg-medical-blue text-white text-xs py-1.5"
-              disabled={isCalibrating || !isMonitoring}
-            >
-              {isCalibrating ? "Calibrando..." : "Calibrar"}
-            </Button>
-            
-            <Button
-              onClick={isMonitoring ? handleStopMeasurement : handleStartMeasurement}
-              size="sm"
-              className={`flex-1 ${isMonitoring ? 'bg-medical-red/80 hover:bg-medical-red' : 'bg-medical-blue/80 hover:bg-medical-blue'} text-white text-xs py-1.5`}
-              disabled={elapsedTime >= 30 && !isMonitoring}
-            >
-              {isMonitoring ? 'Detener' : 'Iniciar'}
-            </Button>
-
-            <Button
-              onClick={handleReset}
-              size="sm"
-              className="flex-1 bg-gray-600/80 hover:bg-gray-600 text-white text-xs py-1.5"
-            >
-              Reset
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      <CalibrationDialog
-        isOpen={showCalibrationDialog}
-        onClose={() => setShowCalibrationDialog(false)}
-        isCalibrating={isCalibrating}
-      />
-    </div>
-  );
-};
-
-export default Index;
+          <div className="flex justify-center gap-2 w-full max
