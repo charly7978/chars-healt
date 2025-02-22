@@ -1,8 +1,7 @@
-
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
-import CameraView from "@/components/CameraView";
+import SimpleCameraView from "@/components/SimpleCameraView";
 import { useSignalProcessor } from "@/hooks/useSignalProcessor";
 import SignalQualityIndicator from "@/components/SignalQualityIndicator";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
@@ -33,7 +32,6 @@ const Index = () => {
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
-  // Auth effect
   useEffect(() => {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -139,7 +137,6 @@ const Index = () => {
     }
   };
 
-  // Cleanup effect
   useEffect(() => {
     return () => {
       if (measurementTimerRef.current) {
@@ -149,7 +146,6 @@ const Index = () => {
     };
   }, []);
 
-  // Calibration handlers
   const handleCalibrationStart = () => {
     if (isMonitoring) {
       pauseMonitoring();
@@ -162,7 +158,6 @@ const Index = () => {
     }
   };
 
-  // Visibility change effect
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden) {
@@ -182,7 +177,6 @@ const Index = () => {
     };
   }, [isMonitoring, isPaused, showCalibrationDialog]);
 
-  // Stream handler
   const handleStreamReady = (stream: MediaStream) => {
     if (!isMonitoring) return;
     
@@ -231,7 +225,6 @@ const Index = () => {
     processImage();
   };
 
-  // Signal processing effect
   useEffect(() => {
     if (lastSignal && lastSignal.fingerDetected && isMonitoring) {
       const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
@@ -251,12 +244,11 @@ const Index = () => {
     <div className="w-screen h-screen bg-gray-900 overflow-hidden">
       <div className="relative w-full h-full">
         <div className="absolute inset-0">
-          <CameraView 
+          <SimpleCameraView 
             onStreamReady={handleStreamReady} 
             isMonitoring={isCameraOn}
             isFingerDetected={lastSignal?.fingerDetected}
             signalQuality={signalQuality}
-            buttonPosition={document.querySelector('.measure-button')?.getBoundingClientRect()}
           />
         </div>
 
