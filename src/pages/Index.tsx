@@ -35,6 +35,7 @@ const Index = () => {
   useEffect(() => {
     if (!isMonitoring) {
       setElapsedTime(0);
+      setArrhythmiaCount("--");
       return;
     }
 
@@ -76,8 +77,17 @@ const Index = () => {
       const vitals = processVitalSigns(lastSignal.filteredValue);
       if (vitals) {
         setVitalSigns(vitals);
-        // Actualizar el estado de arritmias
+        // Actualizar el estado de arritmias y registrar logs
         setArrhythmiaCount(vitals.arrhythmiaStatus);
+
+        console.log("Index: Actualización de signos vitales", {
+          timestamp: new Date().toISOString(),
+          heartRate: heartBeatResult.bpm,
+          spo2: vitals.spo2,
+          bloodPressure: vitals.pressure,
+          arrhythmiaStatus: vitals.arrhythmiaStatus,
+          signalQuality: lastSignal.quality
+        });
       }
     }
   }, [lastSignal, processHeartBeat, processVitalSigns]);
@@ -118,23 +128,12 @@ const Index = () => {
       
       try {
         const frame = await imageCapture.grabFrame();
-        console.log("Index: Frame capturado", {
-          width: frame.width,
-          height: frame.height
-        });
         
         tempCanvas.width = frame.width;
         tempCanvas.height = frame.height;
         tempCtx.drawImage(frame, 0, 0);
         
         const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
-        console.log("Index: ImageData generado", {
-          width: imageData.width,
-          height: imageData.height,
-          dataLength: imageData.data.length,
-          firstPixelRed: imageData.data[0]
-        });
-        
         processFrame(imageData);
         
         if (processingRef.current) {
@@ -148,6 +147,7 @@ const Index = () => {
       }
     };
 
+    console.log("Index: Iniciando monitoreo de signos vitales");
     setIsMonitoring(true);
     processingRef.current = true;
     processImage();
@@ -157,13 +157,21 @@ const Index = () => {
     e.preventDefault();
     e.stopPropagation();
     
-    console.log("Index: Iniciando medición");
+    console.log("Index: Iniciando nueva medición");
     startProcessing();
     setIsCameraOn(true);
   };
 
   const handleStopMeasurement = () => {
-    console.log("Index: Deteniendo medición");
+    console.log("Index: Deteniendo medición", {
+      finalMeasurements: {
+        heartRate,
+        spo2: vitalSigns.spo2,
+        bloodPressure: vitalSigns.pressure,
+        arrhythmiaStatus: vitalSigns.arrhythmiaStatus
+      }
+    });
+    
     setIsMonitoring(false);
     processingRef.current = false;
     stopProcessing();
@@ -179,6 +187,7 @@ const Index = () => {
     setVitalSigns({ spo2: 0, pressure: "--/--", arrhythmiaStatus: "--" });
     setHeartRate(0);
     setArrhythmiaCount("--");
+    console.log("Index: Medición reiniciada, valores reseteados");
   };
 
   return (
@@ -214,7 +223,7 @@ const Index = () => {
               <VitalSign label="Heart Rate" value={heartRate} unit="BPM" />
               <VitalSign label="SpO2" value={vitalSigns.spo2} unit="%" />
               <VitalSign label="Blood Pressure" value={vitalSigns.pressure} unit="mmHg" />
-              <VitalSign label="Arrhythmias" value={arrhythmiaCount} />
+              <VitalSign label="Arrhythmias" value={isMonitoring ? arrhythmiaCount : "--"} />
             </div>
           </div>
 
