@@ -32,7 +32,7 @@ export const useVitalMeasurement = (isMeasuring: boolean) => {
         heartRate: 0,
         spo2: 0,
         pressure: "--/--",
-        arrhythmiaCount: lastArrhythmiaCount
+        arrhythmiaCount: "--"
       }));
       setElapsedTime(0);
       return;
@@ -49,37 +49,23 @@ export const useVitalMeasurement = (isMeasuring: boolean) => {
       }
 
       const bpm = processor.getFinalBPM() || 0;
-      const arrCount = processor.arrhythmiaCount || 0;
 
       console.log('useVitalMeasurement - Actualización:', {
         processor: !!processor,
         bpm,
-        arrCount,
         timestamp: new Date().toISOString()
       });
 
       setMeasurements(prev => {
-        const arrhythmiaStatus = 
-          arrCount > 0 ? "ARRITMIA DETECTADA" : "SIN ARRITMIAS";
-
-        if (prev.heartRate === bpm && prev.arrhythmiaCount === arrhythmiaStatus) {
+        if (prev.heartRate === bpm) {
           return prev;
         }
 
-        console.log('useVitalMeasurement - Nuevos valores:', {
-          bpm,
-          arrhythmiaStatus,
-          timestamp: new Date().toISOString()
-        });
-
         return {
           ...prev,
-          heartRate: bpm,
-          arrhythmiaCount: isMeasuring ? arrhythmiaStatus : arrCount
+          heartRate: bpm
         };
       });
-
-      setLastArrhythmiaCount(arrCount);
     };
 
     updateMeasurements();
