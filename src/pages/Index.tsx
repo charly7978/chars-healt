@@ -8,7 +8,6 @@ import PPGSignalMeter from "@/components/PPGSignalMeter";
 import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import CalibrationDialog from "@/components/CalibrationDialog";
-import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { LogOut, Settings, Play, Square } from "lucide-react";
 
@@ -27,12 +26,10 @@ const Index = () => {
   const [showCalibrationDialog, setShowCalibrationDialog] = useState(false);
   const [email, setEmail] = useState<string>("");
   
-  const { toast } = useToast();
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
-  // Control de sesión
   useEffect(() => {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -60,16 +57,8 @@ const Index = () => {
     try {
       stopMonitoring();
       await supabase.auth.signOut();
-      toast({
-        title: "Sesión cerrada",
-        description: "Has cerrado sesión correctamente"
-      });
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "No se pudo cerrar la sesión"
-      });
+      console.error("Error al cerrar sesión:", error);
     }
   };
 
@@ -78,10 +67,6 @@ const Index = () => {
     setIsCameraOn(true);
     setIsPaused(false);
     startProcessing();
-    toast({
-      title: "Medición Iniciada",
-      description: "El sistema está monitoreando sus signos vitales"
-    });
   };
 
   const stopMonitoring = () => {
@@ -90,10 +75,6 @@ const Index = () => {
     setIsPaused(false);
     stopProcessing();
     resetVitalSigns();
-    toast({
-      title: "Medición Detenida",
-      description: "El sistema ha detenido el monitoreo"
-    });
   };
 
   const pauseMonitoring = () => {
@@ -122,7 +103,6 @@ const Index = () => {
     }
   };
 
-  // Control de visibilidad de la página
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden) {
@@ -229,7 +209,7 @@ const Index = () => {
                 size="icon"
                 className="bg-black/30 text-gray-300 hover:text-white"
                 onClick={() => setShowCalibrationDialog(true)}
-                disabled={isMonitoring}
+                disabled={!isMonitoring}
               >
                 <Settings className="h-5 w-5" />
               </Button>

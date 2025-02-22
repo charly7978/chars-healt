@@ -3,7 +3,6 @@ import * as React from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Activity } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
 interface CalibrationDialogProps {
@@ -19,7 +18,6 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({
   onCalibrationStart,
   onCalibrationEnd
 }) => {
-  const { toast } = useToast();
   const [progress, setProgress] = React.useState(0);
   const [status, setStatus] = React.useState<string>("");
   const [isCalibrating, setIsCalibrating] = React.useState(false);
@@ -28,20 +26,14 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Debe iniciar sesión para calibrar"
-        });
         return;
       }
 
       setIsCalibrating(true);
-      onCalibrationStart(); // Notifica que inicia la calibración
+      onCalibrationStart();
       setProgress(0);
       setStatus("Iniciando calibración...");
 
-      // Actualizar estado en BD
       await supabase
         .from('calibration_settings')
         .upsert({
@@ -50,7 +42,6 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({
           last_calibration_date: new Date().toISOString()
         });
 
-      // Proceso real de calibración con pasos precisos
       const calibrationSteps = [
         { name: "Ajustando sensores...", duration: 3000 },
         { name: "Calibrando intensidad de luz...", duration: 3000 },
@@ -77,26 +68,17 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({
         .eq('user_id', session.user.id);
 
       setProgress(100);
-      toast({
-        title: "Calibración completada",
-        description: "El sistema ha sido calibrado exitosamente"
-      });
 
       setTimeout(() => {
         setIsCalibrating(false);
-        onCalibrationEnd(); // Notifica que terminó la calibración
+        onCalibrationEnd();
         onClose();
       }, 1000);
 
     } catch (error) {
       console.error("Error durante la calibración:", error);
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Error durante la calibración"
-      });
       setIsCalibrating(false);
-      onCalibrationEnd(); // Notifica que terminó la calibración (con error)
+      onCalibrationEnd();
     }
   };
 
@@ -107,19 +89,18 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({
   }, [isOpen]);
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={isOpen} onOpenChange={() => onClose()}>
       <DialogContent className="sm:max-w-md">
         <div className="flex items-center justify-between mb-4">
           <Button
             variant="ghost"
             size="icon"
             onClick={onClose}
-            disabled={isCalibrating}
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <h2 className="text-lg font-semibold">Calibración del Sistema</h2>
-          <div className="w-9" /> {/* Espaciador */}
+          <div className="w-9" />
         </div>
 
         <div className="space-y-6">
