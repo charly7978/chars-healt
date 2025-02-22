@@ -41,14 +41,24 @@ export const useVitalMeasurement = (isMeasuring: boolean) => {
 
       // Verificamos y actualizamos el conteo de arritmias y BPM
       const processor = window.heartBeatProcessor;
-      if (processor && typeof processor.arrhythmiaCount === 'number') {
+      if (processor) {
         const currentCount = processor.arrhythmiaCount;
-        const finalBPM = processor.getFinalBPM() || 0;
+        
+        // Obtenemos los valores actuales
+        let currentBPM = 0;
+        const sorted = [...processor.bpmHistory].sort((a, b) => a - b);
+        if (sorted.length > 2) {
+          // Promedio de los últimos valores, excluyendo outliers
+          const validBPMs = sorted.slice(1, -1);
+          currentBPM = Math.round(validBPMs.reduce((a, b) => a + b, 0) / validBPMs.length);
+        }
+        
+        console.log('Updating vitals:', { currentBPM, currentCount });
         
         setLastArrhythmiaCount(currentCount);
         setMeasurements(prev => ({
           ...prev,
-          heartRate: finalBPM,
+          heartRate: currentBPM,
           arrhythmiaCount: currentCount
         }));
       }
