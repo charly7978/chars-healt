@@ -30,7 +30,12 @@ const Index = () => {
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
-  const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
+  const { 
+    processSignal: processVitalSigns, 
+    reset: resetVitalSigns,
+    startMonitoring: startVitalSignsMonitoring,
+    stopMonitoring: stopVitalSignsMonitoring
+  } = useVitalSignsProcessor();
 
   useEffect(() => {
     const checkSession = async () => {
@@ -77,7 +82,7 @@ const Index = () => {
     setIsPaused(false);
     startProcessing();
     resetVitalSigns();
-    processVitalSigns.startMonitoring();
+    startVitalSignsMonitoring();
     setElapsedTime(0);
     if (measurementTimerRef.current) {
       clearInterval(measurementTimerRef.current);
@@ -98,7 +103,7 @@ const Index = () => {
     setIsCameraOn(false);
     setIsPaused(false);
     stopProcessing();
-    const finalResults = processVitalSigns.stopMonitoring();
+    const finalResults = stopVitalSignsMonitoring();
     if (finalResults) {
       setVitalSigns(finalResults);
     }

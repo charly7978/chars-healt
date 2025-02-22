@@ -45,18 +45,20 @@ export const useVitalSignsProcessor = () => {
 
   const startMonitoring = useCallback(() => {
     setIsMonitoring(true);
+    setHasDetectedArrhythmia(false);
+    setArrhythmiaCount(0);
   }, []);
 
   const stopMonitoring = useCallback(() => {
+    setIsMonitoring(false);
     if (hasDetectedArrhythmia) {
-      // Al detener, si hubo arritmias, mostramos el conteo total
       return {
         spo2: 0,
         pressure: "--/--",
         arrhythmiaStatus: arrhythmiaCount
       };
     }
-    setIsMonitoring(false);
+    return null;
   }, [hasDetectedArrhythmia, arrhythmiaCount]);
 
   return {
