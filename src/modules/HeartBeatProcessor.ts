@@ -236,7 +236,16 @@ export class HeartBeatProcessor {
     // 3) Suavizado exponencial
     const smoothed = this.calculateEMA(movAvgVal);
 
-    // Guardar en buffer para graficar (por si lo necesitas)
+    console.log('HeartBeatProcessor - Vital Signs Raw:', {
+      timestamp: new Date().toISOString(),
+      rawValue: value,
+      medianFiltered: medVal,
+      movingAverage: movAvgVal,
+      smoothedValue: smoothed,
+      baselineValue: this.baseline
+    });
+
+    // Guardar en buffer para graficar
     this.signalBuffer.push(smoothed);
     if (this.signalBuffer.length > this.WINDOW_SIZE) {
       this.signalBuffer.shift();
@@ -254,13 +263,21 @@ export class HeartBeatProcessor {
     }
 
     // Baseline muy suave
-    this.baseline =
-      this.baseline * this.BASELINE_FACTOR + smoothed * (1 - this.BASELINE_FACTOR);
+    this.baseline = this.baseline * this.BASELINE_FACTOR + smoothed * (1 - this.BASELINE_FACTOR);
 
     // Valor "normalizado"
     const normalizedValue = smoothed - this.baseline;
 
-    // ——— Auto-reset si señal está muy baja varios frames ———
+    console.log('HeartBeatProcessor - Signal Processing:', {
+      timestamp: new Date().toISOString(),
+      normalizedValue,
+      signalBufferSize: this.signalBuffer.length,
+      currentBaseline: this.baseline,
+      currentBPMHistory: this.bpmHistory,
+      currentSmoothBPM: this.getSmoothBPM()
+    });
+
+    // Auto-reset si señal está muy baja
     this.autoResetIfSignalIsLow(Math.abs(normalizedValue));
 
     // Derivada "suave"
@@ -281,6 +298,17 @@ export class HeartBeatProcessor {
     // Verificación final de pico
     const isConfirmedPeak = this.confirmPeak(isPeak, normalizedValue, confidence);
 
+    if (isConfirmedPeak) {
+      console.log('HeartBeatProcessor - Peak Detected:', {
+        timestamp: new Date().toISOString(),
+        normalizedValue,
+        confidence,
+        smoothDerivative,
+        timeSinceLastPeak: this.lastPeakTime ? Date.now() - this.lastPeakTime : null,
+        currentBPMHistory: this.bpmHistory
+      });
+    }
+
     // Si se confirma y no estamos en warm-up, actualizamos BPM & beep
     if (isConfirmedPeak && !this.isInWarmup()) {
       const now = Date.now();
@@ -299,6 +327,16 @@ export class HeartBeatProcessor {
         // Beep en el momento exacto de confirmación
         this.playBeep(0.12);
         this.updateBPM();
+
+        console.log('HeartBeatProcessor - Vital Signs Update:', {
+          timestamp: new Date().toISOString(),
+          currentBPM: this.getSmoothBPM(),
+          rawBPM: this.calculateCurrentBPM(),
+          bpmHistory: this.bpmHistory,
+          arrhythmiaCount: this.arrhythmiaCount,
+          isInLearningPhase: this.isLearningPhase,
+          baselineRhythm: this.baselineRhythm
+        });
       }
     }
 
