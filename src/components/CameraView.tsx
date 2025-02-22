@@ -92,8 +92,30 @@ const CameraView = ({ onStreamReady, isMonitoring, isFingerDetected = false, sig
       });
 
       const newStream = await navigator.mediaDevices.getUserMedia(constraints);
-
       const videoTrack = newStream.getVideoTracks()[0];
+      
+      // Log detallado de las capacidades de la cámara
+      const capabilities = videoTrack.getCapabilities();
+      const settings = videoTrack.getSettings();
+      
+      console.log("Camera Capabilities:", {
+        capabilities,
+        currentSettings: settings,
+        trackLabel: videoTrack.label,
+        trackConstraints: videoTrack.getConstraints()
+      });
+
+      // Log de los valores iniciales de los frames
+      if (videoRef.current) {
+        videoRef.current.onloadedmetadata = () => {
+          console.log("Video metadata loaded:", {
+            videoWidth: videoRef.current?.videoWidth,
+            videoHeight: videoRef.current?.videoHeight,
+            readyState: videoRef.current?.readyState,
+            frameRate: settings.frameRate
+          });
+        };
+      }
       
       if (videoTrack.getCapabilities()?.torch) {
         await videoTrack.applyConstraints({
@@ -112,6 +134,22 @@ const CameraView = ({ onStreamReady, isMonitoring, isFingerDetected = false, sig
         const originalGetImageData = CanvasRenderingContext2D.prototype.getImageData;
         CanvasRenderingContext2D.prototype.getImageData = function(...args) {
           const originalImageData = originalGetImageData.apply(this, args);
+          
+          // Log de los valores de píxeles para diagnóstico
+          if (isAndroid) {
+            const sampleSize = 1000;
+            let redSum = 0;
+            for (let i = 0; i < sampleSize * 4; i += 4) {
+              redSum += originalImageData.data[i];
+            }
+            console.log("Image Data Sample:", {
+              avgRedValue: redSum / sampleSize,
+              width: originalImageData.width,
+              height: originalImageData.height,
+              timestamp: Date.now()
+            });
+          }
+          
           return normalizeImageData(originalImageData);
         };
 
