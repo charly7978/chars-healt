@@ -272,7 +272,7 @@ const Index = () => {
             </div>
           </div>
 
-          <div className="flex-1 flex flex-col justify-center gap-2 max-w-md mx-auto w-full mt-[-3rem]">
+          <div className="flex-1 flex flex-col justify-center gap-2 max-w-md mx-auto w-full mt-[-2rem]">
             <div className="relative">
               <PPGSignalMeter 
                 value={lastSignal?.filteredValue || 0}
