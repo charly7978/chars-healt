@@ -114,6 +114,8 @@ export class VitalSignsProcessor {
     for (let i = 1; i < peakTimes.length; i++) {
       pttValues.push(peakTimes[i] - peakTimes[i-1]);
     }
+    
+    // Cálculo manual de la media del PTT
     const avgPTT = pttValues.reduce((a, b) => a + b, 0) / pttValues.length;
 
     // Análisis de la forma de onda
@@ -142,8 +144,13 @@ export class VitalSignsProcessor {
       return 0;
     });
 
-    const avgAmplitude = amplitudes.reduce((a, b) => a + b, 0) / amplitudes.length;
-    const variability = amplitudes.reduce((a, b) => a + Math.abs(b - avgAmplitude), 0) / amplitudes.length;
+    if (amplitudes.length === 0) return 0;
+
+    const sum = amplitudes.reduce((a, b) => a + b, 0);
+    const avgAmplitude = sum / amplitudes.length;
+    
+    const variability = amplitudes.reduce((a, b) => 
+      a + Math.abs(b - avgAmplitude), 0) / amplitudes.length;
     
     const quality = Math.max(0, Math.min(100, 100 * (1 - variability/avgAmplitude)));
     return quality;
@@ -155,7 +162,7 @@ export class VitalSignsProcessor {
         return values[peak] - values[valleys[i]];
       }
       return 0;
-    }).filter(a => a > 0); // Solo amplitudes positivas
+    }).filter(a => a > 0);
 
     if (amplitudes.length === 0) {
       return {
@@ -239,6 +246,7 @@ export class VitalSignsProcessor {
     const iqr = q3 - q1;
     const validValues = this.movingAverageSpO2.filter(v => v >= q1 - 1.5 * iqr && v <= q3 + 1.5 * iqr);
     
+    // Cálculo manual de la media de los valores válidos
     return Math.round(validValues.reduce((a, b) => a + b, 0) / validValues.length);
   }
 
