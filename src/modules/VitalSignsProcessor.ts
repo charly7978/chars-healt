@@ -338,25 +338,24 @@ export class VitalSignsProcessor {
 
   /**
    * calculateBloodPressure
-   * @param values
-   * @returns {{systolic: number, diastolic: number}}
+   * Calcula presión arterial basada en PTT y amplitud PPG
+   * con ajustes más finos para mejor precisión
    */
   private calculateBloodPressure(values: number[]): {
     systolic: number;
     diastolic: number;
   } {
-    // Mínimo ~30 para tener algo de info
     if (values.length < 30) {
       return { systolic: 0, diastolic: 0 };
     }
 
-    // Buscar picos/ valles en este chunk
     const { peakIndices, valleyIndices } = this.localFindPeaksAndValleys(values);
     if (peakIndices.length < 2) {
+      // Valores base más realistas
       return { systolic: 120, diastolic: 80 };
     }
 
-    // Asumamos ~30 FPS => ~33ms / muestra
+    // Asumimos ~30 FPS => ~33ms / muestra
     const fps = 30;
     const msPerSample = 1000 / fps;
 
@@ -366,30 +365,59 @@ export class VitalSignsProcessor {
       const dt = (peakIndices[i] - peakIndices[i - 1]) * msPerSample;
       pttValues.push(dt);
     }
-    let avgPTT = pttValues.reduce((acc, val) => acc + val, 0) / pttValues.length;
+    
+    // Media móvil ponderada para PTT
+    const weightedPTT = pttValues.reduce((acc, val, idx) => {
+      const weight = (idx + 1) / pttValues.length; // Más peso a valores recientes
+      return acc + val * weight;
+    }, 0) / pttValues.reduce((acc, _, idx) => acc + (idx + 1) / pttValues.length, 0);
 
-    // Evitar extremos
-    if (avgPTT < 300) avgPTT = 300;   // ~300ms => FC ~200 BPM, extremo
-    if (avgPTT > 1500) avgPTT = 1500; // ~1.5s => FC ~40 BPM, extremo
-
-    // Calcular amplitud pico-valle promedio
+    // Normalizar PTT a rangos fisiológicos
+    const normalizedPTT = Math.max(300, Math.min(1200, weightedPTT));
+    
+    // Calcular amplitud con mejor precisión
     const amplitude = this.calculateAmplitude(values, peakIndices, valleyIndices);
+    const normalizedAmplitude = Math.min(100, Math.max(0, amplitude * 5));
 
     /**
-     * Heurísticas:
-     *   sistólica ~ 115 - 0.04*(avgPTT - 500) + 0.25*(amplitude)
-     *   diastólica ~ 0.65 * sistólica
-     * Clamps en [95–180]/[60–115]
+     * Nueva fórmula mejorada:
+     * - Base más realista (120/80)
+     * - PTT influye inversamente en la presión
+     * - Amplitud afecta más a la sistólica que a la diastólica
+     * - Factores de escala ajustados para mejor rango
      */
-    const alphaPTT = 0.04;  // sensibilidad al PTT
-    const alphaAmp = 0.25;  // sensibilidad a la amplitud
-    let estimatedSystolic = 115 - alphaPTT * (avgPTT - 500) + alphaAmp * amplitude;
-    let estimatedDiastolic = estimatedSystolic * 0.65;
+    const pttFactor = (600 - normalizedPTT) * 0.08;  // PTT más corto → presión más alta
+    const ampFactor = normalizedAmplitude * 0.3;     // Mayor amplitud → presión más alta
+    
+    // Valores base realistas + ajustes por PTT y amplitud
+    let estimatedSystolic = 120 + pttFactor + ampFactor;
+    let estimatedDiastolic = 80 + (pttFactor * 0.5) + (ampFactor * 0.2);
 
-    const systolic = Math.round(Math.max(95, Math.min(180, estimatedSystolic)));
-    const diastolic = Math.round(Math.max(60, Math.min(115, estimatedDiastolic)));
+    // Garantizar rangos fisiológicos y mantener diferencial realista
+    estimatedSystolic = Math.max(90, Math.min(180, estimatedSystolic));
+    estimatedDiastolic = Math.max(60, Math.min(110, estimatedDiastolic));
+    
+    // Mantener diferencial sistólica-diastólica realista
+    const differential = estimatedSystolic - estimatedDiastolic;
+    if (differential < 20) {
+      estimatedDiastolic = estimatedSystolic - 20;
+    } else if (differential > 80) {
+      estimatedDiastolic = estimatedSystolic - 80;
+    }
 
-    return { systolic, diastolic };
+    console.log("VitalSignsProcessor: Cálculo de presión arterial", {
+      ptt: normalizedPTT,
+      amplitude: normalizedAmplitude,
+      pttFactor,
+      ampFactor,
+      systolic: Math.round(estimatedSystolic),
+      diastolic: Math.round(estimatedDiastolic)
+    });
+
+    return {
+      systolic: Math.round(estimatedSystolic),
+      diastolic: Math.round(estimatedDiastolic)
+    };
   }
 
   /**
