@@ -27,7 +27,7 @@ const VitalSign = ({ label, value, unit }: VitalSignProps) => {
 
     if (typeof value === 'number' && value > 0) {
       return {
-        text: `${value} ARRITMIAS`,
+        text: `ARRITMIA DETECTADA (${value})`,
         color: "text-medical-red"
       };
     }
