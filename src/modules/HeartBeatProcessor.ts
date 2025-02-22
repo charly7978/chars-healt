@@ -1,3 +1,4 @@
+
 export class HeartBeatProcessor {
   private readonly SAMPLE_RATE = 30;
   private readonly WINDOW_SIZE = 60;
@@ -7,9 +8,9 @@ export class HeartBeatProcessor {
   private readonly BEEP_FREQUENCY = 1000;
   private readonly BEEP_DURATION = 50;
   private readonly SIGNAL_THRESHOLD = 0.15;
-  private readonly MIN_CONFIDENCE = 0.32;  // Ajuste más sutil
-  private readonly DERIVATIVE_THRESHOLD = -0.001;  // Volvemos al valor original
-  private readonly MIN_PEAK_TIME_MS = 250;  // Menos restrictivo
+  private readonly MIN_CONFIDENCE = 0.32;
+  private readonly DERIVATIVE_THRESHOLD = -0.001;
+  private readonly MIN_PEAK_TIME_MS = 400;  // Único cambio: aumentado de 250ms a 400ms para filtrar falsos positivos muy cercanos
 
   private signalBuffer: number[] = [];
   private lastPeakTime: number | null = null;
