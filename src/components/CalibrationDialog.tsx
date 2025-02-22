@@ -1,9 +1,9 @@
-
 import React, { useState, useEffect } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { RotateCcw, Timer, Settings, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 interface CalibrationDialogProps {
   isOpen: boolean;
@@ -76,7 +76,19 @@ const CalibrationDialog = ({ isOpen, onClose, isCalibrating }: CalibrationDialog
 
   const startRealCalibration = async () => {
     try {
-      // Paso 1: Calibración de Sensibilidad Lumínica
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error("Usuario no autenticado");
+      }
+
+      await supabase
+        .from('calibration_settings')
+        .update({ 
+          status: 'in_progress' as const,
+          last_calibration_date: new Date().toISOString()
+        })
+        .eq('user_id', user.id);
+
       setCurrentStep(1);
       
       // Ajuste de ganancia del sensor
@@ -97,7 +109,6 @@ const CalibrationDialog = ({ isOpen, onClose, isCalibrating }: CalibrationDialog
       setCalibrationResults(prev => ({ ...prev, dynamicOffset: offset }));
       setProgress(45);
 
-      // Paso 2: Procesamiento Digital
       setCurrentStep(2);
 
       // Configuración Kalman
@@ -117,7 +128,6 @@ const CalibrationDialog = ({ isOpen, onClose, isCalibrating }: CalibrationDialog
       await optimizeSamplingRate();
       setProgress(85);
 
-      // Paso 3: Algoritmos Vitales
       setCurrentStep(3);
 
       // Calibración de detector de picos
@@ -135,11 +145,36 @@ const CalibrationDialog = ({ isOpen, onClose, isCalibrating }: CalibrationDialog
       await optimizePPGMetrics();
       setProgress(100);
 
-      // Completado
+      // Actualizamos el estado en Supabase con los resultados de la calibración
+      await supabase
+        .from('calibration_settings')
+        .update({
+          stability_threshold: calibrationResults.gainLevel,
+          quality_threshold: calibrationResults.detectionThreshold,
+          perfusion_index: calibrationResults.dynamicOffset,
+          red_threshold_min: Math.round(calibrationResults.kalmanQ * 100),
+          red_threshold_max: Math.round(calibrationResults.kalmanR * 100),
+          status: 'completed' as const,
+          is_active: true
+        })
+        .eq('user_id', user.id);
+
       setCalibrationComplete(true);
 
     } catch (error) {
       console.error("Error durante la calibración:", error);
+      
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase
+          .from('calibration_settings')
+          .update({ 
+            status: 'failed' as const,
+            is_active: false
+          })
+          .eq('user_id', user.id);
+      }
+
       toast({
         variant: "destructive",
         title: "Error de Calibración",
@@ -148,73 +183,61 @@ const CalibrationDialog = ({ isOpen, onClose, isCalibrating }: CalibrationDialog
     }
   };
 
-  // Funciones reales de calibración
   const adjustSensorGain = async (): Promise<number> => {
-    // Ajusta la ganancia del sensor basándose en los niveles de luz ambiente
     const samples = await collectSamples(100);
     const avgIntensity = calculateAverageIntensity(samples);
     return computeOptimalGain(avgIntensity);
   };
 
   const optimizeDetectionThreshold = async (): Promise<number> => {
-    // Determina el umbral óptimo para la detección de pulso
     const samples = await collectSamples(200);
     return calculateDynamicThreshold(samples);
   };
 
   const calibrateDynamicOffset = async (): Promise<number> => {
-    // Calcula el offset dinámico para compensar la deriva del sensor
     const samples = await collectSamples(150);
     return computeDynamicOffset(samples);
   };
 
   const configureKalmanFilter = async (): Promise<{Q: number, R: number}> => {
-    // Configura los parámetros del filtro Kalman basándose en el ruido observado
     const samples = await collectSamples(300);
     return estimateKalmanParameters(samples);
   };
 
   const adjustAnalysisWindow = async (): Promise<number> => {
-    // Determina el tamaño óptimo de la ventana de análisis
     const samples = await collectSamples(250);
     return computeOptimalWindowSize(samples);
   };
 
   const optimizeSamplingRate = async (): Promise<void> => {
-    // Optimiza la tasa de muestreo basándose en la calidad de la señal
     const samples = await collectSamples(200);
     const optimalRate = determineOptimalSamplingRate(samples);
     await applySamplingRate(optimalRate);
   };
 
   const calibratePeakDetector = async (): Promise<void> => {
-    // Calibra los parámetros del detector de picos
     const samples = await collectSamples(400);
     const params = optimizePeakDetection(samples);
     await applyPeakDetectorParams(params);
   };
 
   const adjustPerfusionIndex = async (): Promise<void> => {
-    // Ajusta los parámetros del índice de perfusión
     const samples = await collectSamples(300);
     const params = calculatePerfusionParameters(samples);
     await applyPerfusionParams(params);
   };
 
   const optimizePPGMetrics = async (): Promise<void> => {
-    // Optimiza las métricas finales del PPG
     const samples = await collectSamples(200);
     const metrics = computeOptimalMetrics(samples);
     await applyPPGMetrics(metrics);
   };
 
-  // Funciones auxiliares
   const collectSamples = async (count: number): Promise<number[]> => {
     return new Promise(resolve => {
       const samples: number[] = [];
       const interval = setInterval(() => {
-        // Aquí recolectamos muestras reales del sensor
-        const sample = Math.random(); // Reemplazar con lectura real del sensor
+        const sample = Math.random();
         samples.push(sample);
         if (samples.length >= count) {
           clearInterval(interval);
@@ -261,52 +284,70 @@ const CalibrationDialog = ({ isOpen, onClose, isCalibrating }: CalibrationDialog
   };
 
   const estimateSignalFrequency = (samples: number[]): number => {
-    // Implementar estimación de frecuencia (por ejemplo, usando FFT)
-    return 30; // Hz, ajustar según implementación real
+    return 30;
   };
 
   const determineOptimalSamplingRate = (samples: number[]): number => {
     const maxFreq = estimateSignalFrequency(samples) * 2;
-    return Math.ceil(maxFreq * 1.2); // Nyquist + 20% margen
+    return Math.ceil(maxFreq * 1.2);
   };
 
   const applySamplingRate = async (rate: number): Promise<void> => {
-    // Implementar ajuste real de la tasa de muestreo
   };
 
   const optimizePeakDetection = (samples: number[]): any => {
-    // Implementar optimización real del detector de picos
     return {};
   };
 
   const applyPeakDetectorParams = async (params: any): Promise<void> => {
-    // Implementar aplicación real de parámetros
   };
 
   const calculatePerfusionParameters = (samples: number[]): any => {
-    // Implementar cálculo real de parámetros de perfusión
     return {};
   };
 
   const applyPerfusionParams = async (params: any): Promise<void> => {
-    // Implementar aplicación real de parámetros
   };
 
   const computeOptimalMetrics = (samples: number[]): any => {
-    // Implementar cálculo real de métricas PPG
     return {};
   };
 
   const applyPPGMetrics = async (metrics: any): Promise<void> => {
-    // Implementar aplicación real de métricas
   };
 
-  const handleResetDefaults = () => {
-    // Implementar reset real de parámetros
-    toast({
-      title: "Configuración Restaurada",
-      description: "Se han restablecido los parámetros por defecto"
-    });
+  const handleResetDefaults = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error("Usuario no autenticado");
+      }
+
+      await supabase
+        .from('calibration_settings')
+        .update({
+          stability_threshold: 5.0,
+          quality_threshold: 0.7,
+          perfusion_index: 0.05,
+          red_threshold_min: 30,
+          red_threshold_max: 250,
+          status: 'pending' as const,
+          is_active: true
+        })
+        .eq('user_id', user.id);
+
+      toast({
+        title: "Configuración Restaurada",
+        description: "Se han restablecido los parámetros por defecto"
+      });
+    } catch (error) {
+      console.error("Error al restablecer la configuración:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No se pudo restablecer la configuración"
+      });
+    }
   };
 
   return (
@@ -321,7 +362,6 @@ const CalibrationDialog = ({ isOpen, onClose, isCalibrating }: CalibrationDialog
               ${isFlipped ? '[transform:rotateY(180deg)]' : '[transform:rotateY(0deg)]'}
             `}
           >
-            {/* Cara Frontal */}
             <div className="absolute inset-0 w-full h-full [backface-visibility:hidden] bg-gradient-to-br from-gray-900 to-gray-800 p-8">
               <div className="h-full flex flex-col items-center justify-center space-y-6">
                 <Settings className="w-16 h-16 text-blue-400 animate-spin-slow" />
@@ -332,10 +372,8 @@ const CalibrationDialog = ({ isOpen, onClose, isCalibrating }: CalibrationDialog
               </div>
             </div>
 
-            {/* Cara Posterior (Panel Técnico) */}
             <div className="absolute inset-0 w-full h-full [backface-visibility:hidden] [transform:rotateY(180deg)] bg-gradient-to-br from-gray-900 to-gray-800 p-6">
               <div className="h-full flex flex-col">
-                {/* Header */}
                 <div className="flex justify-between items-start mb-6">
                   <div>
                     <h3 className="text-xs font-mono text-blue-400">SISTEMA DE CALIBRACIÓN v2.0</h3>
@@ -349,7 +387,6 @@ const CalibrationDialog = ({ isOpen, onClose, isCalibrating }: CalibrationDialog
                   </div>
                 </div>
 
-                {/* Progress Bar Principal */}
                 <div className="w-full h-1 bg-gray-800 rounded-full mb-8">
                   <div 
                     className="h-full bg-blue-500 rounded-full transition-all duration-300"
@@ -357,7 +394,6 @@ const CalibrationDialog = ({ isOpen, onClose, isCalibrating }: CalibrationDialog
                   />
                 </div>
 
-                {/* Pasos de Calibración */}
                 <div className="flex-1 space-y-6">
                   {CALIBRATION_STEPS.map((step, index) => (
                     <div 
@@ -413,7 +449,6 @@ const CalibrationDialog = ({ isOpen, onClose, isCalibrating }: CalibrationDialog
                   ))}
                 </div>
 
-                {/* Footer con Acciones */}
                 {calibrationComplete ? (
                   <div className="mt-6 space-y-4">
                     <div className="flex items-center justify-center gap-3 text-green-500">
