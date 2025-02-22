@@ -8,31 +8,31 @@
 export class HeartBeatProcessor {
   // ────────── CONFIGURACIONES PRINCIPALES ──────────
   private readonly SAMPLE_RATE = 30;
-  private readonly WINDOW_SIZE = 60;
+  private readonly WINDOW_SIZE = 45; // Reducido para ser más consistente
   private readonly MIN_BPM = 40;
-  private readonly MAX_BPM = 200; // Aumentado para permitir más latidos
-  private readonly SIGNAL_THRESHOLD = 0.60; // Reducido para ser más sensible
-  private readonly MIN_CONFIDENCE = 0.50; // Reducido para ser más permisivo
-  private readonly DERIVATIVE_THRESHOLD = -0.03; // Menos restrictivo
-  private readonly MIN_PEAK_TIME_MS = 400; // Reducido para permitir latidos más cercanos
-  private readonly WARMUP_TIME_MS = 3000; // Reducido para empezar antes
+  private readonly MAX_BPM = 200;
+  private readonly SIGNAL_THRESHOLD = 0.45; // Ajustado para ser más consistente entre plataformas
+  private readonly MIN_CONFIDENCE = 0.45;
+  private readonly DERIVATIVE_THRESHOLD = -0.02; // Ajustado para mejor detección
+  private readonly MIN_PEAK_TIME_MS = 300; // Ajustado para permitir frecuencias más altas
+  private readonly WARMUP_TIME_MS = 2000; // Reducido para calibración más rápida
 
-  // Parámetros de filtrado ajustados
-  private readonly MEDIAN_FILTER_WINDOW = 3; // Reducido para mayor sensibilidad
-  private readonly MOVING_AVERAGE_WINDOW = 5; // Reducido para mayor sensibilidad
-  private readonly EMA_ALPHA = 0.3; // Aumentado para respuesta más rápida
-  private readonly BASELINE_FACTOR = 0.995; // Ajustado para adaptación más rápida
+  // Parámetros de filtrado unificados
+  private readonly MEDIAN_FILTER_WINDOW = 3;
+  private readonly MOVING_AVERAGE_WINDOW = 3;
+  private readonly EMA_ALPHA = 0.25;
+  private readonly BASELINE_FACTOR = 0.995;
 
-  // Parámetros de beep ajustados para sonido más realista
-  private readonly BEEP_PRIMARY_FREQUENCY = 880; // Frecuencia principal (La4)
-  private readonly BEEP_SECONDARY_FREQUENCY = 440; // Armónico (La3)
-  private readonly BEEP_DURATION = 100; // Duración más larga
-  private readonly BEEP_VOLUME = 0.7; // Volumen aumentado
+  // Parámetros de beep
+  private readonly BEEP_PRIMARY_FREQUENCY = 880;
+  private readonly BEEP_SECONDARY_FREQUENCY = 440;
+  private readonly BEEP_DURATION = 100;
+  private readonly BEEP_VOLUME = 0.7;
   private readonly MIN_BEEP_INTERVAL_MS = 300;
 
-  // ────────── AUTO-RESET SI LA SEÑAL ES MUY BAJA ──────────
-  private readonly LOW_SIGNAL_THRESHOLD = 0.03;
-  private readonly LOW_SIGNAL_FRAMES = 10;
+  // Auto-reset para señal baja
+  private readonly LOW_SIGNAL_THRESHOLD = 0.02;
+  private readonly LOW_SIGNAL_FRAMES = 8;
   private lowSignalCount = 0;
 
   // Variables internas
@@ -52,13 +52,20 @@ export class HeartBeatProcessor {
   private peakConfirmationBuffer: number[] = [];
   private lastConfirmedPeak: boolean = false;
   private smoothBPM: number = 0;
-  private readonly BPM_ALPHA = 0.2;
-  private peakCandidateIndex: number | null = null;
-  private peakCandidateValue: number = 0;
+  private readonly BPM_ALPHA = 0.15; // Suavizado más agresivo
+  private isAndroid: boolean;
 
   constructor() {
+    this.isAndroid = /Android/i.test(navigator.userAgent);
     this.initAudio();
     this.startTime = Date.now();
+    
+    // Ajustes específicos para Android
+    if (this.isAndroid) {
+      this.BPM_ALPHA = 0.12; // Más suavizado para Android
+      this.SIGNAL_THRESHOLD = 0.40; // Umbral más bajo para Android
+      this.DERIVATIVE_THRESHOLD = -0.015; // Más sensible
+    }
   }
 
   private async initAudio() {
@@ -66,10 +73,103 @@ export class HeartBeatProcessor {
       this.audioContext = new AudioContext();
       await this.audioContext.resume();
       await this.playBeep(0.01);
-      console.log("HeartBeatProcessor: Audio Context Initialized");
     } catch (err) {
       console.error("HeartBeatProcessor: Error initializing audio", err);
     }
+  }
+
+  private medianFilter(value: number): number {
+    this.medianBuffer.push(value);
+    if (this.medianBuffer.length > this.MEDIAN_FILTER_WINDOW) {
+      this.medianBuffer.shift();
+    }
+    const sorted = [...this.medianBuffer].sort((a, b) => a - b);
+    return sorted[Math.floor(sorted.length / 2)];
+  }
+
+  private calculateMovingAverage(value: number): number {
+    this.movingAverageBuffer.push(value);
+    if (this.movingAverageBuffer.length > this.MOVING_AVERAGE_WINDOW) {
+      this.movingAverageBuffer.shift();
+    }
+    const sum = this.movingAverageBuffer.reduce((a, b) => a + b, 0);
+    return sum / this.movingAverageBuffer.length;
+  }
+
+  private calculateEMA(value: number): number {
+    this.smoothedValue = this.EMA_ALPHA * value + (1 - this.EMA_ALPHA) * this.smoothedValue;
+    return this.smoothedValue;
+  }
+
+  public processSignal(value: number): {
+    bpm: number;
+    confidence: number;
+    isPeak: boolean;
+    filteredValue: number;
+    arrhythmiaCount: number;
+  } {
+    // Aplicar filtros en cascada
+    const medVal = this.medianFilter(value);
+    const movAvgVal = this.calculateMovingAverage(medVal);
+    const smoothed = this.calculateEMA(movAvgVal);
+
+    this.signalBuffer.push(smoothed);
+    if (this.signalBuffer.length > this.WINDOW_SIZE) {
+      this.signalBuffer.shift();
+    }
+
+    if (this.signalBuffer.length < Math.floor(this.WINDOW_SIZE / 2)) {
+      return {
+        bpm: 0,
+        confidence: 0,
+        isPeak: false,
+        filteredValue: smoothed,
+        arrhythmiaCount: 0
+      };
+    }
+
+    // Actualizar línea base con factor de plataforma
+    const baselineFactor = this.isAndroid ? 0.997 : this.BASELINE_FACTOR;
+    this.baseline = this.baseline * baselineFactor + smoothed * (1 - baselineFactor);
+
+    const normalizedValue = smoothed - this.baseline;
+    this.autoResetIfSignalIsLow(Math.abs(normalizedValue));
+
+    // Calcular derivada
+    this.values.push(smoothed);
+    if (this.values.length > 3) {
+      this.values.shift();
+    }
+
+    let smoothDerivative = smoothed - this.lastValue;
+    if (this.values.length === 3) {
+      smoothDerivative = (this.values[2] - this.values[0]) / 2;
+    }
+    this.lastValue = smoothed;
+
+    // Detectar y confirmar picos
+    const { isPeak, confidence } = this.detectPeak(normalizedValue, smoothDerivative);
+    const isConfirmedPeak = this.confirmPeak(isPeak, normalizedValue, confidence);
+
+    if (isConfirmedPeak && !this.isInWarmup()) {
+      const now = Date.now();
+      const timeSinceLastPeak = this.lastPeakTime ? now - this.lastPeakTime : Number.MAX_VALUE;
+
+      if (timeSinceLastPeak >= this.MIN_PEAK_TIME_MS) {
+        this.previousPeakTime = this.lastPeakTime;
+        this.lastPeakTime = now;
+        this.playBeep(0.12);
+        this.updateBPM();
+      }
+    }
+
+    return {
+      bpm: Math.round(this.getSmoothBPM()),
+      confidence,
+      isPeak: isConfirmedPeak && !this.isInWarmup(),
+      filteredValue: smoothed,
+      arrhythmiaCount: 0
+    };
   }
 
   private async playBeep(volume: number = this.BEEP_VOLUME) {
@@ -145,99 +245,6 @@ export class HeartBeatProcessor {
     return Date.now() - this.startTime < this.WARMUP_TIME_MS;
   }
 
-  private medianFilter(value: number): number {
-    this.medianBuffer.push(value);
-    if (this.medianBuffer.length > this.MEDIAN_FILTER_WINDOW) {
-      this.medianBuffer.shift();
-    }
-    const sorted = [...this.medianBuffer].sort((a, b) => a - b);
-    return sorted[Math.floor(sorted.length / 2)];
-  }
-
-  private calculateMovingAverage(value: number): number {
-    this.movingAverageBuffer.push(value);
-    if (this.movingAverageBuffer.length > this.MOVING_AVERAGE_WINDOW) {
-      this.movingAverageBuffer.shift();
-    }
-    const sum = this.movingAverageBuffer.reduce((a, b) => a + b, 0);
-    return sum / this.movingAverageBuffer.length;
-  }
-
-  private calculateEMA(value: number): number {
-    this.smoothedValue =
-      this.EMA_ALPHA * value + (1 - this.EMA_ALPHA) * this.smoothedValue;
-    return this.smoothedValue;
-  }
-
-  public processSignal(value: number): {
-    bpm: number;
-    confidence: number;
-    isPeak: boolean;
-    filteredValue: number;
-    arrhythmiaCount: number;
-  } {
-    const medVal = this.medianFilter(value);
-    const movAvgVal = this.calculateMovingAverage(medVal);
-    const smoothed = this.calculateEMA(movAvgVal);
-
-    this.signalBuffer.push(smoothed);
-    if (this.signalBuffer.length > this.WINDOW_SIZE) {
-      this.signalBuffer.shift();
-    }
-
-    if (this.signalBuffer.length < 30) {
-      return {
-        bpm: 0,
-        confidence: 0,
-        isPeak: false,
-        filteredValue: smoothed,
-        arrhythmiaCount: 0
-      };
-    }
-
-    this.baseline =
-      this.baseline * this.BASELINE_FACTOR + smoothed * (1 - this.BASELINE_FACTOR);
-
-    const normalizedValue = smoothed - this.baseline;
-    this.autoResetIfSignalIsLow(Math.abs(normalizedValue));
-
-    this.values.push(smoothed);
-    if (this.values.length > 3) {
-      this.values.shift();
-    }
-
-    let smoothDerivative = smoothed - this.lastValue;
-    if (this.values.length === 3) {
-      smoothDerivative = (this.values[2] - this.values[0]) / 2;
-    }
-    this.lastValue = smoothed;
-
-    const { isPeak, confidence } = this.detectPeak(normalizedValue, smoothDerivative);
-    const isConfirmedPeak = this.confirmPeak(isPeak, normalizedValue, confidence);
-
-    if (isConfirmedPeak && !this.isInWarmup()) {
-      const now = Date.now();
-      const timeSinceLastPeak = this.lastPeakTime
-        ? now - this.lastPeakTime
-        : Number.MAX_VALUE;
-
-      if (timeSinceLastPeak >= this.MIN_PEAK_TIME_MS) {
-        this.previousPeakTime = this.lastPeakTime;
-        this.lastPeakTime = now;
-        this.playBeep(0.12);
-        this.updateBPM();
-      }
-    }
-
-    return {
-      bpm: Math.round(this.getSmoothBPM()),
-      confidence,
-      isPeak: isConfirmedPeak && !this.isInWarmup(),
-      filteredValue: smoothed,
-      arrhythmiaCount: 0
-    };
-  }
-
   private autoResetIfSignalIsLow(amplitude: number) {
     if (amplitude < this.LOW_SIGNAL_THRESHOLD) {
       this.lowSignalCount++;
@@ -273,17 +280,20 @@ export class HeartBeatProcessor {
       return { isPeak: false, confidence: 0 };
     }
 
+    const threshold = this.isAndroid ? this.SIGNAL_THRESHOLD * 0.9 : this.SIGNAL_THRESHOLD;
+    const derivThreshold = this.isAndroid ? this.DERIVATIVE_THRESHOLD * 1.2 : this.DERIVATIVE_THRESHOLD;
+
     const isPeak =
-      derivative < this.DERIVATIVE_THRESHOLD &&
-      normalizedValue > this.SIGNAL_THRESHOLD &&
+      derivative < derivThreshold &&
+      normalizedValue > threshold &&
       this.lastValue > this.baseline * 0.98;
 
     const amplitudeConfidence = Math.min(
-      Math.max(Math.abs(normalizedValue) / (this.SIGNAL_THRESHOLD * 1.8), 0),
+      Math.max(Math.abs(normalizedValue) / (threshold * 1.8), 0),
       1
     );
     const derivativeConfidence = Math.min(
-      Math.max(Math.abs(derivative) / Math.abs(this.DERIVATIVE_THRESHOLD * 0.8), 0),
+      Math.max(Math.abs(derivative) / Math.abs(derivThreshold * 0.8), 0),
       1
     );
 
