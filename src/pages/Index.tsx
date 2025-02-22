@@ -284,7 +284,7 @@ const Index = () => {
             </div>
           </div>
 
-          <div className="flex-1 flex flex-col justify-center gap-2 max-w-md mx-auto w-full mt-[-6rem]">
+          <div className="flex-1 flex flex-col justify-center gap-2 max-w-md mx-auto w-full mt-[-12rem]">
             <div className="relative">
               <PPGSignalMeter 
                 value={lastSignal?.filteredValue || 0}
@@ -306,7 +306,7 @@ const Index = () => {
             </div>
           </div>
 
-          <div className="flex flex-col items-center gap-1 w-full max-w-md mx-auto mt-[-4rem]">
+          <div className="flex flex-col items-center gap-1 w-full max-w-md mx-auto mt-[-8rem]">
             {isMonitoring && (
               <div className="text-xs font-medium text-gray-300 mb-1">
                 Tiempo de medición: {elapsedTime}s / 30s

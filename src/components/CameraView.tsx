@@ -133,10 +133,10 @@ const CameraView = ({
       {isMonitoring && buttonPosition && (
         <div className="absolute bottom-24 left-1/2 transform -translate-x-1/2 z-20 flex flex-col items-center">
           <Fingerprint
-            size={32}
+            size={48}
             className={`transition-colors duration-300 ${getFingerColor()}`}
           />
-          <span className={`text-xs mt-1 transition-colors duration-300 ${
+          <span className={`text-xs mt-2 transition-colors duration-300 ${
             isFingerDetected ? 'text-green-500' : 'text-gray-400'
           }`}>
             {isFingerDetected ? "dedo detectado" : "ubique su dedo en el lente"}
