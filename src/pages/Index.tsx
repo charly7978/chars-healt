@@ -289,4 +289,50 @@ const Index = () => {
             </div>
           </div>
 
-          <div className="flex justify-center gap-2 w-full max
+          <div className="flex justify-center gap-2 w-full">
+            {!isMonitoring ? (
+              <Button
+                onClick={handleStartMeasurement}
+                className="bg-medical-blue hover:bg-medical-blue/90"
+              >
+                Iniciar Medición
+              </Button>
+            ) : (
+              <>
+                <Button
+                  onClick={handleStopMeasurement}
+                  variant="destructive"
+                >
+                  Detener
+                </Button>
+                <Button
+                  onClick={handleCalibration}
+                  variant="outline"
+                  disabled={isCalibrating}
+                >
+                  Calibrar
+                </Button>
+                <Button
+                  onClick={handleReset}
+                  variant="ghost"
+                  className="text-white hover:bg-white/20"
+                >
+                  Reiniciar
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+      
+      {showCalibrationDialog && (
+        <CalibrationDialog
+          onClose={() => setShowCalibrationDialog(false)}
+          isCalibrating={isCalibrating}
+        />
+      )}
+    </div>
+  );
+};
+
+export default Index;
