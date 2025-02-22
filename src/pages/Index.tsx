@@ -65,10 +65,12 @@ const Index = () => {
       });
       
       // Procesar señal cardíaca
-      const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
-      if (heartBeatResult) {
-        setHeartRate(heartBeatResult.bpm || 0);
-        setArrhythmiaCount(heartBeatResult.arrhythmiaCount || 0);
+      const result = processHeartBeat(lastSignal.filteredValue);
+      if (result && typeof result === 'object' && 'bpm' in result) {
+        setHeartRate(result.bpm);
+        if ('arrhythmiaCount' in result) {
+          setArrhythmiaCount(result.arrhythmiaCount);
+        }
       }
       
       // Procesar signos vitales (SpO2 y presión)
