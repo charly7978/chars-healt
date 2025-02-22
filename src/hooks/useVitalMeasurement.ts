@@ -41,8 +41,8 @@ export const useVitalMeasurement = (isMeasuring: boolean) => {
         return;
       }
 
-      // 1. Obtener BPM usando getSmoothBPM en lugar de getFinalBPM
-      const bpm = processor.getSmoothBPM?.() || processor.getFinalBPM() || 0;
+      // Usamos solo getFinalBPM que es público
+      const bpm = processor.getFinalBPM() || 0;
       const arrCount = processor.arrhythmiaCount || 0;
 
       // Log detallado para debug
@@ -53,7 +53,7 @@ export const useVitalMeasurement = (isMeasuring: boolean) => {
         timestamp: new Date().toISOString()
       });
 
-      // 2. Actualizar estado solo si los valores son diferentes
+      // Actualizar estado solo si los valores son diferentes
       setMeasurements(prev => {
         if (prev.heartRate === bpm && prev.arrhythmiaCount === arrCount) {
           return prev; // No actualizar si no hay cambios
