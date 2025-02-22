@@ -27,7 +27,7 @@ export class HeartBeatProcessor {
   private readonly BEEP_PRIMARY_FREQUENCY = 880; // Frecuencia principal (La4)
   private readonly BEEP_SECONDARY_FREQUENCY = 440; // Armónico (La3)
   private readonly BEEP_DURATION = 100; // Duración más larga
-  private readonly BEEP_VOLUME = 0.4; // Volumen aumentado
+  private readonly BEEP_VOLUME = 0.7; // Volumen aumentado
   private readonly MIN_BEEP_INTERVAL_MS = 300;
 
   // ────────── AUTO-RESET SI LA SEÑAL ES MUY BAJA ──────────
