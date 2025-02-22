@@ -2,13 +2,13 @@
 export class HeartBeatProcessor {
   private readonly SAMPLE_RATE = 30;
   private readonly WINDOW_SIZE = 60;
-  private readonly MIN_PEAK_DISTANCE = 15;
-  private readonly MAX_BPM = 200;
+  private readonly MIN_PEAK_DISTANCE = 10;
+  private readonly MAX_BPM = 190;
   private readonly MIN_BPM = 40;
   private readonly BEEP_FREQUENCY = 1000;
   private readonly BEEP_DURATION = 50;
   private readonly SIGNAL_THRESHOLD = 0.40;  
-  private readonly MIN_CONFIDENCE = 0.32;
+  private readonly MIN_CONFIDENCE = 0.50;
   private readonly DERIVATIVE_THRESHOLD = -0.050;  // Único cambio: de -0.005 a -0.010 para exigir cambios aún más pronunciados
   private readonly MIN_PEAK_TIME_MS = 400;
 
