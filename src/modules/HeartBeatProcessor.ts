@@ -1,22 +1,27 @@
 
 export class HeartBeatProcessor {
+  // Constantes ajustadas según las nuevas recomendaciones
   private readonly SAMPLE_RATE = 30;
   private readonly WINDOW_SIZE = 60;
-  private readonly MIN_PEAK_DISTANCE = 9;  // Ajustado de 10 a 9 para permitir hasta 190 BPM
+  private readonly MIN_PEAK_DISTANCE = 9;
   private readonly MAX_BPM = 190;
   private readonly MIN_BPM = 40;
   private readonly BEEP_FREQUENCY = 1000;
   private readonly BEEP_DURATION = 50;
-  private readonly SIGNAL_THRESHOLD = 0.45;  // Ajustado a un punto medio entre 0.4 y 0.5
-  private readonly MIN_CONFIDENCE = 0.80;
-  private readonly DERIVATIVE_THRESHOLD = -0.045;  // Ajustado para exigir una bajada más pronunciada
-  private readonly MIN_PEAK_TIME_MS = 315;  // Ajustado de 400 a 315 para permitir hasta 190 BPM
-  private readonly WARMUP_TIME_MS = 5000;  // Tiempo de calentamiento de 5 segundos
-  private readonly MOVING_AVERAGE_WINDOW = 5;  // Ventana para el promedio móvil
-  private readonly EMA_ALPHA = 0.2;  // Factor de suavizado exponencial
+  private readonly SIGNAL_THRESHOLD = 0.5;    // Aumentado a 0.5 para mayor robustez
+  private readonly MIN_CONFIDENCE = 0.85;     // Aumentado a 0.85 para mayor confianza
+  private readonly DERIVATIVE_THRESHOLD = -0.065; // Más exigente para detectar cambios más pronunciados
+  private readonly MIN_PEAK_TIME_MS = 315;
+  private readonly WARMUP_TIME_MS = 5000;
+  private readonly MOVING_AVERAGE_WINDOW = 7;  // Aumentado a 7 para mejor suavizado
+  private readonly MEDIAN_FILTER_WINDOW = 5;   // Nuevo: ventana para filtro de mediana
+  private readonly EMA_ALPHA = 0.2;
+  private readonly INHIBITION_TIME_MS = 300;   // Nuevo: tiempo de inhibición entre pulsos
+  private readonly END_CUTOFF_TIME_MS = 2000;  // Nuevo: tiempo de corte al final
 
   private signalBuffer: number[] = [];
   private movingAverageBuffer: number[] = [];
+  private medianFilterBuffer: number[] = [];
   private lastPeakTime: number | null = null;
   private previousPeakTime: number | null = null;
   private audioContext: AudioContext | null = null;
@@ -27,6 +32,8 @@ export class HeartBeatProcessor {
   private values: number[] = [];
   private startTime: number = 0;
   private smoothedValue: number = 0;
+  private lastConfirmedPeak: boolean = false;
+  private peakConfirmationBuffer: number[] = [];
 
   constructor() {
     this.initAudio();
@@ -38,10 +45,6 @@ export class HeartBeatProcessor {
       this.audioContext = new AudioContext();
       await this.audioContext.resume();
       await this.playBeep(0.01);
-      console.log("HeartBeatProcessor: Audio initialized successfully", {
-        sampleRate: this.audioContext.sampleRate,
-        state: this.audioContext.state
-      });
     } catch (error) {
       console.error("HeartBeatProcessor: Error initializing audio", error);
     }
@@ -49,6 +52,19 @@ export class HeartBeatProcessor {
 
   private isInWarmup(): boolean {
     return Date.now() - this.startTime < this.WARMUP_TIME_MS;
+  }
+
+  private isInEndCutoff(): boolean {
+    return Date.now() - this.startTime > (30000 - this.END_CUTOFF_TIME_MS);
+  }
+
+  private calculateMedianFilter(value: number): number {
+    this.medianFilterBuffer.push(value);
+    if (this.medianFilterBuffer.length > this.MEDIAN_FILTER_WINDOW) {
+      this.medianFilterBuffer.shift();
+    }
+    const sorted = [...this.medianFilterBuffer].sort((a, b) => a - b);
+    return sorted[Math.floor(sorted.length / 2)];
   }
 
   private calculateMovingAverage(value: number): number {
@@ -65,12 +81,12 @@ export class HeartBeatProcessor {
   }
 
   private async playBeep(volume: number = 0.1) {
-    if (!this.audioContext || this.isInWarmup()) {
+    if (!this.audioContext || this.isInWarmup() || this.isInEndCutoff()) {
       return;
     }
 
     const currentTime = Date.now();
-    if (currentTime - this.lastBeepTime < 200) {
+    if (currentTime - this.lastBeepTime < this.INHIBITION_TIME_MS) {
       return;
     }
 
@@ -102,8 +118,9 @@ export class HeartBeatProcessor {
     confidence: number;
     isPeak: boolean;
   } {
-    // Aplicar filtros para suavizar la señal
-    const movingAvg = this.calculateMovingAverage(value);
+    // Aplicar cadena de filtros
+    const medianFiltered = this.calculateMedianFilter(value);
+    const movingAvg = this.calculateMovingAverage(medianFiltered);
     const smoothedValue = this.calculateEMA(movingAvg);
 
     this.signalBuffer.push(smoothedValue);
@@ -128,8 +145,10 @@ export class HeartBeatProcessor {
     const { isPeak, confidence } = this.detectPeak(normalizedValue, smoothDerivative);
     this.lastValue = smoothedValue;
 
-    // No procesar picos durante el warmup
-    if (isPeak && confidence > this.MIN_CONFIDENCE && !this.isInWarmup()) {
+    // Sistema de confirmación de picos
+    const isConfirmedPeak = this.confirmPeak(isPeak, normalizedValue, confidence);
+
+    if (isConfirmedPeak && !this.isInWarmup() && !this.isInEndCutoff()) {
       const currentTime = Date.now();
       const timeSinceLastPeak = this.lastPeakTime ? currentTime - this.lastPeakTime : Infinity;
       
@@ -144,8 +163,31 @@ export class HeartBeatProcessor {
     return {
       bpm: this.calculateCurrentBPM(),
       confidence,
-      isPeak: isPeak && !this.isInWarmup()
+      isPeak: isConfirmedPeak && !this.isInWarmup() && !this.isInEndCutoff()
     };
+  }
+
+  private confirmPeak(isPeak: boolean, normalizedValue: number, confidence: number): boolean {
+    this.peakConfirmationBuffer.push(normalizedValue);
+    if (this.peakConfirmationBuffer.length > 3) {
+      this.peakConfirmationBuffer.shift();
+    }
+
+    // Doble chequeo: confirmar que hay un descenso claro después del pico
+    if (isPeak && !this.lastConfirmedPeak && confidence > this.MIN_CONFIDENCE) {
+      const hasDescendingTrend = this.peakConfirmationBuffer.length === 3 &&
+        this.peakConfirmationBuffer[2] < this.peakConfirmationBuffer[1] &&
+        this.peakConfirmationBuffer[1] > this.peakConfirmationBuffer[0];
+
+      if (hasDescendingTrend) {
+        this.lastConfirmedPeak = true;
+        return true;
+      }
+    } else if (!isPeak) {
+      this.lastConfirmedPeak = false;
+    }
+
+    return false;
   }
 
   private detectPeak(normalizedValue: number, derivative: number): { isPeak: boolean; confidence: number } {
@@ -173,9 +215,7 @@ export class HeartBeatProcessor {
     }
 
     const interval = this.lastPeakTime - this.previousPeakTime;
-    if (interval <= 0) {
-      return;
-    }
+    if (interval <= 0) return;
 
     const instantBPM = 60000 / interval;
 
@@ -188,39 +228,40 @@ export class HeartBeatProcessor {
   }
 
   private calculateCurrentBPM(): number {
-    if (this.bpmHistory.length < 2) {
-      return 0;
+    if (this.bpmHistory.length < 2) return 0;
+
+    const sorted = [...this.bpmHistory].sort((a, b) => a - b);
+    // Usar mediana en lugar de media para mayor robustez
+    if (sorted.length % 2 === 1) {
+      return Math.round(sorted[Math.floor(sorted.length / 2)]);
+    } else {
+      const mid1 = sorted[(sorted.length/2) - 1];
+      const mid2 = sorted[sorted.length/2];
+      return Math.round((mid1 + mid2) / 2);
     }
-
-    // Eliminar valores extremos
-    const sortedBPMs = [...this.bpmHistory].sort((a, b) => a - b);
-    const filteredBPMs = sortedBPMs.slice(1, -1); // Elimina el valor más alto y más bajo
-
-    if (filteredBPMs.length === 0) {
-      return 0;
-    }
-
-    const average = filteredBPMs.reduce((a, b) => a + b, 0) / filteredBPMs.length;
-    return Math.round(average);
   }
 
   public getFinalBPM(): number {
     if (this.bpmHistory.length < 5) return 0;
 
-    // Descartar outliers (10% superior e inferior)
     const sorted = [...this.bpmHistory].sort((a, b) => a - b);
-    const cut = Math.round(sorted.length * 0.1);
+    // Descartar el 15% superior e inferior para mayor robustez
+    const cut = Math.round(sorted.length * 0.15);
     const trimmed = sorted.slice(cut, sorted.length - cut);
 
     if (trimmed.length === 0) return 0;
 
-    const sum = trimmed.reduce((acc, val) => acc + val, 0);
-    return Math.round(sum / trimmed.length);
+    // Usar mediana para el resultado final
+    const medianIndex = Math.floor(trimmed.length / 2);
+    return trimmed.length % 2 === 0
+      ? Math.round((trimmed[medianIndex - 1] + trimmed[medianIndex]) / 2)
+      : Math.round(trimmed[medianIndex]);
   }
 
   reset() {
     this.signalBuffer = [];
     this.movingAverageBuffer = [];
+    this.medianFilterBuffer = [];
     this.lastPeakTime = null;
     this.previousPeakTime = null;
     this.bpmHistory = [];
@@ -229,6 +270,8 @@ export class HeartBeatProcessor {
     this.lastValue = 0;
     this.values = [];
     this.smoothedValue = 0;
-    this.startTime = Date.now(); // Reiniciar el tiempo de calentamiento
+    this.lastConfirmedPeak = false;
+    this.peakConfirmationBuffer = [];
+    this.startTime = Date.now();
   }
 }
