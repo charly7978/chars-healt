@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
@@ -22,7 +23,7 @@ const Index = () => {
   useEffect(() => {
     const handleMeasurementComplete = (e: Event) => {
       e.preventDefault();
-      setIsMonitoring(false);
+      handleStopMeasurement();
     };
 
     window.addEventListener('measurementComplete', handleMeasurementComplete);
@@ -40,6 +41,13 @@ const Index = () => {
     console.log("Index: Camera stream ready", stream.getVideoTracks()[0].getSettings());
     const videoTrack = stream.getVideoTracks()[0];
     const imageCapture = new ImageCapture(videoTrack);
+    
+    // Intentar encender la linterna
+    if (videoTrack.getCapabilities()?.torch) {
+      videoTrack.applyConstraints({
+        advanced: [{ torch: true }]
+      }).catch(err => console.error("Error activando linterna:", err));
+    }
     
     const tempCanvas = document.createElement('canvas');
     const tempCtx = tempCanvas.getContext('2d');
@@ -86,35 +94,34 @@ const Index = () => {
       }
     };
 
+    // Iniciar el procesamiento después de que la cámara esté lista
+    setIsMonitoring(true);
+    processingRef.current = true;
     processImage();
   };
 
-  const handleStartStop = (e: React.MouseEvent) => {
+  const handleStartMeasurement = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     
-    if (!isMonitoring && !isCameraOn) {
-      setIsCameraOn(true);
-      startProcessing();
-      setTimeout(() => {
-        setIsMonitoring(true);
-        processingRef.current = true;
-      }, 500);
-    } else if (isMonitoring) {
-      setIsMonitoring(false);
-      processingRef.current = false;
-      stopProcessing();
-    }
+    console.log("Index: Iniciando medición");
+    startProcessing();
+    setIsCameraOn(true);
   };
 
-  const handleReset = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleStopMeasurement = () => {
+    console.log("Index: Deteniendo medición");
     setIsMonitoring(false);
     processingRef.current = false;
     stopProcessing();
     setSignalQuality(0);
     setIsCameraOn(false);
+  };
+
+  const handleReset = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    handleStopMeasurement();
   };
 
   useEffect(() => {
@@ -134,7 +141,6 @@ const Index = () => {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
         ctx.fillRect(0, 0, canvasRef.current!.width, canvasRef.current!.height);
         
-        // Amplificamos más la señal y la invertimos para que suba cuando detecte más rojo
         const signalValue = lastSignal ? -lastSignal.filteredValue * 100 : 0;
         const currentY = (canvasRef.current!.height / 2) + signalValue;
         
@@ -209,9 +215,9 @@ const Index = () => {
             </Button>
             
             <Button
-              onClick={handleStartStop}
+              onClick={isMonitoring ? handleStopMeasurement : handleStartMeasurement}
               size="sm"
-              className={`flex-1 ${isMonitoring ? 'bg-medical-red/80' : 'bg-medical-blue/80'} hover:opacity-100 text-white text-xs py-1.5`}
+              className={`flex-1 ${isMonitoring ? 'bg-medical-red/80 hover:bg-medical-red' : 'bg-medical-blue/80 hover:bg-medical-blue'} text-white text-xs py-1.5`}
               disabled={isComplete && !isMonitoring}
             >
               {isMonitoring ? 'Detener' : 'Iniciar'}
