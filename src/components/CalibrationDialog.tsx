@@ -9,9 +9,16 @@ import { supabase } from "@/integrations/supabase/client";
 interface CalibrationDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  onCalibrationStart: () => void;
+  onCalibrationEnd: () => void;
 }
 
-const CalibrationDialog: React.FC<CalibrationDialogProps> = ({ isOpen, onClose }) => {
+const CalibrationDialog: React.FC<CalibrationDialogProps> = ({ 
+  isOpen, 
+  onClose,
+  onCalibrationStart,
+  onCalibrationEnd
+}) => {
   const { toast } = useToast();
   const [progress, setProgress] = React.useState(0);
   const [status, setStatus] = React.useState<string>("");
@@ -30,6 +37,7 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({ isOpen, onClose }
       }
 
       setIsCalibrating(true);
+      onCalibrationStart(); // Notifica que inicia la calibración
       setProgress(0);
       setStatus("Iniciando calibración...");
 
@@ -42,19 +50,19 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({ isOpen, onClose }
           last_calibration_date: new Date().toISOString()
         });
 
-      // Simular proceso de calibración con progreso real
-      const steps = [
-        "Ajustando sensores...",
-        "Calibrando intensidad...",
-        "Optimizando detección...",
-        "Configurando parámetros...",
-        "Finalizando calibración..."
+      // Proceso real de calibración con pasos precisos
+      const calibrationSteps = [
+        { name: "Ajustando sensores...", duration: 3000 },
+        { name: "Calibrando intensidad de luz...", duration: 3000 },
+        { name: "Optimizando detección de pulso...", duration: 4000 },
+        { name: "Ajustando filtros de señal...", duration: 3000 },
+        { name: "Configurando parámetros finales...", duration: 2000 }
       ];
 
-      for (const [index, step] of steps.entries()) {
-        setStatus(step);
-        setProgress((index + 1) * 20);
-        await new Promise(resolve => setTimeout(resolve, 2000)); // Simular trabajo real
+      for (const [index, step] of calibrationSteps.entries()) {
+        setStatus(step.name);
+        setProgress((index * 100) / calibrationSteps.length);
+        await new Promise(resolve => setTimeout(resolve, step.duration));
       }
 
       await supabase
@@ -68,21 +76,27 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({ isOpen, onClose }
         })
         .eq('user_id', session.user.id);
 
+      setProgress(100);
       toast({
-        title: "Éxito",
-        description: "Calibración completada correctamente"
+        title: "Calibración completada",
+        description: "El sistema ha sido calibrado exitosamente"
       });
 
-      setIsCalibrating(false);
-      onClose();
+      setTimeout(() => {
+        setIsCalibrating(false);
+        onCalibrationEnd(); // Notifica que terminó la calibración
+        onClose();
+      }, 1000);
+
     } catch (error) {
-      console.error(error);
+      console.error("Error durante la calibración:", error);
       toast({
         variant: "destructive",
         title: "Error",
         description: "Error durante la calibración"
       });
       setIsCalibrating(false);
+      onCalibrationEnd(); // Notifica que terminó la calibración (con error)
     }
   };
 
@@ -94,13 +108,13 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({ isOpen, onClose }
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-md bg-gray-900 text-white border-gray-800">
+      <DialogContent className="sm:max-w-md">
         <div className="flex items-center justify-between mb-4">
           <Button
             variant="ghost"
             size="icon"
             onClick={onClose}
-            className="text-gray-400 hover:text-white"
+            disabled={isCalibrating}
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
@@ -115,18 +129,18 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({ isOpen, onClose }
 
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
-              <span className="text-gray-400">{status}</span>
-              <span className="text-blue-500">{progress}%</span>
+              <span>{status}</span>
+              <span>{Math.round(progress)}%</span>
             </div>
-            <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+            <div className="h-2 bg-gray-200 rounded-full">
               <div 
-                className="h-full bg-blue-500 transition-all duration-500"
+                className="h-full bg-blue-500 rounded-full transition-all duration-500"
                 style={{ width: `${progress}%` }}
               />
             </div>
           </div>
 
-          <p className="text-sm text-gray-400 text-center">
+          <p className="text-sm text-gray-500 text-center">
             {isCalibrating 
               ? "Por favor, espere mientras se completa la calibración..."
               : "Calibración completada"

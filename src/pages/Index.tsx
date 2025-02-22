@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
@@ -15,6 +14,7 @@ import { LogOut, Settings, Play, Square } from "lucide-react";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [signalQuality, setSignalQuality] = useState(0);
   const [vitalSigns, setVitalSigns] = useState({ 
@@ -22,7 +22,6 @@ const Index = () => {
     pressure: "--/--",
     arrhythmiaStatus: "--" 
   });
-  const [elapsedTime, setElapsedTime] = useState(0);
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState<string | number>("--");
   const [showCalibrationDialog, setShowCalibrationDialog] = useState(false);
@@ -33,7 +32,7 @@ const Index = () => {
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
-  // Control de sesión solamente
+  // Control de sesión
   useEffect(() => {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -77,6 +76,7 @@ const Index = () => {
   const startMonitoring = () => {
     setIsMonitoring(true);
     setIsCameraOn(true);
+    setIsPaused(false);
     startProcessing();
     toast({
       title: "Medición Iniciada",
@@ -87,6 +87,7 @@ const Index = () => {
   const stopMonitoring = () => {
     setIsMonitoring(false);
     setIsCameraOn(false);
+    setIsPaused(false);
     stopProcessing();
     resetVitalSigns();
     toast({
@@ -94,6 +95,52 @@ const Index = () => {
       description: "El sistema ha detenido el monitoreo"
     });
   };
+
+  const pauseMonitoring = () => {
+    if (isMonitoring) {
+      setIsPaused(true);
+      stopProcessing();
+    }
+  };
+
+  const resumeMonitoring = () => {
+    if (isMonitoring) {
+      setIsPaused(false);
+      startProcessing();
+    }
+  };
+
+  const handleCalibrationStart = () => {
+    if (isMonitoring) {
+      pauseMonitoring();
+    }
+  };
+
+  const handleCalibrationEnd = () => {
+    if (isMonitoring) {
+      resumeMonitoring();
+    }
+  };
+
+  // Control de visibilidad de la página
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        if (isMonitoring && !isPaused) {
+          pauseMonitoring();
+        }
+      } else {
+        if (isMonitoring && isPaused && !showCalibrationDialog) {
+          resumeMonitoring();
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [isMonitoring, isPaused, showCalibrationDialog]);
 
   const handleStreamReady = (stream: MediaStream) => {
     if (!isMonitoring) return;
@@ -242,6 +289,8 @@ const Index = () => {
       <CalibrationDialog
         isOpen={showCalibrationDialog}
         onClose={() => setShowCalibrationDialog(false)}
+        onCalibrationStart={handleCalibrationStart}
+        onCalibrationEnd={handleCalibrationEnd}
       />
     </div>
   );
