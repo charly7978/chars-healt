@@ -118,52 +118,55 @@ export class VitalSignsProcessor {
     pressure: string;
     arrhythmiaStatus: string;
   } {
-    console.log("VitalSignsProcessor: Entrada de señal", {
-      ppgValue,
-      isLearning: this.isLearningPhase,
-      rrIntervalsCount: this.rrIntervals.length,
-      receivedRRData: rrData
-    });
+    // Actualizar tiempo desde inicio
+    const currentTime = Date.now();
+    const timeSinceStart = currentTime - this.measurementStartTime;
 
+    // Procesar señal PPG
     const filteredValue = this.applySMAFilter(ppgValue);
-    
     this.ppgValues.push(filteredValue);
     if (this.ppgValues.length > this.WINDOW_SIZE) {
       this.ppgValues.shift();
     }
 
-    // Si recibimos datos RR, los usamos directamente
+    // Detectar picos y actualizar RR intervals
+    if (this.detectPeak(filteredValue)) {
+      this.processHeartBeat();
+    }
+
+    // También incorporar datos RR externos si están disponibles
     if (rrData && rrData.intervals.length > 0) {
       this.rrIntervals = [...rrData.intervals];
       this.lastPeakTime = rrData.lastPeakTime;
-      
-      // Solo detectamos arritmias si no estamos en fase de aprendizaje
-      if (!this.isLearningPhase && this.rrIntervals.length >= this.RR_WINDOW_SIZE) {
-        this.detectArrhythmia();
-      }
     }
 
-    // Calcular SpO2 y presión
-    const spo2 = this.calculateSpO2(this.ppgValues.slice(-60));
-    const bp = this.calculateBloodPressure(this.ppgValues.slice(-60));
-    const pressureString = `${bp.systolic}/${bp.diastolic}`;
-
-    // Estado de arritmia y conteo
+    // Verificar si estamos en fase de aprendizaje
     let arrhythmiaStatus = "--";
     
-    const currentTime = Date.now();
-    const timeSinceStart = currentTime - this.measurementStartTime;
-
-    // Actualizar fase de aprendizaje
     if (timeSinceStart <= this.ARRHYTHMIA_LEARNING_PERIOD) {
       this.isLearningPhase = true;
       arrhythmiaStatus = "APRENDIENDO...";
+      console.log("VitalSignsProcessor: En fase de aprendizaje", {
+        timeSinceStart,
+        learningPeriod: this.ARRHYTHMIA_LEARNING_PERIOD
+      });
     } else {
       this.isLearningPhase = false;
+      
+      // Solo detectar arritmias después de la fase de aprendizaje
+      if (this.rrIntervals.length >= this.RR_WINDOW_SIZE) {
+        this.detectArrhythmia();
+      }
+      
       arrhythmiaStatus = this.arrhythmiaDetected ? 
         `ARRITMIAS: ${this.arrhythmiaCount}` : 
         "SIN ARRITMIAS";
     }
+
+    // Calcular otros signos vitales
+    const spo2 = this.calculateSpO2(this.ppgValues.slice(-60));
+    const bp = this.calculateBloodPressure(this.ppgValues.slice(-60));
+    const pressureString = `${bp.systolic}/${bp.diastolic}`;
 
     console.log("VitalSignsProcessor: Estado actual", {
       timestamp: currentTime,
@@ -180,6 +183,24 @@ export class VitalSignsProcessor {
       pressure: pressureString,
       arrhythmiaStatus
     };
+  }
+
+  private detectPeak(value: number): boolean {
+    const currentTime = Date.now();
+    if (this.lastPeakTime === null) {
+      if (value > this.PEAK_THRESHOLD) {
+        this.lastPeakTime = currentTime;
+        return true;
+      }
+      return false;
+    }
+
+    const timeSinceLastPeak = currentTime - this.lastPeakTime;
+    if (value > this.PEAK_THRESHOLD && timeSinceLastPeak > 500) {
+      this.lastPeakTime = currentTime;
+      return true;
+    }
+    return false;
   }
 
   private detectArrhythmia() {
@@ -416,30 +437,6 @@ export class VitalSignsProcessor {
 
     const mean = amps.reduce((a, b) => a + b, 0) / amps.length;
     return mean;
-  }
-
-  /**
-   * detectPeak
-   * Marca un latido cuando value > PEAK_THRESHOLD y pasaron >=500ms 
-   * desde el último pico.
-   */
-  private detectPeak(value: number): boolean {
-    const currentTime = Date.now();
-    if (this.lastPeakTime === null) {
-      // primer latido
-      if (value > this.PEAK_THRESHOLD) {
-        this.lastPeakTime = currentTime;
-        return true;
-      }
-      return false;
-    }
-
-    const timeSinceLastPeak = currentTime - this.lastPeakTime;
-    if (value > this.PEAK_THRESHOLD && timeSinceLastPeak > 500) {
-      this.lastPeakTime = currentTime;
-      return true;
-    }
-    return false;
   }
 
   /**
