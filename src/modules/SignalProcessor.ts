@@ -1,3 +1,4 @@
+
 import { ProcessedSignal, ProcessingError, SignalProcessor } from '../types/signal';
 
 class KalmanFilter {
@@ -27,16 +28,16 @@ export class PPGSignalProcessor implements SignalProcessor {
   private lastValues: number[] = [];
   private readonly DEFAULT_CONFIG = {
     BUFFER_SIZE: 10,
-    MIN_RED_THRESHOLD: 95,
-    MAX_RED_THRESHOLD: 240,
-    STABILITY_WINDOW: 6,
-    MIN_STABILITY_COUNT: 3
+    MIN_RED_THRESHOLD: 90,  // Reducido de 95 a 90 para mayor sensibilidad
+    MAX_RED_THRESHOLD: 245, // Aumentado de 240 a 245
+    STABILITY_WINDOW: 5,    // Reducido de 6 a 5 para respuesta más rápida
+    MIN_STABILITY_COUNT: 3  // Mantenido en 3 para evitar falsos positivos
   };
   private currentConfig: typeof this.DEFAULT_CONFIG;
   private readonly BUFFER_SIZE = 10;
-  private readonly MIN_RED_THRESHOLD = 95;
-  private readonly MAX_RED_THRESHOLD = 240;
-  private readonly STABILITY_WINDOW = 6;
+  private readonly MIN_RED_THRESHOLD = 90;
+  private readonly MAX_RED_THRESHOLD = 245;
+  private readonly STABILITY_WINDOW = 5;
   private readonly MIN_STABILITY_COUNT = 3;
   private stableFrameCount: number = 0;
   private lastStableValue: number = 0;
@@ -180,39 +181,47 @@ export class PPGSignalProcessor implements SignalProcessor {
     const isInRange = rawValue >= this.MIN_RED_THRESHOLD && rawValue <= this.MAX_RED_THRESHOLD;
     
     if (!isInRange) {
+      // Reset más rápido cuando se detecta que no hay dedo
       this.stableFrameCount = 0;
+      this.lastStableValue = 0;
       return { isFingerDetected: false, quality: 0 };
     }
 
-    // Calcular estabilidad
     if (this.lastValues.length < this.STABILITY_WINDOW) {
       return { isFingerDetected: false, quality: 0 };
     }
 
+    // Cálculo de estabilidad mejorado
     const recentValues = this.lastValues.slice(-this.STABILITY_WINDOW);
+    const avgValue = recentValues.reduce((sum, val) => sum + val, 0) / recentValues.length;
     const avgVariation = recentValues.reduce((sum, val, i, arr) => {
       if (i === 0) return 0;
       return sum + Math.abs(val - arr[i-1]);
     }, 0) / (recentValues.length - 1);
 
-    const isStable = avgVariation < 5; // Umbral de variación para considerar señal estable
+    // Umbral de variación adaptativo basado en el valor promedio
+    const variationThreshold = Math.max(3, avgValue * 0.05); // 5% del valor promedio o mínimo 3
+    const isStable = avgVariation < variationThreshold;
 
     if (isStable) {
       this.stableFrameCount++;
       this.lastStableValue = filtered;
     } else {
-      this.stableFrameCount = Math.max(0, this.stableFrameCount - 1);
+      // Reducción gradual del contador de estabilidad
+      this.stableFrameCount = Math.max(0, this.stableFrameCount - 0.5);
     }
 
     const isFingerDetected = this.stableFrameCount >= this.MIN_STABILITY_COUNT;
     
-    // Calcular calidad solo si el dedo está detectado
     let quality = 0;
     if (isFingerDetected) {
-      const stabilityScore = Math.min(this.stableFrameCount / 10, 1);
+      // Cálculo de calidad mejorado
+      const stabilityScore = Math.min(this.stableFrameCount / (this.MIN_STABILITY_COUNT * 2), 1);
       const intensityScore = Math.min((rawValue - this.MIN_RED_THRESHOLD) / 
                                     (this.MAX_RED_THRESHOLD - this.MIN_RED_THRESHOLD), 1);
-      quality = Math.round((stabilityScore * 0.7 + intensityScore * 0.3) * 100);
+      const variationScore = Math.max(0, 1 - (avgVariation / variationThreshold));
+      
+      quality = Math.round((stabilityScore * 0.4 + intensityScore * 0.3 + variationScore * 0.3) * 100);
     }
 
     return { isFingerDetected, quality };
