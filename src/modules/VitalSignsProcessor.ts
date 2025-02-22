@@ -483,7 +483,6 @@ export class VitalSignsProcessor {
    * Filtro SMA (Smooth Moving Average) de tamaño 3
    * para mitigar ruido puntual.
    */
-  private smaBuffer: number[] = [];
   private applySMAFilter(value: number): number {
     this.smaBuffer.push(value);
     if (this.smaBuffer.length > this.SMA_WINDOW) {
