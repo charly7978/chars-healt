@@ -8,14 +8,14 @@
 export class HeartBeatProcessor {
   // ────────── CONFIGURACIONES PRINCIPALES ──────────
   private readonly SAMPLE_RATE = 30;
-  private readonly WINDOW_SIZE = 45; // Reducido para ser más consistente
+  private readonly WINDOW_SIZE = 45;
   private readonly MIN_BPM = 40;
   private readonly MAX_BPM = 200;
-  private readonly SIGNAL_THRESHOLD = 0.45; // Ajustado para ser más consistente entre plataformas
+  private readonly SIGNAL_THRESHOLD = 0.45;
   private readonly MIN_CONFIDENCE = 0.45;
-  private readonly DERIVATIVE_THRESHOLD = -0.02; // Ajustado para mejor detección
-  private readonly MIN_PEAK_TIME_MS = 300; // Ajustado para permitir frecuencias más altas
-  private readonly WARMUP_TIME_MS = 2000; // Reducido para calibración más rápida
+  private readonly DERIVATIVE_THRESHOLD = -0.02;
+  private readonly MIN_PEAK_TIME_MS = 300;
+  private readonly WARMUP_TIME_MS = 2000;
 
   // Parámetros de filtrado unificados
   private readonly MEDIAN_FILTER_WINDOW = 3;
@@ -52,19 +52,20 @@ export class HeartBeatProcessor {
   private peakConfirmationBuffer: number[] = [];
   private lastConfirmedPeak: boolean = false;
   private smoothBPM: number = 0;
-  private readonly BPM_ALPHA = 0.15; // Suavizado más agresivo
+  private readonly BPM_ALPHA = 0.15;
   private isAndroid: boolean;
+  private androidMultiplier: number = 1.0;
+  private peakCandidateIndex: number | null = null;
+  private peakCandidateValue: number = 0;
 
   constructor() {
     this.isAndroid = /Android/i.test(navigator.userAgent);
     this.initAudio();
     this.startTime = Date.now();
     
-    // Ajustes específicos para Android
+    // En lugar de cambiar los umbrales base, aplicamos un multiplicador para Android
     if (this.isAndroid) {
-      this.BPM_ALPHA = 0.12; // Más suavizado para Android
-      this.SIGNAL_THRESHOLD = 0.40; // Umbral más bajo para Android
-      this.DERIVATIVE_THRESHOLD = -0.015; // Más sensible
+      this.androidMultiplier = 1.35; // Factor de corrección para Android
     }
   }
 
@@ -108,8 +109,11 @@ export class HeartBeatProcessor {
     filteredValue: number;
     arrhythmiaCount: number;
   } {
+    // Aplicar ajuste de plataforma al valor de entrada
+    const adjustedValue = this.isAndroid ? value * this.androidMultiplier : value;
+    
     // Aplicar filtros en cascada
-    const medVal = this.medianFilter(value);
+    const medVal = this.medianFilter(adjustedValue);
     const movAvgVal = this.calculateMovingAverage(medVal);
     const smoothed = this.calculateEMA(movAvgVal);
 
@@ -128,9 +132,8 @@ export class HeartBeatProcessor {
       };
     }
 
-    // Actualizar línea base con factor de plataforma
-    const baselineFactor = this.isAndroid ? 0.997 : this.BASELINE_FACTOR;
-    this.baseline = this.baseline * baselineFactor + smoothed * (1 - baselineFactor);
+    // Actualizar línea base
+    this.baseline = this.baseline * this.BASELINE_FACTOR + smoothed * (1 - this.BASELINE_FACTOR);
 
     const normalizedValue = smoothed - this.baseline;
     this.autoResetIfSignalIsLow(Math.abs(normalizedValue));
@@ -163,13 +166,144 @@ export class HeartBeatProcessor {
       }
     }
 
+    const finalBPM = Math.round(this.getSmoothBPM());
+    
     return {
-      bpm: Math.round(this.getSmoothBPM()),
+      bpm: finalBPM,
       confidence,
       isPeak: isConfirmedPeak && !this.isInWarmup(),
       filteredValue: smoothed,
       arrhythmiaCount: 0
     };
+  }
+
+  private detectPeak(normalizedValue: number, derivative: number): {
+    isPeak: boolean;
+    confidence: number;
+  } {
+    const now = Date.now();
+    const timeSinceLastPeak = this.lastPeakTime ? now - this.lastPeakTime : Number.MAX_VALUE;
+
+    if (timeSinceLastPeak < this.MIN_PEAK_TIME_MS) {
+      return { isPeak: false, confidence: 0 };
+    }
+
+    const isPeak =
+      derivative < this.DERIVATIVE_THRESHOLD &&
+      normalizedValue > this.SIGNAL_THRESHOLD &&
+      this.lastValue > this.baseline * 0.98;
+
+    const amplitudeConfidence = Math.min(
+      Math.max(Math.abs(normalizedValue) / (this.SIGNAL_THRESHOLD * 1.8), 0),
+      1
+    );
+    const derivativeConfidence = Math.min(
+      Math.max(Math.abs(derivative) / Math.abs(this.DERIVATIVE_THRESHOLD * 0.8), 0),
+      1
+    );
+
+    const confidence = (amplitudeConfidence + derivativeConfidence) / 2;
+
+    return { isPeak, confidence };
+  }
+
+  private confirmPeak(isPeak: boolean, normalizedValue: number, confidence: number): boolean {
+    this.peakConfirmationBuffer.push(normalizedValue);
+    if (this.peakConfirmationBuffer.length > 5) {
+      this.peakConfirmationBuffer.shift();
+    }
+
+    if (isPeak && !this.lastConfirmedPeak && confidence >= this.MIN_CONFIDENCE) {
+      if (this.peakConfirmationBuffer.length >= 3) {
+        const len = this.peakConfirmationBuffer.length;
+        const goingDown1 =
+          this.peakConfirmationBuffer[len - 1] < this.peakConfirmationBuffer[len - 2];
+        const goingDown2 =
+          this.peakConfirmationBuffer[len - 2] < this.peakConfirmationBuffer[len - 3];
+
+        if (goingDown1 && goingDown2) {
+          this.lastConfirmedPeak = true;
+          return true;
+        }
+      }
+    } else if (!isPeak) {
+      this.lastConfirmedPeak = false;
+    }
+
+    return false;
+  }
+
+  private isInWarmup(): boolean {
+    return Date.now() - this.startTime < this.WARMUP_TIME_MS;
+  }
+
+  private autoResetIfSignalIsLow(amplitude: number) {
+    if (amplitude < this.LOW_SIGNAL_THRESHOLD) {
+      this.lowSignalCount++;
+      if (this.lowSignalCount >= this.LOW_SIGNAL_FRAMES) {
+        this.resetDetectionStates();
+      }
+    } else {
+      this.lowSignalCount = 0;
+    }
+  }
+
+  private resetDetectionStates() {
+    this.lastPeakTime = null;
+    this.previousPeakTime = null;
+    this.lastConfirmedPeak = false;
+    this.peakCandidateIndex = null;
+    this.peakCandidateValue = 0;
+    this.peakConfirmationBuffer = [];
+    this.values = [];
+    console.log("HeartBeatProcessor: auto-reset detection states (low signal).");
+  }
+
+  private updateBPM() {
+    if (!this.lastPeakTime || !this.previousPeakTime) return;
+    const interval = this.lastPeakTime - this.previousPeakTime;
+    if (interval <= 0) return;
+
+    const instantBPM = 60000 / interval;
+    if (instantBPM >= this.MIN_BPM && instantBPM <= this.MAX_BPM) {
+      this.bpmHistory.push(instantBPM);
+      if (this.bpmHistory.length > 12) {
+        this.bpmHistory.shift();
+      }
+    }
+  }
+
+  private getSmoothBPM(): number {
+    const rawBPM = this.calculateCurrentBPM();
+    if (this.smoothBPM === 0) {
+      this.smoothBPM = rawBPM;
+      return rawBPM;
+    }
+    this.smoothBPM = this.BPM_ALPHA * rawBPM + (1 - this.BPM_ALPHA) * this.smoothBPM;
+    return this.smoothBPM;
+  }
+
+  private calculateCurrentBPM(): number {
+    if (this.bpmHistory.length < 2) {
+      return 0;
+    }
+    const sorted = [...this.bpmHistory].sort((a, b) => a - b);
+    const trimmed = sorted.slice(1, -1);
+    if (!trimmed.length) return 0;
+    const avg = trimmed.reduce((a, b) => a + b, 0) / trimmed.length;
+    return avg;
+  }
+
+  public getFinalBPM(): number {
+    if (this.bpmHistory.length < 5) {
+      return 0;
+    }
+    const sorted = [...this.bpmHistory].sort((a, b) => a - b);
+    const cut = Math.round(sorted.length * 0.1);
+    const finalSet = sorted.slice(cut, sorted.length - cut);
+    if (!finalSet.length) return 0;
+    const sum = finalSet.reduce((acc, val) => acc + val, 0);
+    return Math.round(sum / finalSet.length);
   }
 
   private async playBeep(volume: number = this.BEEP_VOLUME) {
@@ -239,145 +373,6 @@ export class HeartBeatProcessor {
     } catch (err) {
       console.error("HeartBeatProcessor: Error playing beep", err);
     }
-  }
-
-  private isInWarmup(): boolean {
-    return Date.now() - this.startTime < this.WARMUP_TIME_MS;
-  }
-
-  private autoResetIfSignalIsLow(amplitude: number) {
-    if (amplitude < this.LOW_SIGNAL_THRESHOLD) {
-      this.lowSignalCount++;
-      if (this.lowSignalCount >= this.LOW_SIGNAL_FRAMES) {
-        this.resetDetectionStates();
-      }
-    } else {
-      this.lowSignalCount = 0;
-    }
-  }
-
-  private resetDetectionStates() {
-    this.lastPeakTime = null;
-    this.previousPeakTime = null;
-    this.lastConfirmedPeak = false;
-    this.peakCandidateIndex = null;
-    this.peakCandidateValue = 0;
-    this.peakConfirmationBuffer = [];
-    this.values = [];
-    console.log("HeartBeatProcessor: auto-reset detection states (low signal).");
-  }
-
-  private detectPeak(normalizedValue: number, derivative: number): {
-    isPeak: boolean;
-    confidence: number;
-  } {
-    const now = Date.now();
-    const timeSinceLastPeak = this.lastPeakTime
-      ? now - this.lastPeakTime
-      : Number.MAX_VALUE;
-
-    if (timeSinceLastPeak < this.MIN_PEAK_TIME_MS) {
-      return { isPeak: false, confidence: 0 };
-    }
-
-    const threshold = this.isAndroid ? this.SIGNAL_THRESHOLD * 0.9 : this.SIGNAL_THRESHOLD;
-    const derivThreshold = this.isAndroid ? this.DERIVATIVE_THRESHOLD * 1.2 : this.DERIVATIVE_THRESHOLD;
-
-    const isPeak =
-      derivative < derivThreshold &&
-      normalizedValue > threshold &&
-      this.lastValue > this.baseline * 0.98;
-
-    const amplitudeConfidence = Math.min(
-      Math.max(Math.abs(normalizedValue) / (threshold * 1.8), 0),
-      1
-    );
-    const derivativeConfidence = Math.min(
-      Math.max(Math.abs(derivative) / Math.abs(derivThreshold * 0.8), 0),
-      1
-    );
-
-    const confidence = (amplitudeConfidence + derivativeConfidence) / 2;
-
-    return { isPeak, confidence };
-  }
-
-  private confirmPeak(
-    isPeak: boolean,
-    normalizedValue: number,
-    confidence: number
-  ): boolean {
-    this.peakConfirmationBuffer.push(normalizedValue);
-    if (this.peakConfirmationBuffer.length > 5) {
-      this.peakConfirmationBuffer.shift();
-    }
-
-    if (isPeak && !this.lastConfirmedPeak && confidence >= this.MIN_CONFIDENCE) {
-      if (this.peakConfirmationBuffer.length >= 3) {
-        const len = this.peakConfirmationBuffer.length;
-        const goingDown1 =
-          this.peakConfirmationBuffer[len - 1] < this.peakConfirmationBuffer[len - 2];
-        const goingDown2 =
-          this.peakConfirmationBuffer[len - 2] < this.peakConfirmationBuffer[len - 3];
-
-        if (goingDown1 && goingDown2) {
-          this.lastConfirmedPeak = true;
-          return true;
-        }
-      }
-    } else if (!isPeak) {
-      this.lastConfirmedPeak = false;
-    }
-
-    return false;
-  }
-
-  private updateBPM() {
-    if (!this.lastPeakTime || !this.previousPeakTime) return;
-    const interval = this.lastPeakTime - this.previousPeakTime;
-    if (interval <= 0) return;
-
-    const instantBPM = 60000 / interval;
-    if (instantBPM >= this.MIN_BPM && instantBPM <= this.MAX_BPM) {
-      this.bpmHistory.push(instantBPM);
-      if (this.bpmHistory.length > 12) {
-        this.bpmHistory.shift();
-      }
-    }
-  }
-
-  private getSmoothBPM(): number {
-    const rawBPM = this.calculateCurrentBPM();
-    if (this.smoothBPM === 0) {
-      this.smoothBPM = rawBPM;
-      return rawBPM;
-    }
-    this.smoothBPM =
-      this.BPM_ALPHA * rawBPM + (1 - this.BPM_ALPHA) * this.smoothBPM;
-    return this.smoothBPM;
-  }
-
-  private calculateCurrentBPM(): number {
-    if (this.bpmHistory.length < 2) {
-      return 0;
-    }
-    const sorted = [...this.bpmHistory].sort((a, b) => a - b);
-    const trimmed = sorted.slice(1, -1);
-    if (!trimmed.length) return 0;
-    const avg = trimmed.reduce((a, b) => a + b, 0) / trimmed.length;
-    return avg;
-  }
-
-  public getFinalBPM(): number {
-    if (this.bpmHistory.length < 5) {
-      return 0;
-    }
-    const sorted = [...this.bpmHistory].sort((a, b) => a - b);
-    const cut = Math.round(sorted.length * 0.1);
-    const finalSet = sorted.slice(cut, sorted.length - cut);
-    if (!finalSet.length) return 0;
-    const sum = finalSet.reduce((acc, val) => acc + val, 0);
-    return Math.round(sum / finalSet.length);
   }
 
   public reset() {
