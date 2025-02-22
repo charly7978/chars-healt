@@ -11,7 +11,7 @@ export class HeartBeatProcessor {
   private readonly WINDOW_SIZE = 60;
   private readonly MIN_BPM = 40;
   private readonly MAX_BPM = 180;
-  private readonly SIGNAL_THRESHOLD = 0.60;
+  private readonly SIGNAL_THRESHOLD = 0.80;
   private readonly MIN_CONFIDENCE = 0.70;
   private readonly DERIVATIVE_THRESHOLD = -0.05;
   private readonly MIN_PEAK_TIME_MS = 600;
