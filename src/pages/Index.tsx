@@ -174,8 +174,11 @@ const Index = () => {
     };
 
     console.log("Index: Iniciando monitoreo de signos vitales");
-    setIsMonitoring(true);
-    processingRef.current = true;
+    setIsCameraOn(true);
+    if (!isCalibrating) {
+      setIsMonitoring(true);
+      processingRef.current = true;
+    }
     processImage();
   };
 
@@ -260,7 +263,9 @@ const Index = () => {
       setIsCalibrating(false);
       setShowCalibrationDialog(false);
       if (wasMeasuring) {
+        console.log("Reanudando medición después de calibración");
         setIsMonitoring(true);
+        processingRef.current = true;
       }
     }
   };
@@ -338,7 +343,9 @@ const Index = () => {
         onClose={() => {
           setShowCalibrationDialog(false);
           if (wasMeasuring) {
+            console.log("Reanudando medición al cerrar diálogo");
             setIsMonitoring(true);
+            processingRef.current = true;
           }
         }}
         isCalibrating={isCalibrating}
