@@ -2,6 +2,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { HeartBeatProcessor } from '../modules/HeartBeatProcessor';
 
+interface HeartBeatResult {
+  bpm: number;
+  confidence: number;
+  isPeak: boolean;
+  filteredValue?: number;
+  arrhythmiaCount: number;
+}
+
 export const useHeartBeatProcessor = () => {
   const [processor] = useState(() => {
     console.log('useHeartBeatProcessor: Creando nueva instancia de HeartBeatProcessor');
@@ -27,7 +35,7 @@ export const useHeartBeatProcessor = () => {
     }
   }, [processor]);
 
-  const processSignal = useCallback((value: number) => {
+  const processSignal = useCallback((value: number): HeartBeatResult => {
     console.log('useHeartBeatProcessor - processSignal:', {
       inputValue: value,
       currentProcessor: !!processor,
@@ -47,6 +55,8 @@ export const useHeartBeatProcessor = () => {
       setCurrentBPM(result.bpm);
       setConfidence(result.confidence);
     }
+
+    return result;
   }, [processor]);
 
   const reset = useCallback(() => {

@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
@@ -65,13 +64,9 @@ const Index = () => {
       });
       
       // Procesar señal cardíaca
-      const result = processHeartBeat(lastSignal.filteredValue);
-      if (result && typeof result === 'object' && 'bpm' in result) {
-        setHeartRate(result.bpm);
-        if ('arrhythmiaCount' in result) {
-          setArrhythmiaCount(result.arrhythmiaCount);
-        }
-      }
+      const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
+      setHeartRate(heartBeatResult.bpm);
+      setArrhythmiaCount(heartBeatResult.arrhythmiaCount);
       
       // Procesar signos vitales (SpO2 y presión)
       const vitals = processVitalSigns(lastSignal.filteredValue);
