@@ -1,4 +1,3 @@
-
 export class HeartBeatProcessor {
   private readonly SAMPLE_RATE = 30;
   private readonly WINDOW_SIZE = 60;
@@ -8,9 +7,9 @@ export class HeartBeatProcessor {
   private readonly BEEP_FREQUENCY = 1000;
   private readonly BEEP_DURATION = 50;
   private readonly SIGNAL_THRESHOLD = 0.15;
-  private readonly MIN_CONFIDENCE = 0.35;  // Ligero ajuste para ser más selectivo
-  private readonly DERIVATIVE_THRESHOLD = -0.002;  // Ajuste sutil para requerir cambios más significativos
-  private readonly MIN_PEAK_TIME_MS = 300;  // Mínimo tiempo entre picos válidos (200ms = 300bpm)
+  private readonly MIN_CONFIDENCE = 0.32;  // Ajuste más sutil
+  private readonly DERIVATIVE_THRESHOLD = -0.001;  // Volvemos al valor original
+  private readonly MIN_PEAK_TIME_MS = 250;  // Menos restrictivo
 
   private signalBuffer: number[] = [];
   private lastPeakTime: number | null = null;
@@ -108,25 +107,14 @@ export class HeartBeatProcessor {
     this.lastValue = value;
 
     if (isPeak && confidence > this.MIN_CONFIDENCE) {
-      // Validación adicional del intervalo entre picos
       const currentTime = Date.now();
       const timeSinceLastPeak = this.lastPeakTime ? currentTime - this.lastPeakTime : Infinity;
       
-      // Solo procesar si el intervalo es razonable
       if (timeSinceLastPeak >= this.MIN_PEAK_TIME_MS) {
-        console.log("[ProcessSignal] Peak detected", {
-          currentTime,
-          timeSinceLastPeak,
-          confidence
-        });
-        
+        this.previousPeakTime = this.lastPeakTime;
+        this.lastPeakTime = currentTime;
         this.playBeep(0.1);
-        this.updateBPM(currentTime);
-      } else {
-        console.log("[ProcessSignal] Peak ignored - too close", {
-          timeSinceLastPeak,
-          minRequired: this.MIN_PEAK_TIME_MS
-        });
+        this.updateBPM();
       }
     }
 
@@ -147,18 +135,10 @@ export class HeartBeatProcessor {
       return { isPeak: false, confidence: 0 };
     }
 
-    // Criterios más estrictos para la detección de picos
     const isPeak = derivative < this.DERIVATIVE_THRESHOLD && 
                    normalizedValue > this.SIGNAL_THRESHOLD &&
-                   this.lastValue > this.baseline &&
-                   Math.abs(derivative) < Math.abs(this.DERIVATIVE_THRESHOLD) * 3; // Evitar cambios demasiado bruscos
+                   this.lastValue > this.baseline;
 
-    if (isPeak) {
-      this.previousPeakTime = this.lastPeakTime;
-      this.lastPeakTime = currentTime;
-    }
-
-    // Cálculo de confianza más estricto
     const amplitudeConfidence = Math.min(Math.max(Math.abs(normalizedValue) / (this.SIGNAL_THRESHOLD * 2), 0), 1);
     const derivativeConfidence = Math.min(Math.max(Math.abs(derivative) / Math.abs(this.DERIVATIVE_THRESHOLD), 0), 1);
     const confidence = (amplitudeConfidence + derivativeConfidence) / 2;
@@ -166,7 +146,7 @@ export class HeartBeatProcessor {
     return { isPeak, confidence };
   }
 
-  private updateBPM(currentTime: number) {
+  private updateBPM() {
     if (!this.lastPeakTime || !this.previousPeakTime) {
       return;
     }
@@ -180,23 +160,12 @@ export class HeartBeatProcessor {
 
     const instantBPM = 60000 / interval;
 
-    console.log("[UpdateBPM] Calculation", {
-      interval,
-      instantBPM,
-      isValid: instantBPM >= this.MIN_BPM && instantBPM <= this.MAX_BPM
-    });
-
     if (instantBPM >= this.MIN_BPM && instantBPM <= this.MAX_BPM) {
       this.bpmHistory.push(instantBPM);
       
       if (this.bpmHistory.length > 5) {
         this.bpmHistory.shift();
       }
-
-      console.log("[UpdateBPM] History updated", {
-        historyLength: this.bpmHistory.length,
-        history: this.bpmHistory
-      });
     }
   }
 
@@ -208,17 +177,10 @@ export class HeartBeatProcessor {
     const sortedBPMs = [...this.bpmHistory].sort((a, b) => a - b);
     const medianBPM = sortedBPMs[Math.floor(sortedBPMs.length / 2)];
 
-    console.log("[CalculateBPM] Result", {
-      historyLength: this.bpmHistory.length,
-      sortedBPMs,
-      medianBPM
-    });
-
     return Math.round(medianBPM);
   }
 
   reset() {
-    console.log("HeartBeatProcessor: Resetting");
     this.signalBuffer = [];
     this.lastPeakTime = null;
     this.previousPeakTime = null;
