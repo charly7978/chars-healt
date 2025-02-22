@@ -16,8 +16,6 @@ const Index = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const processingRef = useRef<boolean>(false);
-  const streamRef = useRef<MediaStream | null>(null);
-  const animationFrameRef = useRef<number>();
 
   useEffect(() => {
     processingRef.current = isMonitoring;
@@ -40,10 +38,10 @@ const Index = () => {
 
   const handleStreamReady = (stream: MediaStream) => {
     console.log("Index: Camera stream ready", stream.getVideoTracks()[0].getSettings());
-    streamRef.current = stream;
     const videoTrack = stream.getVideoTracks()[0];
     const imageCapture = new ImageCapture(videoTrack);
     
+    // Intentar encender la linterna
     if (videoTrack.getCapabilities()?.torch) {
       videoTrack.applyConstraints({
         advanced: [{ torch: true }]
@@ -65,55 +63,49 @@ const Index = () => {
       
       try {
         const frame = await imageCapture.grabFrame();
+        console.log("Index: Frame capturado", {
+          width: frame.width,
+          height: frame.height
+        });
+        
         tempCanvas.width = frame.width;
         tempCanvas.height = frame.height;
         tempCtx.drawImage(frame, 0, 0);
         
         const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
+        console.log("Index: ImageData generado", {
+          width: imageData.width,
+          height: imageData.height,
+          dataLength: imageData.data.length,
+          firstPixelRed: imageData.data[0]
+        });
+        
         processFrame(imageData);
         
         if (processingRef.current) {
-          animationFrameRef.current = requestAnimationFrame(processImage);
+          requestAnimationFrame(processImage);
         }
       } catch (error) {
         console.error("Index: Error capturando frame:", error);
         if (processingRef.current) {
-          animationFrameRef.current = requestAnimationFrame(processImage);
+          requestAnimationFrame(processImage);
         }
       }
     };
 
+    // Iniciar el procesamiento después de que la cámara esté lista
     setIsMonitoring(true);
     processingRef.current = true;
-    startProcessing();
     processImage();
   };
 
   const handleStartMeasurement = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    
     console.log("Index: Iniciando medición");
+    startProcessing();
     setIsCameraOn(true);
-  };
-
-  const cleanupResources = () => {
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = undefined;
-    }
-
-    if (streamRef.current) {
-      const tracks = streamRef.current.getTracks();
-      tracks.forEach(track => {
-        if (track.getCapabilities()?.torch) {
-          track.applyConstraints({
-            advanced: [{ torch: false }]
-          }).catch(err => console.error("Error desactivando linterna:", err));
-        }
-        track.stop();
-      });
-      streamRef.current = null;
-    }
   };
 
   const handleStopMeasurement = () => {
@@ -121,8 +113,8 @@ const Index = () => {
     setIsMonitoring(false);
     processingRef.current = false;
     stopProcessing();
+    setSignalQuality(0);
     setIsCameraOn(false);
-    cleanupResources();
   };
 
   const handleReset = (e: React.MouseEvent) => {
@@ -138,60 +130,44 @@ const Index = () => {
   };
 
   useEffect(() => {
-    return () => {
-      cleanupResources();
-    };
-  }, []);
-
-  useEffect(() => {
-    let animationFrameId: number;
-    let previousY = canvasRef.current?.height ? canvasRef.current.height / 2 : 0;
-    let x = 0;
-
-    const animate = () => {
-      const canvas = canvasRef.current;
-      if (!canvas || !isMonitoring) return;
-
-      const ctx = canvas.getContext('2d');
+    if (canvasRef.current && isMonitoring) {
+      const ctx = canvasRef.current.getContext('2d');
       if (!ctx) return;
 
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      
-      const signalValue = lastSignal ? -lastSignal.filteredValue * 100 : 0;
-      const currentY = (canvas.height / 2) + signalValue;
-      
-      const gradient = ctx.createLinearGradient(x-1, previousY, x, currentY);
-      gradient.addColorStop(0, '#00ff00');
-      gradient.addColorStop(1, '#39FF14');
-      
-      ctx.beginPath();
-      ctx.strokeStyle = gradient;
-      ctx.lineWidth = 2;
-      ctx.moveTo(x-1, previousY);
-      ctx.lineTo(x, currentY);
-      ctx.stroke();
-      
-      previousY = currentY;
-      x = (x + 1) % canvas.width;
-      
-      animationFrameId = requestAnimationFrame(animate);
-    };
+      ctx.fillStyle = 'black';
+      ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
 
-    if (isMonitoring && canvasRef.current) {
-      const ctx = canvasRef.current.getContext('2d');
-      if (ctx) {
-        ctx.fillStyle = 'black';
-        ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-        animate();
-      }
+      let x = 0;
+      let previousY = canvasRef.current.height / 2;
+
+      const animate = () => {
+        if (!isMonitoring) return;
+        
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+        ctx.fillRect(0, 0, canvasRef.current!.width, canvasRef.current!.height);
+        
+        const signalValue = lastSignal ? -lastSignal.filteredValue * 100 : 0;
+        const currentY = (canvasRef.current!.height / 2) + signalValue;
+        
+        const gradient = ctx.createLinearGradient(x-1, previousY, x, currentY);
+        gradient.addColorStop(0, '#00ff00');
+        gradient.addColorStop(1, '#39FF14');
+        
+        ctx.beginPath();
+        ctx.strokeStyle = gradient;
+        ctx.lineWidth = 2;
+        ctx.moveTo(x-1, previousY);
+        ctx.lineTo(x, currentY);
+        ctx.stroke();
+        
+        previousY = currentY;
+        x = (x + 1) % canvasRef.current!.width;
+        
+        requestAnimationFrame(animate);
+      };
+
+      animate();
     }
-
-    return () => {
-      if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
-      }
-    };
   }, [isMonitoring, lastSignal]);
 
   return (
