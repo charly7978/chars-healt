@@ -44,7 +44,7 @@ export class HeartBeatProcessor {
   private readonly SIGNAL_THRESHOLD = 0.60;        // Ajustado. Antes estaba en 0.90
   private readonly MIN_CONFIDENCE = 0.80;
   private readonly DERIVATIVE_THRESHOLD = -0.05;
-  private readonly MIN_PEAK_TIME_MS = 500;         // Evita picos más rápidos que ~150 BPM
+  private readonly MIN_PEAK_TIME_MS = 600;         // Evita picos más rápidos que ~150 BPM
   private readonly WARMUP_TIME_MS = 5000;
 
   // Parámetros de filtrado.
