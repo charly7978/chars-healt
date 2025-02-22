@@ -17,7 +17,15 @@ const Index = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const processingRef = useRef<boolean>(false);
+  const streamRef = useRef<MediaStream | null>(null);
   const animationFrameRef = useRef<number>();
+
+  // Efecto para manejar la finalización automática después de 22 segundos
+  useEffect(() => {
+    if (isComplete && isMonitoring) {
+      handleStopMeasurement();
+    }
+  }, [isComplete, isMonitoring]);
 
   useEffect(() => {
     processingRef.current = isMonitoring;
@@ -40,6 +48,7 @@ const Index = () => {
 
   const handleStreamReady = (stream: MediaStream) => {
     console.log("Index: Camera stream ready", stream.getVideoTracks()[0].getSettings());
+    streamRef.current = stream;
     const videoTrack = stream.getVideoTracks()[0];
     const imageCapture = new ImageCapture(videoTrack);
     
@@ -74,28 +83,22 @@ const Index = () => {
         tempCtx.drawImage(frame, 0, 0);
         
         const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
-        console.log("Index: ImageData generado", {
-          width: imageData.width,
-          height: imageData.height,
-          dataLength: imageData.data.length,
-          firstPixelRed: imageData.data[0]
-        });
-        
         processFrame(imageData);
         
         if (processingRef.current) {
-          requestAnimationFrame(processImage);
+          animationFrameRef.current = requestAnimationFrame(processImage);
         }
       } catch (error) {
         console.error("Index: Error capturando frame:", error);
         if (processingRef.current) {
-          requestAnimationFrame(processImage);
+          animationFrameRef.current = requestAnimationFrame(processImage);
         }
       }
     };
 
     setIsMonitoring(true);
     processingRef.current = true;
+    startProcessing();
     processImage();
   };
 
@@ -104,17 +107,43 @@ const Index = () => {
     e.stopPropagation();
     
     console.log("Index: Iniciando medición");
-    startProcessing();
     setIsCameraOn(true);
+  };
+
+  const cleanupResources = () => {
+    // Detener el procesamiento de frames
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = undefined;
+    }
+
+    // Detener y limpiar el stream de la cámara
+    if (streamRef.current) {
+      const tracks = streamRef.current.getTracks();
+      tracks.forEach(track => {
+        if (track.getCapabilities()?.torch) {
+          track.applyConstraints({
+            advanced: [{ torch: false }]
+          }).catch(err => console.error("Error desactivando linterna:", err));
+        }
+        track.stop();
+      });
+      streamRef.current = null;
+    }
+
+    // Resetear estados
+    setCurrentBPM(0);
+    setMeasurementConfidence(0);
+    setSignalQuality(0);
+    processingRef.current = false;
   };
 
   const handleStopMeasurement = () => {
     console.log("Index: Deteniendo medición");
     setIsMonitoring(false);
-    processingRef.current = false;
-    stopProcessing();
-    setSignalQuality(0);
     setIsCameraOn(false);
+    stopProcessing();
+    cleanupResources();
   };
 
   const handleReset = (e: React.MouseEvent) => {
@@ -128,6 +157,13 @@ const Index = () => {
     e.stopPropagation();
     console.log("Index: Calibrando...");
   };
+
+  // Cleanup effect cuando el componente se desmonta
+  useEffect(() => {
+    return () => {
+      cleanupResources();
+    };
+  }, []);
 
   useEffect(() => {
     let animationFrameId: number;
