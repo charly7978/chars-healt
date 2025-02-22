@@ -57,7 +57,7 @@ export class VitalSignsProcessor {
   private readonly RR_WINDOW_SIZE = 5;
   
   /** Umbral RMSSD (en ms) para considerar arritmia */
-  private readonly RMSSD_THRESHOLD = 20;
+  private readonly RMSSD_THRESHOLD = 25; // Aumentado de 20 a 25 para ser más selectivo
   
   /** Ventana corta de aprendizaje */
   private readonly ARRHYTHMIA_LEARNING_PERIOD = 3000;
@@ -119,10 +119,10 @@ export class VitalSignsProcessor {
     // Calcular RMSSD
     const rmssd = Math.sqrt(sumSquaredDiff / (recentRR.length - 1));
     
-    // También detectar latidos prematuros
+    // También detectar latidos prematuros con umbral más estricto
     const avgRR = recentRR.reduce((a, b) => a + b, 0) / recentRR.length;
     const lastRR = recentRR[recentRR.length - 1];
-    const prematureBeat = Math.abs(lastRR - avgRR) > (avgRR * 0.2); // 20% de variación
+    const prematureBeat = Math.abs(lastRR - avgRR) > (avgRR * 0.25); // Aumentado a 25% de variación
     
     console.log("VitalSignsProcessor: Análisis RMSSD", {
       timestamp: new Date().toISOString(),
@@ -134,8 +134,8 @@ export class VitalSignsProcessor {
       prematureBeat
     });
 
-    // Nueva condición de arritmia
-    const newArrhythmiaState = rmssd > this.RMSSD_THRESHOLD || prematureBeat;
+    // Nueva condición de arritmia más estricta
+    const newArrhythmiaState = rmssd > this.RMSSD_THRESHOLD && prematureBeat;
 
     if (newArrhythmiaState !== this.arrhythmiaDetected) {
       this.arrhythmiaDetected = newArrhythmiaState;
