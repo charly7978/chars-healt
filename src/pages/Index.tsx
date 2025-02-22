@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
@@ -10,8 +9,6 @@ import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import CalibrationDialog from "@/components/CalibrationDialog";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
-import { useNavigate } from "react-router-dom";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -28,7 +25,6 @@ const Index = () => {
   const [isCalibrating, setIsCalibrating] = useState(false);
   const [showCalibrationDialog, setShowCalibrationDialog] = useState(false);
   
-  const navigate = useNavigate();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { startProcessing, stopProcessing, lastSignal, processFrame, calibrate } = useSignalProcessor();
   const processingRef = useRef<boolean>(false);
@@ -78,13 +74,25 @@ const Index = () => {
         quality: lastSignal.quality
       });
       
+      // Procesar señal cardíaca
       const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
       setHeartRate(heartBeatResult.bpm);
       
+      // Procesar signos vitales (SpO2, presión y arritmias)
       const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
       if (vitals) {
         setVitalSigns(vitals);
         setArrhythmiaCount(vitals.arrhythmiaStatus);
+
+        console.log("Index: Actualización de signos vitales", {
+          timestamp: new Date().toISOString(),
+          heartRate: heartBeatResult.bpm,
+          spo2: vitals.spo2,
+          bloodPressure: vitals.pressure,
+          arrhythmiaStatus: vitals.arrhythmiaStatus,
+          signalQuality: lastSignal.quality,
+          rrData: heartBeatResult.rrData
+        });
       }
     }
   }, [lastSignal, processHeartBeat, processVitalSigns]);
@@ -184,69 +192,43 @@ const Index = () => {
     setVitalSigns({ spo2: 0, pressure: "--/--", arrhythmiaStatus: "--" });
     setHeartRate(0);
     setArrhythmiaCount("--");
-  };
-
-  const handleSignOut = async () => {
-    try {
-      handleStopMeasurement();
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.error("Error al cerrar sesión:", error);
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "No se pudo cerrar sesión. Intente nuevamente.",
-        });
-        return;
-      }
-      navigate("/auth");
-    } catch (error) {
-      console.error("Error inesperado al cerrar sesión:", error);
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Ocurrió un error inesperado. Intente nuevamente.",
-      });
-    }
+    console.log("Index: Medición reiniciada, valores reseteados");
   };
 
   const handleCalibration = async () => {
     try {
-      console.log("Index: Iniciando proceso de calibración");
       setIsCalibrating(true);
       setShowCalibrationDialog(true);
       
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, 5000));
       
-      console.log("Index: Ejecutando calibración del procesador");
       const success = await calibrate();
       
       if (success) {
-        console.log("Index: Calibración exitosa");
         setIsCalibrating(false);
-        
-        toast({
-          title: "Calibración Exitosa",
-          description: "Los parámetros han sido ajustados según las condiciones actuales.",
-          duration: 3000,
-        });
+        setTimeout(() => {
+          toast({
+            title: "Calibración Exitosa",
+            description: "Los parámetros han sido ajustados para esta sesión.",
+            duration: 3000,
+          });
+        }, 500);
       } else {
-        console.error("Index: Fallo en la calibración");
         toast({
           variant: "destructive",
           title: "Error de Calibración",
-          description: "Asegúrese de mantener el dedo firme sobre el sensor e intente nuevamente.",
+          description: "Por favor, intente nuevamente.",
           duration: 3000,
         });
         setIsCalibrating(false);
         setShowCalibrationDialog(false);
       }
     } catch (error) {
-      console.error("Index: Error durante la calibración:", error);
+      console.error("Error durante la calibración:", error);
       toast({
         variant: "destructive",
         title: "Error de Calibración",
-        description: "Error en el proceso de calibración. Verifique la posición del dedo.",
+        description: "Ocurrió un error inesperado.",
         duration: 3000,
       });
       setIsCalibrating(false);
@@ -269,17 +251,8 @@ const Index = () => {
         <div className="relative z-10 h-full flex flex-col justify-between p-4">
           <div className="flex justify-between items-start w-full">
             <h1 className="text-lg font-bold text-white bg-black/30 px-3 py-1 rounded">PPG Monitor</h1>
-            <div className="flex gap-2">
-              <div className="text-base font-mono text-medical-blue bg-black/30 px-3 py-1 rounded">
-                {isMonitoring ? `${Math.ceil(30 - elapsedTime)}s` : '30s'}
-              </div>
-              <Button
-                onClick={handleSignOut}
-                variant="ghost"
-                className="text-white hover:bg-white/20"
-              >
-                Cerrar Sesión
-              </Button>
+            <div className="text-base font-mono text-medical-blue bg-black/30 px-3 py-1 rounded">
+              {isMonitoring ? `${Math.ceil(30 - elapsedTime)}s` : '30s'}
             </div>
           </div>
 
@@ -300,48 +273,41 @@ const Index = () => {
             </div>
           </div>
 
-          <div className="flex justify-center gap-2 w-full">
-            {!isMonitoring ? (
-              <Button
-                onClick={handleStartMeasurement}
-                className="bg-medical-blue hover:bg-medical-blue/90"
-              >
-                Iniciar Medición
-              </Button>
-            ) : (
-              <>
-                <Button
-                  onClick={handleStopMeasurement}
-                  variant="destructive"
-                >
-                  Detener
-                </Button>
-                <Button
-                  onClick={handleCalibration}
-                  variant="outline"
-                  disabled={isCalibrating}
-                >
-                  Calibrar
-                </Button>
-                <Button
-                  onClick={handleReset}
-                  variant="ghost"
-                  className="text-white hover:bg-white/20"
-                >
-                  Reiniciar
-                </Button>
-              </>
-            )}
+          <div className="flex justify-center gap-2 w-full max-w-md mx-auto">
+            <Button
+              onClick={handleCalibration}
+              size="sm"
+              className="flex-1 bg-medical-blue/80 hover:bg-medical-blue text-white text-xs py-1.5"
+              disabled={isCalibrating || !isMonitoring}
+            >
+              {isCalibrating ? "Calibrando..." : "Calibrar"}
+            </Button>
+            
+            <Button
+              onClick={isMonitoring ? handleStopMeasurement : handleStartMeasurement}
+              size="sm"
+              className={`flex-1 ${isMonitoring ? 'bg-medical-red/80 hover:bg-medical-red' : 'bg-medical-blue/80 hover:bg-medical-blue'} text-white text-xs py-1.5`}
+              disabled={elapsedTime >= 30 && !isMonitoring}
+            >
+              {isMonitoring ? 'Detener' : 'Iniciar'}
+            </Button>
+
+            <Button
+              onClick={handleReset}
+              size="sm"
+              className="flex-1 bg-gray-600/80 hover:bg-gray-600 text-white text-xs py-1.5"
+            >
+              Reset
+            </Button>
           </div>
         </div>
       </div>
-      
-      {showCalibrationDialog && (
-        <CalibrationDialog
-          onClose={() => setShowCalibrationDialog(false)}
-          isCalibrating={isCalibrating}
-        />
-      )}
+
+      <CalibrationDialog
+        isOpen={showCalibrationDialog}
+        onClose={() => setShowCalibrationDialog(false)}
+        isCalibrating={isCalibrating}
+      />
     </div>
   );
 };

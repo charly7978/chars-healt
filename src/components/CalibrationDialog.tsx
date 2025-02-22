@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import {
   Dialog,
@@ -8,11 +9,13 @@ import { CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface CalibrationDialogProps {
+  isOpen: boolean;
   onClose: () => void;
   isCalibrating: boolean;
 }
 
 const CalibrationDialog = ({
+  isOpen,
   onClose,
   isCalibrating,
 }: CalibrationDialogProps) => {
@@ -29,7 +32,7 @@ const CalibrationDialog = ({
   }, [isCalibrating]);
 
   return (
-    <Dialog open={true} onOpenChange={() => onClose()}>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-md duration-500 p-0 overflow-hidden bg-gradient-to-br from-gray-900 to-gray-800">
         <div className="relative w-full h-[500px] [perspective:1200px]">
           <div 
