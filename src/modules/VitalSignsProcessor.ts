@@ -247,50 +247,80 @@ export class VitalSignsProcessor {
     this.lastPeakTime = currentTime;
   }
 
+  /** 
+   * Buffer para suavizar transiciones de SpO2
+   * Guarda últimos N valores válidos para media móvil
+   */
+  private spo2Buffer: number[] = [];
+  private readonly SPO2_BUFFER_SIZE = 10;
+
   /**
    * calculateSpO2
-   * Calcula la saturación de oxígeno empezando desde 0,
-   * sin valores predeterminados.
+   * Calcula la saturación de oxígeno con transiciones suaves
+   * y mediciones reales.
    */
   private calculateSpO2(values: number[]): number {
-    // Si no hay suficientes muestras, retornar 0
+    // Si no hay suficientes muestras para análisis
     if (values.length < 30) {
+      // Si tenemos valores previos, degradamos suavemente
+      if (this.spo2Buffer.length > 0) {
+        const lastValid = this.spo2Buffer[this.spo2Buffer.length - 1];
+        return Math.max(0, lastValid - 1);
+      }
       return 0;
     }
 
     // Calcular componentes AC y DC
     const dc = this.calculateDC(values);
-    if (dc === 0) return 0;
-
-    const ac = this.calculateAC(values);
-    
-    // Índice de perfusión más sensible
-    const perfusionIndex = ac / dc;
-    
-    // Con perfusión insuficiente, retornar 0
-    if (perfusionIndex < this.PERFUSION_INDEX_THRESHOLD) {
+    if (dc === 0) {
+      // Con DC = 0, degradamos suavemente si hay histórico
+      if (this.spo2Buffer.length > 0) {
+        const lastValid = this.spo2Buffer[this.spo2Buffer.length - 1];
+        return Math.max(0, lastValid - 1);
+      }
       return 0;
     }
 
-    // Ratio R normalizado [0-1] para mejor control
-    const R = Math.min(1, (ac / dc) / this.SPO2_CALIBRATION_FACTOR);
+    const ac = this.calculateAC(values);
     
-    // Base SpO2 calculada desde la señal real
-    let spO2 = Math.round(98 - (10 * R));
+    // Índice de perfusión con umbral más estricto
+    const perfusionIndex = ac / dc;
+    
+    if (perfusionIndex < this.PERFUSION_INDEX_THRESHOLD) {
+      // Con mala perfusión, degradamos suavemente
+      if (this.spo2Buffer.length > 0) {
+        const lastValid = this.spo2Buffer[this.spo2Buffer.length - 1];
+        return Math.max(0, lastValid - 2);
+      }
+      return 0;
+    }
 
-    // Ajustes según perfusión
+    // Ratio R con mejor calibración
+    const R = (ac / dc) / this.SPO2_CALIBRATION_FACTOR;
+    
+    // Cálculo base de SpO2 más gradual
+    let spO2 = Math.round(98 - (15 * R));
+    
+    // Ajustes basados en calidad de perfusión
     if (perfusionIndex > 0.15) {
       spO2 = Math.min(98, spO2 + 1);
     } else if (perfusionIndex < 0.08) {
-      spO2 = Math.max(88, spO2 - 1);
+      spO2 = Math.max(0, spO2 - 1);
     }
 
-    // Límites fisiológicos [88-98]
-    spO2 = Math.max(88, Math.min(98, spO2));
+    // Límite superior fisiológico
+    spO2 = Math.min(98, spO2);
 
-    // Media móvil suave solo si hay valor previo válido
-    if (this.lastValue > 0) {
-      spO2 = Math.round((spO2 * 0.7) + (this.lastValue * 0.3));
+    // Actualizar buffer de valores
+    this.spo2Buffer.push(spO2);
+    if (this.spo2Buffer.length > this.SPO2_BUFFER_SIZE) {
+      this.spo2Buffer.shift();
+    }
+
+    // Media móvil para suavizar cambios
+    if (this.spo2Buffer.length > 0) {
+      const sum = this.spo2Buffer.reduce((a, b) => a + b, 0);
+      spO2 = Math.round(sum / this.spo2Buffer.length);
     }
 
     console.log("VitalSignsProcessor: Cálculo SpO2", {
@@ -299,11 +329,10 @@ export class VitalSignsProcessor {
       ratio: R,
       perfusionIndex,
       rawSpO2: spO2,
-      previousValue: this.lastValue,
-      finalSpO2: spO2
+      bufferSize: this.spo2Buffer.length,
+      smoothedSpO2: spO2
     });
 
-    this.lastValue = spO2;
     return spO2;
   }
 
@@ -493,11 +522,12 @@ export class VitalSignsProcessor {
 
   /**
    * reset
-   * Reinicia todo el estado interno: buffers, baseline de RR, etc.
+   * Reinicia todo el estado interno
    */
   public reset(): void {
     this.ppgValues = [];
     this.smaBuffer = [];
+    this.spo2Buffer = [];
     this.lastValue = 0;
     this.lastPeakTime = null;
     this.rrIntervals = [];
