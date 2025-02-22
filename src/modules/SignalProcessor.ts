@@ -1,4 +1,3 @@
-
 import { ProcessedSignal, ProcessingError, SignalProcessor } from '../types/signal';
 
 class KalmanFilter {
@@ -27,26 +26,31 @@ export class PPGSignalProcessor implements SignalProcessor {
   private kalmanFilter: KalmanFilter;
   private lastValues: number[] = [];
   private readonly BUFFER_SIZE = 10;
-  private readonly MIN_RED_THRESHOLD = 30;  // Bajamos el umbral mínimo para Android
-  private readonly MAX_RED_THRESHOLD = 250; // Aumentamos el máximo para más tolerancia
-  private readonly STABILITY_WINDOW = 5;    // Ventana para calcular estabilidad
-  private readonly MIN_STABILITY_COUNT = 3;  // Mínimo de frames estables para considerar dedo presente
-  private stableFrameCount: number = 0;
-  private lastStableValue: number = 0;
+  
+  private redThreshold: { min: number; max: number } = {
+    min: 30,
+    max: 250
+  };
+  private stabilityThreshold: number = 5;
+  private qualityThreshold: number = 0.7;
+  private perfusionIndex: number = 0.05;
   
   constructor(
     public onSignalReady?: (signal: ProcessedSignal) => void,
     public onError?: (error: ProcessingError) => void
   ) {
     this.kalmanFilter = new KalmanFilter();
-    console.log("PPGSignalProcessor: Instancia creada");
+    console.log("PPGSignalProcessor: Instancia creada con parámetros iniciales", {
+      redThreshold: this.redThreshold,
+      stabilityThreshold: this.stabilityThreshold,
+      qualityThreshold: this.qualityThreshold,
+      perfusionIndex: this.perfusionIndex
+    });
   }
 
   async initialize(): Promise<void> {
     try {
       this.lastValues = [];
-      this.stableFrameCount = 0;
-      this.lastStableValue = 0;
       this.kalmanFilter.reset();
       console.log("PPGSignalProcessor: Inicializado");
     } catch (error) {
@@ -65,19 +69,76 @@ export class PPGSignalProcessor implements SignalProcessor {
   stop(): void {
     this.isProcessing = false;
     this.lastValues = [];
-    this.stableFrameCount = 0;
-    this.lastStableValue = 0;
     this.kalmanFilter.reset();
     console.log("PPGSignalProcessor: Detenido");
   }
 
   async calibrate(): Promise<boolean> {
+    console.log("PPGSignalProcessor: Iniciando calibración real");
+    
     try {
-      await this.initialize();
+      const calibrationValues: number[] = [];
+      let startTime = Date.now();
+      
+      // Recolectar datos durante 3 segundos
+      while (Date.now() - startTime < 3000) {
+        if (this.lastValues.length > 0) {
+          calibrationValues.push(this.lastValues[this.lastValues.length - 1]);
+        }
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+
+      if (calibrationValues.length < 20) {
+        throw new Error("Insuficientes muestras para calibración");
+      }
+
+      // Calcular estadísticas de la señal
+      const mean = calibrationValues.reduce((a, b) => a + b, 0) / calibrationValues.length;
+      const std = Math.sqrt(
+        calibrationValues.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / calibrationValues.length
+      );
+
+      // Ajustar umbrales basados en las estadísticas de la señal
+      this.redThreshold = {
+        min: Math.max(20, Math.floor(mean - 2 * std)),
+        max: Math.min(255, Math.ceil(mean + 2 * std))
+      };
+
+      // Calcular la estabilidad de la señal
+      const variations = [];
+      for (let i = 1; i < calibrationValues.length; i++) {
+        variations.push(Math.abs(calibrationValues[i] - calibrationValues[i-1]));
+      }
+      const avgVariation = variations.reduce((a, b) => a + b, 0) / variations.length;
+      this.stabilityThreshold = Math.max(2, Math.min(10, avgVariation * 1.5));
+
+      // Ajustar índice de perfusión basado en la amplitud de la señal
+      const amplitude = Math.max(...calibrationValues) - Math.min(...calibrationValues);
+      this.perfusionIndex = Math.max(0.03, Math.min(0.15, amplitude / mean));
+
+      // Ajustar umbral de calidad basado en la estabilidad
+      this.qualityThreshold = Math.max(0.5, Math.min(0.9, 1 - (avgVariation / mean)));
+
+      console.log("PPGSignalProcessor: Calibración completada", {
+        muestras: calibrationValues.length,
+        mediaSeñal: mean,
+        desviacionEstandar: std,
+        nuevosParametros: {
+          redThreshold: this.redThreshold,
+          stabilityThreshold: this.stabilityThreshold,
+          qualityThreshold: this.qualityThreshold,
+          perfusionIndex: this.perfusionIndex
+        }
+      });
+
       return true;
     } catch (error) {
-      console.error("PPGSignalProcessor: Error de calibración", error);
-      this.handleError("CALIBRATION_ERROR", "Error durante la calibración");
+      console.error("PPGSignalProcessor: Error durante la calibración:", error);
+      // Restaurar valores por defecto en caso de error
+      this.redThreshold = { min: 30, max: 250 };
+      this.stabilityThreshold = 5;
+      this.qualityThreshold = 0.7;
+      this.perfusionIndex = 0.05;
       return false;
     }
   }
@@ -148,45 +209,36 @@ export class PPGSignalProcessor implements SignalProcessor {
   }
 
   private analyzeSignal(filtered: number, rawValue: number): { isFingerDetected: boolean, quality: number } {
-    const isInRange = rawValue >= this.MIN_RED_THRESHOLD && rawValue <= this.MAX_RED_THRESHOLD;
+    const isInRange = rawValue >= this.redThreshold.min && rawValue <= this.redThreshold.max;
     
     if (!isInRange) {
-      this.stableFrameCount = 0;
       return { isFingerDetected: false, quality: 0 };
     }
 
-    // Calcular estabilidad
-    if (this.lastValues.length < this.STABILITY_WINDOW) {
+    if (this.lastValues.length < 5) {
       return { isFingerDetected: false, quality: 0 };
     }
 
-    const recentValues = this.lastValues.slice(-this.STABILITY_WINDOW);
+    const recentValues = this.lastValues.slice(-5);
     const avgVariation = recentValues.reduce((sum, val, i, arr) => {
       if (i === 0) return 0;
       return sum + Math.abs(val - arr[i-1]);
     }, 0) / (recentValues.length - 1);
 
-    const isStable = avgVariation < 5; // Umbral de variación para considerar señal estable
-
-    if (isStable) {
-      this.stableFrameCount++;
-      this.lastStableValue = filtered;
-    } else {
-      this.stableFrameCount = Math.max(0, this.stableFrameCount - 1);
-    }
-
-    const isFingerDetected = this.stableFrameCount >= this.MIN_STABILITY_COUNT;
+    const isStable = avgVariation < this.stabilityThreshold;
+    const perfusion = avgVariation / filtered;
     
-    // Calcular calidad solo si el dedo está detectado
     let quality = 0;
-    if (isFingerDetected) {
-      const stabilityScore = Math.min(this.stableFrameCount / 10, 1);
-      const intensityScore = Math.min((rawValue - this.MIN_RED_THRESHOLD) / 
-                                    (this.MAX_RED_THRESHOLD - this.MIN_RED_THRESHOLD), 1);
-      quality = Math.round((stabilityScore * 0.7 + intensityScore * 0.3) * 100);
+    if (isStable && perfusion >= this.perfusionIndex) {
+      const stabilityScore = Math.min(1, this.stabilityThreshold / avgVariation);
+      const perfusionScore = Math.min(1, perfusion / this.perfusionIndex);
+      quality = Math.round((stabilityScore * 0.7 + perfusionScore * 0.3) * 100);
     }
 
-    return { isFingerDetected, quality };
+    return {
+      isFingerDetected: quality >= this.qualityThreshold * 100,
+      quality
+    };
   }
 
   private detectROI(redValue: number): ProcessedSignal['roi'] {

@@ -197,38 +197,42 @@ const Index = () => {
 
   const handleCalibration = async () => {
     try {
+      console.log("Index: Iniciando proceso de calibración");
       setIsCalibrating(true);
       setShowCalibrationDialog(true);
       
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      // Asegurar que el sistema tenga suficientes muestras antes de calibrar
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
+      console.log("Index: Ejecutando calibración del procesador");
       const success = await calibrate();
       
       if (success) {
+        console.log("Index: Calibración exitosa");
         setIsCalibrating(false);
-        setTimeout(() => {
-          toast({
-            title: "Calibración Exitosa",
-            description: "Los parámetros han sido ajustados para esta sesión.",
-            duration: 3000,
-          });
-        }, 500);
+        
+        toast({
+          title: "Calibración Exitosa",
+          description: "Los parámetros han sido ajustados según las condiciones actuales.",
+          duration: 3000,
+        });
       } else {
+        console.error("Index: Fallo en la calibración");
         toast({
           variant: "destructive",
           title: "Error de Calibración",
-          description: "Por favor, intente nuevamente.",
+          description: "Asegúrese de mantener el dedo firme sobre el sensor e intente nuevamente.",
           duration: 3000,
         });
         setIsCalibrating(false);
         setShowCalibrationDialog(false);
       }
     } catch (error) {
-      console.error("Error durante la calibración:", error);
+      console.error("Index: Error durante la calibración:", error);
       toast({
         variant: "destructive",
         title: "Error de Calibración",
-        description: "Ocurrió un error inesperado.",
+        description: "Error en el proceso de calibración. Verifique la posición del dedo.",
         duration: 3000,
       });
       setIsCalibrating(false);
