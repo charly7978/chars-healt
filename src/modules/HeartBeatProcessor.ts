@@ -1,4 +1,3 @@
-
 export class HeartBeatProcessor {
   private readonly SAMPLE_RATE = 30;
   private readonly WINDOW_SIZE = 60;
@@ -9,6 +8,7 @@ export class HeartBeatProcessor {
   private readonly BEEP_DURATION = 50;
   private readonly SIGNAL_THRESHOLD = 0.15;
   private readonly MIN_CONFIDENCE = 0.3;
+  private readonly DERIVATIVE_THRESHOLD = -0.001;
 
   private signalBuffer: number[] = [];
   private lastPeakTime: number = 0;
@@ -17,6 +17,7 @@ export class HeartBeatProcessor {
   private lastBeepTime: number = 0;
   private baseline: number = 0;
   private lastValue: number = 0;
+  private values: number[] = [];
 
   constructor() {
     this.initAudio();
@@ -112,14 +113,20 @@ export class HeartBeatProcessor {
       threshold: this.SIGNAL_THRESHOLD
     });
 
-    const derivative = value - this.lastValue;
-    const { isPeak, confidence } = this.detectPeak(normalizedValue, derivative);
+    this.values.push(value);
+    if (this.values.length > 3) this.values.shift();
+
+    const smoothDerivative = this.values.length > 2 ? 
+      (this.values[2] - this.values[0]) / 2 : 
+      value - this.lastValue;
+
+    const { isPeak, confidence } = this.detectPeak(normalizedValue, smoothDerivative);
     this.lastValue = value;
 
     console.log("[ProcessSignal] Detección de pico", {
       isPeak,
       confidence,
-      derivative,
+      derivative: smoothDerivative,
       meetsConfidenceThreshold: confidence > this.MIN_CONFIDENCE
     });
 
@@ -171,12 +178,12 @@ export class HeartBeatProcessor {
       return { isPeak: false, confidence: 0 };
     }
 
-    const isPeak = derivative < -0.05 && 
+    const isPeak = derivative < this.DERIVATIVE_THRESHOLD && 
                    normalizedValue > this.SIGNAL_THRESHOLD &&
                    this.lastValue > this.baseline;
 
     console.log("[DetectPeak] Criterios de pico", {
-      derivativeCriterion: derivative < -0.05,
+      derivativeCriterion: derivative < this.DERIVATIVE_THRESHOLD,
       thresholdCriterion: normalizedValue > this.SIGNAL_THRESHOLD,
       baselineCriterion: this.lastValue > this.baseline,
       isPeak
@@ -186,14 +193,15 @@ export class HeartBeatProcessor {
       this.lastPeakTime = currentTime;
     }
 
-    const amplitude = Math.abs(normalizedValue);
-    const confidence = Math.min(Math.max(amplitude / (this.SIGNAL_THRESHOLD * 2), 0), 1);
+    const amplitudeConfidence = Math.min(Math.max(Math.abs(normalizedValue) / (this.SIGNAL_THRESHOLD * 2), 0), 1);
+    const derivativeConfidence = Math.min(Math.max(Math.abs(derivative) / Math.abs(this.DERIVATIVE_THRESHOLD), 0), 1);
+    const confidence = (amplitudeConfidence + derivativeConfidence) / 2;
 
     console.log("[DetectPeak] Resultado", {
       isPeak,
       confidence,
-      amplitude,
-      normalizedConfidence: amplitude / (this.SIGNAL_THRESHOLD * 2)
+      amplitude: Math.abs(normalizedValue),
+      normalizedConfidence: amplitudeConfidence
     });
 
     return { isPeak, confidence };
@@ -264,5 +272,6 @@ export class HeartBeatProcessor {
     this.lastBeepTime = 0;
     this.baseline = 0;
     this.lastValue = 0;
+    this.values = [];
   }
 }
