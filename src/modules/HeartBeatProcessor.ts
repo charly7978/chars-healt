@@ -93,15 +93,6 @@ export class HeartBeatProcessor {
       this.signalBuffer.shift();
     }
 
-    // Necesitamos suficientes muestras
-    if (this.signalBuffer.length < 30) {
-      console.log("HeartBeatProcessor: Buffer insuficiente", {
-        currentSize: this.signalBuffer.length,
-        required: 30
-      });
-      return { bpm: 0, confidence: 0, isPeak: false };
-    }
-
     // Calcular línea base con media móvil
     this.baseline = this.baseline * 0.95 + value * 0.05;
     const normalizedValue = value - this.baseline;
