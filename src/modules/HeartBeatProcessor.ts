@@ -123,13 +123,6 @@ export class HeartBeatProcessor {
     const { isPeak, confidence } = this.detectPeak(normalizedValue, smoothDerivative);
     this.lastValue = value;
 
-    console.log("[ProcessSignal] Detección de pico", {
-      isPeak,
-      confidence,
-      derivative: smoothDerivative,
-      meetsConfidenceThreshold: confidence > this.MIN_CONFIDENCE
-    });
-
     if (isPeak && confidence > this.MIN_CONFIDENCE) {
       console.log("[ProcessSignal] ¡PICO DETECTADO!", {
         time: Date.now(),
@@ -162,32 +155,13 @@ export class HeartBeatProcessor {
     const currentTime = Date.now();
     const timeSinceLastPeak = currentTime - this.lastPeakTime;
     
-    console.log("[DetectPeak] Análisis", {
-      normalizedValue,
-      derivative,
-      timeSinceLastPeak,
-      threshold: this.SIGNAL_THRESHOLD,
-      minPeakTime: 250
-    });
-
     if (timeSinceLastPeak < 250) {
-      console.log("[DetectPeak] Muy poco tiempo desde último pico", {
-        timeSinceLastPeak,
-        minRequired: 250
-      });
       return { isPeak: false, confidence: 0 };
     }
 
     const isPeak = derivative < this.DERIVATIVE_THRESHOLD && 
                    normalizedValue > this.SIGNAL_THRESHOLD &&
                    this.lastValue > this.baseline;
-
-    console.log("[DetectPeak] Criterios de pico", {
-      derivativeCriterion: derivative < this.DERIVATIVE_THRESHOLD,
-      thresholdCriterion: normalizedValue > this.SIGNAL_THRESHOLD,
-      baselineCriterion: this.lastValue > this.baseline,
-      isPeak
-    });
 
     if (isPeak) {
       this.lastPeakTime = currentTime;
@@ -200,8 +174,9 @@ export class HeartBeatProcessor {
     console.log("[DetectPeak] Resultado", {
       isPeak,
       confidence,
-      amplitude: Math.abs(normalizedValue),
-      normalizedConfidence: amplitudeConfidence
+      timeSinceLastPeak,
+      currentTime,
+      lastPeakTime: this.lastPeakTime
     });
 
     return { isPeak, confidence };
@@ -209,30 +184,30 @@ export class HeartBeatProcessor {
 
   private updateBPM() {
     const currentTime = Date.now();
-    const timeSinceLastPeak = currentTime - this.lastPeakTime;
     
     console.log("[UpdateBPM] Inicio", {
       currentTime,
       lastPeakTime: this.lastPeakTime,
-      timeSinceLastPeak,
       currentHistoryLength: this.bpmHistory.length
     });
 
-    if (timeSinceLastPeak > 0) {
+    if (this.lastPeakTime > 0) {
+      const timeSinceLastPeak = currentTime - this.lastPeakTime;
       const instantBPM = 60000 / timeSinceLastPeak;
       
-      console.log("[UpdateBPM] Cálculo", {
+      console.log("[UpdateBPM] Cálculo instantáneo", {
+        timeSinceLastPeak,
         instantBPM,
-        isInRange: instantBPM >= this.MIN_BPM && instantBPM <= this.MAX_BPM,
-        minBPM: this.MIN_BPM,
-        maxBPM: this.MAX_BPM
+        isInRange: instantBPM >= this.MIN_BPM && instantBPM <= this.MAX_BPM
       });
 
       if (instantBPM >= this.MIN_BPM && instantBPM <= this.MAX_BPM) {
         this.bpmHistory.push(instantBPM);
-        if (this.bpmHistory.length > 8) {
+        
+        if (this.bpmHistory.length > 5) {
           this.bpmHistory.shift();
         }
+        
         console.log("[UpdateBPM] Historia actualizada", {
           newLength: this.bpmHistory.length,
           history: this.bpmHistory
@@ -248,20 +223,21 @@ export class HeartBeatProcessor {
     });
 
     if (this.bpmHistory.length < 2) {
-      console.log("[CalculateBPM] Historia insuficiente");
       return 0;
     }
 
-    const sortedBPMs = [...this.bpmHistory].sort((a, b) => a - b);
-    const medianBPM = sortedBPMs[Math.floor(sortedBPMs.length / 2)];
-    
+    const sum = this.bpmHistory.reduce((acc, curr) => acc + curr, 0);
+    const averageBPM = sum / this.bpmHistory.length;
+    const roundedBPM = Math.round(averageBPM);
+
     console.log("[CalculateBPM] Resultado", {
-      sortedBPMs,
-      medianBPM,
-      finalBPM: Math.round(medianBPM)
+      sum,
+      average: averageBPM,
+      roundedBPM,
+      bpmHistory: this.bpmHistory
     });
 
-    return Math.round(medianBPM);
+    return roundedBPM;
   }
 
   reset() {
