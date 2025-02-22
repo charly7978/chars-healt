@@ -1,50 +1,20 @@
 /**
  * HeartBeatProcessor
- *
+ * 
  * Procesa la señal PPG para estimar la frecuencia cardíaca y emite un beep
- * cada vez que el detector de picos (basado en la misma señal que se grafica)
- * identifica un pico real.  
- *
- * Además, incluye un sistema simple de detección de arritmias:
- *   - Durante los primeros 10s (LEARNING_PERIOD_MS), mide los intervalos entre latidos
- *     para calcular un "ritmo base" (baselineRhythm).
- *   - Luego, compara cada nuevo intervalo con ese ritmo base. Si la diferencia porcentual
- *     excede RHYTHM_TOLERANCE, se incrementa arrhythmiaCount.
- *
- * Ajustes clave para evitar falsos picos al retirar el dedo:
- *   1) autoResetIfSignalIsLow(...) revisa la amplitud. Si es muy baja
- *      (LOW_SIGNAL_THRESHOLD) por varios frames consecutivos (LOW_SIGNAL_FRAMES),
- *      ejecuta resetDetectionStates() para limpiar buffers de picos.
- *   2) El beep se dispara solo si la detección de picos confirma un pico real
- *      (misma señal que se grafica).
- *   3) Se mantuvieron los estados de arritmia (rhythmLearningIntervals, baselineRhythm, etc.)
- *      incluso cuando se hace auto-reset de la detección de picos, para no perder
- *      la información de la fase de aprendizaje.
- *
- * Si aun así la arritmia no se detecta, revisa que el umbral (SIGNAL_THRESHOLD = 0.60)
- * no sea demasiado alto para tu señal real. Ajusta según la amplitud típica
- * de tu pulso (por ejemplo, 0.4–0.5).
+ * cada vez que el detector de picos identifica un pico real.
  */
 
 export class HeartBeatProcessor {
   // ────────── CONFIGURACIONES PRINCIPALES ──────────
-
-  // Frecuencia de muestreo (aprox. 30 FPS).
   private readonly SAMPLE_RATE = 30;
-
-  // Tamaño de buffer para graficar la señal (2 s a 30 FPS).
   private readonly WINDOW_SIZE = 60;
-
-  // Rango plausible de BPM (40 - 180).
   private readonly MIN_BPM = 40;
   private readonly MAX_BPM = 180;
-
-  // Parámetros de detección de pico.
-  //  (Ajustar SIGNAL_THRESHOLD si la señal es pequeña o grande)
-  private readonly SIGNAL_THRESHOLD = 0.50;        // Ajustado. Antes estaba en 0.90
+  private readonly SIGNAL_THRESHOLD = 0.50;
   private readonly MIN_CONFIDENCE = 0.80;
   private readonly DERIVATIVE_THRESHOLD = -0.05;
-  private readonly MIN_PEAK_TIME_MS = 600;         // Evita picos más rápidos que ~150 BPM
+  private readonly MIN_PEAK_TIME_MS = 600;
   private readonly WARMUP_TIME_MS = 5000;
 
   // Parámetros de filtrado.
@@ -100,24 +70,9 @@ export class HeartBeatProcessor {
   private peakCandidateIndex: number | null = null;
   private peakCandidateValue: number = 0;
 
-  // ────────── DETECCIÓN DE ARRITMIAS ──────────
-  private readonly LEARNING_PERIOD_MS = 10000;    // 10s de aprendizaje
-  private readonly RHYTHM_TOLERANCE = 0.20;       // Aumentado a 20% de variación permitida para mejor detección
-  private readonly MIN_INTERVALS_FOR_BASELINE = 3; // Mínimo de intervalos para establecer línea base
-
-  private rhythmLearningIntervals: number[] = [];
-  private lastRhythmTime: number | null = null;
-  private isLearningPhase = true;
-  private baselineRhythm: number = 0;
-  public arrhythmiaCount: number = 0;
-
-  // Marca de inicio de medición (para saber cuántos ms han pasado).
-  private measurementStartTime: number = 0;
-
   constructor() {
     this.initAudio();
     this.startTime = Date.now();
-    this.measurementStartTime = Date.now();
   }
 
   // ────────── AUDIO (BEEP) ──────────
@@ -242,7 +197,7 @@ export class HeartBeatProcessor {
         confidence: 0,
         isPeak: false,
         filteredValue: smoothed,
-        arrhythmiaCount: this.arrhythmiaCount
+        arrhythmiaCount: 0
       };
     }
 
@@ -301,7 +256,7 @@ export class HeartBeatProcessor {
       confidence,
       isPeak: isConfirmedPeak && !this.isInWarmup(),
       filteredValue: smoothed,
-      arrhythmiaCount: this.arrhythmiaCount
+      arrhythmiaCount: 0
     };
   }
 
@@ -522,98 +477,5 @@ export class HeartBeatProcessor {
     this.peakCandidateIndex = null;
     this.peakCandidateValue = 0;
     this.lowSignalCount = 0;
-
-    // Arritmias
-    this.rhythmLearningIntervals = [];
-    this.lastRhythmTime = null;
-    this.isLearningPhase = true;
-    this.baselineRhythm = 0;
-    this.arrhythmiaCount = 0;
-    this.measurementStartTime = Date.now();
-  }
-
-  // ────────── DETECCIÓN DE ARRITMIAS ──────────
-
-  /**
-   * analyzeRhythm
-   * Llamado cada vez que se confirma un pico (latido). Mide la diferencia
-   * en ms respecto al latido anterior para ver si hay una desviación anómala.
-   */
-  private analyzeRhythm(currentTime: number) {
-    if (!this.lastRhythmTime) {
-      this.lastRhythmTime = currentTime;
-      return;
-    }
-
-    const interval = currentTime - this.lastRhythmTime;
-    const timeSinceStart = currentTime - this.measurementStartTime;
-
-    // Fase de aprendizaje (primeros 10s)
-    if (this.isLearningPhase && timeSinceStart <= this.LEARNING_PERIOD_MS) {
-      console.log("HeartBeatProcessor - Fase de aprendizaje", {
-        interval,
-        timeSinceStart,
-        learningPeriod: this.LEARNING_PERIOD_MS
-      });
-      
-      this.rhythmLearningIntervals.push(interval);
-
-      if (timeSinceStart > this.LEARNING_PERIOD_MS) {
-        this.isLearningPhase = false;
-        this.calculateBaselineRhythm();
-      }
-    }
-    // Fase de detección
-    else if (!this.isLearningPhase && this.baselineRhythm > 0) {
-      const deviation = Math.abs(interval - this.baselineRhythm) / this.baselineRhythm;
-      
-      console.log("HeartBeatProcessor - Análisis de arritmia", {
-        interval,
-        baselineRhythm: this.baselineRhythm,
-        deviation,
-        threshold: this.RHYTHM_TOLERANCE,
-        currentTime: new Date().toISOString()
-      });
-
-      if (deviation > this.RHYTHM_TOLERANCE) {
-        this.arrhythmiaCount++;
-        console.warn("HeartBeatProcessor - ARRITMIA DETECTADA", {
-          interval,
-          baselineRhythm: this.baselineRhythm,
-          deviation,
-          arrhythmiaCount: this.arrhythmiaCount,
-          timestamp: new Date().toISOString()
-        });
-      }
-    }
-
-    this.lastRhythmTime = currentTime;
-  }
-
-  /**
-   * calculateBaselineRhythm
-   * Al terminar la fase de aprendizaje, descarta outliers (10% superior/inferior)
-   * y promedia el resto para definir baselineRhythm.
-   */
-  private calculateBaselineRhythm() {
-    if (this.rhythmLearningIntervals.length < this.MIN_INTERVALS_FOR_BASELINE) {
-      console.log("HeartBeatProcessor - Baseline: Insuficientes intervalos para calcular", {
-        required: this.MIN_INTERVALS_FOR_BASELINE,
-        current: this.rhythmLearningIntervals.length
-      });
-      return;
-    }
-
-    const sorted = [...this.rhythmLearningIntervals].sort((a, b) => a - b);
-    const cutoff = Math.floor(sorted.length * 0.1);
-    const filtered = sorted.slice(cutoff, sorted.length - cutoff);
-
-    this.baselineRhythm = filtered.reduce((sum, val) => sum + val, 0) / filtered.length;
-    console.log("HeartBeatProcessor - Baseline Rhythm calculado", {
-      baselineRhythm: this.baselineRhythm,
-      intervalsCount: this.rhythmLearningIntervals.length,
-      intervalsFiltered: filtered.length,
-      toleranceMs: this.baselineRhythm * this.RHYTHM_TOLERANCE
-    });
   }
 }
