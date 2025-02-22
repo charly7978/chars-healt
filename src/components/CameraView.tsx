@@ -36,33 +36,37 @@ const CameraView = ({
         throw new Error("getUserMedia no está soportado");
       }
 
-      // Detectamos si es Android por el user agent
       const isAndroid = /android/i.test(navigator.userAgent);
 
-      const constraints: MediaStreamConstraints = {
+      // Inicialmente pedimos configuración mínima para abrir rápido
+      const initialConstraints: MediaStreamConstraints = {
         video: {
           facingMode: 'environment',
-          width: { ideal: 1280, min: 720 },
-          height: { ideal: 720, min: 480 },
-          frameRate: { min: 25, ideal: 30 },
-          aspectRatio: { ideal: 16/9 }
+          width: 720,
+          height: 480
         }
       };
 
-      const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+      const newStream = await navigator.mediaDevices.getUserMedia(initialConstraints);
       
       const videoTrack = newStream.getVideoTracks()[0];
       if (videoTrack) {
-        // En Android, intentamos reducir el procesamiento
         if (isAndroid) {
           try {
-            await videoTrack.applyConstraints({
-              // Reducimos la resolución máxima en Android
-              width: { max: 1280 },
-              height: { max: 720 }
-            });
-            
-            // Liberamos recursos cuando no se usa
+            // Una vez que la cámara está abierta, ajustamos la calidad
+            setTimeout(async () => {
+              try {
+                await videoTrack.applyConstraints({
+                  width: { max: 1280 },
+                  height: { max: 720 },
+                  frameRate: { min: 25, ideal: 30 },
+                  aspectRatio: { ideal: 16/9 }
+                });
+              } catch (err) {
+                console.log("No se pudieron aplicar configuraciones optimizadas:", err);
+              }
+            }, 500);
+
             videoTrack.enabled = true;
             videoRef.current?.addEventListener('pause', () => {
               videoTrack.enabled = false;
@@ -88,7 +92,6 @@ const CameraView = ({
 
       if (videoRef.current) {
         videoRef.current.srcObject = newStream;
-        // Optimizaciones de renderizado para Android
         if (isAndroid) {
           videoRef.current.style.transform = 'translateZ(0)';
           videoRef.current.style.backfaceVisibility = 'hidden';
