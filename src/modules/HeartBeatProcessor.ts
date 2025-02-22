@@ -111,9 +111,21 @@ export class HeartBeatProcessor {
   private peakCandidateIndex: number | null = null;
   private peakCandidateValue: number = 0;
 
+  // Parámetros para detección de arritmias
+  private readonly LEARNING_PERIOD_MS = 10000;  // 10 segundos de aprendizaje
+  private readonly RHYTHM_TOLERANCE = 0.15;     // 15% de variación permitida
+
+  private rhythmLearningIntervals: number[] = [];
+  private lastRhythmTime: number | null = null;
+  private isLearningPhase = true;
+  private baselineRhythm: number = 0;
+  private arrhythmiaCount = 0;
+  private measurementStartTime: number = 0;
+
   constructor() {
     this.initAudio();
     this.startTime = Date.now();
+    this.measurementStartTime = Date.now();
   }
 
   // ────────── AUDIO (BEEP) ──────────
@@ -213,6 +225,7 @@ export class HeartBeatProcessor {
     confidence: number;
     isPeak: boolean;
     filteredValue: number;
+    arrhythmiaCount: number;
   } {
     // 1) Filtro de mediana
     const medVal = this.medianFilter(value);
@@ -235,7 +248,8 @@ export class HeartBeatProcessor {
         bpm: 0,
         confidence: 0,
         isPeak: false,
-        filteredValue: smoothed
+        filteredValue: smoothed,
+        arrhythmiaCount: 0
       };
     }
 
@@ -278,6 +292,10 @@ export class HeartBeatProcessor {
       if (timeSinceLastPeak >= this.MIN_PEAK_TIME_MS) {
         this.previousPeakTime = this.lastPeakTime;
         this.lastPeakTime = now;
+        
+        // Análisis de arritmias
+        this.analyzeRhythm(now);
+        
         // Beep en el momento exacto de confirmación
         this.playBeep(0.12);
         this.updateBPM();
@@ -288,7 +306,8 @@ export class HeartBeatProcessor {
       bpm: Math.round(this.getSmoothBPM()),
       confidence,
       isPeak: isConfirmedPeak && !this.isInWarmup(),
-      filteredValue: smoothed
+      filteredValue: smoothed,
+      arrhythmiaCount: this.arrhythmiaCount
     };
   }
 
@@ -505,5 +524,71 @@ export class HeartBeatProcessor {
     this.peakCandidateValue = 0;
 
     this.lowSignalCount = 0;
+
+    this.rhythmLearningIntervals = [];
+    this.lastRhythmTime = null;
+    this.isLearningPhase = true;
+    this.baselineRhythm = 0;
+    this.arrhythmiaCount = 0;
+    this.measurementStartTime = Date.now();
+  }
+
+  private analyzeRhythm(currentTime: number) {
+    if (!this.lastRhythmTime) {
+      this.lastRhythmTime = currentTime;
+      return;
+    }
+
+    const interval = currentTime - this.lastRhythmTime;
+    const timeSinceStart = currentTime - this.measurementStartTime;
+
+    // Fase de aprendizaje (primeros 10 segundos)
+    if (this.isLearningPhase && timeSinceStart <= this.LEARNING_PERIOD_MS) {
+      this.rhythmLearningIntervals.push(interval);
+      
+      // Al final de la fase de aprendizaje, calculamos el ritmo base
+      if (timeSinceStart > this.LEARNING_PERIOD_MS) {
+        this.isLearningPhase = false;
+        this.calculateBaselineRhythm();
+      }
+    } 
+    // Fase de detección
+    else if (!this.isLearningPhase && this.baselineRhythm > 0) {
+      // Calculamos la desviación del intervalo actual respecto al ritmo base
+      const deviation = Math.abs(interval - this.baselineRhythm) / this.baselineRhythm;
+      
+      // Si la desviación supera la tolerancia, es una arritmia
+      if (deviation > this.RHYTHM_TOLERANCE) {
+        this.arrhythmiaCount++;
+        console.log('Arritmia detectada:', {
+          intervalo: interval,
+          ritmoBase: this.baselineRhythm,
+          desviacion: deviation,
+          total: this.arrhythmiaCount
+        });
+      }
+    }
+
+    this.lastRhythmTime = currentTime;
+  }
+
+  private calculateBaselineRhythm() {
+    if (this.rhythmLearningIntervals.length < 5) {
+      return; // Necesitamos al menos 5 intervalos para un cálculo confiable
+    }
+
+    // Ordenamos los intervalos y removemos outliers (10% superior e inferior)
+    const sorted = [...this.rhythmLearningIntervals].sort((a, b) => a - b);
+    const cutoff = Math.floor(sorted.length * 0.1);
+    const filtered = sorted.slice(cutoff, sorted.length - cutoff);
+
+    // Calculamos la media de los intervalos restantes
+    this.baselineRhythm = filtered.reduce((sum, val) => sum + val, 0) / filtered.length;
+    
+    console.log('Ritmo base calculado:', {
+      baselineRhythm: this.baselineRhythm,
+      intervalsAnalyzed: this.rhythmLearningIntervals.length,
+      toleranceMs: this.baselineRhythm * this.RHYTHM_TOLERANCE
+    });
   }
 }
