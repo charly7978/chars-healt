@@ -23,7 +23,6 @@ const SimpleCameraView = ({
   const [isAndroid, setIsAndroid] = useState(false);
 
   useEffect(() => {
-    // Detectar si es Android
     setIsAndroid(/Android/i.test(navigator.userAgent));
   }, []);
 
@@ -35,7 +34,6 @@ const SimpleCameraView = ({
       setAvailableCameras(cameras);
       console.log("Cámaras disponibles:", cameras);
       
-      // Priorizar cámara trasera en Android
       if (isAndroid) {
         const backCamera = cameras.find(camera => 
           camera.label.toLowerCase().includes('back') || 
@@ -78,7 +76,6 @@ const SimpleCameraView = ({
           throw new Error("getUserMedia no está soportado");
         }
 
-        // Configuración específica para Android vs otros dispositivos
         const constraints: MediaStreamConstraints = {
           video: {
             deviceId: currentCamera ? { exact: currentCamera } : undefined,
@@ -86,8 +83,7 @@ const SimpleCameraView = ({
             width: { ideal: isAndroid ? 1280 : 640 },
             height: { ideal: isAndroid ? 720 : 480 },
             frameRate: { ideal: 30 },
-            aspectRatio: isAndroid ? { ideal: 16/9 } : { ideal: 4/3 },
-            resizeMode: 'crop-and-scale'
+            aspectRatio: isAndroid ? { ideal: 16/9 } : { ideal: 4/3 }
           }
         };
 
@@ -102,7 +98,6 @@ const SimpleCameraView = ({
           videoRef.current.setAttribute('playsinline', 'true');
           videoRef.current.setAttribute('autoplay', 'true');
           
-          // Ajustar orientación para Android
           if (isAndroid) {
             videoRef.current.style.transform = 'scaleX(-1) rotate(90deg)';
           } else {
@@ -116,19 +111,6 @@ const SimpleCameraView = ({
           const track = stream.getVideoTracks()[0];
           console.log("Capacidades de la cámara:", track.getCapabilities());
           console.log("Configuración actual:", track.getSettings());
-          
-          // Intentar aplicar configuraciones específicas para Android
-          if (isAndroid) {
-            try {
-              await track.applyConstraints({
-                advanced: [{
-                  zoom: 1
-                }]
-              });
-            } catch (err) {
-              console.log("No se pudieron aplicar configuraciones avanzadas:", err);
-            }
-          }
         }
       } catch (err) {
         console.error("Error al iniciar la cámara:", err);
