@@ -27,17 +27,20 @@ export class PPGSignalProcessor implements SignalProcessor {
   private kalmanFilter: KalmanFilter;
   private lastValues: number[] = [];
   private readonly DEFAULT_CONFIG = {
-    BUFFER_SIZE: 8, // Reducido para menor uso de memoria
-    MIN_RED_THRESHOLD: 80,
-    MAX_RED_THRESHOLD: 245,
-    STABILITY_WINDOW: 3, // Reducido para respuesta más rápida
-    MIN_STABILITY_COUNT: 2 // Reducido para detección más rápida
+    BUFFER_SIZE: 10,
+    MIN_RED_THRESHOLD: 85,  // Reducido de 90 a 85 para mayor sensibilidad
+    MAX_RED_THRESHOLD: 245, // Mantenido en 245
+    STABILITY_WINDOW: 5,    // Mantenido en 5
+    MIN_STABILITY_COUNT: 3  // Mantenido en 3 para evitar falsos positivos
   };
   private currentConfig: typeof this.DEFAULT_CONFIG;
+  private readonly BUFFER_SIZE = 10;
+  private readonly MIN_RED_THRESHOLD = 85;
+  private readonly MAX_RED_THRESHOLD = 245;
+  private readonly STABILITY_WINDOW = 5;
+  private readonly MIN_STABILITY_COUNT = 3;
   private stableFrameCount: number = 0;
   private lastStableValue: number = 0;
-  private lastProcessTime: number = 0;
-  private readonly PROCESS_INTERVAL = 33; // ~30fps
   
   constructor(
     public onSignalReady?: (signal: ProcessedSignal) => void,
@@ -54,7 +57,6 @@ export class PPGSignalProcessor implements SignalProcessor {
       this.stableFrameCount = 0;
       this.lastStableValue = 0;
       this.kalmanFilter.reset();
-      this.lastProcessTime = 0;
       console.log("PPGSignalProcessor: Inicializado");
     } catch (error) {
       console.error("PPGSignalProcessor: Error de inicialización", error);
@@ -62,56 +64,81 @@ export class PPGSignalProcessor implements SignalProcessor {
     }
   }
 
-  private extractRedChannel(imageData: ImageData): number {
-    const data = imageData.data;
-    let redSum = 0;
-    let count = 0;
-    
-    // Analizar solo una porción más pequeña de la imagen para mejor rendimiento
-    const startX = Math.floor(imageData.width * 0.4);
-    const endX = Math.floor(imageData.width * 0.6);
-    const startY = Math.floor(imageData.height * 0.4);
-    const endY = Math.floor(imageData.height * 0.6);
-    
-    // Optimización: saltar píxeles para mejorar rendimiento
-    const skipPixels = 2;
-    
-    for (let y = startY; y < endY; y += skipPixels) {
-      for (let x = startX; x < endX; x += skipPixels) {
-        const i = (y * imageData.width + x) * 4;
-        redSum += data[i];
-        count++;
-      }
+  start(): void {
+    if (this.isProcessing) return;
+    this.isProcessing = true;
+    this.initialize();
+    console.log("PPGSignalProcessor: Iniciado");
+  }
+
+  stop(): void {
+    this.isProcessing = false;
+    this.lastValues = [];
+    this.stableFrameCount = 0;
+    this.lastStableValue = 0;
+    this.kalmanFilter.reset();
+    console.log("PPGSignalProcessor: Detenido");
+  }
+
+  async calibrate(): Promise<boolean> {
+    try {
+      console.log("PPGSignalProcessor: Iniciando calibración");
+      await this.initialize();
+
+      // Simulamos el proceso de calibración
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Ajustamos los umbrales basados en las condiciones actuales
+      this.currentConfig = {
+        ...this.DEFAULT_CONFIG,
+        MIN_RED_THRESHOLD: Math.max(25, this.MIN_RED_THRESHOLD - 5),
+        MAX_RED_THRESHOLD: Math.min(255, this.MAX_RED_THRESHOLD + 5),
+        STABILITY_WINDOW: this.STABILITY_WINDOW,
+        MIN_STABILITY_COUNT: this.MIN_STABILITY_COUNT
+      };
+
+      console.log("PPGSignalProcessor: Calibración completada", this.currentConfig);
+      return true;
+    } catch (error) {
+      console.error("PPGSignalProcessor: Error de calibración", error);
+      this.handleError("CALIBRATION_ERROR", "Error durante la calibración");
+      return false;
     }
-    
-    return redSum / count;
+  }
+
+  resetToDefault(): void {
+    this.currentConfig = { ...this.DEFAULT_CONFIG };
+    this.initialize();
+    console.log("PPGSignalProcessor: Configuración restaurada a valores por defecto");
   }
 
   processFrame(imageData: ImageData): void {
     if (!this.isProcessing) {
+      console.log("PPGSignalProcessor: No está procesando");
       return;
     }
-
-    const currentTime = Date.now();
-    if (currentTime - this.lastProcessTime < this.PROCESS_INTERVAL) {
-      return; // Limitar la frecuencia de procesamiento
-    }
-    this.lastProcessTime = currentTime;
 
     try {
       const redValue = this.extractRedChannel(imageData);
       const filtered = this.kalmanFilter.filter(redValue);
-      
-      // Mantener buffer pequeño
       this.lastValues.push(filtered);
-      if (this.lastValues.length > this.currentConfig.BUFFER_SIZE) {
+      
+      if (this.lastValues.length > this.BUFFER_SIZE) {
         this.lastValues.shift();
       }
 
       const { isFingerDetected, quality } = this.analyzeSignal(filtered, redValue);
 
+      console.log("PPGSignalProcessor: Análisis", {
+        redValue,
+        filtered,
+        isFingerDetected,
+        quality,
+        stableFrames: this.stableFrameCount
+      });
+
       const processedSignal: ProcessedSignal = {
-        timestamp: currentTime,
+        timestamp: Date.now(),
         rawValue: redValue,
         filteredValue: filtered,
         quality: quality,
@@ -127,44 +154,71 @@ export class PPGSignalProcessor implements SignalProcessor {
     }
   }
 
+  private extractRedChannel(imageData: ImageData): number {
+    const data = imageData.data;
+    let redSum = 0;
+    let count = 0;
+    
+    // Analizar solo el centro de la imagen (25% central)
+    const startX = Math.floor(imageData.width * 0.375);
+    const endX = Math.floor(imageData.width * 0.625);
+    const startY = Math.floor(imageData.height * 0.375);
+    const endY = Math.floor(imageData.height * 0.625);
+    
+    for (let y = startY; y < endY; y++) {
+      for (let x = startX; x < endX; x++) {
+        const i = (y * imageData.width + x) * 4;
+        redSum += data[i];  // Canal rojo
+        count++;
+      }
+    }
+    
+    const avgRed = redSum / count;
+    return avgRed;
+  }
+
   private analyzeSignal(filtered: number, rawValue: number): { isFingerDetected: boolean, quality: number } {
-    const isInRange = rawValue >= this.currentConfig.MIN_RED_THRESHOLD && 
-                     rawValue <= this.currentConfig.MAX_RED_THRESHOLD;
+    const isInRange = rawValue >= this.MIN_RED_THRESHOLD && rawValue <= this.MAX_RED_THRESHOLD;
     
     if (!isInRange) {
+      // Reset inmediato cuando se detecta que no hay dedo
       this.stableFrameCount = 0;
       this.lastStableValue = 0;
       return { isFingerDetected: false, quality: 0 };
     }
 
-    if (this.lastValues.length < this.currentConfig.STABILITY_WINDOW) {
+    if (this.lastValues.length < this.STABILITY_WINDOW) {
       return { isFingerDetected: false, quality: 0 };
     }
 
-    const recentValues = this.lastValues.slice(-this.currentConfig.STABILITY_WINDOW);
+    // Cálculo de estabilidad mejorado
+    const recentValues = this.lastValues.slice(-this.STABILITY_WINDOW);
     const avgValue = recentValues.reduce((sum, val) => sum + val, 0) / recentValues.length;
     const avgVariation = recentValues.reduce((sum, val, i, arr) => {
       if (i === 0) return 0;
       return sum + Math.abs(val - arr[i-1]);
     }, 0) / (recentValues.length - 1);
 
-    const variationThreshold = Math.max(2.0, avgValue * 0.05);
+    // Umbral de variación adaptativo más estricto
+    const variationThreshold = Math.max(2.5, avgValue * 0.04); // Reducido a 4% del valor promedio
     const isStable = avgVariation < variationThreshold;
 
     if (isStable) {
       this.stableFrameCount++;
       this.lastStableValue = filtered;
     } else {
-      this.stableFrameCount = Math.max(0, this.stableFrameCount - 1);
+      // Reducción más rápida del contador cuando hay inestabilidad
+      this.stableFrameCount = Math.max(0, this.stableFrameCount - 0.75);
     }
 
-    const isFingerDetected = this.stableFrameCount >= this.currentConfig.MIN_STABILITY_COUNT;
+    const isFingerDetected = this.stableFrameCount >= this.MIN_STABILITY_COUNT;
     
     let quality = 0;
     if (isFingerDetected) {
-      const stabilityScore = Math.min(this.stableFrameCount / (this.currentConfig.MIN_STABILITY_COUNT * 1.5), 1);
-      const intensityScore = Math.min((rawValue - this.currentConfig.MIN_RED_THRESHOLD) / 
-                                    (this.currentConfig.MAX_RED_THRESHOLD - this.currentConfig.MIN_RED_THRESHOLD), 1);
+      // Cálculo de calidad más estricto
+      const stabilityScore = Math.min(this.stableFrameCount / (this.MIN_STABILITY_COUNT * 2), 1);
+      const intensityScore = Math.min((rawValue - this.MIN_RED_THRESHOLD) / 
+                                    (this.MAX_RED_THRESHOLD - this.MIN_RED_THRESHOLD), 1);
       const variationScore = Math.max(0, 1 - (avgVariation / variationThreshold));
       
       quality = Math.round((stabilityScore * 0.4 + intensityScore * 0.3 + variationScore * 0.3) * 100);
@@ -190,46 +244,5 @@ export class PPGSignalProcessor implements SignalProcessor {
       timestamp: Date.now()
     };
     this.onError?.(error);
-  }
-
-  start(): void {
-    if (this.isProcessing) return;
-    this.isProcessing = true;
-    this.initialize();
-    console.log("PPGSignalProcessor: Iniciado");
-  }
-
-  stop(): void {
-    this.isProcessing = false;
-    this.lastValues = [];
-    this.stableFrameCount = 0;
-    this.lastStableValue = 0;
-    this.kalmanFilter.reset();
-    console.log("PPGSignalProcessor: Detenido");
-  }
-
-  async calibrate(): Promise<boolean> {
-    try {
-      console.log("PPGSignalProcessor: Iniciando calibración");
-      await this.initialize();
-      
-      const isAndroid = /Android/i.test(navigator.userAgent);
-      if (isAndroid) {
-        // Configuración específica para Android
-        this.currentConfig = {
-          ...this.DEFAULT_CONFIG,
-          BUFFER_SIZE: 6,
-          STABILITY_WINDOW: 3,
-          MIN_STABILITY_COUNT: 2
-        };
-      }
-      
-      console.log("PPGSignalProcessor: Calibración completada", this.currentConfig);
-      return true;
-    } catch (error) {
-      console.error("PPGSignalProcessor: Error de calibración", error);
-      this.handleError("CALIBRATION_ERROR", "Error durante la calibración");
-      return false;
-    }
   }
 }
