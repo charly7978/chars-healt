@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
@@ -23,6 +24,26 @@ const Index = () => {
     processingRef.current = isMonitoring;
   }, [isMonitoring]);
 
+  // Restaurar la actualización de calidad de señal
+  useEffect(() => {
+    if (lastSignal) {
+      console.log("Index: Actualizando calidad de señal:", lastSignal.quality);
+      setSignalQuality(lastSignal.quality);
+    }
+  }, [lastSignal]);
+
+  // Mantener el procesamiento de señal cardíaca separado
+  useEffect(() => {
+    if (lastSignal && lastSignal.fingerDetected) {
+      console.log("Index: Procesando señal cardíaca", {
+        value: lastSignal.filteredValue,
+        fingerDetected: lastSignal.fingerDetected,
+        quality: lastSignal.quality
+      });
+      processSignal(lastSignal.filteredValue);
+    }
+  }, [lastSignal, processSignal]);
+
   useEffect(() => {
     const handleMeasurementComplete = (e: Event) => {
       e.preventDefault();
@@ -32,20 +53,6 @@ const Index = () => {
     window.addEventListener('measurementComplete', handleMeasurementComplete);
     return () => window.removeEventListener('measurementComplete', handleMeasurementComplete);
   }, []);
-
-  useEffect(() => {
-    if (lastSignal) {
-      console.log("Index: Procesando señal cardíaca", {
-        value: lastSignal.filteredValue,
-        fingerDetected: lastSignal.fingerDetected,
-        quality: lastSignal.quality
-      });
-      
-      if (lastSignal.fingerDetected) {
-        processSignal(lastSignal.filteredValue);
-      }
-    }
-  }, [lastSignal, processSignal]);
 
   const handleStreamReady = (stream: MediaStream) => {
     console.log("Index: Camera stream ready", stream.getVideoTracks()[0].getSettings());
@@ -104,7 +111,6 @@ const Index = () => {
       }
     };
 
-    // Iniciar el procesamiento después de que la cámara esté lista
     setIsMonitoring(true);
     processingRef.current = true;
     processImage();
@@ -134,47 +140,6 @@ const Index = () => {
     handleStopMeasurement();
     resetHeartBeat();
   };
-
-  useEffect(() => {
-    if (canvasRef.current && isMonitoring) {
-      const ctx = canvasRef.current.getContext('2d');
-      if (!ctx) return;
-
-      ctx.fillStyle = 'black';
-      ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-
-      let x = 0;
-      let previousY = canvasRef.current.height / 2;
-
-      const animate = () => {
-        if (!isMonitoring) return;
-        
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
-        ctx.fillRect(0, 0, canvasRef.current!.width, canvasRef.current!.height);
-        
-        const signalValue = lastSignal ? -lastSignal.filteredValue * 100 : 0;
-        const currentY = (canvasRef.current!.height / 2) + signalValue;
-        
-        const gradient = ctx.createLinearGradient(x-1, previousY, x, currentY);
-        gradient.addColorStop(0, '#00ff00');
-        gradient.addColorStop(1, '#39FF14');
-        
-        ctx.beginPath();
-        ctx.strokeStyle = gradient;
-        ctx.lineWidth = 2;
-        ctx.moveTo(x-1, previousY);
-        ctx.lineTo(x, currentY);
-        ctx.stroke();
-        
-        previousY = currentY;
-        x = (x + 1) % canvasRef.current!.width;
-        
-        requestAnimationFrame(animate);
-      };
-
-      animate();
-    }
-  }, [isMonitoring, lastSignal]);
 
   return (
     <div className="w-screen h-screen bg-gray-900 overflow-hidden">
