@@ -64,9 +64,9 @@ export class VitalSignsProcessor {
   private ppgValues: number[] = [];
 
   /** Últimos valores estimados (se devuelven si no hay baseline o detección). */
-  private lastSpO2: number = 98;
-  private lastSystolic: number = 120;
-  private lastDiastolic: number = 80;
+  private lastSpO2: number = 0;
+  private lastSystolic: number = 0;
+  private lastDiastolic: number = 0;
 
   /** Flag que indica si ya tenemos baseline (al menos 60 muestras aceptables). */
   private baselineEstablished = false;
@@ -81,8 +81,15 @@ export class VitalSignsProcessor {
   private readonly BP_SMOOTHING_FACTOR = 0.3;   // ~30% nuevo, ~70% valor previo
   private readonly SPO2_SIGNAL_FACTOR = 0.4;    // Peso para SpO2 crudo vs. valor previo
 
+  /** Tiempo de inicio de la medición */
+  private measurementStartTime: number = 0;
+
+  /** Última presión válida calculada */
+  private lastValidPressure: { systolic: number; diastolic: number } | null = null;
+
   constructor() {
-    console.log("VitalSignsProcessor: Inicializando procesador de señales vitales (última versión).");
+    console.log("VitalSignsProcessor: Inicializando procesador de señales vitales");
+    this.measurementStartTime = Date.now();
   }
 
   /**
@@ -269,44 +276,69 @@ export class VitalSignsProcessor {
   private calculateActualBloodPressure(ppgValues: number[]): { systolic: number; diastolic: number } {
     const { peakTimes, valleys } = this.findPeaksAndValleys(ppgValues);
     
-    if (peakTimes.length < 2) {
-      return { systolic: this.lastSystolic, diastolic: this.lastDiastolic };
+    if (peakTimes.length < 4) {
+      return { 
+        systolic: this.lastValidPressure?.systolic || 0,
+        diastolic: this.lastValidPressure?.diastolic || 0 
+      };
     }
 
-    // Análisis real del tiempo entre picos (PTT)
+    // Análisis de intervalos entre picos (PTT)
     const pttValues = [];
+    const amplitudes = [];
+    
     for (let i = 1; i < peakTimes.length; i++) {
-      const interval = peakTimes[i] - peakTimes[i-1];
-      if (interval > 5 && interval < 200) { // Filtro de intervalos fisiológicamente posibles
-        pttValues.push(interval);
+      const ptt = peakTimes[i] - peakTimes[i-1];
+      if (ptt >= 20 && ptt <= 180) {
+        pttValues.push(ptt);
+      }
+      
+      if (valleys[i-1]) {
+        const amplitude = ppgValues[peakTimes[i]] - ppgValues[valleys[i-1]];
+        if (amplitude > 0) {
+          amplitudes.push(amplitude);
+        }
       }
     }
-    
-    if (pttValues.length === 0) {
-      return { systolic: this.lastSystolic, diastolic: this.lastDiastolic };
+
+    if (pttValues.length < 3 || amplitudes.length < 3) {
+      return { 
+        systolic: this.lastValidPressure?.systolic || 0,
+        diastolic: this.lastValidPressure?.diastolic || 0 
+      };
     }
 
-    // Cálculo real del PTT promedio
+    // Análisis estadístico del PTT y amplitudes
     const avgPTT = pttValues.reduce((a, b) => a + b, 0) / pttValues.length;
+    const avgAmplitude = amplitudes.reduce((a, b) => a + b, 0) / amplitudes.length;
 
-    // Análisis real de la forma de onda
-    const { amplitude } = this.calculateWaveformAmplitudes(ppgValues, peakTimes, valleys);
-
-    // Cálculo basado únicamente en mediciones reales
-    // La relación entre PTT y presión sistólica está inversamente relacionada
-    const systolic = Math.round(120 + ((1000 / avgPTT) - 8) * 2);
+    // Tiempo transcurrido desde el inicio de la medición (en segundos)
+    const elapsedTime = (Date.now() - this.measurementStartTime) / 1000;
     
-    // La presión diastólica se relaciona con la amplitud de la onda y la sistólica
-    const diastolic = Math.round(systolic - (40 + amplitude * 0.2));
+    // Factor de confianza basado en el tiempo y calidad de señal
+    const confidenceFactor = Math.min(elapsedTime / 10, 1);
 
-    // Límites fisiológicos seguros
-    const finalSystolic = Math.min(180, Math.max(90, systolic));
-    const finalDiastolic = Math.min(110, Math.max(60, diastolic));
+    // Cálculo de presión basado en PTT y amplitud
+    // La relación PTT-presión es inversamente proporcional
+    let systolic = Math.round((1000 / avgPTT) * 6 * confidenceFactor);
+    let diastolic = Math.round(systolic * 0.65 + (avgAmplitude * 0.1));
 
-    return { 
-      systolic: finalSystolic, 
-      diastolic: finalDiastolic 
-    };
+    // Límites fisiológicos realistas
+    systolic = Math.min(160, Math.max(70, systolic));
+    diastolic = Math.min(100, Math.max(40, diastolic));
+
+    // Verificación de coherencia
+    if (systolic - diastolic < 20 || systolic - diastolic > 80) {
+      return { 
+        systolic: this.lastValidPressure?.systolic || 0,
+        diastolic: this.lastValidPressure?.diastolic || 0 
+      };
+    }
+
+    // Actualizar última presión válida
+    this.lastValidPressure = { systolic, diastolic };
+
+    return { systolic, diastolic };
   }
 
   // ───────────────────── Cálculos internos ─────────────────────
@@ -447,11 +479,13 @@ export class VitalSignsProcessor {
    */
   public reset(): void {
     this.ppgValues = [];
-    this.lastSpO2 = 98;
-    this.lastSystolic = 120;
-    this.lastDiastolic = 80;
+    this.lastSpO2 = 0;
+    this.lastSystolic = 0;
+    this.lastDiastolic = 0;
     this.baselineEstablished = false;
     this.movingAverageSpO2 = [];
     this.smaBuffer = [];
+    this.measurementStartTime = Date.now();
+    this.lastValidPressure = null;
   }
 }
