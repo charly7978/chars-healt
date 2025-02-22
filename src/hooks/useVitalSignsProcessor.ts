@@ -17,24 +17,22 @@ export const useVitalSignsProcessor = () => {
       return result;
     }
 
-    // Si acabamos de empezar a monitorear y no hay arritmias aún
-    if (!hasDetectedArrhythmia) {
-      result.arrhythmiaStatus = "SIN ARRITMIAS";
-    }
-    
-    // Si se detecta una arritmia
+    // Procesar el resultado y actualizar estados
     if (result.arrhythmiaStatus === "ARRITMIA DETECTADA") {
-      setHasDetectedArrhythmia(true);
-      setArrhythmiaCount(prev => prev + 1);
-    }
-    
-    // Si ya se detectó una arritmia anteriormente
-    if (hasDetectedArrhythmia) {
-      result.arrhythmiaStatus = "ARRITMIA DETECTADA";
+      if (!hasDetectedArrhythmia) {
+        setHasDetectedArrhythmia(true);
+        setArrhythmiaCount(prev => prev + 1);
+      }
+      result.arrhythmiaStatus = `${arrhythmiaCount + 1} ARRITMIAS DETECTADAS`;
+    } else {
+      // Si no hay arritmia en este frame
+      result.arrhythmiaStatus = hasDetectedArrhythmia 
+        ? `${arrhythmiaCount} ARRITMIAS DETECTADAS` 
+        : "SIN ARRITMIAS";
     }
     
     return result;
-  }, [processor, hasDetectedArrhythmia, isMonitoring]);
+  }, [processor, hasDetectedArrhythmia, arrhythmiaCount, isMonitoring]);
 
   const reset = useCallback(() => {
     processor.reset();
