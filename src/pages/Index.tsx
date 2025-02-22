@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
@@ -16,6 +17,7 @@ const Index = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const processingRef = useRef<boolean>(false);
+  const animationFrameRef = useRef<number>();
 
   useEffect(() => {
     processingRef.current = isMonitoring;
@@ -41,7 +43,6 @@ const Index = () => {
     const videoTrack = stream.getVideoTracks()[0];
     const imageCapture = new ImageCapture(videoTrack);
     
-    // Intentar encender la linterna
     if (videoTrack.getCapabilities()?.torch) {
       videoTrack.applyConstraints({
         advanced: [{ torch: true }]
@@ -93,7 +94,6 @@ const Index = () => {
       }
     };
 
-    // Iniciar el procesamiento después de que la cámara esté lista
     setIsMonitoring(true);
     processingRef.current = true;
     processImage();
@@ -130,44 +130,54 @@ const Index = () => {
   };
 
   useEffect(() => {
-    if (canvasRef.current && isMonitoring) {
-      const ctx = canvasRef.current.getContext('2d');
+    let animationFrameId: number;
+    let previousY = canvasRef.current?.height ? canvasRef.current.height / 2 : 0;
+    let x = 0;
+
+    const animate = () => {
+      const canvas = canvasRef.current;
+      if (!canvas || !isMonitoring) return;
+
+      const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
-      ctx.fillStyle = 'black';
-      ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      const signalValue = lastSignal ? -lastSignal.filteredValue * 100 : 0;
+      const currentY = (canvas.height / 2) + signalValue;
+      
+      const gradient = ctx.createLinearGradient(x-1, previousY, x, currentY);
+      gradient.addColorStop(0, '#00ff00');
+      gradient.addColorStop(1, '#39FF14');
+      
+      ctx.beginPath();
+      ctx.strokeStyle = gradient;
+      ctx.lineWidth = 2;
+      ctx.moveTo(x-1, previousY);
+      ctx.lineTo(x, currentY);
+      ctx.stroke();
+      
+      previousY = currentY;
+      x = (x + 1) % canvas.width;
+      
+      animationFrameId = requestAnimationFrame(animate);
+    };
 
-      let x = 0;
-      let previousY = canvasRef.current.height / 2;
-
-      const animate = () => {
-        if (!isMonitoring) return;
-        
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
-        ctx.fillRect(0, 0, canvasRef.current!.width, canvasRef.current!.height);
-        
-        const signalValue = lastSignal ? -lastSignal.filteredValue * 100 : 0;
-        const currentY = (canvasRef.current!.height / 2) + signalValue;
-        
-        const gradient = ctx.createLinearGradient(x-1, previousY, x, currentY);
-        gradient.addColorStop(0, '#00ff00');
-        gradient.addColorStop(1, '#39FF14');
-        
-        ctx.beginPath();
-        ctx.strokeStyle = gradient;
-        ctx.lineWidth = 2;
-        ctx.moveTo(x-1, previousY);
-        ctx.lineTo(x, currentY);
-        ctx.stroke();
-        
-        previousY = currentY;
-        x = (x + 1) % canvasRef.current!.width;
-        
-        requestAnimationFrame(animate);
-      };
-
-      animate();
+    if (isMonitoring && canvasRef.current) {
+      const ctx = canvasRef.current.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+        animate();
+      }
     }
+
+    return () => {
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+    };
   }, [isMonitoring, lastSignal]);
 
   return (
