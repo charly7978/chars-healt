@@ -1,3 +1,4 @@
+
 export class HeartBeatProcessor {
   private readonly SAMPLE_RATE = 30;
   private readonly WINDOW_SIZE = 60;
@@ -12,6 +13,7 @@ export class HeartBeatProcessor {
   private readonly MIN_PEAK_TIME_MS = 315;  // Ajustado de 400 a 315 para permitir hasta 190 BPM
   private readonly WARMUP_TIME_MS = 5000;  // Tiempo de calentamiento de 5 segundos
   private readonly MOVING_AVERAGE_WINDOW = 5;  // Ventana para el promedio móvil
+  private readonly EMA_ALPHA = 0.2;  // Factor de suavizado exponencial
 
   private signalBuffer: number[] = [];
   private movingAverageBuffer: number[] = [];
@@ -24,6 +26,7 @@ export class HeartBeatProcessor {
   private lastValue: number = 0;
   private values: number[] = [];
   private startTime: number = 0;
+  private smoothedValue: number = 0;
 
   constructor() {
     this.initAudio();
@@ -44,6 +47,10 @@ export class HeartBeatProcessor {
     }
   }
 
+  private isInWarmup(): boolean {
+    return Date.now() - this.startTime < this.WARMUP_TIME_MS;
+  }
+
   private calculateMovingAverage(value: number): number {
     this.movingAverageBuffer.push(value);
     if (this.movingAverageBuffer.length > this.MOVING_AVERAGE_WINDOW) {
@@ -52,15 +59,18 @@ export class HeartBeatProcessor {
     return this.movingAverageBuffer.reduce((a, b) => a + b, 0) / this.movingAverageBuffer.length;
   }
 
+  private calculateEMA(value: number): number {
+    this.smoothedValue = this.EMA_ALPHA * value + (1 - this.EMA_ALPHA) * this.smoothedValue;
+    return this.smoothedValue;
+  }
+
   private async playBeep(volume: number = 0.1) {
-    if (!this.audioContext) {
-      console.warn("HeartBeatProcessor: AudioContext no disponible");
+    if (!this.audioContext || this.isInWarmup()) {
       return;
     }
 
     const currentTime = Date.now();
     if (currentTime - this.lastBeepTime < 200) {
-      console.log("HeartBeatProcessor: Beep ignorado (muy cercano al anterior)");
       return;
     }
 
@@ -92,8 +102,9 @@ export class HeartBeatProcessor {
     confidence: number;
     isPeak: boolean;
   } {
-    // Aplicar promedio móvil para suavizar la señal
-    const smoothedValue = this.calculateMovingAverage(value);
+    // Aplicar filtros para suavizar la señal
+    const movingAvg = this.calculateMovingAverage(value);
+    const smoothedValue = this.calculateEMA(movingAvg);
 
     this.signalBuffer.push(smoothedValue);
     if (this.signalBuffer.length > this.WINDOW_SIZE) {
@@ -117,10 +128,8 @@ export class HeartBeatProcessor {
     const { isPeak, confidence } = this.detectPeak(normalizedValue, smoothDerivative);
     this.lastValue = smoothedValue;
 
-    // Verificar si estamos en el período de calentamiento
-    const isWarmupPeriod = Date.now() - this.startTime < this.WARMUP_TIME_MS;
-
-    if (isPeak && confidence > this.MIN_CONFIDENCE && !isWarmupPeriod) {
+    // No procesar picos durante el warmup
+    if (isPeak && confidence > this.MIN_CONFIDENCE && !this.isInWarmup()) {
       const currentTime = Date.now();
       const timeSinceLastPeak = this.lastPeakTime ? currentTime - this.lastPeakTime : Infinity;
       
@@ -132,12 +141,10 @@ export class HeartBeatProcessor {
       }
     }
 
-    const bpm = this.calculateCurrentBPM();
-
     return {
-      bpm,
+      bpm: this.calculateCurrentBPM(),
       confidence,
-      isPeak: isPeak && !isWarmupPeriod
+      isPeak: isPeak && !this.isInWarmup()
     };
   }
 
@@ -167,7 +174,6 @@ export class HeartBeatProcessor {
 
     const interval = this.lastPeakTime - this.previousPeakTime;
     if (interval <= 0) {
-      console.log("[UpdateBPM] Invalid interval", { interval });
       return;
     }
 
@@ -175,7 +181,7 @@ export class HeartBeatProcessor {
 
     if (instantBPM >= this.MIN_BPM && instantBPM <= this.MAX_BPM) {
       this.bpmHistory.push(instantBPM);
-      if (this.bpmHistory.length > 5) {
+      if (this.bpmHistory.length > 8) {
         this.bpmHistory.shift();
       }
     }
@@ -186,16 +192,30 @@ export class HeartBeatProcessor {
       return 0;
     }
 
-    if (this.bpmHistory.length > 8) {
-      this.bpmHistory.shift();
+    // Eliminar valores extremos
+    const sortedBPMs = [...this.bpmHistory].sort((a, b) => a - b);
+    const filteredBPMs = sortedBPMs.slice(1, -1); // Elimina el valor más alto y más bajo
+
+    if (filteredBPMs.length === 0) {
+      return 0;
     }
 
-    const sortedBPMs = [...this.bpmHistory].sort((a, b) => a - b);
-    const filteredBPMs = sortedBPMs.slice(1, -1);
-
     const average = filteredBPMs.reduce((a, b) => a + b, 0) / filteredBPMs.length;
-    
     return Math.round(average);
+  }
+
+  public getFinalBPM(): number {
+    if (this.bpmHistory.length < 5) return 0;
+
+    // Descartar outliers (10% superior e inferior)
+    const sorted = [...this.bpmHistory].sort((a, b) => a - b);
+    const cut = Math.round(sorted.length * 0.1);
+    const trimmed = sorted.slice(cut, sorted.length - cut);
+
+    if (trimmed.length === 0) return 0;
+
+    const sum = trimmed.reduce((acc, val) => acc + val, 0);
+    return Math.round(sum / trimmed.length);
   }
 
   reset() {
@@ -208,6 +228,7 @@ export class HeartBeatProcessor {
     this.baseline = 0;
     this.lastValue = 0;
     this.values = [];
+    this.smoothedValue = 0;
     this.startTime = Date.now(); // Reiniciar el tiempo de calentamiento
   }
 }
