@@ -43,9 +43,8 @@ const CameraView = ({ onStreamReady, isMonitoring, isFingerDetected = false, sig
       const constraints = {
         video: {
           facingMode: 'environment',
-          width: isAndroid ? { ideal: 480, max: 640 } : { ideal: 1280 },
-          height: isAndroid ? { ideal: 360, max: 480 } : { ideal: 720 },
-          frameRate: isAndroid ? { ideal: 15, max: 30 } : { ideal: 30 }
+          width: isAndroid ? { ideal: 640 } : { ideal: 1280 },
+          height: isAndroid ? { ideal: 480 } : { ideal: 720 }
         }
       };
 
@@ -56,32 +55,13 @@ const CameraView = ({ onStreamReady, isMonitoring, isFingerDetected = false, sig
       });
 
       const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+
       const videoTrack = newStream.getVideoTracks()[0];
       
       if (videoTrack.getCapabilities()?.torch) {
         await videoTrack.applyConstraints({
           advanced: [{ torch: true }]
         });
-      }
-
-      if (isAndroid) {
-        const capabilities = videoTrack.getCapabilities();
-        console.log("Camera capabilities:", capabilities);
-        
-        if (capabilities.exposureMode) {
-          try {
-            const exposureConstraints: MediaTrackConstraintSet = {
-              exposureMode: 'manual',
-              exposureTime: 1000
-            };
-            
-            await videoTrack.applyConstraints({
-              advanced: [exposureConstraints]
-            });
-          } catch (err) {
-            console.log("No se pudo ajustar exposición manual:", err);
-          }
-        }
       }
 
       if (videoRef.current) {
