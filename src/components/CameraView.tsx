@@ -124,11 +124,16 @@ const CameraView = ({ onStreamReady, isMonitoring, isFingerDetected = false, sig
         className="hidden"
       />
       {isMonitoring && (
-        <div className="absolute top-[45%] left-[48%] transform -translate-x-1/2 -translate-y-1/2 z-20">
+        <div className="absolute top-[45%] left-[45%] transform -translate-x-1/2 -translate-y-1/2 z-20 flex flex-col items-center">
           <Fingerprint
-            size={32}
+            size={24}
             className={`transition-colors duration-300 ${getFingerColor()}`}
           />
+          <span className={`text-xs mt-1 transition-colors duration-300 ${
+            isFingerDetected ? 'text-green-500' : 'text-gray-400'
+          }`}>
+            {isFingerDetected ? "dedo detectado" : "ubique su dedo en el lente"}
+          </span>
         </div>
       )}
     </>
