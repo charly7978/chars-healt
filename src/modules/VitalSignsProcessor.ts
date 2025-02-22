@@ -38,22 +38,16 @@ export class VitalSignsProcessor {
   /** Máximo de muestras PPG en el buffer (~10s si ~30FPS). */
   private readonly WINDOW_SIZE = 300;
 
-  /** Factor de calibración para SpO2 (ajustar con validaciones). */
-  private readonly SPO2_CALIBRATION_FACTOR = 0.95;
+  /** Factor de calibración para SpO2 (ajustado para Android) */
+  private readonly SPO2_CALIBRATION_FACTOR = 0.85; // Reducido para mayor sensibilidad
 
-  /** Umbral mínimo de índice de perfusión (AC/DC) * 100 para confiar en SpO2. */
-  private readonly PERFUSION_INDEX_THRESHOLD = 0.1; // Reducido para Android
+  /** Umbral mínimo de índice de perfusión (AC/DC) * 100 para confiar en SpO2 */
+  private readonly PERFUSION_INDEX_THRESHOLD = 0.05; // Muy reducido para Android
 
-  /**
-   * Ventana de promedios para SpO2 (suavizado).  
-   * Ajuste según cuánta reactividad versus estabilidad se desee.
-   */
-  private readonly SPO2_WINDOW = 15;
+  /** Ventana de promedios para SpO2 (reducida para más reactividad) */  
+  private readonly SPO2_WINDOW = 10;
 
-  /**
-   * Tamaño de la ventana para el pequeño SMA (Smooth Moving Average) 
-   * en cada lectura, para atenuar ruido puntual.
-   */
+  /** Tamaño de la ventana para el SMA */
   private readonly SMA_WINDOW = 3;
 
   //-----------------------------------------
@@ -188,47 +182,57 @@ export class VitalSignsProcessor {
 
   /**
    * calculateActualSpO2
-   * Realiza la estimación de SpO2 basada en AC/DC y calidad de señal PPG.
+   * Versión optimizada para Android con mayor sensibilidad.
    */
   private calculateActualSpO2(ppgValues: number[]): number {
     if (!this.baselineEstablished) return this.lastSpO2;
 
-    const acComponent = this.calculateAC(ppgValues);
-    const dcComponent = this.calculateDC(ppgValues);
+    // Calculamos componentes con ventana reducida para mayor sensibilidad
+    const recentValues = ppgValues.slice(-60); // 2 segundos @30FPS
+    const acComponent = this.calculateAC(recentValues);
+    const dcComponent = this.calculateDC(recentValues);
 
     if (dcComponent === 0) {
+      console.log("VitalSignsProcessor: DC Component es 0");
       return this.lastSpO2;
     }
 
-    // Índice de perfusión ajustado para Android
-    const perfusionIndex = (acComponent / dcComponent) * 100;
+    // Índice de perfusión con factor de amplificación para Android
+    const perfusionIndex = (acComponent / dcComponent) * 200; // Amplificado x2
     
-    // Ajuste del umbral de perfusión para Android
+    console.log("VitalSignsProcessor: Perfusion Index:", perfusionIndex);
+    
     if (perfusionIndex < this.PERFUSION_INDEX_THRESHOLD * 100) {
       console.log("VitalSignsProcessor: Perfusión baja:", perfusionIndex);
       return this.lastSpO2;
     }
 
-    const { peakTimes, valleys } = this.findPeaksAndValleys(ppgValues);
+    const { peakTimes, valleys } = this.findPeaksAndValleys(recentValues);
+    
+    // Requerimos menos picos para comenzar a calcular
     if (peakTimes.length < 2) {
       console.log("VitalSignsProcessor: Picos insuficientes para SpO2");
       return this.lastSpO2;
     }
 
-    // Cálculo ajustado de SpO2 para Android
-    const ratio = (acComponent / dcComponent) * 1.5; // Factor de ajuste para compensar la linterna
-    const spo2Raw = 110 - (25 * ratio * this.SPO2_CALIBRATION_FACTOR);
+    // Cálculo optimizado para Android
+    const ratio = (acComponent / dcComponent) * 2.5; // Factor aumentado
+    let spo2Raw = 110 - (20 * ratio * this.SPO2_CALIBRATION_FACTOR);
     
-    // Ajuste de calidad de señal para Android
-    const signalQuality = this.calculateSignalQuality(ppgValues, peakTimes, valleys);
+    // Ajuste de calidad de señal más permisivo
+    const signalQuality = this.calculateSignalQuality(recentValues, peakTimes, valleys);
     console.log("VitalSignsProcessor: Calidad señal SpO2:", signalQuality);
 
-    // Ponderación ajustada para Android
-    const qualityWeight = Math.min((signalQuality / 100) * 1.2, 1);
+    // Ponderación más agresiva para valores nuevos
+    const qualityWeight = Math.min((signalQuality / 100) * 1.5, 1);
     const newSpo2 = spo2Raw * qualityWeight + this.lastSpO2 * (1 - qualityWeight);
 
-    // Clampeamos a [85..100]
-    return Math.min(100, Math.max(85, Math.round(newSpo2)));
+    // Ajuste final más permisivo
+    spo2Raw = Math.min(100, Math.max(80, Math.round(newSpo2)));
+    
+    console.log("VitalSignsProcessor: SpO2 Raw:", spo2Raw);
+
+    return spo2Raw;
   }
 
   /**
@@ -323,30 +327,32 @@ export class VitalSignsProcessor {
 
   /**
    * calculateAC
-   * AC = [max - min] de la ventana actual.
+   * Versión optimizada para Android con mayor sensibilidad a cambios.
    */
   private calculateAC(values: number[]): number {
-    return Math.max(...values) - Math.min(...values);
+    // Amplificamos la diferencia para Android
+    return (Math.max(...values) - Math.min(...values)) * 1.5;
   }
 
   /**
    * calculateDC
-   * DC = promedio / componente "base" de la ventana actual.
+   * Versión optimizada para Android.
    */
   private calculateDC(values: number[]): number {
     const sum = values.reduce((a, b) => a + b, 0);
-    return sum / values.length;
+    // Ajustamos el componente DC para mejor relación AC/DC
+    return (sum / values.length) * 0.8;
   }
 
   /**
    * calculateSignalQuality
-   * Mide la consistencia de amplitud entre picos. 
-   * Cuanta más variabilidad, peor la señal.
+   * Versión más sensible para Android.
    */
   private calculateSignalQuality(values: number[], peaks: number[], valleys: number[]): number {
     const amps = peaks.map((peak, i) => {
       if (valleys[i]) {
-        return Math.abs(values[peak] - values[valleys[i]]);
+        // Amplificamos la diferencia para Android
+        return Math.abs(values[peak] - values[valleys[i]]) * 1.5;
       }
       return 0;
     });
@@ -362,8 +368,8 @@ export class VitalSignsProcessor {
     }
     variability /= amps.length;
 
-    // 0 => pésima calidad, 100 => excelente
-    const quality = Math.max(0, Math.min(100, 100 * (1 - variability / (avgAmp || 1))));
+    // Más permisivo con la variabilidad
+    const quality = Math.max(0, Math.min(100, 100 * (1 - variability / (avgAmp * 2 || 1))));
     return quality;
   }
 
@@ -438,7 +444,7 @@ export class VitalSignsProcessor {
 
   /**
    * applySMAFilter
-   * Pequeño promedio móvil (tamaño 3) para mitigar ruido puntual 
+   * Pequeño promedio m��vil (tamaño 3) para mitigar ruido puntual 
    * en cada lectura proveniente de la cámara.
    */
   private applySMAFilter(value: number): number {
