@@ -20,12 +20,14 @@ export const useVitalMeasurement = (isMeasuring: boolean) => {
 
   useEffect(() => {
     if (!isMeasuring) {
-      setMeasurements({
+      setMeasurements(prev => ({
+        ...prev,
         heartRate: 0,
         spo2: 0,
         pressure: "--/--",
+        // Mantenemos el último conteo de arritmias
         arrhythmiaCount: lastArrhythmiaCount
-      });
+      }));
       setElapsedTime(0);
       return;
     }
@@ -38,13 +40,19 @@ export const useVitalMeasurement = (isMeasuring: boolean) => {
       const elapsed = currentTime - startTime;
       setElapsedTime(elapsed / 1000);
 
-      // Actualizamos el conteo de arritmias desde el procesador global
-      if (window.heartBeatProcessor && typeof window.heartBeatProcessor.arrhythmiaCount === 'number') {
-        setLastArrhythmiaCount(window.heartBeatProcessor.arrhythmiaCount);
-        setMeasurements(prev => ({
-          ...prev,
-          arrhythmiaCount: window.heartBeatProcessor.arrhythmiaCount
-        }));
+      // Verificamos y actualizamos el conteo de arritmias
+      const processor = window.heartBeatProcessor;
+      if (processor) {
+        const currentCount = processor.arrhythmiaCount;
+        console.log('Conteo actual de arritmias:', currentCount); // Debug
+        
+        if (typeof currentCount === 'number') {
+          setLastArrhythmiaCount(currentCount);
+          setMeasurements(prev => ({
+            ...prev,
+            arrhythmiaCount: currentCount
+          }));
+        }
       }
 
       if (elapsed >= MEASUREMENT_DURATION) {
