@@ -79,14 +79,7 @@ export default {
       },
       animation: {
         "heart-beat": "heart-beat 1s ease-in-out infinite",
-      },
-      utilities: {
-        ".backface-hidden": {
-          "backface-visibility": "hidden",
-        },
-        ".perspective-1000": {
-          "perspective": "1000px",
-        },
+        "flip-in": "flip-in 1s ease-out forwards",
       }
     },
   },

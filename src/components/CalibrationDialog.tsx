@@ -1,3 +1,4 @@
+
 import React from "react";
 import {
   Dialog,
@@ -27,17 +28,36 @@ const CalibrationDialog = ({
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-md animate-in slide-in-from-bottom-10 duration-500 p-0 overflow-hidden bg-gradient-to-br from-gray-900 to-gray-800">
         {isCalibrating ? (
-          <div className="relative w-full h-[500px] perspective-1000">
-            <div className="absolute inset-0 [transform-style:preserve-3d] animate-[flip-in_1s_ease-out_forwards]">
+          <div className="relative w-full h-[500px] [perspective:1000px]">
+            <div 
+              className="absolute inset-0 [transform-style:preserve-3d] animate-flip-in"
+              style={{
+                backfaceVisibility: 'hidden',
+                WebkitBackfaceVisibility: 'hidden'
+              }}
+            >
               {/* Panel frontal (se voltea) */}
-              <div className="absolute inset-0 backface-hidden bg-gradient-to-br from-gray-900 to-gray-800 p-6 flex items-center justify-center">
+              <div 
+                className="absolute inset-0 bg-gradient-to-br from-gray-900 to-gray-800 p-6 flex items-center justify-center"
+                style={{
+                  backfaceVisibility: 'hidden',
+                  WebkitBackfaceVisibility: 'hidden'
+                }}
+              >
                 <div className="text-2xl font-bold text-white">
                   Iniciando Calibración
                 </div>
               </div>
               
               {/* Panel trasero (interface técnica) */}
-              <div className="absolute inset-0 [transform:rotateY(180deg)] backface-hidden bg-gradient-to-br from-gray-900 to-gray-800 p-6">
+              <div 
+                className="absolute inset-0 bg-gradient-to-br from-gray-900 to-gray-800 p-6"
+                style={{
+                  transform: 'rotateY(180deg)',
+                  backfaceVisibility: 'hidden',
+                  WebkitBackfaceVisibility: 'hidden'
+                }}
+              >
                 <div className="h-full flex flex-col">
                   {/* Pantalla de diagnóstico */}
                   <div className="flex-1 space-y-4">
