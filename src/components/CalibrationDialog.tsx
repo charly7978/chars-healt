@@ -68,17 +68,19 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({
         .eq('user_id', session.user.id);
 
       setProgress(100);
+      setIsCalibrating(false);
+      onCalibrationEnd();
 
+      // Cerramos el diálogo después de un breve delay
       setTimeout(() => {
-        setIsCalibrating(false);
-        onCalibrationEnd();
         onClose();
-      }, 1000);
+      }, 500);
 
     } catch (error) {
       console.error("Error durante la calibración:", error);
       setIsCalibrating(false);
       onCalibrationEnd();
+      onClose();
     }
   };
 
@@ -89,13 +91,21 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({
   }, [isOpen]);
 
   return (
-    <Dialog open={isOpen} onOpenChange={() => onClose()}>
+    <Dialog open={isOpen} onOpenChange={() => {
+      if (!isCalibrating) {
+        onClose();
+      }
+    }}>
       <DialogContent className="sm:max-w-md">
         <div className="flex items-center justify-between mb-4">
           <Button
             variant="ghost"
             size="icon"
-            onClick={onClose}
+            onClick={() => {
+              if (!isCalibrating) {
+                onClose();
+              }
+            }}
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>

@@ -33,8 +33,8 @@ const VitalSign = ({ label, value, unit }: VitalSignProps) => {
     }
     
     return {
-      text: "SIN ARRITMIAS",
-      color: "text-[#0FA0CE]"
+      text: "--",
+      color: "text-white/90"
     };
   };
 
