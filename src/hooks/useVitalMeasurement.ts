@@ -43,12 +43,12 @@ export const useVitalMeasurement = (isMeasuring: boolean) => {
       const processor = window.heartBeatProcessor;
       if (processor && typeof processor.arrhythmiaCount === 'number') {
         const currentCount = processor.arrhythmiaCount;
-        const currentBPM = processor.currentBPM || 0;
+        const finalBPM = processor.getFinalBPM() || 0;
         
         setLastArrhythmiaCount(currentCount);
         setMeasurements(prev => ({
           ...prev,
-          heartRate: currentBPM,
+          heartRate: finalBPM,
           arrhythmiaCount: currentCount
         }));
       }
