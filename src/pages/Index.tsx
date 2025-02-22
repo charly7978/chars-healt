@@ -14,7 +14,10 @@ const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [signalQuality, setSignalQuality] = useState(0);
-  const [measurements, setMeasurements] = useState({ spo2: 0, pressure: 0 });
+  const [measurements, setMeasurements] = useState({ 
+    spo2: 0, 
+    pressure: { systolic: 0, diastolic: 0 }
+  });
   const { heartRate, spo2, pressure, arrhythmiaCount, elapsedTime, isComplete } = useVitalMeasurement(isMonitoring);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
@@ -46,13 +49,15 @@ const Index = () => {
       const vitalSigns = processVitalSigns(lastSignal.filteredValue);
       
       if (vitalSigns) {
-        // Extraemos la presión sistólica de la cadena "systolic/diastolic"
-        const systolicValue = parseInt(vitalSigns.pressure.split('/')[0], 10);
+        const [systolic, diastolic] = vitalSigns.pressure.split('/').map(v => parseInt(v, 10));
         
         setMeasurements(prev => ({
           ...prev,
           spo2: vitalSigns.spo2,
-          pressure: systolicValue // Usamos solo la presión sistólica como número
+          pressure: {
+            systolic,
+            diastolic
+          }
         }));
       }
     }
@@ -187,7 +192,11 @@ const Index = () => {
             <div className="grid grid-cols-2 gap-2">
               <VitalSign label="Heart Rate" value={heartRate} unit="BPM" />
               <VitalSign label="SpO2" value={measurements.spo2} unit="%" />
-              <VitalSign label="Blood Pressure" value={measurements.pressure} unit="mmHg" />
+              <VitalSign 
+                label="Blood Pressure" 
+                value={`${measurements.pressure.systolic}/${measurements.pressure.diastolic}`} 
+                unit="mmHg" 
+              />
               <VitalSign label="Arrhythmias" value={arrhythmiaCount} unit="events" />
             </div>
           </div>
