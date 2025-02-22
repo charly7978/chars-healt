@@ -57,15 +57,14 @@ const SimpleCameraView = ({
           throw new Error("getUserMedia no está soportado");
         }
 
-        // Configuración optimizada para rendimiento
+        // Configuración optimizada para rendimiento con propiedades válidas
         const constraints: MediaStreamConstraints = {
           video: {
             deviceId: currentCamera ? { exact: currentCamera } : undefined,
             facingMode: currentCamera ? undefined : 'environment',
-            width: { ideal: 320 }, // Bajamos la resolución
+            width: { ideal: 320 },
             height: { ideal: 240 },
-            frameRate: { ideal: 15 }, // Reducimos los FPS
-            resizeMode: 'crop-and-scale' // Optimización para móviles
+            frameRate: { ideal: 15 }
           }
         };
 
