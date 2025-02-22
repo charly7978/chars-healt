@@ -5,7 +5,7 @@ interface VitalMeasurements {
   heartRate: number;
   spo2: number;
   pressure: string;
-  arrhythmiaCount: number;
+  arrhythmiaCount: string | number;
 }
 
 export const useVitalMeasurement = (isMeasuring: boolean) => {
@@ -41,11 +41,9 @@ export const useVitalMeasurement = (isMeasuring: boolean) => {
         return;
       }
 
-      // Usamos solo getFinalBPM que es público
       const bpm = processor.getFinalBPM() || 0;
       const arrCount = processor.arrhythmiaCount || 0;
 
-      // Log detallado para debug
       console.log('VitalMeasurement: Valores actuales:', {
         processor: !!processor,
         bpm,
@@ -53,22 +51,24 @@ export const useVitalMeasurement = (isMeasuring: boolean) => {
         timestamp: new Date().toISOString()
       });
 
-      // Actualizar estado solo si los valores son diferentes
       setMeasurements(prev => {
-        if (prev.heartRate === bpm && prev.arrhythmiaCount === arrCount) {
-          return prev; // No actualizar si no hay cambios
+        // Si se detectó una nueva arritmia
+        const arrhythmiaStatus = 
+          arrCount > 0 ? "ARRITMIA DETECTADA" : "SIN ARRITMIAS";
+
+        if (prev.heartRate === bpm && prev.arrhythmiaCount === arrhythmiaStatus) {
+          return prev;
         }
         return {
           ...prev,
           heartRate: bpm,
-          arrhythmiaCount: arrCount
+          arrhythmiaCount: isMeasuring ? arrhythmiaStatus : arrCount
         };
       });
 
       setLastArrhythmiaCount(arrCount);
     };
 
-    // Actualizar inmediatamente
     updateMeasurements();
 
     const interval = setInterval(() => {
@@ -83,7 +83,7 @@ export const useVitalMeasurement = (isMeasuring: boolean) => {
         const event = new CustomEvent('measurementComplete');
         window.dispatchEvent(event);
       }
-    }, 200); // Actualizamos más frecuentemente para no perder valores
+    }, 200);
 
     return () => clearInterval(interval);
   }, [isMeasuring]);
