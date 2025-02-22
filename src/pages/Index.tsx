@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
@@ -32,6 +33,7 @@ const Index = () => {
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
+  // Auth effect
   useEffect(() => {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -50,9 +52,7 @@ const Index = () => {
       }
     });
 
-    return () => {
-      subscription.unsubscribe();
-    };
+    return () => subscription.unsubscribe();
   }, []);
 
   const handleLogout = async () => {
@@ -77,9 +77,11 @@ const Index = () => {
     setIsPaused(false);
     startProcessing();
     setElapsedTime(0);
+    
     if (measurementTimerRef.current) {
       clearInterval(measurementTimerRef.current);
     }
+    
     measurementTimerRef.current = window.setInterval(() => {
       setElapsedTime(prev => {
         if (prev >= 30) {
@@ -98,8 +100,10 @@ const Index = () => {
     stopProcessing();
     resetVitalSigns();
     setElapsedTime(0);
+    
     if (measurementTimerRef.current) {
       clearInterval(measurementTimerRef.current);
+      measurementTimerRef.current = null;
     }
   };
 
@@ -109,6 +113,7 @@ const Index = () => {
       stopProcessing();
       if (measurementTimerRef.current) {
         clearInterval(measurementTimerRef.current);
+        measurementTimerRef.current = null;
       }
     }
   };
@@ -117,12 +122,13 @@ const Index = () => {
     if (isMonitoring) {
       setIsPaused(false);
       startProcessing();
-      if (elapsedTime < 30) {
+      if (elapsedTime < 30 && !measurementTimerRef.current) {
         measurementTimerRef.current = window.setInterval(() => {
           setElapsedTime(prev => {
             if (prev >= 30) {
               if (measurementTimerRef.current) {
                 clearInterval(measurementTimerRef.current);
+                measurementTimerRef.current = null;
               }
               return 30;
             }
@@ -133,14 +139,17 @@ const Index = () => {
     }
   };
 
+  // Cleanup effect
   useEffect(() => {
     return () => {
       if (measurementTimerRef.current) {
         clearInterval(measurementTimerRef.current);
+        measurementTimerRef.current = null;
       }
     };
   }, []);
 
+  // Calibration handlers
   const handleCalibrationStart = () => {
     if (isMonitoring) {
       pauseMonitoring();
@@ -153,6 +162,7 @@ const Index = () => {
     }
   };
 
+  // Visibility change effect
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden) {
@@ -172,6 +182,7 @@ const Index = () => {
     };
   }, [isMonitoring, isPaused, showCalibrationDialog]);
 
+  // Stream handler
   const handleStreamReady = (stream: MediaStream) => {
     if (!isMonitoring) return;
     
@@ -220,6 +231,7 @@ const Index = () => {
     processImage();
   };
 
+  // Signal processing effect
   useEffect(() => {
     if (lastSignal && lastSignal.fingerDetected && isMonitoring) {
       const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
@@ -233,7 +245,7 @@ const Index = () => {
       
       setSignalQuality(lastSignal.quality);
     }
-  }, [lastSignal, isMonitoring]);
+  }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
 
   return (
     <div className="w-screen h-screen bg-gray-900 overflow-hidden">
