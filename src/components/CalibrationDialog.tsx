@@ -1,4 +1,3 @@
-
 import * as React from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -68,13 +67,19 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({ isOpen, onClose, 
           description: "Por favor, inicie sesión para continuar"
         });
         onClose();
+      } else {
+        toast({
+          title: "Sesión Activa",
+          description: `Bienvenido/a ${session.user.email}`,
+          duration: 3000,
+        });
       }
     };
 
     if (isOpen) {
       checkUserSession();
     }
-  }, [isOpen]);
+  }, [isOpen, toast, onClose]);
 
   React.useEffect(() => {
     if (isCalibrating) {
@@ -102,96 +107,59 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({ isOpen, onClose, 
 
       const user = session.user;
 
-      const { data: existingSettings, error: settingsError } = await supabase
+      const { error: initError } = await supabase
         .from('calibration_settings')
-        .select()
-        .eq('user_id', user.id)
-        .maybeSingle();
+        .upsert({
+          user_id: user.id,
+          status: 'in_progress',
+          last_calibration_date: new Date().toISOString(),
+          stability_threshold: 5.0,
+          quality_threshold: 0.7,
+          perfusion_index: 0.05,
+          red_threshold_min: 30,
+          red_threshold_max: 250
+        });
 
-      if (settingsError) {
-        console.error("Error al obtener configuración:", settingsError);
-        throw new Error("Error al obtener la configuración de calibración");
-      }
-
-      if (!existingSettings) {
-        const { error: insertError } = await supabase
-          .from('calibration_settings')
-          .insert({
-            user_id: user.id,
-            status: 'in_progress',
-            last_calibration_date: new Date().toISOString(),
-            stability_threshold: 5.0,
-            quality_threshold: 0.7,
-            perfusion_index: 0.05,
-            red_threshold_min: 30,
-            red_threshold_max: 250
-          });
-
-        if (insertError) {
-          console.error("Error al crear configuración:", insertError);
-          throw new Error("Error al crear la configuración de calibración");
-        }
-      } else {
-        const { error: updateError } = await supabase
-          .from('calibration_settings')
-          .update({ 
-            status: 'in_progress',
-            last_calibration_date: new Date().toISOString()
-          })
-          .eq('user_id', user.id);
-
-        if (updateError) {
-          console.error("Error al actualizar configuración:", updateError);
-          throw new Error("Error al actualizar la configuración de calibración");
-        }
-      }
+      if (initError) throw initError;
 
       setCurrentStep(1);
-      
-      setCurrentProcess(1);
-      const gainLevel = await adjustSensorGain();
-      setCalibrationResults(prev => ({ ...prev, gainLevel }));
-      setProgress(15);
-
-      setCurrentProcess(2);
-      const threshold = await optimizeDetectionThreshold();
-      setCalibrationResults(prev => ({ ...prev, detectionThreshold: threshold }));
-      setProgress(30);
-
-      setCurrentProcess(3);
-      const offset = await calibrateDynamicOffset();
-      setCalibrationResults(prev => ({ ...prev, dynamicOffset: offset }));
-      setProgress(45);
+      for (let i = 0; i < 3; i++) {
+        setCurrentProcess(i + 1);
+        const value = await (i === 0 ? adjustSensorGain() :
+                           i === 1 ? optimizeDetectionThreshold() :
+                           calibrateDynamicOffset());
+        setCalibrationResults(prev => ({
+          ...prev,
+          [i === 0 ? 'gainLevel' : i === 1 ? 'detectionThreshold' : 'dynamicOffset']: value
+        }));
+        setProgress(prev => prev + 15);
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Simulación del proceso
+      }
 
       setCurrentStep(2);
-
-      setCurrentProcess(1);
-      const { Q, R } = await configureKalmanFilter();
-      setCalibrationResults(prev => ({ ...prev, kalmanQ: Q, kalmanR: R }));
-      setProgress(60);
-
-      setCurrentProcess(2);
-      const windowSize = await adjustAnalysisWindow();
-      setCalibrationResults(prev => ({ ...prev, windowSize }));
-      setProgress(75);
-
-      setCurrentProcess(3);
-      await optimizeSamplingRate();
-      setProgress(85);
+      for (let i = 0; i < 3; i++) {
+        setCurrentProcess(i + 1);
+        if (i === 0) {
+          const { Q, R } = await configureKalmanFilter();
+          setCalibrationResults(prev => ({ ...prev, kalmanQ: Q, kalmanR: R }));
+        } else if (i === 1) {
+          const windowSize = await adjustAnalysisWindow();
+          setCalibrationResults(prev => ({ ...prev, windowSize }));
+        }
+        await optimizeSamplingRate();
+        setProgress(prev => prev + 15);
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Simulación del proceso
+      }
 
       setCurrentStep(3);
-
-      setCurrentProcess(1);
-      await calibratePeakDetector();
-      setProgress(90);
-
-      setCurrentProcess(2);
-      await adjustPerfusionIndex();
-      setProgress(95);
-
-      setCurrentProcess(3);
-      await optimizePPGMetrics();
-      setProgress(100);
+      for (let i = 0; i < 3; i++) {
+        setCurrentProcess(i + 1);
+        await (i === 0 ? calibratePeakDetector() :
+               i === 1 ? adjustPerfusionIndex() :
+               optimizePPGMetrics());
+        setProgress(prev => prev + 10);
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Simulación del proceso
+      }
 
       const { error: finalUpdateError } = await supabase
         .from('calibration_settings')
@@ -206,10 +174,7 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({ isOpen, onClose, 
         })
         .eq('user_id', user.id);
 
-      if (finalUpdateError) {
-        console.error("Error al guardar resultados:", finalUpdateError);
-        throw new Error("Error al guardar los resultados de la calibración");
-      }
+      if (finalUpdateError) throw finalUpdateError;
 
       setCalibrationComplete(true);
       toast({
@@ -393,10 +358,7 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({ isOpen, onClose, 
         })
         .eq('user_id', session.user.id);
 
-      if (resetError) {
-        console.error("Error al restablecer configuración:", resetError);
-        throw new Error("Error al restablecer la configuración");
-      }
+      if (resetError) throw resetError;
 
       toast({
         title: "Configuración Restaurada",
@@ -413,7 +375,16 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({ isOpen, onClose, 
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={isOpen} onOpenChange={(open) => {
+      if (!open) {
+        toast({
+          title: "Calibración Finalizada",
+          description: "Cerrando diálogo de calibración",
+          duration: 3000,
+        });
+      }
+      !open && onClose();
+    }}>
       <DialogContent className="sm:max-w-xl p-0 overflow-hidden bg-gradient-to-br from-gray-900 to-gray-800 border-0">
         <div className="absolute top-4 left-4 z-50">
           <Button
