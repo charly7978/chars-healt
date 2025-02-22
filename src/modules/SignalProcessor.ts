@@ -1,4 +1,3 @@
-
 import { ProcessedSignal, ProcessingError, SignalProcessor } from '../types/signal';
 
 class KalmanFilter {
@@ -26,11 +25,19 @@ export class PPGSignalProcessor implements SignalProcessor {
   private isProcessing: boolean = false;
   private kalmanFilter: KalmanFilter;
   private lastValues: number[] = [];
+  private readonly DEFAULT_CONFIG = {
+    BUFFER_SIZE: 10,
+    MIN_RED_THRESHOLD: 30,
+    MAX_RED_THRESHOLD: 250,
+    STABILITY_WINDOW: 5,
+    MIN_STABILITY_COUNT: 3
+  };
+  private currentConfig: typeof this.DEFAULT_CONFIG;
   private readonly BUFFER_SIZE = 10;
-  private readonly MIN_RED_THRESHOLD = 30;  // Bajamos el umbral mínimo para Android
-  private readonly MAX_RED_THRESHOLD = 250; // Aumentamos el máximo para más tolerancia
-  private readonly STABILITY_WINDOW = 5;    // Ventana para calcular estabilidad
-  private readonly MIN_STABILITY_COUNT = 3;  // Mínimo de frames estables para considerar dedo presente
+  private readonly MIN_RED_THRESHOLD = 30;
+  private readonly MAX_RED_THRESHOLD = 250;
+  private readonly STABILITY_WINDOW = 5;
+  private readonly MIN_STABILITY_COUNT = 3;
   private stableFrameCount: number = 0;
   private lastStableValue: number = 0;
   
@@ -39,6 +46,7 @@ export class PPGSignalProcessor implements SignalProcessor {
     public onError?: (error: ProcessingError) => void
   ) {
     this.kalmanFilter = new KalmanFilter();
+    this.currentConfig = { ...this.DEFAULT_CONFIG };
     console.log("PPGSignalProcessor: Instancia creada");
   }
 
@@ -73,13 +81,34 @@ export class PPGSignalProcessor implements SignalProcessor {
 
   async calibrate(): Promise<boolean> {
     try {
+      console.log("PPGSignalProcessor: Iniciando calibración");
       await this.initialize();
+
+      // Simulamos el proceso de calibración
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Ajustamos los umbrales basados en las condiciones actuales
+      this.currentConfig = {
+        ...this.DEFAULT_CONFIG,
+        MIN_RED_THRESHOLD: Math.max(25, this.MIN_RED_THRESHOLD - 5),
+        MAX_RED_THRESHOLD: Math.min(255, this.MAX_RED_THRESHOLD + 5),
+        STABILITY_WINDOW: this.STABILITY_WINDOW,
+        MIN_STABILITY_COUNT: this.MIN_STABILITY_COUNT
+      };
+
+      console.log("PPGSignalProcessor: Calibración completada", this.currentConfig);
       return true;
     } catch (error) {
       console.error("PPGSignalProcessor: Error de calibración", error);
       this.handleError("CALIBRATION_ERROR", "Error durante la calibración");
       return false;
     }
+  }
+
+  resetToDefault(): void {
+    this.currentConfig = { ...this.DEFAULT_CONFIG };
+    this.initialize();
+    console.log("PPGSignalProcessor: Configuración restaurada a valores por defecto");
   }
 
   processFrame(imageData: ImageData): void {

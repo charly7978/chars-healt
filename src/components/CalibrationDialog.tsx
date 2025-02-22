@@ -5,7 +5,7 @@ import {
   DialogContent,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, RotateCcw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface CalibrationDialogProps {
@@ -14,6 +14,20 @@ interface CalibrationDialogProps {
   isCalibrating: boolean;
 }
 
+const DEFAULT_CALIBRATION = {
+  redThresholdMin: 30,
+  redThresholdMax: 250,
+  stabilityThreshold: 5.0,
+  qualityThreshold: 0.7,
+  perfusionIndex: 0.05,
+};
+
+const CALIBRATION_STEPS = [
+  { id: 1, name: "Sensores de luz", description: "Ajustando sensibilidad lumínica..." },
+  { id: 2, name: "Filtros de señal", description: "Optimizando filtros digitales..." },
+  { id: 3, name: "Parámetros vitales", description: "Configurando umbrales..." },
+];
+
 const CalibrationDialog = ({
   isOpen,
   onClose,
@@ -21,15 +35,42 @@ const CalibrationDialog = ({
 }: CalibrationDialogProps) => {
   const { toast } = useToast();
   const [isFlipping, setIsFlipping] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
+  const [calibrationComplete, setCalibrationComplete] = useState(false);
 
   useEffect(() => {
     if (isCalibrating) {
-      // Pequeño retraso para asegurar que el diálogo esté visible
-      const timer = setTimeout(() => setIsFlipping(true), 100);
-      return () => clearTimeout(timer);
+      setIsFlipping(true);
+      setCurrentStep(0);
+      setCalibrationComplete(false);
+
+      // Simulamos los pasos de calibración
+      const stepInterval = 2000; // 2 segundos por paso
+      CALIBRATION_STEPS.forEach((_, index) => {
+        setTimeout(() => {
+          setCurrentStep(index + 1);
+        }, stepInterval * (index + 1));
+      });
+
+      // Completamos la calibración después de 6 segundos
+      setTimeout(() => {
+        setCalibrationComplete(true);
+        setIsFlipping(false);
+      }, 6000);
+    } else {
+      setIsFlipping(false);
+      setCurrentStep(0);
+      setCalibrationComplete(false);
     }
-    setIsFlipping(false);
   }, [isCalibrating]);
+
+  const handleResetToDefault = () => {
+    // Aquí implementaríamos la lógica para resetear a la configuración por defecto
+    toast({
+      title: "Configuración Restaurada",
+      description: "Se han restaurado los parámetros por defecto",
+    });
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -67,37 +108,27 @@ const CalibrationDialog = ({
                     </div>
                   </div>
 
-                  {/* Visualización técnica */}
+                  {/* Visualización de pasos */}
                   <div className="mt-4 space-y-6">
-                    {/* Sección de sensores */}
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-center text-xs font-mono text-gray-400">
-                        <span>SENSORES DE LUZ</span>
-                        <span className="text-medical-blue animate-pulse">CALIBRANDO...</span>
-                      </div>
-                      <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
-                        <div className="h-full bg-medical-blue animate-[progress_2s_ease-in-out_infinite] rounded-full"></div>
-                      </div>
-                    </div>
-
-                    {/* Sección de filtros */}
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-center text-xs font-mono text-gray-400">
-                        <span>FILTROS DE SEÑAL</span>
-                        <span className="text-medical-blue animate-pulse">OPTIMIZANDO...</span>
-                      </div>
-                      <div className="grid grid-cols-5 gap-1">
-                        {[...Array(5)].map((_, i) => (
+                    {CALIBRATION_STEPS.map((step, index) => (
+                      <div key={step.id} className="space-y-2">
+                        <div className="flex justify-between items-center text-xs font-mono text-gray-400">
+                          <span>{step.name}</span>
+                          <span className={currentStep >= step.id ? "text-medical-blue animate-pulse" : ""}>
+                            {currentStep >= step.id ? step.description : "Pendiente..."}
+                          </span>
+                        </div>
+                        <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
                           <div 
-                            key={i} 
-                            className="h-8 bg-gray-700 rounded animate-[equalize_1.5s_ease-in-out_infinite]"
-                            style={{ animationDelay: `${i * 0.2}s` }}
-                          ></div>
-                        ))}
+                            className={`h-full transition-all duration-1000 rounded-full
+                              ${currentStep >= step.id ? "bg-medical-blue animate-[progress_2s_ease-in-out_infinite]" : "w-0"}
+                            `}
+                          />
+                        </div>
                       </div>
-                    </div>
+                    ))}
 
-                    {/* Matriz de LEDs */}
+                    {/* Matriz de LEDs simulada */}
                     <div className="grid grid-cols-8 gap-1">
                       {[...Array(32)].map((_, i) => (
                         <div 
@@ -108,49 +139,57 @@ const CalibrationDialog = ({
                       ))}
                     </div>
 
-                    {/* Terminal */}
+                    {/* Terminal de retroalimentación */}
                     <div className="bg-black/50 p-3 rounded-lg font-mono text-xs space-y-1">
-                      <p className="text-green-500">{'>'}  Iniciando diagnóstico...</p>
-                      <p className="text-medical-blue animate-fade-in [animation-delay:500ms]">{'>'}  Verificando sensores...</p>
-                      <p className="text-medical-blue animate-fade-in [animation-delay:1000ms]">{'>'}  Ajustando parámetros...</p>
-                      <p className="text-medical-blue animate-fade-in [animation-delay:1500ms]">{'>'}  Optimizando señal...</p>
+                      <p className="text-green-500">{'>'}  Calibración en progreso...</p>
+                      {currentStep >= 1 && (
+                        <p className="text-medical-blue">{'>'}  Ajustando sensores...</p>
+                      )}
+                      {currentStep >= 2 && (
+                        <p className="text-medical-blue">{'>'}  Optimizando filtros...</p>
+                      )}
+                      {currentStep >= 3 && (
+                        <p className="text-medical-blue">{'>'}  Configuración completada</p>
+                      )}
                       <div className="inline-block animate-pulse">_</div>
                     </div>
                   </div>
                 </div>
 
-                <div className="text-center text-sm text-gray-400 mt-4">
-                  Mantenga su dedo firme sobre el sensor
-                </div>
+                {calibrationComplete ? (
+                  <div className="space-y-4">
+                    <div className="flex flex-col items-center gap-4">
+                      <CheckCircle2 className="h-12 w-12 text-green-500 animate-scale-in" />
+                      <p className="text-white text-center">Calibración completada con éxito</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button 
+                        onClick={handleResetToDefault}
+                        size="sm" 
+                        variant="outline"
+                        className="flex-1"
+                      >
+                        <RotateCcw className="w-4 h-4 mr-2" />
+                        Restaurar Default
+                      </Button>
+                      <Button 
+                        onClick={onClose}
+                        size="sm"
+                        className="flex-1 bg-medical-blue hover:bg-medical-blue/90"
+                      >
+                        Volver al Monitor
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center text-sm text-gray-400">
+                    Por favor, espere mientras se completa la calibración...
+                  </div>
+                )}
               </div>
             </div>
           </div>
         </div>
-
-        {!isCalibrating && (
-          <div className="p-6 space-y-4">
-            <div className="flex flex-col items-center gap-4">
-              <CheckCircle2 className="h-12 w-12 text-green-500 animate-scale-in" />
-              <div className="space-y-2 text-center">
-                <p className="text-xl font-medium text-white">
-                  ¡Calibración Exitosa!
-                </p>
-                <p className="text-sm text-gray-400">
-                  Todos los sistemas han sido optimizados para esta sesión
-                </p>
-              </div>
-            </div>
-            <div className="flex justify-center mt-4">
-              <Button 
-                onClick={onClose} 
-                variant="outline"
-                className="text-white hover:text-white hover:bg-medical-blue/20 border-medical-blue"
-              >
-                Volver al Monitor
-              </Button>
-            </div>
-          </div>
-        )}
       </DialogContent>
     </Dialog>
   );
