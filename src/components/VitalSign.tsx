@@ -18,7 +18,6 @@ const VitalSign = ({ label, value, unit }: VitalSignProps) => {
       };
     }
     
-    // Durante la medición - valor es string con el estado
     return {
       text: value === "ARRITMIA DETECTADA" ? "ARRITMIA DETECTADA" : "SIN ARRITMIAS",
       color: value === "ARRITMIA DETECTADA" ? "text-medical-red" : "text-[#0FA0CE]"
@@ -31,7 +30,7 @@ const VitalSign = ({ label, value, unit }: VitalSignProps) => {
     <div className="bg-gray-800/20 backdrop-blur-md rounded p-1.5">
       <h3 className="text-gray-400/90 text-xs mb-0.5">{label}</h3>
       <div className="flex items-baseline gap-0.5">
-        <span className={`text-base font-bold ${color || 'text-white/90'}`}>
+        <span className={`${isArrhythmiaDisplay ? 'text-sm' : 'text-base'} font-bold ${color || 'text-white/90'}`}>
           {text}
         </span>
         {!isArrhythmiaDisplay && unit && (

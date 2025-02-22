@@ -281,7 +281,10 @@ const Index = () => {
               />
             </div>
 
-            <SignalQualityIndicator quality={signalQuality} />
+            <SignalQualityIndicator 
+              quality={signalQuality} 
+              isMonitoring={isMonitoring}
+            />
 
             <div className="grid grid-cols-2 gap-2">
               <VitalSign label="Heart Rate" value={heartRate} unit="BPM" />

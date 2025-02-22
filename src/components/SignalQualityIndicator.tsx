@@ -3,9 +3,12 @@ import React from 'react';
 
 interface SignalQualityIndicatorProps {
   quality: number;
+  isMonitoring?: boolean;
 }
 
-const SignalQualityIndicator = ({ quality }: SignalQualityIndicatorProps) => {
+const SignalQualityIndicator = ({ quality, isMonitoring = false }: SignalQualityIndicatorProps) => {
+  const displayQuality = isMonitoring ? quality : 0;
+
   const getQualityColor = (quality: number) => {
     if (quality === 0) return '#666666';
     if (quality > 75) return '#00ff00';
@@ -26,11 +29,11 @@ const SignalQualityIndicator = ({ quality }: SignalQualityIndicatorProps) => {
         <div 
           className="w-12 h-12 rounded-full border-2 flex items-center justify-center shrink-0 transition-all duration-300"
           style={{
-            borderColor: getQualityColor(quality),
-            backgroundColor: `${getQualityColor(quality)}33`
+            borderColor: getQualityColor(displayQuality),
+            backgroundColor: `${getQualityColor(displayQuality)}33`
           }}
         >
-          <span className="text-sm font-bold text-white">{quality}%</span>
+          <span className="text-sm font-bold text-white">{displayQuality}%</span>
         </div>
 
         <div className="flex-1">
@@ -38,9 +41,9 @@ const SignalQualityIndicator = ({ quality }: SignalQualityIndicatorProps) => {
             <span className="text-xs font-semibold text-white/90">Calidad de Señal</span>
             <span 
               className="text-xs font-medium"
-              style={{ color: getQualityColor(quality) }}
+              style={{ color: getQualityColor(displayQuality) }}
             >
-              {getQualityText(quality)}
+              {getQualityText(displayQuality)}
             </span>
           </div>
 
@@ -48,8 +51,8 @@ const SignalQualityIndicator = ({ quality }: SignalQualityIndicatorProps) => {
             <div 
               className="h-full transition-all duration-300"
               style={{
-                width: `${quality}%`,
-                backgroundColor: getQualityColor(quality)
+                width: `${displayQuality}%`,
+                backgroundColor: getQualityColor(displayQuality)
               }}
             />
           </div>
