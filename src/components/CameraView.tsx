@@ -40,11 +40,19 @@ const CameraView = ({ onStreamReady, isMonitoring, isFingerDetected = false, sig
 
       const isAndroid = /Android/i.test(navigator.userAgent);
       
+      // Intentamos usar la misma configuración de Windows en Android
       const constraints = {
         video: {
           facingMode: 'environment',
-          width: isAndroid ? { ideal: 640 } : { ideal: 1280 },
-          height: isAndroid ? { ideal: 480 } : { ideal: 720 }
+          width: { ideal: 1280, min: 640 },
+          height: { ideal: 720, min: 480 },
+          frameRate: { ideal: 30, min: 15 },
+          // Intentamos forzar configuraciones específicas en Android
+          ...(isAndroid && {
+            resizeMode: 'crop-and-scale',
+            brightness: { ideal: 100 },
+            whiteBalanceMode: 'continuous'
+          })
         }
       };
 
@@ -55,10 +63,26 @@ const CameraView = ({ onStreamReady, isMonitoring, isFingerDetected = false, sig
       });
 
       const newStream = await navigator.mediaDevices.getUserMedia(constraints);
-
       const videoTrack = newStream.getVideoTracks()[0];
-      
-      if (videoTrack.getCapabilities()?.torch) {
+
+      // Intentamos aplicar configuraciones adicionales en Android
+      if (isAndroid) {
+        try {
+          const capabilities = videoTrack.getCapabilities();
+          console.log("Android camera capabilities:", capabilities);
+          
+          const settings = {
+            ...capabilities,
+            advanced: [{
+              torch: true
+            }]
+          };
+
+          await videoTrack.applyConstraints(settings);
+        } catch (err) {
+          console.log("No se pudieron aplicar configuraciones avanzadas:", err);
+        }
+      } else if (videoTrack.getCapabilities()?.torch) {
         await videoTrack.applyConstraints({
           advanced: [{ torch: true }]
         });
