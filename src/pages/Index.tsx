@@ -169,7 +169,12 @@ const Index = () => {
     <div className="w-screen h-screen bg-gray-900 overflow-hidden">
       <div className="relative w-full h-full">
         <div className="absolute inset-0">
-          <CameraView onStreamReady={handleStreamReady} isMonitoring={isCameraOn} />
+          <CameraView 
+            onStreamReady={handleStreamReady} 
+            isMonitoring={isCameraOn}
+            isFingerDetected={lastSignal?.fingerDetected}
+            signalQuality={signalQuality}
+          />
         </div>
 
         <div className="relative z-10 h-full flex flex-col justify-between p-4">

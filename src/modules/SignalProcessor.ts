@@ -1,11 +1,12 @@
+
 import { ProcessedSignal, ProcessingError, SignalProcessor } from '../types/signal';
 
 class KalmanFilter {
-  private R: number = 0.01;  // Ruido de medición
-  private Q: number = 0.1;   // Ruido de proceso
-  private P: number = 1;     // Covarianza estimada
-  private X: number = 0;     // Valor estimado
-  private K: number = 0;     // Ganancia de Kalman
+  private R: number = 0.01;
+  private Q: number = 0.1;
+  private P: number = 1;
+  private X: number = 0;
+  private K: number = 0;
 
   filter(measurement: number): number {
     this.P = this.P + this.Q;
@@ -14,20 +15,24 @@ class KalmanFilter {
     this.P = (1 - this.K) * this.P;
     return this.X;
   }
+
+  reset() {
+    this.X = 0;
+    this.P = 1;
+  }
 }
 
 export class PPGSignalProcessor implements SignalProcessor {
   private isProcessing: boolean = false;
   private kalmanFilter: KalmanFilter;
-  private lastValue: number = 0;
-  private frameBuffer: number[] = [];
-  private readonly BUFFER_SIZE = 30;
-  private readonly MIN_RED_THRESHOLD = 50; // Umbral mínimo para detección de dedo
-  private readonly MAX_RED_THRESHOLD = 200; // Umbral máximo para detección de dedo
-  private readonly STABILITY_THRESHOLD = 0.3; // Umbral de estabilidad
-  private frameCount: number = 0;
-  private baselineRed: number = 0;
-  private isFingerDetected: boolean = false;
+  private lastValues: number[] = [];
+  private readonly BUFFER_SIZE = 10;
+  private readonly MIN_RED_THRESHOLD = 30;  // Bajamos el umbral mínimo para Android
+  private readonly MAX_RED_THRESHOLD = 250; // Aumentamos el máximo para más tolerancia
+  private readonly STABILITY_WINDOW = 5;    // Ventana para calcular estabilidad
+  private readonly MIN_STABILITY_COUNT = 3;  // Mínimo de frames estables para considerar dedo presente
+  private stableFrameCount: number = 0;
+  private lastStableValue: number = 0;
   
   constructor(
     public onSignalReady?: (signal: ProcessedSignal) => void,
@@ -39,12 +44,11 @@ export class PPGSignalProcessor implements SignalProcessor {
 
   async initialize(): Promise<void> {
     try {
-      this.frameBuffer = [];
-      this.lastValue = 0;
-      this.frameCount = 0;
-      console.log("PPGSignalProcessor: Inicializando procesador");
-      console.log("PPGSignalProcessor: Buffer limpiado");
-      console.log("PPGSignalProcessor: Valores reseteados");
+      this.lastValues = [];
+      this.stableFrameCount = 0;
+      this.lastStableValue = 0;
+      this.kalmanFilter.reset();
+      console.log("PPGSignalProcessor: Inicializado");
     } catch (error) {
       console.error("PPGSignalProcessor: Error de inicialización", error);
       this.handleError("INIT_ERROR", "Error al inicializar el procesador");
@@ -52,30 +56,24 @@ export class PPGSignalProcessor implements SignalProcessor {
   }
 
   start(): void {
-    if (this.isProcessing) {
-      console.log("PPGSignalProcessor: Ya está en procesamiento");
-      return;
-    }
+    if (this.isProcessing) return;
     this.isProcessing = true;
-    console.log("PPGSignalProcessor: Iniciando procesamiento de señales");
+    this.initialize();
+    console.log("PPGSignalProcessor: Iniciado");
   }
 
   stop(): void {
     this.isProcessing = false;
-    this.frameBuffer = [];
-    this.lastValue = 0;
-    this.frameCount = 0;
-    console.log("PPGSignalProcessor: Deteniendo procesamiento");
-    console.log("PPGSignalProcessor: Buffer limpiado");
-    console.log("PPGSignalProcessor: Valores reseteados");
+    this.lastValues = [];
+    this.stableFrameCount = 0;
+    this.lastStableValue = 0;
+    this.kalmanFilter.reset();
+    console.log("PPGSignalProcessor: Detenido");
   }
 
   async calibrate(): Promise<boolean> {
     try {
-      console.log("PPGSignalProcessor: Iniciando calibración");
-      this.frameBuffer = [];
-      this.lastValue = 0;
-      console.log("PPGSignalProcessor: Calibración completada");
+      await this.initialize();
       return true;
     } catch (error) {
       console.error("PPGSignalProcessor: Error de calibración", error);
@@ -86,63 +84,38 @@ export class PPGSignalProcessor implements SignalProcessor {
 
   processFrame(imageData: ImageData): void {
     if (!this.isProcessing) {
-      console.log("PPGSignalProcessor: No está procesando, frame ignorado");
+      console.log("PPGSignalProcessor: No está procesando");
       return;
     }
 
     try {
-      this.frameCount++;
       const redValue = this.extractRedChannel(imageData);
-      const fingerDetected = this.detectFinger(redValue);
+      const filtered = this.kalmanFilter.filter(redValue);
+      this.lastValues.push(filtered);
       
-      console.log("PPGSignalProcessor: Análisis de frame:", {
-        frameCount: this.frameCount,
+      if (this.lastValues.length > this.BUFFER_SIZE) {
+        this.lastValues.shift();
+      }
+
+      const { isFingerDetected, quality } = this.analyzeSignal(filtered, redValue);
+
+      console.log("PPGSignalProcessor: Análisis", {
         redValue,
-        fingerDetected,
-        baselineRed: this.baselineRed
-      });
-
-      if (!fingerDetected) {
-        // Si no hay dedo, enviamos señal con calidad 0
-        const noFingerSignal: ProcessedSignal = {
-          timestamp: Date.now(),
-          rawValue: redValue,
-          filteredValue: 0,
-          quality: 0,
-          roi: this.detectROI(redValue),
-          fingerDetected: false
-        };
-        
-        this.onSignalReady?.(noFingerSignal);
-        return;
-      }
-
-      // Si hay dedo, procesamos la señal
-      if (this.frameCount <= 10) {
-        this.baselineRed += redValue / 10;
-        console.log("PPGSignalProcessor: Calculando línea base:", this.baselineRed);
-        return;
-      }
-
-      const filtered = this.applyFilters(redValue);
-      const quality = this.calculateSignalQuality(filtered, redValue);
-      
-      console.log("PPGSignalProcessor: Señal procesada:", {
         filtered,
+        isFingerDetected,
         quality,
-        fingerDetected
+        stableFrames: this.stableFrameCount
       });
 
       const processedSignal: ProcessedSignal = {
         timestamp: Date.now(),
         rawValue: redValue,
         filteredValue: filtered,
-        quality,
-        roi: this.detectROI(redValue),
-        fingerDetected: true
+        quality: quality,
+        fingerDetected: isFingerDetected,
+        roi: this.detectROI(redValue)
       };
 
-      this.lastValue = filtered;
       this.onSignalReady?.(processedSignal);
 
     } catch (error) {
@@ -156,70 +129,67 @@ export class PPGSignalProcessor implements SignalProcessor {
     let redSum = 0;
     let count = 0;
     
-    for (let i = 0; i < data.length; i += 4) {
-      redSum += data[i];  // Canal rojo
-      count++;
+    // Analizar solo el centro de la imagen (25% central)
+    const startX = Math.floor(imageData.width * 0.375);
+    const endX = Math.floor(imageData.width * 0.625);
+    const startY = Math.floor(imageData.height * 0.375);
+    const endY = Math.floor(imageData.height * 0.625);
+    
+    for (let y = startY; y < endY; y++) {
+      for (let x = startX; x < endX; x++) {
+        const i = (y * imageData.width + x) * 4;
+        redSum += data[i];  // Canal rojo
+        count++;
+      }
     }
     
     const avgRed = redSum / count;
-    console.log("PPGSignalProcessor: Canal rojo extraído:", {
-      totalRed: redSum,
-      pixelCount: count,
-      average: avgRed
-    });
-    
     return avgRed;
   }
 
-  private detectFinger(redValue: number): boolean {
-    // Un dedo presente debería mostrar valores altos en el canal rojo
-    const isInRange = redValue > this.MIN_RED_THRESHOLD && redValue < this.MAX_RED_THRESHOLD;
+  private analyzeSignal(filtered: number, rawValue: number): { isFingerDetected: boolean, quality: number } {
+    const isInRange = rawValue >= this.MIN_RED_THRESHOLD && rawValue <= this.MAX_RED_THRESHOLD;
     
-    // Actualizar el estado de detección
-    this.isFingerDetected = isInRange;
-    
-    console.log("PPGSignalProcessor: Detección de dedo:", {
-      redValue,
-      isInRange,
-      min: this.MIN_RED_THRESHOLD,
-      max: this.MAX_RED_THRESHOLD
-    });
-    
-    return this.isFingerDetected;
-  }
-
-  private calculateSignalQuality(filteredValue: number, rawValue: number): number {
-    if (!this.isFingerDetected || this.frameCount < 10) {
-      return 0;
+    if (!isInRange) {
+      this.stableFrameCount = 0;
+      return { isFingerDetected: false, quality: 0 };
     }
 
-    // Calcular la estabilidad de la señal
-    const recentValues = this.frameBuffer.slice(-5);
+    // Calcular estabilidad
+    if (this.lastValues.length < this.STABILITY_WINDOW) {
+      return { isFingerDetected: false, quality: 0 };
+    }
+
+    const recentValues = this.lastValues.slice(-this.STABILITY_WINDOW);
     const avgVariation = recentValues.reduce((sum, val, i, arr) => {
       if (i === 0) return 0;
       return sum + Math.abs(val - arr[i-1]);
     }, 0) / (recentValues.length - 1);
 
-    // Normalizar la variación promedio
-    const normalizedStability = Math.max(0, 1 - (avgVariation / this.STABILITY_THRESHOLD));
+    const isStable = avgVariation < 5; // Umbral de variación para considerar señal estable
 
-    // Calcular la intensidad de la señal
-    const signalStrength = Math.min(Math.abs(rawValue - this.baselineRed) / 100, 1);
+    if (isStable) {
+      this.stableFrameCount++;
+      this.lastStableValue = filtered;
+    } else {
+      this.stableFrameCount = Math.max(0, this.stableFrameCount - 1);
+    }
 
-    // Calcular calidad final
-    const quality = Math.round((normalizedStability * 0.7 + signalStrength * 0.3) * 100);
+    const isFingerDetected = this.stableFrameCount >= this.MIN_STABILITY_COUNT;
+    
+    // Calcular calidad solo si el dedo está detectado
+    let quality = 0;
+    if (isFingerDetected) {
+      const stabilityScore = Math.min(this.stableFrameCount / 10, 1);
+      const intensityScore = Math.min((rawValue - this.MIN_RED_THRESHOLD) / 
+                                    (this.MAX_RED_THRESHOLD - this.MIN_RED_THRESHOLD), 1);
+      quality = Math.round((stabilityScore * 0.7 + intensityScore * 0.3) * 100);
+    }
 
-    console.log("PPGSignalProcessor: Cálculo de calidad:", {
-      avgVariation,
-      normalizedStability,
-      signalStrength,
-      quality
-    });
-
-    return Math.min(Math.max(quality, 0), 100);
+    return { isFingerDetected, quality };
   }
 
-  private detectROI(redChannel: number): ProcessedSignal['roi'] {
+  private detectROI(redValue: number): ProcessedSignal['roi'] {
     return {
       x: 0,
       y: 0,
@@ -228,33 +198,13 @@ export class PPGSignalProcessor implements SignalProcessor {
     };
   }
 
-  private applyFilters(value: number): number {
-    let filtered = this.kalmanFilter.filter(value);
-    
-    this.frameBuffer.push(filtered);
-    if (this.frameBuffer.length > this.BUFFER_SIZE) {
-      this.frameBuffer.shift();
-    }
-    
-    filtered = this.applyButterworthFilter(filtered);
-    
-    return filtered;
-  }
-
-  private applyButterworthFilter(value: number): number {
-    const cutoff = 4.0;
-    const resonance = 0.51;
-    return value * (1 / (1 + Math.pow(value/cutoff, 2*resonance)));
-  }
-
   private handleError(code: string, message: string): void {
-    console.error("PPGSignalProcessor: Error detectado", code, message);
+    console.error("PPGSignalProcessor: Error", code, message);
     const error: ProcessingError = {
       code,
       message,
       timestamp: Date.now()
     };
-    
     this.onError?.(error);
   }
 }

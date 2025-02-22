@@ -5,46 +5,14 @@ import { Fingerprint } from 'lucide-react';
 interface CameraViewProps {
   onStreamReady?: (stream: MediaStream) => void;
   isMonitoring: boolean;
+  isFingerDetected?: boolean;
+  signalQuality?: number;
 }
 
-const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
+const CameraView = ({ onStreamReady, isMonitoring, isFingerDetected = false, signalQuality = 0 }: CameraViewProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
-  const [isFingerDetected, setIsFingerDetected] = useState(false);
-
-  const detectFinger = () => {
-    if (!videoRef.current || !canvasRef.current) return;
-    const ctx = canvasRef.current.getContext('2d', { willReadFrequently: true });
-    if (!ctx) return;
-
-    // Capturar imagen del video
-    ctx.drawImage(videoRef.current, 0, 0, canvasRef.current.width, canvasRef.current.height);
-    const imageData = ctx.getImageData(0, 0, canvasRef.current.width, canvasRef.current.height);
-    const data = imageData.data;
-    
-    let validPixels = 0;
-    const totalPixels = data.length / 4;
-
-    // Analizar cada pixel
-    for (let i = 0; i < data.length; i += 4) {
-      const r = data[i];     // Rojo
-      const g = data[i + 1]; // Verde
-      const b = data[i + 2]; // Azul
-      
-      // SOLO consideramos la paleta desde negro absoluto hasta rojo intenso
-      // Negro absoluto (R=0,G=0,B=0) hasta Rojo intenso (R=255,G=0,B=0)
-      if (g < 20 && b < 20 && r >= 0) {
-        validPixels++;
-      }
-    }
-
-    // Calcular el porcentaje de cobertura
-    const coverage = (validPixels / totalPixels) * 100;
-    
-    // La detección es positiva solo si más del 95% de los píxeles son válidos
-    setIsFingerDetected(coverage > 95);
-  };
 
   const stopCamera = async () => {
     if (stream) {
@@ -111,12 +79,12 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
     };
   }, [isMonitoring]);
 
-  useEffect(() => {
-    if (!stream || !isMonitoring) return;
-
-    const interval = setInterval(detectFinger, 200);
-    return () => clearInterval(interval);
-  }, [stream, isMonitoring]);
+  const getFingerColor = () => {
+    if (!isFingerDetected) return 'text-gray-400';
+    if (signalQuality > 75) return 'text-green-500';
+    if (signalQuality > 50) return 'text-yellow-500';
+    return 'text-red-500';
+  };
 
   return (
     <>
@@ -138,9 +106,7 @@ const CameraView = ({ onStreamReady, isMonitoring }: CameraViewProps) => {
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20">
           <Fingerprint
             size={64}
-            className={`transition-colors duration-300 ${
-              isFingerDetected ? 'text-green-500' : 'text-gray-400'
-            }`}
+            className={`transition-colors duration-300 ${getFingerColor()}`}
           />
         </div>
       )}
