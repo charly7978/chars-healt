@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
@@ -71,7 +70,6 @@ const Index = () => {
     setIsPaused(false);
     startProcessing();
     setElapsedTime(0);
-    // Iniciar temporizador de 30 segundos
     if (measurementTimerRef.current) {
       clearInterval(measurementTimerRef.current);
     }
@@ -114,7 +112,6 @@ const Index = () => {
     if (isMonitoring) {
       setIsPaused(false);
       startProcessing();
-      // Reanudar temporizador si no ha llegado a 30 segundos
       if (elapsedTime < 30) {
         measurementTimerRef.current = window.setInterval(() => {
           setElapsedTime(prev => {
@@ -248,10 +245,7 @@ const Index = () => {
         <div className="relative z-10 h-full flex flex-col justify-between p-4">
           <div className="flex justify-between items-start w-full">
             <h1 className="text-lg font-bold text-white bg-black/30 px-3 py-1 rounded">PPG Monitor</h1>
-            <div className="flex gap-2 items-center">
-              <div className="text-xs text-gray-300 bg-black/30 px-2 py-1 rounded truncate max-w-[120px]">
-                {email}
-              </div>
+            <div className="flex gap-2">
               <Button
                 variant="ghost"
                 size="icon"
@@ -272,7 +266,7 @@ const Index = () => {
             </div>
           </div>
 
-          <div className="flex-1 flex flex-col justify-center gap-2 max-w-md mx-auto w-full">
+          <div className="flex-1 flex flex-col justify-center gap-2 max-w-md mx-auto w-full mt-[-2rem]">
             <div className="relative">
               <PPGSignalMeter 
                 value={lastSignal?.filteredValue || 0}
@@ -280,7 +274,7 @@ const Index = () => {
                 isFingerDetected={lastSignal?.fingerDetected || false}
               />
               {isMonitoring && (
-                <div className="absolute top-2 right-2 text-sm font-medium text-white bg-black/50 px-2 py-1 rounded">
+                <div className="absolute top-[-1.5rem] right-2 text-sm font-medium text-white bg-black/50 px-2 py-1 rounded">
                   {elapsedTime}s / 30s
                 </div>
               )}
