@@ -21,14 +21,9 @@ export const useVitalSignsProcessor = () => {
       setHasDetectedArrhythmia(false);
     }
     
-    // Convertimos el contador a string para mantener la compatibilidad de tipos
-    const displayStatus = arrhythmiaCounter > 0 ? 
-      `ARRITMIA DETECTADA` : 
-      result.arrhythmiaStatus;
-    
     return {
       ...result,
-      arrhythmiaStatus: displayStatus
+      arrhythmiaStatus: arrhythmiaCounter.toString()
     };
   }, [processor, hasDetectedArrhythmia, arrhythmiaCounter]);
 
