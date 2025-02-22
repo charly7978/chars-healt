@@ -34,26 +34,38 @@ export const useVitalMeasurement = (isMeasuring: boolean) => {
     const startTime = Date.now();
     const MEASUREMENT_DURATION = 30000;
 
+    const updateMeasurements = () => {
+      const processor = window.heartBeatProcessor;
+      if (processor) {
+        // Obtenemos los valores directamente del procesador
+        const currentBPM = processor.getFinalBPM();
+        const currentCount = processor.arrhythmiaCount;
+        
+        console.log('VitalMeasurement: Actualizando medidas:', { 
+          bpm: currentBPM, 
+          arritmias: currentCount,
+          timestamp: new Date().toISOString()
+        });
+        
+        setLastArrhythmiaCount(currentCount);
+        setMeasurements(prev => ({
+          ...prev,
+          heartRate: currentBPM || 0,
+          arrhythmiaCount: currentCount
+        }));
+      }
+    };
+
+    // Actualizamos inmediatamente la primera vez
+    updateMeasurements();
+
     const interval = setInterval(() => {
       const currentTime = Date.now();
       const elapsed = currentTime - startTime;
       setElapsedTime(elapsed / 1000);
 
-      // Verificamos y actualizamos el conteo de arritmias y BPM
-      const processor = window.heartBeatProcessor;
-      if (processor) {
-        const currentCount = processor.arrhythmiaCount;
-        const currentBPM = processor.getFinalBPM();
-        
-        console.log('Updating vitals:', { currentBPM, currentCount });
-        
-        setLastArrhythmiaCount(currentCount);
-        setMeasurements(prev => ({
-          ...prev,
-          heartRate: currentBPM,
-          arrhythmiaCount: currentCount
-        }));
-      }
+      // Actualizamos medidas en cada intervalo
+      updateMeasurements();
 
       if (elapsed >= MEASUREMENT_DURATION) {
         clearInterval(interval);
