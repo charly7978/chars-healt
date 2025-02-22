@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
@@ -45,10 +46,13 @@ const Index = () => {
       const vitalSigns = processVitalSigns(lastSignal.filteredValue);
       
       if (vitalSigns) {
+        // Extraemos la presión sistólica de la cadena "systolic/diastolic"
+        const systolicValue = parseInt(vitalSigns.pressure.split('/')[0], 10);
+        
         setMeasurements(prev => ({
           ...prev,
           spo2: vitalSigns.spo2,
-          pressure: vitalSigns.pressure
+          pressure: systolicValue // Usamos solo la presión sistólica como número
         }));
       }
     }
