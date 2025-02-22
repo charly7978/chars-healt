@@ -21,18 +21,19 @@ const SimpleCameraView = ({
   const [currentCamera, setCurrentCamera] = useState<string>('');
   const [error, setError] = useState<string>('');
   const [isAndroid, setIsAndroid] = useState(false);
+  const streamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
     setIsAndroid(/Android/i.test(navigator.userAgent));
   }, []);
 
   const getAvailableCameras = async () => {
+    if (availableCameras.length > 0) return; // Evitar escaneos innecesarios
+
     try {
-      await navigator.mediaDevices.getUserMedia({ video: true });
       const devices = await navigator.mediaDevices.enumerateDevices();
       const cameras = devices.filter(device => device.kind === 'videoinput');
       setAvailableCameras(cameras);
-      console.log("Cámaras disponibles:", cameras);
       
       if (isAndroid) {
         const backCamera = cameras.find(camera => 
@@ -44,7 +45,6 @@ const SimpleCameraView = ({
         
         if (backCamera) {
           setCurrentCamera(backCamera.deviceId);
-          console.log("Usando cámara trasera Android:", backCamera.label);
         } else if (cameras.length > 0) {
           setCurrentCamera(cameras[0].deviceId);
         }
@@ -64,12 +64,12 @@ const SimpleCameraView = ({
   };
 
   useEffect(() => {
-    getAvailableCameras();
-  }, [isAndroid]);
+    if (isMonitoring) {
+      getAvailableCameras();
+    }
+  }, [isMonitoring, isAndroid]);
 
   useEffect(() => {
-    let stream: MediaStream | null = null;
-
     const startCamera = async () => {
       try {
         if (!navigator.mediaDevices?.getUserMedia) {
@@ -80,23 +80,27 @@ const SimpleCameraView = ({
           video: {
             deviceId: currentCamera ? { exact: currentCamera } : undefined,
             facingMode: currentCamera ? undefined : 'environment',
-            width: { ideal: isAndroid ? 1280 : 640 },
-            height: { ideal: isAndroid ? 720 : 480 },
-            frameRate: { ideal: 30 },
-            aspectRatio: isAndroid ? { ideal: 16/9 } : { ideal: 4/3 }
+            width: { ideal: isAndroid ? 720 : 640 }, // Reducida para mejor rendimiento
+            height: { ideal: isAndroid ? 480 : 480 },
+            frameRate: { ideal: isAndroid ? 15 : 30 }, // Reducido en Android
+            aspectRatio: { ideal: 4/3 }
           }
         };
 
-        if (stream) {
-          stream.getTracks().forEach(track => track.stop());
+        // Limpiar stream anterior
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach(track => {
+            track.stop();
+            streamRef.current?.removeTrack(track);
+          });
         }
 
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+        streamRef.current = newStream;
         
         if (videoRef.current) {
-          videoRef.current.srcObject = stream;
+          videoRef.current.srcObject = newStream;
           videoRef.current.setAttribute('playsinline', 'true');
-          videoRef.current.setAttribute('autoplay', 'true');
           
           if (isAndroid) {
             videoRef.current.style.transform = 'scaleX(-1) rotate(90deg)';
@@ -105,12 +109,8 @@ const SimpleCameraView = ({
           }
           
           if (onStreamReady) {
-            onStreamReady(stream);
+            onStreamReady(newStream);
           }
-
-          const track = stream.getVideoTracks()[0];
-          console.log("Capacidades de la cámara:", track.getCapabilities());
-          console.log("Configuración actual:", track.getSettings());
         }
       } catch (err) {
         console.error("Error al iniciar la cámara:", err);
@@ -119,8 +119,12 @@ const SimpleCameraView = ({
     };
 
     const stopCamera = () => {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => {
+          track.stop();
+          streamRef.current?.removeTrack(track);
+        });
+        streamRef.current = null;
       }
       if (videoRef.current) {
         videoRef.current.srcObject = null;
@@ -129,6 +133,8 @@ const SimpleCameraView = ({
 
     if (isMonitoring && currentCamera) {
       startCamera();
+    } else {
+      stopCamera();
     }
 
     return () => {
@@ -149,6 +155,7 @@ const SimpleCameraView = ({
         ref={videoRef}
         playsInline
         muted
+        autoPlay
         className={`absolute top-0 left-0 min-w-full min-h-full w-auto h-auto z-0 ${
           isAndroid ? 'object-cover' : 'object-contain'
         }`}
