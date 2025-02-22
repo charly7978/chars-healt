@@ -1,3 +1,4 @@
+
 export class VitalSignsProcessor {
   private ppgValues: number[] = [];
   private readonly WINDOW_SIZE = 300;
@@ -154,12 +155,23 @@ export class VitalSignsProcessor {
         return values[peak] - values[valleys[i]];
       }
       return 0;
-    }).filter(a => a > 0);
+    }).filter(a => a > 0); // Solo amplitudes positivas
 
-    const mean = amplitudes.reduce((a, b) => a + b, 0) / amplitudes.length;
-    
-    const variance = amplitudes.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / amplitudes.length;
-    const standardDeviation = Math.sqrt(variance);
+    if (amplitudes.length === 0) {
+      return {
+        amplitude: 0,
+        variation: 0
+      };
+    }
+
+    // Cálculo manual de la media
+    const sum = amplitudes.reduce((a, b) => a + b, 0);
+    const mean = sum / amplitudes.length;
+
+    // Cálculo manual de la desviación estándar
+    const squaredDiffs = amplitudes.map(value => Math.pow(value - mean, 2));
+    const avgSquaredDiff = squaredDiffs.reduce((a, b) => a + b, 0) / amplitudes.length;
+    const standardDeviation = Math.sqrt(avgSquaredDiff);
 
     return {
       amplitude: mean,
