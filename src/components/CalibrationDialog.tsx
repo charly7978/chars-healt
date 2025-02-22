@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from "react";
+import * as React from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { RotateCcw, Timer, Settings, CheckCircle2, ArrowLeft } from "lucide-react";
@@ -42,14 +42,14 @@ const CALIBRATION_STEPS = [
   }
 ];
 
-const CalibrationDialog = ({ isOpen, onClose, isCalibrating }: CalibrationDialogProps) => {
+const CalibrationDialog: React.FC<CalibrationDialogProps> = ({ isOpen, onClose, isCalibrating }) => {
   const { toast } = useToast();
-  const [isFlipped, setIsFlipped] = useState(false);
-  const [currentStep, setCurrentStep] = useState(0);
-  const [currentProcess, setCurrentProcess] = useState(0);
-  const [calibrationComplete, setCalibrationComplete] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [calibrationResults, setCalibrationResults] = useState({
+  const [isFlipped, setIsFlipped] = React.useState(false);
+  const [currentStep, setCurrentStep] = React.useState(0);
+  const [currentProcess, setCurrentProcess] = React.useState(0);
+  const [calibrationComplete, setCalibrationComplete] = React.useState(false);
+  const [progress, setProgress] = React.useState(0);
+  const [calibrationResults, setCalibrationResults] = React.useState({
     gainLevel: 0,
     detectionThreshold: 0,
     dynamicOffset: 0,
@@ -58,7 +58,7 @@ const CalibrationDialog = ({ isOpen, onClose, isCalibrating }: CalibrationDialog
     windowSize: 0
   });
 
-  useEffect(() => {
+  React.useEffect(() => {
     const checkUserSession = async () => {
       const { data: { session }, error } = await supabase.auth.getSession();
       if (error || !session) {
@@ -76,7 +76,7 @@ const CalibrationDialog = ({ isOpen, onClose, isCalibrating }: CalibrationDialog
     }
   }, [isOpen]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (isCalibrating) {
       setIsFlipped(true);
       setCurrentStep(0);
