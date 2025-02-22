@@ -7,16 +7,17 @@ interface Peak {
 
 export class VitalSignalProcessor {
   private readonly SAMPLE_RATE = 30;
-  private readonly WINDOW_SIZE = 150;
-  private readonly MIN_PEAK_DISTANCE = 15;
+  private readonly WINDOW_SIZE = 90; // Reducido para mayor sensibilidad
+  private readonly MIN_PEAK_DISTANCE = 12; // Ajustado para permitir BPM más altos
   private readonly MAX_BPM = 200;
   private readonly MIN_BPM = 40;
-  private readonly MIN_PEAKS_FOR_BPM = 3;
+  private readonly MIN_PEAKS_FOR_BPM = 2; // Reducido para detección más rápida
 
   private signalBuffer: number[] = [];
   private peakBuffer: Peak[] = [];
   private lastPeakTime: number = 0;
   private baselineValue: number = 0;
+  private lastValidBPM: number = 0;
 
   constructor() {
     this.reset();
@@ -27,6 +28,7 @@ export class VitalSignalProcessor {
     this.peakBuffer = [];
     this.lastPeakTime = 0;
     this.baselineValue = 0;
+    this.lastValidBPM = 0;
   }
 
   processSignal(value: number): {
@@ -45,68 +47,88 @@ export class VitalSignalProcessor {
       this.signalBuffer.shift();
     }
 
-    // Necesitamos al menos 2 segundos de datos
-    if (this.signalBuffer.length < 60) {
+    // Necesitamos al menos 1 segundo de datos
+    if (this.signalBuffer.length < 30) {
       return { bpm: 0, confidence: 0, peaks: [], isValid: false };
     }
 
-    // Detectar picos con el nuevo método mejorado
-    const peaks = this.detectPeaks();
+    // Normalizar señal
+    const normalizedSignal = this.normalizeSignal(this.signalBuffer);
+    
+    // Detectar picos
+    const peaks = this.detectPeaks(normalizedSignal);
     
     // Calcular intervalos entre picos
     const intervals = this.calculateIntervals(peaks);
     
-    // Calcular BPM y confianza con el método mejorado
+    // Calcular BPM y confianza
     const { bpm, confidence } = this.calculateBPM(intervals);
 
     // Actualizar buffer de picos
     this.updatePeakBuffer(peaks);
 
-    console.log("VitalSignalProcessor: Procesamiento completo", {
+    console.log("VitalSignalProcessor: Análisis de señal", {
       signalLength: this.signalBuffer.length,
+      normalizedLength: normalizedSignal.length,
       peaksDetected: peaks.length,
+      intervals: intervals.length,
       bpm,
       confidence
     });
 
+    const isValid = confidence > 0.5 && bpm >= this.MIN_BPM && bpm <= this.MAX_BPM;
+    if (isValid) {
+      this.lastValidBPM = bpm;
+    }
+
     return {
-      bpm,
+      bpm: isValid ? bpm : this.lastValidBPM,
       confidence,
       peaks: this.peakBuffer,
-      isValid: confidence > 0.6 && bpm >= this.MIN_BPM && bpm <= this.MAX_BPM
+      isValid
     };
   }
 
-  private detectPeaks(): Peak[] {
+  private normalizeSignal(signal: number[]): number[] {
+    if (signal.length < 2) return signal;
+    
+    const min = Math.min(...signal);
+    const max = Math.max(...signal);
+    const range = max - min;
+    
+    return signal.map(value => range > 0 ? (value - min) / range : value);
+  }
+
+  private detectPeaks(normalizedSignal: number[]): Peak[] {
     const peaks: Peak[] = [];
     const currentTime = Date.now();
 
-    // Calcular línea base usando ventana móvil
-    const windowSize = 10;
-    const recentValues = this.signalBuffer.slice(-windowSize);
-    this.baselineValue = recentValues.reduce((a, b) => a + b, 0) / windowSize;
+    // Calcular línea base usando media móvil
+    const windowSize = 5;
+    const baselineValues = normalizedSignal.slice(-windowSize);
+    this.baselineValue = baselineValues.reduce((a, b) => a + b, 0) / windowSize;
 
-    // Detectar picos usando ventana deslizante mejorada
-    for (let i = 2; i < this.signalBuffer.length - 2; i++) {
-      const window = this.signalBuffer.slice(i - 2, i + 3);
-      const centerValue = this.signalBuffer[i];
+    // Detectar picos
+    for (let i = 2; i < normalizedSignal.length - 2; i++) {
+      const window = normalizedSignal.slice(i - 2, i + 3);
       const threshold = this.calculateDynamicThreshold(window);
 
-      if (this.isPeak(window, centerValue, threshold)) {
+      if (this.isPeak(window, normalizedSignal[i], threshold)) {
         const timeSinceLastPeak = currentTime - this.lastPeakTime;
         
         // Verificar distancia mínima entre picos
         if (timeSinceLastPeak > (1000 * this.MIN_PEAK_DISTANCE) / this.SAMPLE_RATE) {
           peaks.push({
             timestamp: currentTime,
-            value: centerValue,
+            value: normalizedSignal[i],
             interval: timeSinceLastPeak
           });
           
           this.lastPeakTime = currentTime;
           console.log("VitalSignalProcessor: Pico detectado", {
-            value: centerValue,
-            timeSinceLastPeak
+            value: normalizedSignal[i],
+            timeSinceLastPeak,
+            threshold
           });
         }
       }
@@ -116,13 +138,11 @@ export class VitalSignalProcessor {
   }
 
   private isPeak(window: number[], centerValue: number, threshold: number): boolean {
-    // Verificar si es mayor que los vecinos inmediatos
-    const isLocalPeak = window[2] > window[1] && 
-                       window[2] > window[3] &&
-                       window[2] > window[0] &&
-                       window[2] > window[4];
+    const isLocalPeak = centerValue > window[1] && 
+                       centerValue > window[3] &&
+                       centerValue > window[0] &&
+                       centerValue > window[4];
 
-    // Verificar si supera el umbral dinámico
     const exceedsThreshold = centerValue > this.baselineValue + threshold;
 
     return isLocalPeak && exceedsThreshold;
@@ -133,8 +153,7 @@ export class VitalSignalProcessor {
     const variance = window.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / window.length;
     const stdDev = Math.sqrt(variance);
 
-    // Umbral adaptativo basado en la variabilidad de la señal
-    return stdDev * 1.2;
+    return stdDev * 0.8; // Reducido para mayor sensibilidad
   }
 
   private calculateIntervals(peaks: Peak[]): number[] {
@@ -142,7 +161,7 @@ export class VitalSignalProcessor {
     
     for (let i = 1; i < peaks.length; i++) {
       const interval = peaks[i].timestamp - peaks[i - 1].timestamp;
-      if (interval > 0 && interval < 2000) { // Filtrar intervalos irreales
+      if (interval > 200 && interval < 1500) { // Filtrar intervalos irreales
         intervals.push(interval);
       }
     }
@@ -155,31 +174,26 @@ export class VitalSignalProcessor {
       return { bpm: 0, confidence: 0 };
     }
 
-    // Ordenar intervalos para calcular la mediana
+    // Usar la mediana para mayor estabilidad
     intervals.sort((a, b) => a - b);
     const medianInterval = intervals[Math.floor(intervals.length / 2)];
 
     // Filtrar intervalos cercanos a la mediana
     const validIntervals = intervals.filter(interval => {
       const ratio = interval / medianInterval;
-      return ratio >= 0.7 && ratio <= 1.3;
+      return ratio >= 0.8 && ratio <= 1.2;
     });
 
     if (validIntervals.length < this.MIN_PEAKS_FOR_BPM) {
       return { bpm: 0, confidence: 0 };
     }
 
-    // Calcular BPM usando la mediana de intervalos válidos
+    // Calcular BPM usando la media de intervalos válidos
     const avgInterval = validIntervals.reduce((a, b) => a + b, 0) / validIntervals.length;
     const bpm = Math.round(60000 / avgInterval);
 
-    // Calcular confianza basada en la consistencia de los intervalos
+    // Calcular confianza
     const confidence = validIntervals.length / intervals.length;
-
-    // Validar rango de BPM
-    if (bpm < this.MIN_BPM || bpm > this.MAX_BPM) {
-      return { bpm: 0, confidence: 0 };
-    }
 
     console.log("VitalSignalProcessor: BPM calculado", {
       bpm,
@@ -189,11 +203,13 @@ export class VitalSignalProcessor {
       avgInterval
     });
 
-    return { bpm, confidence };
+    return { 
+      bpm: bpm >= this.MIN_BPM && bpm <= this.MAX_BPM ? bpm : 0,
+      confidence 
+    };
   }
 
   private updatePeakBuffer(newPeaks: Peak[]) {
-    this.peakBuffer = [...this.peakBuffer, ...newPeaks]
-      .slice(-this.WINDOW_SIZE);
+    this.peakBuffer = [...this.peakBuffer, ...newPeaks].slice(-this.WINDOW_SIZE);
   }
 }
