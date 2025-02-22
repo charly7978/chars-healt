@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
@@ -36,6 +35,7 @@ const Index = () => {
     if (!isMonitoring) {
       setElapsedTime(0);
       setArrhythmiaCount("--");
+      setVitalSigns(prev => ({ ...prev, arrhythmiaStatus: "--" }));
       return;
     }
 
@@ -223,7 +223,7 @@ const Index = () => {
               <VitalSign label="Heart Rate" value={heartRate} unit="BPM" />
               <VitalSign label="SpO2" value={vitalSigns.spo2} unit="%" />
               <VitalSign label="Blood Pressure" value={vitalSigns.pressure} unit="mmHg" />
-              <VitalSign label="Arrhythmias" value={isMonitoring ? arrhythmiaCount : "--"} />
+              <VitalSign label="Arrhythmias" value={arrhythmiaCount} />
             </div>
           </div>
 
