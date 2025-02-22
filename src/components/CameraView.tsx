@@ -36,37 +36,29 @@ const CameraView = ({
         throw new Error("getUserMedia no está soportado");
       }
 
-      // Ajustamos los constraints para mejor calidad de señal PPG
       const constraints: MediaStreamConstraints = {
         video: {
           facingMode: 'environment',
           width: { ideal: 1280, min: 720 },
           height: { ideal: 720, min: 480 },
           frameRate: { min: 25, ideal: 30 },
-          aspectRatio: { ideal: 16/9 },
-          // Ajustamos la exposición y el balance de blancos para mejor calidad
-          whiteBalanceMode: 'continuous',
-          exposureMode: 'continuous',
-          // Establecemos prioridad en la exposición para mejor detección de cambios de color
-          exposureCompensation: 0,
-          exposurePriority: 'continuous'
-        } as MediaTrackConstraints
+          aspectRatio: { ideal: 16/9 }
+        }
       };
 
       const newStream = await navigator.mediaDevices.getUserMedia(constraints);
       
-      // Configuramos el track de video con los parámetros que soporta el estándar
+      // Configuramos los settings básicos del video track
       const videoTrack = newStream.getVideoTracks()[0];
       if (videoTrack) {
+        const capabilities = videoTrack.getCapabilities();
+        console.log('Camera capabilities:', capabilities);
+        
         try {
-          await videoTrack.applyConstraints({
-            advanced: [{
-              exposureMode: 'continuous',
-              whiteBalanceMode: 'continuous'
-            }]
-          });
+          const settings = videoTrack.getSettings();
+          console.log('Current camera settings:', settings);
         } catch (err) {
-          console.log("No se pudieron aplicar configuraciones avanzadas:", err);
+          console.log("No se pudo obtener la configuración actual:", err);
         }
       }
 
