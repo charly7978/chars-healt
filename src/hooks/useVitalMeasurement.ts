@@ -39,15 +39,16 @@ export const useVitalMeasurement = (isMeasuring: boolean) => {
       const elapsed = currentTime - startTime;
       setElapsedTime(elapsed / 1000);
 
-      // Verificamos y actualizamos el conteo de arritmias
+      // Verificamos y actualizamos el conteo de arritmias y BPM
       const processor = window.heartBeatProcessor;
       if (processor && typeof processor.arrhythmiaCount === 'number') {
         const currentCount = processor.arrhythmiaCount;
-        console.log('Conteo actual de arritmias:', currentCount);
+        const currentBPM = processor.currentBPM || 0;
         
         setLastArrhythmiaCount(currentCount);
         setMeasurements(prev => ({
           ...prev,
+          heartRate: currentBPM,
           arrhythmiaCount: currentCount
         }));
       }
@@ -61,7 +62,7 @@ export const useVitalMeasurement = (isMeasuring: boolean) => {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isMeasuring, lastArrhythmiaCount]);
+  }, [isMeasuring]);
 
   return {
     ...measurements,
