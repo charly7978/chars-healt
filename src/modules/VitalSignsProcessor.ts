@@ -4,35 +4,22 @@
  * Procesa datos PPG para estimar (de forma muy aproximada) SpO2, presión arterial
  * y detectar posibles arritmias.
  *
- * Recomendaciones y Advertencias Importantes:
- *  - Este código es un prototipo orientado a DEMO / investigación, **no** un
- *    dispositivo médico aprobado.  
- *  - La presión arterial derivada de la onda PPG depende fuertemente de la
- *    calibración individual, la calidad de la señal, y la frecuencia de sampleo.
- *  - La detección de arritmias (basada en RR-intervals, Poincaré, etc.) requiere
- *    validación y una señal estable. Este código la implementa de forma **básica**.
+ * ---------------------------------------------------------------------------
+ * ADVERTENCIA:
+ *  - Código prototipo para DEMO / investigación, **NO** dispositivo médico.
+ *  - Presión arterial vía PPG depende de calibraciones, señales reales estables,
+ *    y hardware adecuado. Se usa aquí una heurística muy simplificada.
+ *  - La detección de arritmias (RR-intervals, Poincaré, etc.) es también
+ *    aproximada y requiere validación clínica.
+ * ---------------------------------------------------------------------------
  *
- * Ajustes Principales en esta versión:
- * 1. **Cálculo de presión arterial** más robusto:
- *    - Se detectan picos y se calcula el "Pulse Transit Time" (PTT) medio en los
- *      últimos ~60 samples para aproximar la sistólica.
- *    - Asimismo, se estima la amplitud pico-valle media para ajustar la
- *      diastólica. El resultado se "clampa" en rangos fisiológicos razonables.
- * 2. **Umbral de perfusión (PERFUSION_INDEX_THRESHOLD) muy bajo (0.05)** para
- *    permitir señales de baja amplitud, dada la cámara/linterna puede ser variable.
- * 3. **Refinado en la detección de arritmias**: la lógica anterior se mantiene,
- *    pero ahora se tienen logs más claros y un “learning phase” de 10s y se
- *    ajusta la baselineRhythm con la media de RR-intervals.
+ * Ajustes solicitados:
+ * 1) Limitar SpO2 en [88, 98], pues 98% suele ser el máximo real en humanos
+ *    (para no quedar clavado en 100%).
+ * 2) Subir un poco la presión arterial calculada, ya que quedaba muy baja.
+ * 3) Hacer la detección de arritmias más sensible, bajando umbrales
+ *    (MAX_RR_VARIATION, POINCARE_SD1_THRESHOLD, POINCARE_SD2_THRESHOLD).
  *
- * Uso:
- *   const vsp = new VitalSignsProcessor();
- *   // Cada frame de PPG
- *   const { spo2, pressure, arrhythmiaStatus } = vsp.processSignal(ppgValue);
- *
- *   console.log("SpO2:", spo2, "Presión:", pressure, "Arritmias:", arrhythmiaStatus);
- * 
- *   // Para reiniciar en cualquier momento:
- *   vsp.reset();
  */
 
 export class VitalSignsProcessor {
@@ -40,49 +27,48 @@ export class VitalSignsProcessor {
   //        PARÁMETROS GLOBALES
   //-----------------------------------------
 
-  /** Tamaño máximo de buffer PPG (p.e. ~10s a ~30FPS). */
+  /** Tamaño máximo de buffer de señal PPG (p.e. ~10s a ~30FPS). */
   private readonly WINDOW_SIZE = 300;
 
-  /** Factor de calibración para SpO2 (ajustado para ser un poco más alto). */
-  private readonly SPO2_CALIBRATION_FACTOR = 1.05;
+  /** Factor de calibración para SpO2 (bajamos un poco para no saturar en 100). */
+  private readonly SPO2_CALIBRATION_FACTOR = 1.02;
 
   /**
-   * Umbral mínimo de índice de perfusión (AC/DC).  
-   * Con un valor tan bajo (0.05), aceptas señales de menor amplitud,
-   * pero cuidado: podría traer lecturas ruidosas.
+   * Umbral mínimo de índice de perfusión (AC/DC) para confiar en SpO2.
+   * 0.05 significa un perfusionIndex de 5 en notación (%)  
    */
   private readonly PERFUSION_INDEX_THRESHOLD = 0.05;
 
   /**
-   * Ventana de cálculo de SpO2 (para la media).  
-   * Aquí se reduce a 10 para que sea más reactivo.
+   * Ventana usada para SpO2 (para la media).  
+   * Puede ajustarse para hacerlo más reactivo vs estable.
    */
   private readonly SPO2_WINDOW = 10;
 
   /**
-   * Ventana del SMA (Smooth Moving Average) en cada frame.  
-   * Ayuda a atenuar el ruido puntual.
+   * Tamaño de ventana para el Smooth Moving Average en cada frame,
+   * para suavizar ruido puntual.
    */
   private readonly SMA_WINDOW = 3;
 
-  // ───────── Parámetros de detección de arritmias ─────────
+  // ───────── Parámetros de Arritmias ─────────
 
-  /** Fase de aprendizaje (en ms) para baseline de RR-intervals (ej. 10s). */
+  /** Fase de aprendizaje (ms) para baseline de RR-intervals (10s). */
   private readonly ARRHYTHMIA_LEARNING_PERIOD = 10000;
 
-  /** Máxima variación relativa de RR con respecto a la baseline para sospechar arritmia. */
-  private readonly MAX_RR_VARIATION = 0.15;
+  /** Máxima variación relativa de RR vs. la baseline para sospechar arritmia (bajada a 0.10). */
+  private readonly MAX_RR_VARIATION = 0.10;
 
-  /** Número mínimo de latidos consecutivos para estimar baseline. */
+  /** Número mínimo de latidos (RR) para fijar baseline. */
   private readonly MIN_CONSECUTIVE_BEATS = 5;
 
-  /** Umbrales Poincaré SD1 y SD2 para detectar mayor variabilidad. */
-  private readonly POINCARE_SD1_THRESHOLD = 0.07;
-  private readonly POINCARE_SD2_THRESHOLD = 0.15;
+  /** Bajamos umbrales Poincaré para detectar más variaciones. */
+  private readonly POINCARE_SD1_THRESHOLD = 0.05;
+  private readonly POINCARE_SD2_THRESHOLD = 0.10;
 
   /**
-   * Umbral de pico (valor PPG) para contar un latido.  
-   * Ajustar según la amplitud típica de la señal PPG (0.6 es un ejemplo genérico).
+   * Umbral de pico en la señal PPG para contar un latido.
+   * Ajustar según la amplitud habitual de la señal (filtrada).
    */
   private readonly PEAK_THRESHOLD = 0.6;
 
@@ -90,28 +76,28 @@ export class VitalSignsProcessor {
   //           VARIABLES INTERNAS
   //-----------------------------------------
 
-  /** Buffer principal de la señal PPG. */
+  /** Buffer principal de la señal PPG filtrada. */
   private ppgValues: number[] = [];
 
-  /** Último valor leído (no siempre se usa). */
+  /** Valor de SpO2 anterior (para no caer en 0 si la señal empeora). */
   private lastValue = 0;
 
-  /** Marca temporal (ms) del último pico detectado. */
+  /** Última marca temporal (ms) de pico detectado. */
   private lastPeakTime: number | null = null;
 
-  /** Buffer de intervalos RR (tiempos entre picos consecutivos) para arritmias. */
+  /** Buffer de intervalos RR (tiempo entre picos consecutivos). */
   private rrIntervals: number[] = [];
 
-  /** Valor medio del RR en la fase de aprendizaje. Se usa como baseline. */
+  /** RR baseline calculado en fase de aprendizaje. */
   private baselineRhythm = 0;
 
-  /** Flag que indica si aún estamos en la fase de “aprendizaje”. */
+  /** Flag de aprendizaje (true hasta pasar ARRHYTHMIA_LEARNING_PERIOD). */
   private isLearningPhase = true;
 
-  /** Indica si se ha detectado o no arritmia. */
+  /** Flag si se detectó arritmia. */
   private arrhythmiaDetected = false;
 
-  /** Marca de tiempo en que arrancó la medición (para la fase de aprendizaje). */
+  /** Momento de inicio (ms) para la medición actual. */
   private measurementStartTime: number = Date.now();
 
   constructor() {
@@ -120,46 +106,45 @@ export class VitalSignsProcessor {
 
   /**
    * processSignal
-   * Procesa un nuevo valor ppg y retorna SpO2, presión (sistólica/diastólica) y
-   * estado de arritmia ("ARRITMIA DETECTADA", "SIN ARRITMIAS" o "--" en aprendizaje).
+   * @param ppgValue - valor PPG crudo de la cámara
+   * @returns { spo2, pressure, arrhythmiaStatus }
    */
   public processSignal(ppgValue: number): {
     spo2: number;
     pressure: string;
     arrhythmiaStatus: string;
   } {
-    // 1) Filtrar la muestra (SMA pequeño).
+    // 1) Filtrar con un SMA corto.
     const filteredValue = this.applySMAFilter(ppgValue);
 
-    // 2) Agregamos al buffer principal y acotamos si excede WINDOW_SIZE.
+    // 2) Agregar al buffer. Limitar al WINDOW_SIZE.
     this.ppgValues.push(filteredValue);
     if (this.ppgValues.length > this.WINDOW_SIZE) {
       this.ppgValues.shift();
     }
 
-    // 3) Detectar picos para medir RR-intervals.
+    // 3) Detectar pico para RR intervals:
     const isPeak = this.detectPeak(filteredValue);
     if (isPeak) {
       this.processHeartBeat();
     }
 
-    // 4) Calcular SpO2 (tomamos ~últimos 60 valores o lo que haya).
+    // 4) Calcular SpO2 (últimos ~60).
     const chunkForSpO2 = this.ppgValues.slice(-60);
     const spo2 = this.calculateSpO2(chunkForSpO2);
 
-    // 5) Calcular Presión Arterial en base a la onda PPG.
+    // 5) Calcular Presión Arterial (igual, últimos ~60).
     const chunkForBP = this.ppgValues.slice(-60);
     const bp = this.calculateBloodPressure(chunkForBP);
     const pressureString = `${bp.systolic}/${bp.diastolic}`;
 
-    // 6) Determinar estado de arritmia (en fase de aprendizaje, no se muestra).
+    // 6) Estado de arritmia (si ya no estamos aprendiendo).
     let arrhythmiaStatus = "--";
     if (!this.isLearningPhase) {
-      arrhythmiaStatus = this.arrhythmiaDetected
-        ? "ARRITMIA DETECTADA"
-        : "SIN ARRITMIAS";
+      arrhythmiaStatus = this.arrhythmiaDetected ? "ARRITMIA DETECTADA" : "SIN ARRITMIAS";
     }
 
+    // Retornar resultado.
     return {
       spo2,
       pressure: pressureString,
@@ -167,13 +152,15 @@ export class VitalSignsProcessor {
     };
   }
 
-  // ──────────────────────────────────────────────────────────
-  //                CÁLCULO DE SPO2 MUY BÁSICO
-  // ──────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────
+  //             CÁLCULO DE SPO2
+  // ─────────────────────────────────────────────────
 
   private calculateSpO2(values: number[]): number {
-    // Necesitamos al menos ~30 muestras para tener algo estable
-    if (values.length < 30) return this.lastValue;
+    // Se requiere al menos ~30 muestras para estabilidad.
+    if (values.length < 30) {
+      return this.lastValue;
+    }
 
     // DC (promedio)
     const dc = this.calculateDC(values);
@@ -181,88 +168,85 @@ export class VitalSignsProcessor {
       return this.lastValue;
     }
 
-    // AC (max-min)
+    // AC (rango)
     const ac = this.calculateAC(values);
     const perfusionIndex = (ac / dc) * 100;
 
-    // Si la perfusión es demasiado baja, devolvemos el último valor.
+    // Si la perfusión es demasiado baja, regresar último SpO2.
     if (perfusionIndex < this.PERFUSION_INDEX_THRESHOLD * 100) {
       return this.lastValue;
     }
 
-    // Cálculo "a ojo": se toma la media con factor de calibración.
-    const mean = values.reduce((a, b) => a + b, 0) / values.length;
+    // Cálculo base a partir del promedio, con factor de calibración.
+    const mean = dc; // (dc es ya el promedio).
     const rawSpO2 = mean * this.SPO2_CALIBRATION_FACTOR;
 
-    // Heurística: limitamos SpO2 en [85, 100].
-    const spO2 = Math.round(Math.max(85, Math.min(100, rawSpO2)));
+    // Limitamos entre [88, 98].
+    const spO2 = Math.round(Math.max(88, Math.min(98, rawSpO2)));
 
-    // Guardamos para reusar si la señal empeora.
+    // Guardamos por si la señal empeora
     this.lastValue = spO2;
     return spO2;
   }
 
-  // ──────────────────────────────────────────────────────────
-  //         CÁLCULO DE PRESIÓN ARTERIAL (HEURÍSTICO)
-  // ──────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────
+  //         CÁLCULO DE PRESIÓN ARTERIAL
+  // ─────────────────────────────────────────────────
 
   private calculateBloodPressure(values: number[]): {
     systolic: number;
     diastolic: number;
   } {
-    // Si no hay muestras suficientes, devolvemos una estimación nula.
+    // Mínimo ~30 para tener algo de info
     if (values.length < 30) {
       return { systolic: 0, diastolic: 0 };
     }
 
-    // 1) Hallar picos en la ventana (no los de detectPeak, sino un minianálisis).
-    //    Usamos la misma lógica, pero en un array local.
+    // Buscar picos/ valles en este chunk
     const { peakIndices, valleyIndices } = this.localFindPeaksAndValleys(values);
     if (peakIndices.length < 2) {
-      // Retorna el último valor o algo por defecto
       return { systolic: 120, diastolic: 80 };
     }
 
-    // 2) Asumir ~30FPS => ~33 ms por muestra.
+    // Asumamos ~30 FPS => ~33ms / muestra
     const fps = 30;
     const msPerSample = 1000 / fps;
 
-    // 3) Calcular PTT (tiempo en ms entre picos consecutivos).
+    // PTT (tiempo en ms entre picos consecutivos)
     const pttValues: number[] = [];
     for (let i = 1; i < peakIndices.length; i++) {
       const dt = (peakIndices[i] - peakIndices[i - 1]) * msPerSample;
       pttValues.push(dt);
     }
-    // Tomamos el promedio
-    let avgPTT = pttValues.reduce((acc, val) => acc + val, 0) / (pttValues.length || 1);
+    let avgPTT = pttValues.reduce((acc, val) => acc + val, 0) / pttValues.length;
 
-    // Evitar valores extremistas de PTT
-    if (avgPTT < 300) avgPTT = 300; // ~300ms => muy alta FC
-    if (avgPTT > 1500) avgPTT = 1500; // ~1.5s => FC muy baja
+    // Evitar extremos
+    if (avgPTT < 300) avgPTT = 300;   // ~300ms => FC ~200 BPM, extremo
+    if (avgPTT > 1500) avgPTT = 1500; // ~1.5s => FC ~40 BPM, extremo
 
-    // 4) Calcular amplitud pico-valle promedio.
+    // Calcular amplitud pico-valle promedio
     const amplitude = this.calculateAmplitude(values, peakIndices, valleyIndices);
 
-    // 5) Heurística para la presión:
-    //    - sistólica ~ 110 ± factor*(500 - avgPTT)
-    //    - también aportamos un factor de amplitud
-    const alphaPTT = 0.05; // sensibilidad de la PTT
-    const alphaAmp = 0.2;  // sensibilidad de la amplitud
-    let estimatedSystolic = 110 - alphaPTT * (avgPTT - 500) + alphaAmp * amplitude;
-    // diastólica ~ 70 + un porcentaje de la sistólica
-    let estimatedDiastolic = estimatedSystolic * 0.6;
+    /**
+     * Heurísticas:
+     *   sistólica ~ 115 - 0.04*(avgPTT - 500) + 0.25*(amplitude)
+     *   diastólica ~ 0.65 * sistólica
+     * Clamps en [95–180]/[60–115]
+     */
+    const alphaPTT = 0.04;  // sensibilidad al PTT
+    const alphaAmp = 0.25;  // sensibilidad a la amplitud
+    let estimatedSystolic = 115 - alphaPTT * (avgPTT - 500) + alphaAmp * amplitude;
+    let estimatedDiastolic = estimatedSystolic * 0.65;
 
-    // Redondear y clampa a valores fisiológicos
-    const systolic = Math.round(Math.min(180, Math.max(90, estimatedSystolic)));
-    const diastolic = Math.round(Math.min(110, Math.max(60, estimatedDiastolic)));
+    const systolic = Math.round(Math.max(95, Math.min(180, estimatedSystolic)));
+    const diastolic = Math.round(Math.max(60, Math.min(115, estimatedDiastolic)));
 
     return { systolic, diastolic };
   }
 
   /**
    * localFindPeaksAndValleys
-   * Método simplificado para la ventana "values". No usa tiempo absoluto,
-   * sino sólo compara vecinos.
+   * Búsqueda simple de picos y valles dentro de "values".
    */
   private localFindPeaksAndValleys(values: number[]) {
     const peakIndices: number[] = [];
@@ -270,6 +254,7 @@ export class VitalSignsProcessor {
 
     for (let i = 2; i < values.length - 2; i++) {
       const v = values[i];
+      // Pico si v > a i±1, i±2
       if (
         v > values[i - 1] &&
         v > values[i - 2] &&
@@ -278,6 +263,7 @@ export class VitalSignsProcessor {
       ) {
         peakIndices.push(i);
       }
+      // Valle si v < a i±1, i±2
       if (
         v < values[i - 1] &&
         v < values[i - 2] &&
@@ -287,13 +273,12 @@ export class VitalSignsProcessor {
         valleyIndices.push(i);
       }
     }
-
     return { peakIndices, valleyIndices };
   }
 
   /**
    * calculateAmplitude
-   * Calcula la amplitud promedio (peak - valley) de la ventana dada.
+   * Amplitud pico-valle promedio.
    */
   private calculateAmplitude(
     values: number[],
@@ -305,6 +290,8 @@ export class VitalSignsProcessor {
     const amps: number[] = [];
     const len = Math.min(peaks.length, valleys.length);
     for (let i = 0; i < len; i++) {
+      // Se asume que peak[i] > valley[i] en tiempo,
+      // si no, igual tomamos la diferencia si es >0.
       const amp = values[peaks[i]] - values[valleys[i]];
       if (amp > 0) {
         amps.push(amp);
@@ -316,19 +303,19 @@ export class VitalSignsProcessor {
     return mean;
   }
 
-  // ──────────────────────────────────────────────────────────
-  //       DETECCIÓN DE PICO (PARA ARRITMIAS / RR-INTERVALS)
-  // ──────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────
+  //          DETECCIÓN DE ARRITMIAS (RR)
+  // ─────────────────────────────────────────────────
 
   /**
    * detectPeak
-   * Marca un latido cuando el valor PPG supera PEAK_THRESHOLD y
-   * han pasado al menos 500ms desde el último pico.
+   * Marca un latido cuando value > PEAK_THRESHOLD y pasaron >=500ms 
+   * desde el último pico.
    */
   private detectPeak(value: number): boolean {
     const currentTime = Date.now();
     if (this.lastPeakTime === null) {
-      // primer pico
+      // primer latido
       if (value > this.PEAK_THRESHOLD) {
         this.lastPeakTime = currentTime;
         return true;
@@ -336,7 +323,6 @@ export class VitalSignsProcessor {
       return false;
     }
 
-    // time since last peak
     const timeSinceLastPeak = currentTime - this.lastPeakTime;
     if (value > this.PEAK_THRESHOLD && timeSinceLastPeak > 500) {
       this.lastPeakTime = currentTime;
@@ -347,7 +333,7 @@ export class VitalSignsProcessor {
 
   /**
    * processHeartBeat
-   * Calcula el intervalo RR y maneja la lógica de aprendizaje y arritmias.
+   * Cada vez que detectamos un pico, calculamos RR y chequeamos arritmias.
    */
   private processHeartBeat() {
     const currentTime = Date.now();
@@ -356,18 +342,17 @@ export class VitalSignsProcessor {
       return;
     }
 
-    // RR = tiempo entre este latido y el anterior
     const rrInterval = currentTime - this.lastPeakTime;
     this.rrIntervals.push(rrInterval);
 
-    // Limitamos el buffer
+    // Limitar el buffer de RR
     if (this.rrIntervals.length > 50) {
       this.rrIntervals.shift();
     }
 
     const timeSinceStart = currentTime - this.measurementStartTime;
 
-    // Fase de aprendizaje (10s). Se calcula una baseline del RR.
+    // Fase aprendizaje
     if (this.isLearningPhase && timeSinceStart <= this.ARRHYTHMIA_LEARNING_PERIOD) {
       if (this.rrIntervals.length >= this.MIN_CONSECUTIVE_BEATS) {
         this.calculateBaselineRhythm();
@@ -376,7 +361,7 @@ export class VitalSignsProcessor {
         this.isLearningPhase = false;
       }
     } else {
-      // Fase de detección real
+      // Fuera de aprendizaje, checar arritmias
       if (this.rrIntervals.length >= this.MIN_CONSECUTIVE_BEATS) {
         this.detectArrhythmia();
       }
@@ -385,18 +370,18 @@ export class VitalSignsProcessor {
 
   /**
    * calculateBaselineRhythm
-   * Se basa en los últimos MIN_CONSECUTIVE_BEATS RR-intervals 
-   * para fijar la baseline.
+   * Baseline con últimos MIN_CONSECUTIVE_BEATS RR.
    */
   private calculateBaselineRhythm() {
-    const recentIntervals = this.rrIntervals.slice(-this.MIN_CONSECUTIVE_BEATS);
-    const sum = recentIntervals.reduce((a, b) => a + b, 0);
-    this.baselineRhythm = sum / recentIntervals.length;
+    const recent = this.rrIntervals.slice(-this.MIN_CONSECUTIVE_BEATS);
+    const sum = recent.reduce((a, b) => a + b, 0);
+    this.baselineRhythm = sum / recent.length;
   }
 
   /**
    * detectArrhythmia
-   * Verifica variaciones en RR e índices Poincaré (SD1, SD2).
+   * Usa variación vs baseline, Poincaré (SD1,SD2) y patrón irregular 
+   * para determinar si hay arritmia.
    */
   private detectArrhythmia() {
     if (this.rrIntervals.length < 2) return;
@@ -404,12 +389,16 @@ export class VitalSignsProcessor {
     const sd1 = this.calculatePoincareSD1();
     const sd2 = this.calculatePoincareSD2();
     const lastRR = this.rrIntervals[this.rrIntervals.length - 1];
+
+    // Asegurarse que hay baseline
     if (!this.baselineRhythm) return;
 
+    // Relación entre el último RR y la baseline
     const rrVariation = Math.abs(lastRR - this.baselineRhythm) / this.baselineRhythm;
+
+    // Checar patrón irregular en los últimos 6 latidos
     const hasIrregularPattern = this.detectIrregularPattern();
 
-    // Nueva condición de arritmia
     const newArrhythmiaState =
       (sd1 > this.POINCARE_SD1_THRESHOLD && sd2 > this.POINCARE_SD2_THRESHOLD) ||
       (rrVariation > this.MAX_RR_VARIATION) ||
@@ -417,7 +406,7 @@ export class VitalSignsProcessor {
 
     if (newArrhythmiaState !== this.arrhythmiaDetected) {
       this.arrhythmiaDetected = newArrhythmiaState;
-      console.log("VitalSignsProcessor: Estado de arritmia => ", {
+      console.log("VitalSignsProcessor: Arritmia =>", {
         arrhythmiaDetected: this.arrhythmiaDetected,
         sd1,
         sd2,
@@ -429,40 +418,38 @@ export class VitalSignsProcessor {
 
   /**
    * calculatePoincareSD1
-   * SD1 en plot Poincaré = desviación estándar de (RRn+1 - RRn)/√2
+   * SD1 en diagrama Poincaré = std de ((RR_n+1 - RR_n)/√2)
    */
   private calculatePoincareSD1(): number {
     const n = this.rrIntervals.length;
     if (n < 2) return 0;
 
-    const diffs = [];
+    const diffs: number[] = [];
     for (let i = 0; i < n - 1; i++) {
       diffs.push((this.rrIntervals[i + 1] - this.rrIntervals[i]) / Math.sqrt(2));
     }
-
     return this.calculateStandardDeviation(diffs);
   }
 
   /**
    * calculatePoincareSD2
-   * SD2 en plot Poincaré = desviación estándar de (RRn+1 + RRn)/√2
+   * SD2 en Poincaré = std de ((RR_n+1 + RR_n)/√2)
    */
   private calculatePoincareSD2(): number {
     const n = this.rrIntervals.length;
     if (n < 2) return 0;
 
-    const sums = [];
+    const sums: number[] = [];
     for (let i = 0; i < n - 1; i++) {
       sums.push((this.rrIntervals[i + 1] + this.rrIntervals[i]) / Math.sqrt(2));
     }
-
     return this.calculateStandardDeviation(sums);
   }
 
   /**
    * detectIrregularPattern
-   * Si, en los últimos 6 latidos, >=2 tienen una variación RR>MAX_RR_VARIATION, 
-   * lo consideramos un patrón irregular.
+   * Si en los últimos 6 latidos >= 2 tienen variación de RR > MAX_RR_VARIATION, 
+   * lo marcamos como patrón irregular.
    */
   private detectIrregularPattern(): boolean {
     if (this.rrIntervals.length < 6) return false;
@@ -483,23 +470,24 @@ export class VitalSignsProcessor {
 
   /**
    * calculateStandardDeviation
-   * SD genérica para un array de valores.
+   * Calcula desviación estándar simple para un array de valores.
    */
   private calculateStandardDeviation(values: number[]): number {
     const n = values.length;
     if (n === 0) return 0;
     const mean = values.reduce((a, b) => a + b, 0) / n;
-    const squaredDiffs = values.map((v) => Math.pow(v - mean, 2));
-    return Math.sqrt(squaredDiffs.reduce((a, b) => a + b, 0) / n);
+    const sqDiffs = values.map((v) => Math.pow(v - mean, 2));
+    const avgSqDiff = sqDiffs.reduce((a, b) => a + b, 0) / n;
+    return Math.sqrt(avgSqDiff);
   }
 
-  // ──────────────────────────────────────────────────────────
-  //                 FUNCIONES DE SOPORTE
-  // ──────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────
+  //           SOPORTE & FILTRO DE ENTRADA
+  // ─────────────────────────────────────────────────
 
-  /** 
+  /**
    * calculateAC
-   * AC = max - min
+   * AC = (max - min) de la ventana actual.
    */
   private calculateAC(values: number[]): number {
     return Math.max(...values) - Math.min(...values);
@@ -507,16 +495,17 @@ export class VitalSignsProcessor {
 
   /**
    * calculateDC
-   * DC = promedio de la ventana actual
+   * DC = promedio de la ventana actual.
    */
   private calculateDC(values: number[]): number {
+    if (values.length === 0) return 0;
     const sum = values.reduce((a, b) => a + b, 0);
     return sum / values.length;
   }
 
   /**
-   * applySMAFilter
-   * Promedio móvil de tamaño 3 para atenuar ruido muy puntual.
+   * Filtro SMA (Smooth Moving Average) de tamaño 3
+   * para mitigar ruido puntual.
    */
   private smaBuffer: number[] = [];
   private applySMAFilter(value: number): number {
@@ -530,7 +519,7 @@ export class VitalSignsProcessor {
 
   /**
    * reset
-   * Restablece todo el estado interno.
+   * Reinicia todo el estado interno: buffers, baseline de RR, etc.
    */
   public reset(): void {
     this.ppgValues = [];
