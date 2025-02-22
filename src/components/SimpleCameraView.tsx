@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, useState } from 'react';
 import { Fingerprint, SwitchCamera } from 'lucide-react';
 import { Button } from "@/components/ui/button";
@@ -82,25 +81,12 @@ const SimpleCameraView = ({
             width: { ideal: 640 },
             height: { ideal: 480 },
             frameRate: { ideal: 30 },
-            // Forzar modo normal de la cámara
-            whiteBalanceMode: { exact: "continuous" },
-            exposureMode: { exact: "continuous" },
-            exposureCompensation: { ideal: 0 },
+            whiteBalance: 'continuous',
+            exposure: 'continuous',
             brightness: { ideal: 100 },
-            contrast: { ideal: 100 },
             saturation: { ideal: 100 },
             sharpness: { ideal: 100 },
-            focusMode: { exact: "continuous" },
-            // Deshabilitar modo noche
-            colorTemperature: { ideal: 5000 }, // Temperatura de color natural
-            advanced: [{
-              // Estos son constraints específicos para Android
-              exposureTime: { ideal: 33333 }, // 1/30 segundo
-              sensitivityISO: { ideal: 100 }, // ISO bajo para evitar modo noche
-              torch: false,
-              noiseReduction: "fast",
-              autoExposurePriority: true
-            }]
+            focusMode: 'continuous'
           }
         };
 
@@ -110,22 +96,25 @@ const SimpleCameraView = ({
 
         stream = await navigator.mediaDevices.getUserMedia(constraints);
         
-        // Aplicar configuraciones adicionales al track de video
         const videoTrack = stream.getVideoTracks()[0];
         if (videoTrack) {
+          const capabilities = videoTrack.getCapabilities();
+          
           try {
-            await videoTrack.applyConstraints({
+            const settings: MediaTrackConstraints = {
               advanced: [{
-                torch: false,
-                manual_exposure: false,
-                exposure_time: 33333, // 1/30 segundo
-                exposure_compensation: 0,
-                white_balance_mode: "continuous",
-                focus_mode: "continuous"
+                brightness: capabilities.brightness?.max ?? 100,
+                contrast: capabilities.contrast?.max ?? 100,
+                saturation: capabilities.saturation?.max ?? 100,
+                sharpness: capabilities.sharpness?.max ?? 100,
+                whiteBalance: 'continuous',
+                exposure: 'continuous'
               }]
-            });
+            };
+            
+            await videoTrack.applyConstraints(settings);
           } catch (e) {
-            console.warn("No se pudieron aplicar todas las configuraciones avanzadas:", e);
+            console.warn("No se pudieron aplicar todas las configuraciones:", e);
           }
         }
         
@@ -185,8 +174,8 @@ const SimpleCameraView = ({
           isAndroid ? 'object-cover' : 'object-contain'
         }`}
         style={{
-          willChange: 'transform', // Optimización de rendimiento
-          backfaceVisibility: 'hidden' // Optimización de rendimiento
+          willChange: 'transform',
+          backfaceVisibility: 'hidden'
         }}
       />
       
