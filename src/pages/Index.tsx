@@ -1,7 +1,8 @@
+
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
-import SimpleCameraView from "@/components/SimpleCameraView";
+import CameraView from "@/components/CameraView";
 import { useSignalProcessor } from "@/hooks/useSignalProcessor";
 import SignalQualityIndicator from "@/components/SignalQualityIndicator";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
@@ -27,13 +28,12 @@ const Index = () => {
   const [email, setEmail] = useState<string>("");
   const [elapsedTime, setElapsedTime] = useState(0);
   const measurementTimerRef = useRef<number | null>(null);
-  const frameRequestRef = useRef<number>();
-  const processingRef = useRef(false);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
+  // Auth effect
   useEffect(() => {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -139,6 +139,7 @@ const Index = () => {
     }
   };
 
+  // Cleanup effect
   useEffect(() => {
     return () => {
       if (measurementTimerRef.current) {
@@ -148,6 +149,7 @@ const Index = () => {
     };
   }, []);
 
+  // Calibration handlers
   const handleCalibrationStart = () => {
     if (isMonitoring) {
       pauseMonitoring();
@@ -160,6 +162,7 @@ const Index = () => {
     }
   };
 
+  // Visibility change effect
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden) {
@@ -179,52 +182,58 @@ const Index = () => {
     };
   }, [isMonitoring, isPaused, showCalibrationDialog]);
 
+  // Stream handler
   const handleStreamReady = (stream: MediaStream) => {
     if (!isMonitoring) return;
     
+    console.log("Index: Camera stream ready", stream.getVideoTracks()[0].getSettings());
     const videoTrack = stream.getVideoTracks()[0];
     const imageCapture = new ImageCapture(videoTrack);
+    
+    if (videoTrack.getCapabilities()?.torch) {
+      videoTrack.applyConstraints({
+        advanced: [{ torch: true }]
+      }).catch(err => console.error("Error activando linterna:", err));
+    }
+    
     const tempCanvas = document.createElement('canvas');
     const tempCtx = tempCanvas.getContext('2d');
-    
     if (!tempCtx) {
-      console.error("No se pudo obtener el contexto 2D");
+      console.error("Index: No se pudo obtener el contexto 2D del canvas temporal");
       return;
     }
     
     const processImage = async () => {
-      if (!isMonitoring || isPaused) {
-        frameRequestRef.current = requestAnimationFrame(processImage);
+      if (!isMonitoring) {
+        console.log("Index: Monitoreo detenido, no se procesan más frames");
         return;
       }
-
+      
       try {
-        if (!processingRef.current) {
-          processingRef.current = true;
-          
-          const frame = await imageCapture.grabFrame();
-          tempCanvas.width = frame.width;
-          tempCanvas.height = frame.height;
-          tempCtx.drawImage(frame, 0, 0);
-          
-          const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
-          processFrame(imageData);
-          
-          processingRef.current = false;
+        const frame = await imageCapture.grabFrame();
+        tempCanvas.width = frame.width;
+        tempCanvas.height = frame.height;
+        tempCtx.drawImage(frame, 0, 0);
+        const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
+        processFrame(imageData);
+        
+        if (isMonitoring) {
+          requestAnimationFrame(processImage);
         }
       } catch (error) {
-        processingRef.current = false;
-        console.error("Error capturando frame:", error);
+        console.error("Index: Error capturando frame:", error);
+        if (isMonitoring) {
+          requestAnimationFrame(processImage);
+        }
       }
-
-      frameRequestRef.current = requestAnimationFrame(processImage);
     };
 
     processImage();
   };
 
+  // Signal processing effect
   useEffect(() => {
-    if (lastSignal && lastSignal.fingerDetected && isMonitoring && !isPaused) {
+    if (lastSignal && lastSignal.fingerDetected && isMonitoring) {
       const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
       setHeartRate(heartBeatResult.bpm);
       
@@ -236,25 +245,18 @@ const Index = () => {
       
       setSignalQuality(lastSignal.quality);
     }
-  }, [lastSignal, isMonitoring, isPaused, processHeartBeat, processVitalSigns]);
-
-  useEffect(() => {
-    return () => {
-      if (frameRequestRef.current) {
-        cancelAnimationFrame(frameRequestRef.current);
-      }
-    };
-  }, []);
+  }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
 
   return (
     <div className="w-screen h-screen bg-gray-900 overflow-hidden">
       <div className="relative w-full h-full">
         <div className="absolute inset-0">
-          <SimpleCameraView 
+          <CameraView 
             onStreamReady={handleStreamReady} 
             isMonitoring={isCameraOn}
             isFingerDetected={lastSignal?.fingerDetected}
             signalQuality={signalQuality}
+            buttonPosition={document.querySelector('.measure-button')?.getBoundingClientRect()}
           />
         </div>
 
