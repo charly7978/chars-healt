@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
@@ -12,15 +13,19 @@ const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [signalQuality, setSignalQuality] = useState(0);
-  const [vitalSigns, setVitalSigns] = useState({ spo2: 0, pressure: "--/--" });
+  const [vitalSigns, setVitalSigns] = useState({ 
+    spo2: 0, 
+    pressure: "--/--",
+    arrhythmiaStatus: "--" 
+  });
   const [elapsedTime, setElapsedTime] = useState(0);
   const [heartRate, setHeartRate] = useState(0);
-  const [arrhythmiaCount, setArrhythmiaCount] = useState<string | number>(0);
+  const [arrhythmiaCount, setArrhythmiaCount] = useState<string | number>("--");
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const processingRef = useRef<boolean>(false);
-  const { processSignal: processHeartBeat, reset: resetHeartBeat } = useHeartBeatProcessor();
+  const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
   useEffect(() => {
@@ -66,12 +71,13 @@ const Index = () => {
       // Procesar señal cardíaca
       const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
       setHeartRate(heartBeatResult.bpm);
-      setArrhythmiaCount(heartBeatResult.arrhythmiaCount);
       
-      // Procesar signos vitales (SpO2 y presión)
+      // Procesar signos vitales (SpO2, presión y arritmias)
       const vitals = processVitalSigns(lastSignal.filteredValue);
       if (vitals) {
         setVitalSigns(vitals);
+        // Actualizar el estado de arritmias
+        setArrhythmiaCount(vitals.arrhythmiaStatus);
       }
     }
   }, [lastSignal, processHeartBeat, processVitalSigns]);
@@ -169,11 +175,10 @@ const Index = () => {
     e.preventDefault();
     e.stopPropagation();
     handleStopMeasurement();
-    resetHeartBeat();
     resetVitalSigns();
-    setVitalSigns({ spo2: 0, pressure: "--/--" });
+    setVitalSigns({ spo2: 0, pressure: "--/--", arrhythmiaStatus: "--" });
     setHeartRate(0);
-    setArrhythmiaCount(0);
+    setArrhythmiaCount("--");
   };
 
   return (
@@ -209,7 +214,7 @@ const Index = () => {
               <VitalSign label="Heart Rate" value={heartRate} unit="BPM" />
               <VitalSign label="SpO2" value={vitalSigns.spo2} unit="%" />
               <VitalSign label="Blood Pressure" value={vitalSigns.pressure} unit="mmHg" />
-              <VitalSign label="Arrhythmias" value={arrhythmiaCount} unit="events" />
+              <VitalSign label="Arrhythmias" value={arrhythmiaCount} />
             </div>
           </div>
 
