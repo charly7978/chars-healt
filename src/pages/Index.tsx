@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
@@ -25,6 +26,8 @@ const Index = () => {
   const [arrhythmiaCount, setArrhythmiaCount] = useState<string | number>("--");
   const [showCalibrationDialog, setShowCalibrationDialog] = useState(false);
   const [email, setEmail] = useState<string>("");
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const measurementTimerRef = useRef<number | null>(null);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
@@ -67,6 +70,22 @@ const Index = () => {
     setIsCameraOn(true);
     setIsPaused(false);
     startProcessing();
+    setElapsedTime(0);
+    // Iniciar temporizador de 30 segundos
+    if (measurementTimerRef.current) {
+      clearInterval(measurementTimerRef.current);
+    }
+    measurementTimerRef.current = window.setInterval(() => {
+      setElapsedTime(prev => {
+        if (prev >= 30) {
+          if (measurementTimerRef.current) {
+            clearInterval(measurementTimerRef.current);
+          }
+          return 30;
+        }
+        return prev + 1;
+      });
+    }, 1000);
   };
 
   const stopMonitoring = () => {
@@ -75,12 +94,19 @@ const Index = () => {
     setIsPaused(false);
     stopProcessing();
     resetVitalSigns();
+    setElapsedTime(0);
+    if (measurementTimerRef.current) {
+      clearInterval(measurementTimerRef.current);
+    }
   };
 
   const pauseMonitoring = () => {
     if (isMonitoring) {
       setIsPaused(true);
       stopProcessing();
+      if (measurementTimerRef.current) {
+        clearInterval(measurementTimerRef.current);
+      }
     }
   };
 
@@ -88,8 +114,30 @@ const Index = () => {
     if (isMonitoring) {
       setIsPaused(false);
       startProcessing();
+      // Reanudar temporizador si no ha llegado a 30 segundos
+      if (elapsedTime < 30) {
+        measurementTimerRef.current = window.setInterval(() => {
+          setElapsedTime(prev => {
+            if (prev >= 30) {
+              if (measurementTimerRef.current) {
+                clearInterval(measurementTimerRef.current);
+              }
+              return 30;
+            }
+            return prev + 1;
+          });
+        }, 1000);
+      }
     }
   };
+
+  useEffect(() => {
+    return () => {
+      if (measurementTimerRef.current) {
+        clearInterval(measurementTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleCalibrationStart = () => {
     if (isMonitoring) {
@@ -200,36 +248,43 @@ const Index = () => {
         <div className="relative z-10 h-full flex flex-col justify-between p-4">
           <div className="flex justify-between items-start w-full">
             <h1 className="text-lg font-bold text-white bg-black/30 px-3 py-1 rounded">PPG Monitor</h1>
-            <div className="flex gap-2">
-              <div className="text-sm text-gray-300 bg-black/30 px-3 py-1 rounded">
+            <div className="flex gap-2 items-center">
+              <div className="text-xs text-gray-300 bg-black/30 px-2 py-1 rounded truncate max-w-[120px]">
                 {email}
               </div>
               <Button
                 variant="ghost"
                 size="icon"
-                className="bg-black/30 text-gray-300 hover:text-white"
+                className="bg-black/30 text-gray-300 hover:text-white h-8 w-8"
                 onClick={() => setShowCalibrationDialog(true)}
                 disabled={!isMonitoring}
               >
-                <Settings className="h-5 w-5" />
+                <Settings className="h-4 w-4" />
               </Button>
               <Button
                 variant="ghost"
                 size="icon"
-                className="bg-black/30 text-gray-300 hover:text-white"
+                className="bg-black/30 text-gray-300 hover:text-white h-8 w-8"
                 onClick={handleLogout}
               >
-                <LogOut className="h-5 w-5" />
+                <LogOut className="h-4 w-4" />
               </Button>
             </div>
           </div>
 
           <div className="flex-1 flex flex-col justify-center gap-2 max-w-md mx-auto w-full">
-            <PPGSignalMeter 
-              value={lastSignal?.filteredValue || 0}
-              quality={lastSignal?.quality || 0}
-              isFingerDetected={lastSignal?.fingerDetected || false}
-            />
+            <div className="relative">
+              <PPGSignalMeter 
+                value={lastSignal?.filteredValue || 0}
+                quality={lastSignal?.quality || 0}
+                isFingerDetected={lastSignal?.fingerDetected || false}
+              />
+              {isMonitoring && (
+                <div className="absolute top-2 right-2 text-sm font-medium text-white bg-black/50 px-2 py-1 rounded">
+                  {elapsedTime}s / 30s
+                </div>
+              )}
+            </div>
 
             <SignalQualityIndicator quality={signalQuality} />
 
