@@ -46,7 +46,7 @@ const PPGSignalMeter = ({ value, quality, isFingerDetected }: PPGSignalMeterProp
       ctx.stroke();
     }
 
-    // Dibujar señal
+    // Dibujar señal (invertida)
     ctx.beginPath();
     ctx.strokeStyle = quality > 75 ? '#00ff00' : quality > 50 ? '#ffff00' : '#ff0000';
     ctx.lineWidth = 2;
@@ -54,7 +54,8 @@ const PPGSignalMeter = ({ value, quality, isFingerDetected }: PPGSignalMeterProp
     values.forEach((point, index) => {
       const x = (canvas.width / MAX_POINTS) * index;
       const normalizedY = (point - minVal) / range;
-      const y = canvas.height - (normalizedY * canvas.height * 0.8 + canvas.height * 0.1);
+      // Invertimos la señal aquí, usando normalizedY directamente en lugar de (1 - normalizedY)
+      const y = normalizedY * canvas.height * 0.8 + canvas.height * 0.1;
       
       if (index === 0) {
         ctx.moveTo(x, y);

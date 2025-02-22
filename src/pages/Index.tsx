@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
@@ -24,7 +23,6 @@ const Index = () => {
     processingRef.current = isMonitoring;
   }, [isMonitoring]);
 
-  // Restaurar la actualización de calidad de señal
   useEffect(() => {
     if (lastSignal) {
       console.log("Index: Actualizando calidad de señal:", lastSignal.quality);
@@ -32,7 +30,6 @@ const Index = () => {
     }
   }, [lastSignal]);
 
-  // Mantener el procesamiento de señal cardíaca separado
   useEffect(() => {
     if (lastSignal && lastSignal.fingerDetected) {
       console.log("Index: Procesando señal cardíaca", {
@@ -59,7 +56,6 @@ const Index = () => {
     const videoTrack = stream.getVideoTracks()[0];
     const imageCapture = new ImageCapture(videoTrack);
     
-    // Intentar encender la linterna
     if (videoTrack.getCapabilities()?.torch) {
       videoTrack.applyConstraints({
         advanced: [{ torch: true }]
@@ -157,7 +153,7 @@ const Index = () => {
           <div className="flex justify-between items-start w-full">
             <h1 className="text-lg font-bold text-white bg-black/30 px-3 py-1 rounded">PPG Monitor</h1>
             <div className="text-base font-mono text-medical-blue bg-black/30 px-3 py-1 rounded">
-              {isMonitoring ? `${Math.ceil(22 - elapsedTime)}s` : '22s'}
+              {isMonitoring ? `${Math.ceil(30 - elapsedTime)}s` : '30s'}
             </div>
           </div>
 
