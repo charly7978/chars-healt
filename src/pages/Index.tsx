@@ -9,6 +9,7 @@ import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import CalibrationDialog from "@/components/CalibrationDialog";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -24,6 +25,7 @@ const Index = () => {
   const [arrhythmiaCount, setArrhythmiaCount] = useState<string | number>("--");
   const [isCalibrating, setIsCalibrating] = useState(false);
   const [showCalibrationDialog, setShowCalibrationDialog] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { startProcessing, stopProcessing, lastSignal, processFrame, calibrate } = useSignalProcessor();
@@ -31,6 +33,24 @@ const Index = () => {
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
   const { toast } = useToast();
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      setIsAuthenticated(!!session);
+      if (error) {
+        console.error("Error verificando autenticación:", error);
+      }
+    };
+
+    checkAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAuthenticated(!!session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   useEffect(() => {
     processingRef.current = isMonitoring;
@@ -196,6 +216,15 @@ const Index = () => {
   };
 
   const handleCalibration = async () => {
+    if (!isAuthenticated) {
+      toast({
+        variant: "destructive",
+        title: "Error de Acceso",
+        description: "Debe iniciar sesión para realizar la calibración"
+      });
+      return;
+    }
+
     try {
       setIsCalibrating(true);
       setShowCalibrationDialog(true);
@@ -214,14 +243,7 @@ const Index = () => {
           });
         }, 500);
       } else {
-        toast({
-          variant: "destructive",
-          title: "Error de Calibración",
-          description: "Por favor, intente nuevamente.",
-          duration: 3000,
-        });
-        setIsCalibrating(false);
-        setShowCalibrationDialog(false);
+        throw new Error("Error en el proceso de calibración");
       }
     } catch (error) {
       console.error("Error durante la calibración:", error);
@@ -278,7 +300,7 @@ const Index = () => {
               onClick={handleCalibration}
               size="sm"
               className="flex-1 bg-medical-blue/80 hover:bg-medical-blue text-white text-xs py-1.5"
-              disabled={isCalibrating || !isMonitoring}
+              disabled={isCalibrating || !isMonitoring || !isAuthenticated}
             >
               {isCalibrating ? "Calibrando..." : "Calibrar"}
             </Button>
