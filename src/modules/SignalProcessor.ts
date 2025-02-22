@@ -26,14 +26,14 @@ export class PPGSignalProcessor implements SignalProcessor {
   private kalmanFilter: KalmanFilter;
   private lastValues: number[] = [];
   private readonly DEFAULT_CONFIG = {
-    BUFFER_SIZE: 15,
+    BUFFER_SIZE: 10,
     MIN_RED_THRESHOLD: 80,
     MAX_RED_THRESHOLD: 175,
     STABILITY_WINDOW: 6,
     MIN_STABILITY_COUNT: 2
   };
   private currentConfig: typeof this.DEFAULT_CONFIG;
-  private readonly BUFFER_SIZE = 15;
+  private readonly BUFFER_SIZE = 10;
   private readonly MIN_RED_THRESHOLD = 80;
   private readonly MAX_RED_THRESHOLD = 175;
   private readonly STABILITY_WINDOW = 6;
