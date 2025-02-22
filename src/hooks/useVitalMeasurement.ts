@@ -19,6 +19,13 @@ export const useVitalMeasurement = (isMeasuring: boolean) => {
   const [lastArrhythmiaCount, setLastArrhythmiaCount] = useState(0);
 
   useEffect(() => {
+    console.log('useVitalMeasurement - Estado:', {
+      isMeasuring,
+      currentMeasurements: measurements,
+      elapsedTime,
+      timestamp: new Date().toISOString()
+    });
+
     if (!isMeasuring) {
       setMeasurements(prev => ({
         ...prev,
@@ -44,7 +51,7 @@ export const useVitalMeasurement = (isMeasuring: boolean) => {
       const bpm = processor.getFinalBPM() || 0;
       const arrCount = processor.arrhythmiaCount || 0;
 
-      console.log('VitalMeasurement: Valores actuales:', {
+      console.log('useVitalMeasurement - Actualización:', {
         processor: !!processor,
         bpm,
         arrCount,
@@ -52,13 +59,19 @@ export const useVitalMeasurement = (isMeasuring: boolean) => {
       });
 
       setMeasurements(prev => {
-        // Si se detectó una nueva arritmia
         const arrhythmiaStatus = 
           arrCount > 0 ? "ARRITMIA DETECTADA" : "SIN ARRITMIAS";
 
         if (prev.heartRate === bpm && prev.arrhythmiaCount === arrhythmiaStatus) {
           return prev;
         }
+
+        console.log('useVitalMeasurement - Nuevos valores:', {
+          bpm,
+          arrhythmiaStatus,
+          timestamp: new Date().toISOString()
+        });
+
         return {
           ...prev,
           heartRate: bpm,
