@@ -55,7 +55,7 @@ export const useVitalSignsProcessor = () => {
       return {
         spo2: 0,
         pressure: "--/--",
-        arrhythmiaStatus: arrhythmiaCount
+        arrhythmiaStatus: `${arrhythmiaCount} ARRITMIAS DETECTADAS`
       };
     }
     return null;
