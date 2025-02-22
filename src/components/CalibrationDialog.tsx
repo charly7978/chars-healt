@@ -1,4 +1,3 @@
-
 import React from "react";
 import {
   Dialog,
@@ -93,10 +92,10 @@ const CalibrationDialog = ({
 
                       {/* Terminal de diagnóstico */}
                       <div className="bg-black/50 p-3 rounded-lg font-mono text-xs space-y-1">
-                        <p className="text-green-500">> Iniciando diagnóstico...</p>
-                        <p className="text-medical-blue animate-fade-in [animation-delay:500ms]">> Verificando sensores...</p>
-                        <p className="text-medical-blue animate-fade-in [animation-delay:1000ms]">> Ajustando parámetros...</p>
-                        <p className="text-medical-blue animate-fade-in [animation-delay:1500ms]">> Optimizando señal...</p>
+                        <p className="text-green-500">{'>'}  Iniciando diagnóstico...</p>
+                        <p className="text-medical-blue animate-fade-in [animation-delay:500ms]">{'>'}  Verificando sensores...</p>
+                        <p className="text-medical-blue animate-fade-in [animation-delay:1000ms]">{'>'}  Ajustando parámetros...</p>
+                        <p className="text-medical-blue animate-fade-in [animation-delay:1500ms]">{'>'}  Optimizando señal...</p>
                         <div className="inline-block animate-pulse">_</div>
                       </div>
                     </div>
@@ -139,4 +138,3 @@ const CalibrationDialog = ({
 };
 
 export default CalibrationDialog;
-
