@@ -119,11 +119,6 @@ export class VitalSignsProcessor {
       return;
     }
 
-    // Si ya se detectó una arritmia, mantenemos ese estado
-    if (this.arrhythmiaDetected) {
-      return;
-    }
-
     // Tomar los últimos N intervalos
     const recentRR = this.rrIntervals.slice(-this.RR_WINDOW_SIZE);
     
@@ -203,7 +198,7 @@ export class VitalSignsProcessor {
       }
     }
 
-    // Calcular SpO2 y presión (sin cambios)
+    // Calcular SpO2 y presión
     const spo2 = this.calculateSpO2(this.ppgValues.slice(-60));
     const bp = this.calculateBloodPressure(this.ppgValues.slice(-60));
     const pressureString = `${bp.systolic}/${bp.diastolic}`;
@@ -214,14 +209,16 @@ export class VitalSignsProcessor {
     const currentTime = Date.now();
     const timeSinceStart = currentTime - this.measurementStartTime;
 
-    if (timeSinceStart > this.ARRHYTHMIA_LEARNING_PERIOD) {
-      this.isLearningPhase = false;
+    // Verificamos si estamos en fase de aprendizaje
+    this.isLearningPhase = timeSinceStart <= this.ARRHYTHMIA_LEARNING_PERIOD;
+    
+    if (this.isLearningPhase) {
+      arrhythmiaStatus = "APRENDIENDO...";
+    } else {
       // Si hay arritmias, mostrar el conteo, si no, mostrar "SIN ARRITMIAS"
       arrhythmiaStatus = this.arrhythmiaDetected ? 
         `ARRITMIAS: ${this.arrhythmiaCount}` : 
         "SIN ARRITMIAS";
-    } else {
-      arrhythmiaStatus = "APRENDIENDO...";
     }
 
     console.log("VitalSignsProcessor: Estado actual", {
