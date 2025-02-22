@@ -1,3 +1,4 @@
+
 export class HeartBeatProcessor {
   private readonly SAMPLE_RATE = 30;
   private readonly WINDOW_SIZE = 60;
@@ -80,11 +81,12 @@ export class HeartBeatProcessor {
     confidence: number;
     isPeak: boolean;
   } {
-    console.log("HeartBeatProcessor: Procesando señal", {
+    console.log("[ProcessSignal] Inicio", {
       inputValue: value,
       bufferSize: this.signalBuffer.length,
+      baseline: this.baseline,
       lastValue: this.lastValue,
-      baseline: this.baseline
+      bpmHistoryLength: this.bpmHistory.length
     });
 
     this.signalBuffer.push(value);
@@ -93,28 +95,53 @@ export class HeartBeatProcessor {
     }
 
     if (this.signalBuffer.length < 30) {
+      console.log("[ProcessSignal] Buffer insuficiente", {
+        currentSize: this.signalBuffer.length,
+        required: 30
+      });
       return { bpm: 0, confidence: 0, isPeak: false };
     }
 
     this.baseline = this.baseline * 0.98 + value * 0.02;
     const normalizedValue = value - this.baseline;
 
+    console.log("[ProcessSignal] Valores normalizados", {
+      rawValue: value,
+      baseline: this.baseline,
+      normalizedValue: normalizedValue,
+      threshold: this.SIGNAL_THRESHOLD
+    });
+
     const derivative = value - this.lastValue;
     const { isPeak, confidence } = this.detectPeak(normalizedValue, derivative);
     this.lastValue = value;
 
+    console.log("[ProcessSignal] Detección de pico", {
+      isPeak,
+      confidence,
+      derivative,
+      meetsConfidenceThreshold: confidence > this.MIN_CONFIDENCE
+    });
+
     if (isPeak && confidence > this.MIN_CONFIDENCE) {
+      console.log("[ProcessSignal] ¡PICO DETECTADO!", {
+        time: Date.now(),
+        timeSinceLastPeak: Date.now() - this.lastPeakTime,
+        normalizedValue,
+        confidence
+      });
       this.playBeep(0.1);
       this.updateBPM();
     }
 
     const bpm = this.calculateCurrentBPM();
 
-    console.log("HeartBeatProcessor: Resultado del procesamiento", {
+    console.log("[ProcessSignal] Resultado final", {
       bpm,
       confidence,
       isPeak,
-      historyLength: this.bpmHistory.length
+      bpmHistoryLength: this.bpmHistory.length,
+      bpmHistory: this.bpmHistory
     });
 
     return {
@@ -128,13 +155,32 @@ export class HeartBeatProcessor {
     const currentTime = Date.now();
     const timeSinceLastPeak = currentTime - this.lastPeakTime;
     
+    console.log("[DetectPeak] Análisis", {
+      normalizedValue,
+      derivative,
+      timeSinceLastPeak,
+      threshold: this.SIGNAL_THRESHOLD,
+      minPeakTime: 250
+    });
+
     if (timeSinceLastPeak < 250) {
+      console.log("[DetectPeak] Muy poco tiempo desde último pico", {
+        timeSinceLastPeak,
+        minRequired: 250
+      });
       return { isPeak: false, confidence: 0 };
     }
 
-    const isPeak = derivative < -0.05 &&
+    const isPeak = derivative < -0.05 && 
                    normalizedValue > this.SIGNAL_THRESHOLD &&
                    this.lastValue > this.baseline;
+
+    console.log("[DetectPeak] Criterios de pico", {
+      derivativeCriterion: derivative < -0.05,
+      thresholdCriterion: normalizedValue > this.SIGNAL_THRESHOLD,
+      baselineCriterion: this.lastValue > this.baseline,
+      isPeak
+    });
 
     if (isPeak) {
       this.lastPeakTime = currentTime;
@@ -143,6 +189,13 @@ export class HeartBeatProcessor {
     const amplitude = Math.abs(normalizedValue);
     const confidence = Math.min(Math.max(amplitude / (this.SIGNAL_THRESHOLD * 2), 0), 1);
 
+    console.log("[DetectPeak] Resultado", {
+      isPeak,
+      confidence,
+      amplitude,
+      normalizedConfidence: amplitude / (this.SIGNAL_THRESHOLD * 2)
+    });
+
     return { isPeak, confidence };
   }
 
@@ -150,26 +203,56 @@ export class HeartBeatProcessor {
     const currentTime = Date.now();
     const timeSinceLastPeak = currentTime - this.lastPeakTime;
     
+    console.log("[UpdateBPM] Inicio", {
+      currentTime,
+      lastPeakTime: this.lastPeakTime,
+      timeSinceLastPeak,
+      currentHistoryLength: this.bpmHistory.length
+    });
+
     if (timeSinceLastPeak > 0) {
       const instantBPM = 60000 / timeSinceLastPeak;
       
+      console.log("[UpdateBPM] Cálculo", {
+        instantBPM,
+        isInRange: instantBPM >= this.MIN_BPM && instantBPM <= this.MAX_BPM,
+        minBPM: this.MIN_BPM,
+        maxBPM: this.MAX_BPM
+      });
+
       if (instantBPM >= this.MIN_BPM && instantBPM <= this.MAX_BPM) {
         this.bpmHistory.push(instantBPM);
         if (this.bpmHistory.length > 8) {
           this.bpmHistory.shift();
         }
+        console.log("[UpdateBPM] Historia actualizada", {
+          newLength: this.bpmHistory.length,
+          history: this.bpmHistory
+        });
       }
     }
   }
 
   private calculateCurrentBPM(): number {
+    console.log("[CalculateBPM] Inicio", {
+      historyLength: this.bpmHistory.length,
+      history: this.bpmHistory
+    });
+
     if (this.bpmHistory.length < 2) {
+      console.log("[CalculateBPM] Historia insuficiente");
       return 0;
     }
 
     const sortedBPMs = [...this.bpmHistory].sort((a, b) => a - b);
     const medianBPM = sortedBPMs[Math.floor(sortedBPMs.length / 2)];
     
+    console.log("[CalculateBPM] Resultado", {
+      sortedBPMs,
+      medianBPM,
+      finalBPM: Math.round(medianBPM)
+    });
+
     return Math.round(medianBPM);
   }
 
