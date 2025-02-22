@@ -42,7 +42,7 @@ export class HeartBeatProcessor {
   // Parámetros de detección de pico.
   //  (Ajustar SIGNAL_THRESHOLD si la señal es pequeña o grande)
   private readonly SIGNAL_THRESHOLD = 0.75;        // Ajustado. Antes estaba en 0.90
-  private readonly MIN_CONFIDENCE = 1.10;
+  private readonly MIN_CONFIDENCE = 1.00;
   private readonly DERIVATIVE_THRESHOLD = -0.05;
   private readonly MIN_PEAK_TIME_MS = 400;         // Evita picos más rápidos que ~150 BPM
   private readonly WARMUP_TIME_MS = 5000;
