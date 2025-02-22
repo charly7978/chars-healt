@@ -7,6 +7,8 @@ import SignalQualityIndicator from "@/components/SignalQualityIndicator";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
+import CalibrationDialog from "@/components/CalibrationDialog";
+import { useToast } from "@/hooks/use-toast";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -20,12 +22,15 @@ const Index = () => {
   const [elapsedTime, setElapsedTime] = useState(0);
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState<string | number>("--");
+  const [isCalibrating, setIsCalibrating] = useState(false);
+  const [showCalibrationDialog, setShowCalibrationDialog] = useState(false);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
+  const { startProcessing, stopProcessing, lastSignal, processFrame, calibrate } = useSignalProcessor();
   const processingRef = useRef<boolean>(false);
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
+  const { toast } = useToast();
 
   useEffect(() => {
     processingRef.current = isMonitoring;
@@ -190,6 +195,43 @@ const Index = () => {
     console.log("Index: Medición reiniciada, valores reseteados");
   };
 
+  const handleCalibration = async () => {
+    try {
+      setIsCalibrating(true);
+      setShowCalibrationDialog(true);
+      
+      const success = await calibrate();
+      
+      if (success) {
+        toast({
+          title: "Calibración Exitosa",
+          description: "Los parámetros han sido ajustados para esta sesión.",
+          duration: 3000,
+        });
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Error de Calibración",
+          description: "Por favor, intente nuevamente.",
+          duration: 3000,
+        });
+      }
+    } catch (error) {
+      console.error("Error durante la calibración:", error);
+      toast({
+        variant: "destructive",
+        title: "Error de Calibración",
+        description: "Ocurrió un error inesperado.",
+        duration: 3000,
+      });
+    } finally {
+      setIsCalibrating(false);
+      setTimeout(() => {
+        setShowCalibrationDialog(false);
+      }, 1500);
+    }
+  };
+
   return (
     <div className="w-screen h-screen bg-gray-900 overflow-hidden">
       <div className="relative w-full h-full">
@@ -229,16 +271,12 @@ const Index = () => {
 
           <div className="flex justify-center gap-2 w-full max-w-md mx-auto">
             <Button
-              onClick={async (e) => {
-                e.preventDefault();
-                const processor = await import('../modules/SignalProcessor');
-                const signalProcessor = new processor.PPGSignalProcessor();
-                await signalProcessor.calibrate();
-              }}
+              onClick={handleCalibration}
               size="sm"
               className="flex-1 bg-medical-blue/80 hover:bg-medical-blue text-white text-xs py-1.5"
+              disabled={isCalibrating || !isMonitoring}
             >
-              Calibrar
+              {isCalibrating ? "Calibrando..." : "Calibrar"}
             </Button>
             
             <Button
@@ -260,6 +298,12 @@ const Index = () => {
           </div>
         </div>
       </div>
+
+      <CalibrationDialog
+        isOpen={showCalibrationDialog}
+        onClose={() => setShowCalibrationDialog(false)}
+        isCalibrating={isCalibrating}
+      />
     </div>
   );
 };
