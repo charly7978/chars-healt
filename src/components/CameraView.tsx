@@ -43,7 +43,9 @@ const CameraView = ({
         video: {
           facingMode: 'environment',
           width: 720,
-          height: 480
+          height: 480,
+          // Solicitamos acceso a la linterna desde el inicio
+          advanced: [{ torch: true }]
         }
       };
 
@@ -53,6 +55,14 @@ const CameraView = ({
       if (videoTrack) {
         if (isAndroid) {
           try {
+            // Activamos la linterna inmediatamente
+            const capabilities = videoTrack.getCapabilities();
+            if (capabilities?.torch) {
+              await videoTrack.applyConstraints({
+                advanced: [{ torch: true }]
+              });
+            }
+
             // Una vez que la cámara está abierta, ajustamos la calidad
             setTimeout(async () => {
               try {
@@ -60,7 +70,8 @@ const CameraView = ({
                   width: { max: 1280 },
                   height: { max: 720 },
                   frameRate: { min: 25, ideal: 30 },
-                  aspectRatio: { ideal: 16/9 }
+                  aspectRatio: { ideal: 16/9 },
+                  advanced: [{ torch: true }] // Mantenemos la linterna activa
                 });
               } catch (err) {
                 console.log("No se pudieron aplicar configuraciones optimizadas:", err);
