@@ -76,9 +76,7 @@ const Index = () => {
     measurementTimerRef.current = window.setInterval(() => {
       setElapsedTime(prev => {
         if (prev >= 30) {
-          if (measurementTimerRef.current) {
-            clearInterval(measurementTimerRef.current);
-          }
+          stopMonitoring();
           return 30;
         }
         return prev + 1;
@@ -266,18 +264,13 @@ const Index = () => {
             </div>
           </div>
 
-          <div className="flex-1 flex flex-col justify-center gap-2 max-w-md mx-auto w-full mt-[-2rem]">
+          <div className="flex-1 flex flex-col justify-center gap-2 max-w-md mx-auto w-full mt-[-3rem]">
             <div className="relative">
               <PPGSignalMeter 
                 value={lastSignal?.filteredValue || 0}
                 quality={lastSignal?.quality || 0}
                 isFingerDetected={lastSignal?.fingerDetected || false}
               />
-              {isMonitoring && (
-                <div className="absolute top-[-1.5rem] right-2 text-sm font-medium text-white bg-black/50 px-2 py-1 rounded">
-                  {elapsedTime}s / 30s
-                </div>
-              )}
             </div>
 
             <SignalQualityIndicator quality={signalQuality} />
@@ -290,10 +283,15 @@ const Index = () => {
             </div>
           </div>
 
-          <div className="flex justify-center gap-2 w-full max-w-md mx-auto">
+          <div className="flex flex-col items-center gap-2 w-full max-w-md mx-auto">
+            {isMonitoring && (
+              <div className="text-sm font-medium text-white bg-black/50 px-3 py-1 rounded mb-2">
+                {elapsedTime}s / 30s
+              </div>
+            )}
             <Button
               onClick={isMonitoring ? stopMonitoring : startMonitoring}
-              className={`flex-1 ${
+              className={`flex-1 w-full ${
                 isMonitoring 
                   ? 'bg-red-600/80 hover:bg-red-600' 
                   : 'bg-green-600/80 hover:bg-green-600'
