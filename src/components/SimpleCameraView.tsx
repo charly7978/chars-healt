@@ -66,7 +66,7 @@ const SimpleCameraView = ({
           throw new Error("getUserMedia no está soportado");
         }
 
-        // Configuración optimizada para calidad de imagen
+        // Configuración optimizada para calidad de imagen usando solo propiedades válidas
         const constraints: MediaStreamConstraints = {
           video: {
             deviceId: currentCamera ? { exact: currentCamera } : undefined,
@@ -74,13 +74,10 @@ const SimpleCameraView = ({
             width: { ideal: 640 },
             height: { ideal: 480 },
             frameRate: { ideal: 30 },
-            // Configuraciones avanzadas para mejorar la calidad
-            exposureMode: 'manual',
-            exposureTime: 1000, // 1ms exposure time
-            whiteBalanceMode: 'manual',
-            exposureCompensation: 1.0,
-            brightness: 1.0,
-            contrast: 1.0
+            aspectRatio: { ideal: 1.3333333333 }, // 4:3 aspect ratio
+            brightness: { ideal: 100 },
+            saturation: { ideal: 100 },
+            sharpness: { ideal: 100 },
           } as MediaTrackConstraints
         };
 
@@ -100,30 +97,26 @@ const SimpleCameraView = ({
             onStreamReady(stream);
           }
 
-          // Configurar track de video
+          // Configurar track de video y mostrar capacidades disponibles
           const track = stream.getVideoTracks()[0];
-          console.log("Capacidades de la cámara:", track.getCapabilities());
-          
-          // Intentar ajustar configuraciones avanzadas si están disponibles
           const capabilities = track.getCapabilities();
-          if (capabilities) {
-            const settings: MediaTrackSettings = {};
+          console.log("Capacidades de la cámara:", capabilities);
+          
+          // Intentar optimizar la configuración del track con los ajustes disponibles
+          try {
+            const currentSettings = track.getSettings();
+            console.log("Configuración actual de la cámara:", currentSettings);
             
-            if (capabilities.exposureMode) {
-              settings.exposureMode = 'manual';
-            }
-            if (capabilities.exposureTime) {
-              settings.exposureTime = 1000;
-            }
-            if (capabilities.whiteBalanceMode) {
-              settings.whiteBalanceMode = 'manual';
-            }
-            
-            try {
-              await track.applyConstraints({ advanced: [settings] });
-            } catch (err) {
-              console.log("No se pudieron aplicar configuraciones avanzadas:", err);
-            }
+            // Aplicar configuraciones básicas que sabemos que son seguras
+            await track.applyConstraints({
+              advanced: [{
+                brightness: 100,
+                saturation: 100,
+                sharpness: 100
+              }]
+            });
+          } catch (err) {
+            console.log("No se pudieron aplicar configuraciones avanzadas:", err);
           }
         }
       } catch (err) {
