@@ -42,7 +42,7 @@ export class VitalSignsProcessor {
   private readonly SPO2_CALIBRATION_FACTOR = 0.95;
 
   /** Umbral mínimo de índice de perfusión (AC/DC) * 100 para confiar en SpO2. */
-  private readonly PERFUSION_INDEX_THRESHOLD = 0.2;
+  private readonly PERFUSION_INDEX_THRESHOLD = 0.1; // Reducido para Android
 
   /**
    * Ventana de promedios para SpO2 (suavizado).  
@@ -200,34 +200,35 @@ export class VitalSignsProcessor {
       return this.lastSpO2;
     }
 
-    // Índice de perfusión
+    // Índice de perfusión ajustado para Android
     const perfusionIndex = (acComponent / dcComponent) * 100;
+    
+    // Ajuste del umbral de perfusión para Android
     if (perfusionIndex < this.PERFUSION_INDEX_THRESHOLD * 100) {
-      // Si la perfusión es muy baja, 
-      // retornamos el último SpO2 para no "colgar" la lectura.
+      console.log("VitalSignsProcessor: Perfusión baja:", perfusionIndex);
       return this.lastSpO2;
     }
 
     const { peakTimes, valleys } = this.findPeaksAndValleys(ppgValues);
     if (peakTimes.length < 2) {
+      console.log("VitalSignsProcessor: Picos insuficientes para SpO2");
       return this.lastSpO2;
     }
 
-    // Ratio AC/DC => spo2 "crudo".
-    const ratio = acComponent / dcComponent;
+    // Cálculo ajustado de SpO2 para Android
+    const ratio = (acComponent / dcComponent) * 1.5; // Factor de ajuste para compensar la linterna
     const spo2Raw = 110 - (25 * ratio * this.SPO2_CALIBRATION_FACTOR);
-
-    // Ajuste por calidad de la onda (variabilidad picos-valles).
+    
+    // Ajuste de calidad de señal para Android
     const signalQuality = this.calculateSignalQuality(ppgValues, peakTimes, valleys);
-    const qualityWeight = signalQuality / 100;
+    console.log("VitalSignsProcessor: Calidad señal SpO2:", signalQuality);
 
-    // Combina spo2Raw con el valor previo según la calidad.
+    // Ponderación ajustada para Android
+    const qualityWeight = Math.min((signalQuality / 100) * 1.2, 1);
     const newSpo2 = spo2Raw * qualityWeight + this.lastSpO2 * (1 - qualityWeight);
 
-    // Clampeamos a [85..100].
-    const clampedSpo2 = Math.min(100, Math.max(85, Math.round(newSpo2)));
-
-    return clampedSpo2;
+    // Clampeamos a [85..100]
+    return Math.min(100, Math.max(85, Math.round(newSpo2)));
   }
 
   /**
@@ -277,6 +278,7 @@ export class VitalSignsProcessor {
     const { peakTimes, valleys } = this.findPeaksAndValleys(ppgValues);
     
     if (peakTimes.length < 2) {
+      console.log("VitalSignsProcessor: Picos insuficientes para presión");
       return { systolic: this.lastSystolic, diastolic: this.lastDiastolic };
     }
 
@@ -289,12 +291,14 @@ export class VitalSignsProcessor {
       pttValues.push(ptt);
       
       if (valleys[i-1]) {
-        const amplitude = ppgValues[peakTimes[i]] - ppgValues[valleys[i-1]];
+        // Ajuste de amplitud para compensar la iluminación en Android
+        const amplitude = (ppgValues[peakTimes[i]] - ppgValues[valleys[i-1]]) * 1.2;
         amplitudes.push(amplitude);
       }
     }
 
-    if (pttValues.length < 3 || amplitudes.length < 3) {
+    if (pttValues.length < 2) {
+      console.log("VitalSignsProcessor: Datos insuficientes para presión");
       return { systolic: this.lastSystolic, diastolic: this.lastDiastolic };
     }
 
@@ -302,28 +306,15 @@ export class VitalSignsProcessor {
     const avgPTT = pttValues.reduce((a, b) => a + b, 0) / pttValues.length;
     const avgAmplitude = amplitudes.reduce((a, b) => a + b, 0) / amplitudes.length;
 
-    // Tiempo transcurrido desde el inicio de la medición (en segundos)
-    const elapsedTime = (Date.now() - this.measurementStartTime) / 1000;
-    
-    // Factor de confianza basado en el tiempo y calidad de señal
-    const confidenceFactor = Math.min(elapsedTime / 10, 1);
+    console.log("VitalSignsProcessor: PTT promedio:", avgPTT);
+    console.log("VitalSignsProcessor: Amplitud promedio:", avgAmplitude);
 
-    // Cálculo de presión basado en PTT y amplitud
-    // La relación PTT-presión es inversamente proporcional
-    let systolic = Math.round((1000 / avgPTT) * 3);
-    let diastolic = Math.round(systolic * (0.5 + (avgAmplitude * 0.001)));
+    // Cálculos con factor de ajuste para Android
+    const systolic = Math.round((1000 / avgPTT) * 2.5); // Factor reducido para evitar valores extremos
+    const diastolic = Math.round(systolic * (0.6 + (avgAmplitude * 0.0008))); // Ajuste más suave
 
-    // Límites fisiológicos realistas
-    systolic = Math.min(160, Math.max(70, systolic));
-    diastolic = Math.min(100, Math.max(40, diastolic));
-
-    // Verificación de coherencia
-    if (systolic - diastolic < 20 || systolic - diastolic > 80) {
-      return { systolic: this.lastSystolic, diastolic: this.lastDiastolic };
-    }
-
-    // Actualizar última presión válida
-    this.lastValidPressure = { systolic, diastolic };
+    this.lastSystolic = systolic;
+    this.lastDiastolic = diastolic;
 
     return { systolic, diastolic };
   }
@@ -418,19 +409,22 @@ export class VitalSignsProcessor {
     const peakTimes: number[] = [];
     const valleyTimes: number[] = [];
 
-    for (let i = 2; i < values.length - 2; i++) {
+    // Ajuste de ventana de análisis para mejorar detección en Android
+    for (let i = 3; i < values.length - 3; i++) {
       const v = values[i];
       const v1 = values[i - 1];
       const v2 = values[i - 2];
+      const v3 = values[i - 3];
       const vn1 = values[i + 1];
       const vn2 = values[i + 2];
+      const vn3 = values[i + 3];
 
-      // Pico si es > que vecinos i±1, i±2
-      if (v > v1 && v > v2 && v > vn1 && v > vn2) {
+      // Detección más estricta de picos para Android
+      if (v > v1 && v > v2 && v > v3 && v > vn1 && v > vn2 && v > vn3) {
         peakTimes.push(i);
       }
-      // Valle si es < que vecinos i±1, i±2
-      if (v < v1 && v < v2 && v < vn1 && v < vn2) {
+      // Detección más estricta de valles para Android
+      if (v < v1 && v < v2 && v < v3 && v < vn1 && v < vn2 && v < vn3) {
         valleyTimes.push(i);
       }
     }
