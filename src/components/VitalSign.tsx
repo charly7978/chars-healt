@@ -12,7 +12,14 @@ const VitalSign = ({ label, value, unit }: VitalSignProps) => {
     if (!isArrhythmiaDisplay) return { text: value, color: "" };
     
     if (typeof value === "number") {
-      // Cuando aún no ha comenzado la medición o está en 0
+      if (value === 0) {
+        // Cuando no ha comenzado la medición, mostramos el valor sin texto
+        return {
+          text: "--",
+          color: "text-white/90"
+        };
+      }
+      // Durante la medición, con el contador de arritmias
       return {
         text: "SIN ARRITMIAS",
         color: "text-[#0FA0CE]" // Azul

@@ -101,14 +101,15 @@ export class HeartBeatProcessor {
   private peakCandidateValue: number = 0;
 
   // ────────── DETECCIÓN DE ARRITMIAS ──────────
-  private readonly LEARNING_PERIOD_MS = 10000;  // 10s de aprendizaje
-  private readonly RHYTHM_TOLERANCE = 0.15;     // 15% de variación permitida
+  private readonly LEARNING_PERIOD_MS = 10000;    // 10s de aprendizaje
+  private readonly RHYTHM_TOLERANCE = 0.20;       // Aumentado a 20% de variación permitida para mejor detección
+  private readonly MIN_INTERVALS_FOR_BASELINE = 3; // Mínimo de intervalos para establecer línea base
 
   private rhythmLearningIntervals: number[] = [];
   private lastRhythmTime: number | null = null;
   private isLearningPhase = true;
   private baselineRhythm: number = 0;
-  public arrhythmiaCount: number = 0; // Expuesto públicamente
+  public arrhythmiaCount: number = 0;
 
   // Marca de inicio de medición (para saber cuántos ms han pasado).
   private measurementStartTime: number = 0;
@@ -540,7 +541,6 @@ export class HeartBeatProcessor {
    */
   private analyzeRhythm(currentTime: number) {
     if (!this.lastRhythmTime) {
-      // Primer latido en la medición, nada que comparar todavía.
       this.lastRhythmTime = currentTime;
       return;
     }
@@ -548,23 +548,34 @@ export class HeartBeatProcessor {
     const interval = currentTime - this.lastRhythmTime;
     const timeSinceStart = currentTime - this.measurementStartTime;
 
-    // Mientras estemos en la fase de aprendizaje (primeros 10s):
+    // Fase de aprendizaje (primeros 10s)
     if (this.isLearningPhase && timeSinceStart <= this.LEARNING_PERIOD_MS) {
+      console.log("HeartBeatProcessor - Fase de aprendizaje", {
+        interval,
+        timeSinceStart,
+        learningPeriod: this.LEARNING_PERIOD_MS
+      });
+      
       this.rhythmLearningIntervals.push(interval);
 
-      // Si excedimos los 10s, calculamos la línea base
       if (timeSinceStart > this.LEARNING_PERIOD_MS) {
         this.isLearningPhase = false;
         this.calculateBaselineRhythm();
       }
     }
-    // Fase de detección (ya tenemos baselineRhythm)
+    // Fase de detección
     else if (!this.isLearningPhase && this.baselineRhythm > 0) {
-      // Desviación porcentual respecto a la línea base
       const deviation = Math.abs(interval - this.baselineRhythm) / this.baselineRhythm;
+      
+      console.log("HeartBeatProcessor - Análisis de arritmia", {
+        interval,
+        baselineRhythm: this.baselineRhythm,
+        deviation,
+        threshold: this.RHYTHM_TOLERANCE,
+        currentTime: new Date().toISOString()
+      });
 
       if (deviation > this.RHYTHM_TOLERANCE) {
-        // Sumar 1 a la cuenta de arritmias
         this.arrhythmiaCount++;
         console.warn("HeartBeatProcessor - ARRITMIA DETECTADA", {
           interval,
@@ -576,7 +587,7 @@ export class HeartBeatProcessor {
       }
     }
 
-    this.lastRhythmTime = currentTime; // Actualizar para el siguiente latido
+    this.lastRhythmTime = currentTime;
   }
 
   /**
@@ -585,9 +596,9 @@ export class HeartBeatProcessor {
    * y promedia el resto para definir baselineRhythm.
    */
   private calculateBaselineRhythm() {
-    if (this.rhythmLearningIntervals.length < 5) {
+    if (this.rhythmLearningIntervals.length < this.MIN_INTERVALS_FOR_BASELINE) {
       console.log("HeartBeatProcessor - Baseline: Insuficientes intervalos para calcular", {
-        required: 5,
+        required: this.MIN_INTERVALS_FOR_BASELINE,
         current: this.rhythmLearningIntervals.length
       });
       return;
