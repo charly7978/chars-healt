@@ -23,9 +23,11 @@ export class HeartBeatProcessor {
   private readonly EMA_ALPHA = 0.2;
   private readonly BASELINE_FACTOR = 0.998;
 
-  // Parámetros de beep.
-  private readonly BEEP_FREQUENCY = 1000;
-  private readonly BEEP_DURATION = 60;
+  // Parámetros de beep ajustados para sonido más realista
+  private readonly BEEP_PRIMARY_FREQUENCY = 880; // Frecuencia principal (La4)
+  private readonly BEEP_SECONDARY_FREQUENCY = 440; // Armónico (La3)
+  private readonly BEEP_DURATION = 100; // Duración más larga
+  private readonly BEEP_VOLUME = 0.4; // Volumen aumentado
   private readonly MIN_BEEP_INTERVAL_MS = 300;
 
   // ────────── AUTO-RESET SI LA SEÑAL ES MUY BAJA ──────────
@@ -70,37 +72,68 @@ export class HeartBeatProcessor {
     }
   }
 
-  private async playBeep(volume: number = 0.1) {
+  private async playBeep(volume: number = this.BEEP_VOLUME) {
     if (!this.audioContext || this.isInWarmup()) return;
 
     const now = Date.now();
     if (now - this.lastBeepTime < this.MIN_BEEP_INTERVAL_MS) return;
 
     try {
-      const oscillator = this.audioContext.createOscillator();
-      const gainNode = this.audioContext.createGain();
+      // Oscilador principal
+      const primaryOscillator = this.audioContext.createOscillator();
+      const primaryGain = this.audioContext.createGain();
+      
+      // Oscilador secundario para armónicos
+      const secondaryOscillator = this.audioContext.createOscillator();
+      const secondaryGain = this.audioContext.createGain();
 
-      oscillator.type = "sine";
-      oscillator.frequency.setValueAtTime(
-        this.BEEP_FREQUENCY,
+      // Configurar oscilador principal
+      primaryOscillator.type = "sine";
+      primaryOscillator.frequency.setValueAtTime(
+        this.BEEP_PRIMARY_FREQUENCY,
         this.audioContext.currentTime
       );
 
-      gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
-      gainNode.gain.linearRampToValueAtTime(
+      // Configurar oscilador secundario
+      secondaryOscillator.type = "sine";
+      secondaryOscillator.frequency.setValueAtTime(
+        this.BEEP_SECONDARY_FREQUENCY,
+        this.audioContext.currentTime
+      );
+
+      // Envelope del sonido principal
+      primaryGain.gain.setValueAtTime(0, this.audioContext.currentTime);
+      primaryGain.gain.linearRampToValueAtTime(
         volume,
         this.audioContext.currentTime + 0.01
       );
-      gainNode.gain.linearRampToValueAtTime(
-        0,
-        this.audioContext.currentTime + 0.05
+      primaryGain.gain.exponentialRampToValueAtTime(
+        0.01,
+        this.audioContext.currentTime + this.BEEP_DURATION / 1000
       );
 
-      oscillator.connect(gainNode);
-      gainNode.connect(this.audioContext.destination);
+      // Envelope del sonido secundario (más suave)
+      secondaryGain.gain.setValueAtTime(0, this.audioContext.currentTime);
+      secondaryGain.gain.linearRampToValueAtTime(
+        volume * 0.3, // Armónico más suave
+        this.audioContext.currentTime + 0.01
+      );
+      secondaryGain.gain.exponentialRampToValueAtTime(
+        0.01,
+        this.audioContext.currentTime + this.BEEP_DURATION / 1000
+      );
 
-      oscillator.start();
-      oscillator.stop(this.audioContext.currentTime + 0.06);
+      // Conectar nodos de audio
+      primaryOscillator.connect(primaryGain);
+      secondaryOscillator.connect(secondaryGain);
+      primaryGain.connect(this.audioContext.destination);
+      secondaryGain.connect(this.audioContext.destination);
+
+      // Iniciar y detener osciladores
+      primaryOscillator.start();
+      secondaryOscillator.start();
+      primaryOscillator.stop(this.audioContext.currentTime + this.BEEP_DURATION / 1000 + 0.05);
+      secondaryOscillator.stop(this.audioContext.currentTime + this.BEEP_DURATION / 1000 + 0.05);
 
       this.lastBeepTime = now;
     } catch (err) {
