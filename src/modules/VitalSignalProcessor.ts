@@ -63,17 +63,30 @@ export class VitalSignalProcessor {
     // Actualizar buffer de picos
     this.updatePeakBuffer(peaks);
 
+    // Log para debugging
+    console.log("VitalSignalProcessor: Análisis", {
+      signalBufferLength: this.signalBuffer.length,
+      peaksDetected: peaks.length,
+      intervals: intervals.length,
+      calculatedBPM: bpm,
+      confidence: confidence
+    });
+
     return {
       bpm,
       confidence,
       peaks: this.peakBuffer,
-      isValid: confidence > 0.5
+      isValid: confidence > 0.5 && bpm >= this.MIN_BPM && bpm <= this.MAX_BPM
     };
   }
 
   private detectPeaks(): Peak[] {
     const peaks: Peak[] = [];
     const currentTime = Date.now();
+
+    // Actualizar línea base con media móvil
+    const recentValues = this.signalBuffer.slice(-10);
+    this.baselineValue = recentValues.reduce((a, b) => a + b, 0) / recentValues.length;
 
     // Usar ventana deslizante para detección de picos
     for (let i = 2; i < this.signalBuffer.length - 2; i++) {
@@ -84,14 +97,22 @@ export class VitalSignalProcessor {
       if (this.isPeak(window, centerValue)) {
         const timeSinceLastPeak = currentTime - this.lastPeakTime;
         
-        // Verificar distancia mínima entre picos
-        if (timeSinceLastPeak > (1000 * this.MIN_PEAK_DISTANCE) / this.SAMPLE_RATE) {
+        // Verificar distancia mínima entre picos y umbral adaptativo
+        if (timeSinceLastPeak > (1000 * this.MIN_PEAK_DISTANCE) / this.SAMPLE_RATE &&
+            centerValue > this.baselineValue + this.calculateDynamicThreshold(window)) {
+          
           peaks.push({
             timestamp: currentTime,
             value: centerValue,
             interval: timeSinceLastPeak
           });
+          
           this.lastPeakTime = currentTime;
+          console.log("VitalSignalProcessor: Pico detectado", {
+            value: centerValue,
+            timeSinceLastPeak,
+            threshold: this.baselineValue + this.calculateDynamicThreshold(window)
+          });
         }
       }
     }
@@ -107,7 +128,7 @@ export class VitalSignalProcessor {
       return centerValue > val;
     });
 
-    return isHigherThanNeighbors && centerValue > threshold;
+    return isHigherThanNeighbors && centerValue > this.baselineValue + threshold;
   }
 
   private calculateDynamicThreshold(window: number[]): number {
@@ -115,7 +136,7 @@ export class VitalSignalProcessor {
     const variance = window.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / window.length;
     const stdDev = Math.sqrt(variance);
 
-    return mean + stdDev * 1.5; // Umbral adaptativo
+    return stdDev * 1.5; // Umbral adaptativo
   }
 
   private calculateIntervals(peaks: Peak[]): number[] {
@@ -123,7 +144,9 @@ export class VitalSignalProcessor {
     
     for (let i = 1; i < peaks.length; i++) {
       const interval = peaks[i].timestamp - peaks[i - 1].timestamp;
-      intervals.push(interval);
+      if (interval > 0) { // Solo intervalos positivos
+        intervals.push(interval);
+      }
     }
 
     return intervals;
@@ -134,32 +157,40 @@ export class VitalSignalProcessor {
       return { bpm: 0, confidence: 0 };
     }
 
-    // Filtrar intervalos anómalos
+    // Filtrar intervalos anómalos usando la mediana
+    intervals.sort((a, b) => a - b);
+    const medianInterval = intervals[Math.floor(intervals.length / 2)];
+    
+    // Considerar solo intervalos cercanos a la mediana
     const validIntervals = intervals.filter(interval => {
-      const bpm = 60000 / interval;
-      return bpm >= this.MIN_BPM && bpm <= this.MAX_BPM;
+      const ratio = interval / medianInterval;
+      return ratio >= 0.7 && ratio <= 1.3;
     });
 
     if (validIntervals.length < 3) {
       return { bpm: 0, confidence: 0 };
     }
 
-    // Calcular media y desviación estándar
-    const mean = validIntervals.reduce((a, b) => a + b, 0) / validIntervals.length;
-    const variance = validIntervals.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / validIntervals.length;
-    const stdDev = Math.sqrt(variance);
+    // Calcular BPM usando la mediana de los intervalos válidos
+    const medianValidInterval = validIntervals[Math.floor(validIntervals.length / 2)];
+    const bpm = Math.round(60000 / medianValidInterval);
 
-    // Calcular BPM
-    const bpm = Math.round(60000 / mean);
+    // Calcular confianza basada en la consistencia de los intervalos
+    const confidence = validIntervals.length / intervals.length;
 
-    // Calcular confianza basada en la variabilidad
-    const coefficientOfVariation = stdDev / mean;
-    const confidence = Math.max(0, Math.min(1, 1 - coefficientOfVariation));
+    // Verificar que el BPM está en un rango razonable
+    if (bpm < this.MIN_BPM || bpm > this.MAX_BPM) {
+      return { bpm: 0, confidence: 0 };
+    }
 
-    return {
-      bpm: bpm,
-      confidence: confidence
-    };
+    console.log("VitalSignalProcessor: BPM calculado", {
+      bpm,
+      confidence,
+      validIntervals: validIntervals.length,
+      totalIntervals: intervals.length
+    });
+
+    return { bpm, confidence };
   }
 
   private updatePeakBuffer(newPeaks: Peak[]) {
@@ -167,4 +198,3 @@ export class VitalSignalProcessor {
       .slice(-this.WINDOW_SIZE);
   }
 }
-
