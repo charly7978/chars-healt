@@ -20,24 +20,36 @@ const SimpleCameraView = ({
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
   const [currentCamera, setCurrentCamera] = useState<string>('');
   const [error, setError] = useState<string>('');
+  const [isAndroid, setIsAndroid] = useState(false);
+
+  useEffect(() => {
+    // Detectar si es Android
+    setIsAndroid(/Android/i.test(navigator.userAgent));
+  }, []);
 
   const getAvailableCameras = async () => {
     try {
-      await navigator.mediaDevices.getUserMedia({ video: true }); // Solicitar permiso primero
+      await navigator.mediaDevices.getUserMedia({ video: true });
       const devices = await navigator.mediaDevices.enumerateDevices();
       const cameras = devices.filter(device => device.kind === 'videoinput');
       setAvailableCameras(cameras);
       console.log("Cámaras disponibles:", cameras);
       
-      // En móvil, intentar usar la cámara trasera primero
-      const backCamera = cameras.find(camera => 
-        camera.label.toLowerCase().includes('back') || 
-        camera.label.toLowerCase().includes('trasera') ||
-        camera.label.toLowerCase().includes('environment')
-      );
-      
-      if (backCamera) {
-        setCurrentCamera(backCamera.deviceId);
+      // Priorizar cámara trasera en Android
+      if (isAndroid) {
+        const backCamera = cameras.find(camera => 
+          camera.label.toLowerCase().includes('back') || 
+          camera.label.toLowerCase().includes('trasera') ||
+          camera.label.toLowerCase().includes('environment') ||
+          camera.label.toLowerCase().includes('0')
+        );
+        
+        if (backCamera) {
+          setCurrentCamera(backCamera.deviceId);
+          console.log("Usando cámara trasera Android:", backCamera.label);
+        } else if (cameras.length > 0) {
+          setCurrentCamera(cameras[0].deviceId);
+        }
       } else if (cameras.length > 0) {
         setCurrentCamera(cameras[0].deviceId);
       }
@@ -55,7 +67,7 @@ const SimpleCameraView = ({
 
   useEffect(() => {
     getAvailableCameras();
-  }, []);
+  }, [isAndroid]);
 
   useEffect(() => {
     let stream: MediaStream | null = null;
@@ -66,19 +78,19 @@ const SimpleCameraView = ({
           throw new Error("getUserMedia no está soportado");
         }
 
-        // Configuración optimizada para calidad de imagen usando solo propiedades válidas
+        // Configuración específica para Android vs otros dispositivos
         const constraints: MediaStreamConstraints = {
           video: {
             deviceId: currentCamera ? { exact: currentCamera } : undefined,
             facingMode: currentCamera ? undefined : 'environment',
-            width: { ideal: 640 },
-            height: { ideal: 480 },
+            width: { ideal: isAndroid ? 1280 : 640 },
+            height: { ideal: isAndroid ? 720 : 480 },
             frameRate: { ideal: 30 },
-            aspectRatio: { ideal: 1.3333333333 }, // 4:3 aspect ratio
+            aspectRatio: isAndroid ? { ideal: 16/9 } : { ideal: 4/3 },
+            resizeMode: 'crop-and-scale'
           }
         };
 
-        // Detener stream anterior
         if (stream) {
           stream.getTracks().forEach(track => track.stop());
         }
@@ -90,18 +102,33 @@ const SimpleCameraView = ({
           videoRef.current.setAttribute('playsinline', 'true');
           videoRef.current.setAttribute('autoplay', 'true');
           
+          // Ajustar orientación para Android
+          if (isAndroid) {
+            videoRef.current.style.transform = 'scaleX(-1) rotate(90deg)';
+          } else {
+            videoRef.current.style.transform = 'scaleX(-1)';
+          }
+          
           if (onStreamReady) {
             onStreamReady(stream);
           }
 
-          // Configurar track de video y mostrar capacidades disponibles
           const track = stream.getVideoTracks()[0];
-          const capabilities = track.getCapabilities();
-          console.log("Capacidades de la cámara:", capabilities);
+          console.log("Capacidades de la cámara:", track.getCapabilities());
+          console.log("Configuración actual:", track.getSettings());
           
-          // Mostrar configuración actual para debug
-          const currentSettings = track.getSettings();
-          console.log("Configuración actual de la cámara:", currentSettings);
+          // Intentar aplicar configuraciones específicas para Android
+          if (isAndroid) {
+            try {
+              await track.applyConstraints({
+                advanced: [{
+                  zoom: 1
+                }]
+              });
+            } catch (err) {
+              console.log("No se pudieron aplicar configuraciones avanzadas:", err);
+            }
+          }
         }
       } catch (err) {
         console.error("Error al iniciar la cámara:", err);
@@ -125,7 +152,7 @@ const SimpleCameraView = ({
     return () => {
       stopCamera();
     };
-  }, [isMonitoring, currentCamera, onStreamReady]);
+  }, [isMonitoring, currentCamera, onStreamReady, isAndroid]);
 
   const getFingerColor = () => {
     if (!isFingerDetected) return 'text-gray-400';
@@ -140,11 +167,9 @@ const SimpleCameraView = ({
         ref={videoRef}
         playsInline
         muted
-        style={{ 
-          objectFit: 'cover',
-          transform: 'scaleX(-1)'
-        }}
-        className="absolute top-0 left-0 min-w-full min-h-full w-auto h-auto z-0"
+        className={`absolute top-0 left-0 min-w-full min-h-full w-auto h-auto z-0 ${
+          isAndroid ? 'object-cover' : 'object-contain'
+        }`}
       />
       
       {error && (
