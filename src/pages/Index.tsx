@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
@@ -10,7 +11,7 @@ import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import CalibrationDialog from "@/components/CalibrationDialog";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { LogOut, Settings } from "lucide-react";
+import { LogOut, Settings, Play, Square } from "lucide-react";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -32,25 +33,7 @@ const Index = () => {
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
-  // Control de visibilidad de la página
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        stopProcessing();
-        setIsMonitoring(false);
-      } else {
-        startProcessing();
-        setIsMonitoring(true);
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, []);
-
-  // Control de sesión
+  // Control de sesión solamente
   useEffect(() => {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -58,8 +41,6 @@ const Index = () => {
         window.location.href = "/auth";
       } else {
         setEmail(session.user.email || "");
-        startProcessing();
-        setIsMonitoring(true);
       }
     };
 
@@ -73,12 +54,12 @@ const Index = () => {
 
     return () => {
       subscription.unsubscribe();
-      stopProcessing();
     };
   }, []);
 
   const handleLogout = async () => {
     try {
+      stopMonitoring();
       await supabase.auth.signOut();
       toast({
         title: "Sesión cerrada",
@@ -93,58 +74,30 @@ const Index = () => {
     }
   };
 
-  useEffect(() => {
-    if (!isMonitoring) {
-      return;
-    }
+  const startMonitoring = () => {
+    setIsMonitoring(true);
+    setIsCameraOn(true);
+    startProcessing();
+    toast({
+      title: "Medición Iniciada",
+      description: "El sistema está monitoreando sus signos vitales"
+    });
+  };
 
-    const startTime = Date.now();
-    const interval = setInterval(() => {
-      const currentTime = Date.now();
-      const elapsed = (currentTime - startTime) / 1000;
-      setElapsedTime(elapsed);
-    }, 200);
-
-    return () => clearInterval(interval);
-  }, [isMonitoring]);
-
-  useEffect(() => {
-    if (lastSignal) {
-      console.log("Index: Actualizando calidad de señal:", lastSignal.quality);
-      setSignalQuality(lastSignal.quality);
-    }
-  }, [lastSignal]);
-
-  useEffect(() => {
-    if (lastSignal && lastSignal.fingerDetected) {
-      console.log("Index: Procesando señal cardíaca y vital", {
-        value: lastSignal.filteredValue,
-        fingerDetected: lastSignal.fingerDetected,
-        quality: lastSignal.quality
-      });
-      
-      const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
-      setHeartRate(heartBeatResult.bpm);
-      
-      const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
-      if (vitals) {
-        setVitalSigns(vitals);
-        setArrhythmiaCount(vitals.arrhythmiaStatus);
-
-        console.log("Index: Actualización de signos vitales", {
-          timestamp: new Date().toISOString(),
-          heartRate: heartBeatResult.bpm,
-          spo2: vitals.spo2,
-          bloodPressure: vitals.pressure,
-          arrhythmiaStatus: vitals.arrhythmiaStatus,
-          signalQuality: lastSignal.quality,
-          rrData: heartBeatResult.rrData
-        });
-      }
-    }
-  }, [lastSignal, processHeartBeat, processVitalSigns]);
+  const stopMonitoring = () => {
+    setIsMonitoring(false);
+    setIsCameraOn(false);
+    stopProcessing();
+    resetVitalSigns();
+    toast({
+      title: "Medición Detenida",
+      description: "El sistema ha detenido el monitoreo"
+    });
+  };
 
   const handleStreamReady = (stream: MediaStream) => {
+    if (!isMonitoring) return;
+    
     console.log("Index: Camera stream ready", stream.getVideoTracks()[0].getSettings());
     const videoTrack = stream.getVideoTracks()[0];
     const imageCapture = new ImageCapture(videoTrack);
@@ -170,11 +123,9 @@ const Index = () => {
       
       try {
         const frame = await imageCapture.grabFrame();
-        
         tempCanvas.width = frame.width;
         tempCanvas.height = frame.height;
         tempCtx.drawImage(frame, 0, 0);
-        
         const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
         processFrame(imageData);
         
@@ -189,10 +140,23 @@ const Index = () => {
       }
     };
 
-    console.log("Index: Iniciando monitoreo de signos vitales");
-    setIsCameraOn(true);
     processImage();
   };
+
+  useEffect(() => {
+    if (lastSignal && lastSignal.fingerDetected && isMonitoring) {
+      const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
+      setHeartRate(heartBeatResult.bpm);
+      
+      const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
+      if (vitals) {
+        setVitalSigns(vitals);
+        setArrhythmiaCount(vitals.arrhythmiaStatus);
+      }
+      
+      setSignalQuality(lastSignal.quality);
+    }
+  }, [lastSignal, isMonitoring]);
 
   return (
     <div className="w-screen h-screen bg-gray-900 overflow-hidden">
@@ -218,6 +182,7 @@ const Index = () => {
                 size="icon"
                 className="bg-black/30 text-gray-300 hover:text-white"
                 onClick={() => setShowCalibrationDialog(true)}
+                disabled={isMonitoring}
               >
                 <Settings className="h-5 w-5" />
               </Button>
@@ -251,27 +216,24 @@ const Index = () => {
 
           <div className="flex justify-center gap-2 w-full max-w-md mx-auto">
             <Button
-              onClick={() => setShowCalibrationDialog(true)}
-              size="sm"
-              className="flex-1 bg-medical-blue/80 hover:bg-medical-blue text-white text-xs py-1.5"
+              onClick={isMonitoring ? stopMonitoring : startMonitoring}
+              className={`flex-1 ${
+                isMonitoring 
+                  ? 'bg-red-600/80 hover:bg-red-600' 
+                  : 'bg-green-600/80 hover:bg-green-600'
+              } text-white gap-2`}
             >
-              Calibrar
-            </Button>
-            
-            <Button
-              onClick={isMonitoring ? stopProcessing : startProcessing}
-              size="sm"
-              className={`flex-1 ${isMonitoring ? 'bg-medical-red/80 hover:bg-medical-red' : 'bg-medical-blue/80 hover:bg-medical-blue'} text-white text-xs py-1.5`}
-            >
-              {isMonitoring ? 'Detener' : 'Iniciar'}
-            </Button>
-
-            <Button
-              onClick={resetVitalSigns}
-              size="sm"
-              className="flex-1 bg-gray-600/80 hover:bg-gray-600 text-white text-xs py-1.5"
-            >
-              Reset
+              {isMonitoring ? (
+                <>
+                  <Square className="h-4 w-4" />
+                  Detener Medición
+                </>
+              ) : (
+                <>
+                  <Play className="h-4 w-4" />
+                  Iniciar Medición
+                </>
+              )}
             </Button>
           </div>
         </div>
