@@ -92,7 +92,6 @@ export class PPGSignalProcessor implements SignalProcessor {
 
   processFrame(imageData: ImageData): void {
     if (!this.isProcessing) {
-      console.log("PPGSignalProcessor: No está procesando");
       return;
     }
 
@@ -107,19 +106,24 @@ export class PPGSignalProcessor implements SignalProcessor {
 
       const { isFingerDetected, quality } = this.analyzeSignal(filtered, redValue);
 
+      let heartRate = 0;
+      let confidence = 0;
+
       if (isFingerDetected) {
         const vitalSigns = this.vitalProcessor.processSignal(filtered);
         
         if (vitalSigns.isValid) {
-          this.lastBPM = vitalSigns.bpm;
-          this.lastConfidence = vitalSigns.confidence;
+          heartRate = vitalSigns.bpm;
+          confidence = vitalSigns.confidence;
+          
+          console.log("PPGSignalProcessor: Vital signs calculados", {
+            heartRate,
+            confidence,
+            quality,
+            isValid: vitalSigns.isValid,
+            peaks: vitalSigns.peaks.length
+          });
         }
-
-        console.log("PPGSignalProcessor: Vital signs", {
-          bpm: this.lastBPM,
-          confidence: this.lastConfidence,
-          quality
-        });
       }
 
       const processedSignal: ProcessedSignal = {
@@ -128,8 +132,8 @@ export class PPGSignalProcessor implements SignalProcessor {
         filteredValue: filtered,
         quality: quality,
         fingerDetected: isFingerDetected,
-        heartRate: isFingerDetected ? this.lastBPM : 0,
-        confidence: isFingerDetected ? this.lastConfidence : 0,
+        heartRate: heartRate,
+        confidence: confidence,
         roi: this.detectROI(redValue)
       };
 

@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
@@ -11,6 +10,8 @@ const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [signalQuality, setSignalQuality] = useState(0);
+  const [currentBPM, setCurrentBPM] = useState(0);
+  const [measurementConfidence, setMeasurementConfidence] = useState(0);
   const { heartRate, spo2, pressure, arrhythmiaCount, elapsedTime, isComplete } = useVitalMeasurement(isMonitoring);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
@@ -21,19 +22,17 @@ const Index = () => {
   }, [isMonitoring]);
 
   useEffect(() => {
-    const handleMeasurementComplete = (e: Event) => {
-      e.preventDefault();
-      handleStopMeasurement();
-    };
-
-    window.addEventListener('measurementComplete', handleMeasurementComplete);
-    return () => window.removeEventListener('measurementComplete', handleMeasurementComplete);
-  }, []);
-
-  useEffect(() => {
     if (lastSignal) {
-      console.log("Index: Actualizando calidad de señal:", lastSignal.quality);
+      console.log("Index: Actualizando datos vitales:", {
+        quality: lastSignal.quality,
+        heartRate: lastSignal.heartRate,
+        confidence: lastSignal.confidence
+      });
       setSignalQuality(lastSignal.quality);
+      if (lastSignal.fingerDetected && lastSignal.heartRate > 0) {
+        setCurrentBPM(lastSignal.heartRate);
+        setMeasurementConfidence(lastSignal.confidence);
+      }
     }
   }, [lastSignal]);
 
@@ -124,6 +123,12 @@ const Index = () => {
     handleStopMeasurement();
   };
 
+  const handleCalibrate = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log("Index: Calibrando...");
+  };
+
   useEffect(() => {
     if (canvasRef.current && isMonitoring) {
       const ctx = canvasRef.current.getContext('2d');
@@ -198,21 +203,22 @@ const Index = () => {
             <SignalQualityIndicator quality={signalQuality} />
 
             <div className="grid grid-cols-2 gap-2">
-              <VitalSign label="Heart Rate" value={heartRate} unit="BPM" />
-              <VitalSign label="SpO2" value={spo2} unit="%" />
-              <VitalSign label="Blood Pressure" value={pressure} unit="mmHg" />
-              <VitalSign label="Arrhythmias" value={arrhythmiaCount} unit="events" />
+              <VitalSign 
+                label="Heart Rate" 
+                value={currentBPM > 0 ? currentBPM : '--'} 
+                unit="BPM" 
+              />
+              <VitalSign 
+                label="Confidence" 
+                value={measurementConfidence > 0 ? Math.round(measurementConfidence * 100) : '--'} 
+                unit="%" 
+              />
             </div>
           </div>
 
           <div className="flex justify-center gap-2 w-full max-w-md mx-auto">
             <Button
-              onClick={async (e) => {
-                e.preventDefault();
-                const processor = await import('../modules/SignalProcessor');
-                const signalProcessor = new processor.PPGSignalProcessor();
-                await signalProcessor.calibrate();
-              }}
+              onClick={handleCalibrate}
               size="sm"
               className="flex-1 bg-medical-blue/80 hover:bg-medical-blue text-white text-xs py-1.5"
             >
