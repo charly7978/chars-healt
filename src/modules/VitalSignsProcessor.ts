@@ -108,8 +108,80 @@ export class VitalSignsProcessor {
   }
 
   /**
-   * Algoritmo de detección de arritmias basado en RMSSD
+   * processSignal
    */
+  public processSignal(
+    ppgValue: number,
+    rrData?: { intervals: number[]; lastPeakTime: number | null }
+  ): {
+    spo2: number;
+    pressure: string;
+    arrhythmiaStatus: string;
+  } {
+    console.log("VitalSignsProcessor: Entrada de señal", {
+      ppgValue,
+      isLearning: this.isLearningPhase,
+      rrIntervalsCount: this.rrIntervals.length,
+      receivedRRData: rrData
+    });
+
+    const filteredValue = this.applySMAFilter(ppgValue);
+    
+    this.ppgValues.push(filteredValue);
+    if (this.ppgValues.length > this.WINDOW_SIZE) {
+      this.ppgValues.shift();
+    }
+
+    // Si recibimos datos RR, los usamos directamente
+    if (rrData && rrData.intervals.length > 0) {
+      this.rrIntervals = [...rrData.intervals];
+      this.lastPeakTime = rrData.lastPeakTime;
+      
+      // Solo detectamos arritmias si no estamos en fase de aprendizaje
+      if (!this.isLearningPhase && this.rrIntervals.length >= this.RR_WINDOW_SIZE) {
+        this.detectArrhythmia();
+      }
+    }
+
+    // Calcular SpO2 y presión
+    const spo2 = this.calculateSpO2(this.ppgValues.slice(-60));
+    const bp = this.calculateBloodPressure(this.ppgValues.slice(-60));
+    const pressureString = `${bp.systolic}/${bp.diastolic}`;
+
+    // Estado de arritmia y conteo
+    let arrhythmiaStatus = "--";
+    
+    const currentTime = Date.now();
+    const timeSinceStart = currentTime - this.measurementStartTime;
+
+    // Actualizar fase de aprendizaje
+    if (timeSinceStart <= this.ARRHYTHMIA_LEARNING_PERIOD) {
+      this.isLearningPhase = true;
+      arrhythmiaStatus = "APRENDIENDO...";
+    } else {
+      this.isLearningPhase = false;
+      arrhythmiaStatus = this.arrhythmiaDetected ? 
+        `ARRITMIAS: ${this.arrhythmiaCount}` : 
+        "SIN ARRITMIAS";
+    }
+
+    console.log("VitalSignsProcessor: Estado actual", {
+      timestamp: currentTime,
+      isLearningPhase: this.isLearningPhase,
+      arrhythmiaDetected: this.arrhythmiaDetected,
+      arrhythmiaCount: this.arrhythmiaCount,
+      arrhythmiaStatus,
+      timeSinceStart,
+      learningPeriod: this.ARRHYTHMIA_LEARNING_PERIOD
+    });
+
+    return {
+      spo2,
+      pressure: pressureString,
+      arrhythmiaStatus
+    };
+  }
+
   private detectArrhythmia() {
     if (this.rrIntervals.length < this.RR_WINDOW_SIZE) {
       console.log("VitalSignsProcessor: Insuficientes intervalos RR para RMSSD", {
@@ -161,81 +233,6 @@ export class VitalSignsProcessor {
         }
       });
     }
-  }
-
-  /**
-   * processSignal
-   */
-  public processSignal(
-    ppgValue: number,
-    rrData?: { intervals: number[]; lastPeakTime: number | null }
-  ): {
-    spo2: number;
-    pressure: string;
-    arrhythmiaStatus: string;
-  } {
-    console.log("VitalSignsProcessor: Entrada de señal", {
-      ppgValue,
-      isLearning: this.isLearningPhase,
-      rrIntervalsCount: this.rrIntervals.length,
-      receivedRRData: rrData
-    });
-
-    const filteredValue = this.applySMAFilter(ppgValue);
-    
-    this.ppgValues.push(filteredValue);
-    if (this.ppgValues.length > this.WINDOW_SIZE) {
-      this.ppgValues.shift();
-    }
-
-    // Si recibimos datos RR, los usamos directamente
-    if (rrData && rrData.intervals.length > 0) {
-      this.rrIntervals = [...rrData.intervals];
-      this.lastPeakTime = rrData.lastPeakTime;
-      
-      if (!this.isLearningPhase && this.rrIntervals.length >= this.RR_WINDOW_SIZE) {
-        this.detectArrhythmia();
-      }
-    }
-
-    // Calcular SpO2 y presión
-    const spo2 = this.calculateSpO2(this.ppgValues.slice(-60));
-    const bp = this.calculateBloodPressure(this.ppgValues.slice(-60));
-    const pressureString = `${bp.systolic}/${bp.diastolic}`;
-
-    // Estado de arritmia y conteo
-    let arrhythmiaStatus = "--";
-    
-    const currentTime = Date.now();
-    const timeSinceStart = currentTime - this.measurementStartTime;
-
-    // Verificamos si estamos en fase de aprendizaje
-    this.isLearningPhase = timeSinceStart <= this.ARRHYTHMIA_LEARNING_PERIOD;
-    
-    if (this.isLearningPhase) {
-      arrhythmiaStatus = "APRENDIENDO...";
-    } else {
-      // Si hay arritmias, mostrar el conteo, si no, mostrar "SIN ARRITMIAS"
-      arrhythmiaStatus = this.arrhythmiaDetected ? 
-        `ARRITMIAS: ${this.arrhythmiaCount}` : 
-        "SIN ARRITMIAS";
-    }
-
-    console.log("VitalSignsProcessor: Estado actual", {
-      timestamp: currentTime,
-      isLearningPhase: this.isLearningPhase,
-      arrhythmiaDetected: this.arrhythmiaDetected,
-      arrhythmiaCount: this.arrhythmiaCount,
-      arrhythmiaStatus,
-      timeSinceStart,
-      learningPeriod: this.ARRHYTHMIA_LEARNING_PERIOD
-    });
-
-    return {
-      spo2,
-      pressure: pressureString,
-      arrhythmiaStatus
-    };
   }
 
   private processHeartBeat() {
