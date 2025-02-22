@@ -7,12 +7,14 @@ interface SignalQualityIndicatorProps {
 
 const SignalQualityIndicator = ({ quality }: SignalQualityIndicatorProps) => {
   const getQualityColor = (quality: number) => {
-    if (quality > 75) return '#ff0000';
-    if (quality > 50) return '#ff4444';
-    return '#ff8888';
+    if (quality === 0) return '#666666';
+    if (quality > 75) return '#00ff00';
+    if (quality > 50) return '#ffff00';
+    return '#ff0000';
   };
 
   const getQualityText = (quality: number) => {
+    if (quality === 0) return 'Sin Dedo';
     if (quality > 75) return 'Excelente';
     if (quality > 50) return 'Buena';
     return 'Baja';
@@ -21,7 +23,6 @@ const SignalQualityIndicator = ({ quality }: SignalQualityIndicatorProps) => {
   return (
     <div className="bg-black/30 backdrop-blur-md rounded p-2 w-full">
       <div className="flex items-center gap-2">
-        {/* Indicador circular */}
         <div 
           className="w-12 h-12 rounded-full border-2 flex items-center justify-center shrink-0 transition-all duration-300"
           style={{
@@ -33,7 +34,6 @@ const SignalQualityIndicator = ({ quality }: SignalQualityIndicatorProps) => {
         </div>
 
         <div className="flex-1">
-          {/* Texto de calidad */}
           <div className="flex justify-between items-center mb-1">
             <span className="text-xs font-semibold text-white/90">Calidad de Señal</span>
             <span 
@@ -44,7 +44,6 @@ const SignalQualityIndicator = ({ quality }: SignalQualityIndicatorProps) => {
             </span>
           </div>
 
-          {/* Barra de progreso */}
           <div className="w-full h-1.5 bg-gray-700/50 rounded-full overflow-hidden">
             <div 
               className="h-full transition-all duration-300"

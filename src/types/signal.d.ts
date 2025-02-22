@@ -4,6 +4,7 @@ export interface ProcessedSignal {
   rawValue: number;
   filteredValue: number;
   quality: number;
+  fingerDetected: boolean;
   roi: {
     x: number;
     y: number;

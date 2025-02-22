@@ -8,14 +8,10 @@ class KalmanFilter {
   private K: number = 0;     // Ganancia de Kalman
 
   filter(measurement: number): number {
-    // Predicción
     this.P = this.P + this.Q;
-
-    // Actualización
     this.K = this.P / (this.P + this.R);
     this.X = this.X + this.K * (measurement - this.X);
     this.P = (1 - this.K) * this.P;
-
     return this.X;
   }
 }
@@ -26,9 +22,12 @@ export class PPGSignalProcessor implements SignalProcessor {
   private lastValue: number = 0;
   private frameBuffer: number[] = [];
   private readonly BUFFER_SIZE = 30;
-  private readonly QUALITY_THRESHOLD = 0.5; // Reducido el umbral para mejor sensibilidad
+  private readonly MIN_RED_THRESHOLD = 50; // Umbral mínimo para detección de dedo
+  private readonly MAX_RED_THRESHOLD = 200; // Umbral máximo para detección de dedo
+  private readonly STABILITY_THRESHOLD = 0.3; // Umbral de estabilidad
   private frameCount: number = 0;
   private baselineRed: number = 0;
+  private isFingerDetected: boolean = false;
   
   constructor(
     public onSignalReady?: (signal: ProcessedSignal) => void,
@@ -94,33 +93,44 @@ export class PPGSignalProcessor implements SignalProcessor {
     try {
       this.frameCount++;
       const redValue = this.extractRedChannel(imageData);
-      console.log("PPGSignalProcessor: Valor rojo extraído:", {
+      const fingerDetected = this.detectFinger(redValue);
+      
+      console.log("PPGSignalProcessor: Análisis de frame:", {
         frameCount: this.frameCount,
         redValue,
-        imageDataSize: `${imageData.width}x${imageData.height}`,
-        totalPixels: imageData.width * imageData.height
+        fingerDetected,
+        baselineRed: this.baselineRed
       });
-      
-      // Establecer línea base en los primeros frames
+
+      if (!fingerDetected) {
+        // Si no hay dedo, enviamos señal con calidad 0
+        const noFingerSignal: ProcessedSignal = {
+          timestamp: Date.now(),
+          rawValue: redValue,
+          filteredValue: 0,
+          quality: 0,
+          roi: this.detectROI(redValue),
+          fingerDetected: false
+        };
+        
+        this.onSignalReady?.(noFingerSignal);
+        return;
+      }
+
+      // Si hay dedo, procesamos la señal
       if (this.frameCount <= 10) {
         this.baselineRed += redValue / 10;
-        console.log("PPGSignalProcessor: Calculando línea base:", {
-          frameCount: this.frameCount,
-          currentBaselineRed: this.baselineRed
-        });
+        console.log("PPGSignalProcessor: Calculando línea base:", this.baselineRed);
         return;
       }
 
       const filtered = this.applyFilters(redValue);
-      const quality = this.calculateSignalQuality(filtered);
+      const quality = this.calculateSignalQuality(filtered, redValue);
       
       console.log("PPGSignalProcessor: Señal procesada:", {
-        frameCount: this.frameCount,
-        redValue,
         filtered,
         quality,
-        baselineRed: this.baselineRed,
-        bufferSize: this.frameBuffer.length
+        fingerDetected
       });
 
       const processedSignal: ProcessedSignal = {
@@ -128,17 +138,12 @@ export class PPGSignalProcessor implements SignalProcessor {
         rawValue: redValue,
         filteredValue: filtered,
         quality,
-        roi: this.detectROI(redValue)
+        roi: this.detectROI(redValue),
+        fingerDetected: true
       };
 
       this.lastValue = filtered;
-      
-      if (this.onSignalReady) {
-        console.log("PPGSignalProcessor: Enviando señal al callback");
-        this.onSignalReady(processedSignal);
-      } else {
-        console.warn("PPGSignalProcessor: No hay callback onSignalReady configurado");
-      }
+      this.onSignalReady?.(processedSignal);
 
     } catch (error) {
       console.error("PPGSignalProcessor: Error procesando frame", error);
@@ -164,6 +169,54 @@ export class PPGSignalProcessor implements SignalProcessor {
     });
     
     return avgRed;
+  }
+
+  private detectFinger(redValue: number): boolean {
+    // Un dedo presente debería mostrar valores altos en el canal rojo
+    const isInRange = redValue > this.MIN_RED_THRESHOLD && redValue < this.MAX_RED_THRESHOLD;
+    
+    // Actualizar el estado de detección
+    this.isFingerDetected = isInRange;
+    
+    console.log("PPGSignalProcessor: Detección de dedo:", {
+      redValue,
+      isInRange,
+      min: this.MIN_RED_THRESHOLD,
+      max: this.MAX_RED_THRESHOLD
+    });
+    
+    return this.isFingerDetected;
+  }
+
+  private calculateSignalQuality(filteredValue: number, rawValue: number): number {
+    if (!this.isFingerDetected || this.frameCount < 10) {
+      return 0;
+    }
+
+    // Calcular la estabilidad de la señal
+    const recentValues = this.frameBuffer.slice(-5);
+    const avgVariation = recentValues.reduce((sum, val, i, arr) => {
+      if (i === 0) return 0;
+      return sum + Math.abs(val - arr[i-1]);
+    }, 0) / (recentValues.length - 1);
+
+    // Normalizar la variación promedio
+    const normalizedStability = Math.max(0, 1 - (avgVariation / this.STABILITY_THRESHOLD));
+
+    // Calcular la intensidad de la señal
+    const signalStrength = Math.min(Math.abs(rawValue - this.baselineRed) / 100, 1);
+
+    // Calcular calidad final
+    const quality = Math.round((normalizedStability * 0.7 + signalStrength * 0.3) * 100);
+
+    console.log("PPGSignalProcessor: Cálculo de calidad:", {
+      avgVariation,
+      normalizedStability,
+      signalStrength,
+      quality
+    });
+
+    return Math.min(Math.max(quality, 0), 100);
   }
 
   private detectROI(redChannel: number): ProcessedSignal['roi'] {
@@ -192,42 +245,6 @@ export class PPGSignalProcessor implements SignalProcessor {
     const cutoff = 4.0;
     const resonance = 0.51;
     return value * (1 / (1 + Math.pow(value/cutoff, 2*resonance)));
-  }
-
-  private calculateSignalQuality(currentValue: number): number {
-    // Si no hay suficientes frames, la calidad es baja
-    if (this.frameCount < 10 || this.frameBuffer.length < 2) {
-      return 0;
-    }
-
-    // Calcular la variación respecto a la línea base
-    const variation = Math.abs(currentValue - this.baselineRed);
-    const normalizedVariation = Math.min(variation / this.baselineRed, 1);
-
-    // Calcular la estabilidad de la señal usando los últimos valores
-    const recentValues = this.frameBuffer.slice(-5);
-    const avgVariation = recentValues.reduce((sum, val, i, arr) => {
-      if (i === 0) return 0;
-      return sum + Math.abs(val - arr[i-1]);
-    }, 0) / (recentValues.length - 1);
-
-    // Normalizar la variación promedio
-    const normalizedStability = Math.max(0, 1 - (avgVariation / this.QUALITY_THRESHOLD));
-
-    // Calcular la calidad final combinando ambos factores
-    const rawQuality = (normalizedVariation + normalizedStability) / 2;
-    const quality = Math.min(Math.max(rawQuality * 100, 0), 100);
-
-    console.log("Calidad calculada:", {
-      variation,
-      normalizedVariation,
-      avgVariation,
-      normalizedStability,
-      rawQuality,
-      quality
-    });
-
-    return Math.round(quality);
   }
 
   private handleError(code: string, message: string): void {
