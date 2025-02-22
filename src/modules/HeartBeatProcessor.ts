@@ -8,8 +8,8 @@ export class HeartBeatProcessor {
   private readonly BEEP_FREQUENCY = 1000;
   private readonly BEEP_DURATION = 50;
   private readonly SIGNAL_THRESHOLD = 0.40;  
-  private readonly MIN_CONFIDENCE = 0.50;
-  private readonly DERIVATIVE_THRESHOLD = -0.050;  // Único cambio: de -0.005 a -0.010 para exigir cambios aún más pronunciados
+  private readonly MIN_CONFIDENCE = 0.60;
+  private readonly DERIVATIVE_THRESHOLD = -0.040;  // Único cambio: de -0.005 a -0.010 para exigir cambios aún más pronunciados
   private readonly MIN_PEAK_TIME_MS = 400;
 
   private signalBuffer: number[] = [];
