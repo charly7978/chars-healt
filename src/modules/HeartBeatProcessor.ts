@@ -227,6 +227,15 @@ export class HeartBeatProcessor {
     filteredValue: number;
     arrhythmiaCount: number;
   } {
+    console.log('HeartBeatProcessor - Processing Signal:', {
+      timestamp: new Date().toISOString(),
+      inputValue: value,
+      currentBPM: this.getSmoothBPM(),
+      arrhythmiaCount: this.arrhythmiaCount,
+      isLearningPhase: this.isLearningPhase,
+      baselineRhythm: this.baselineRhythm
+    });
+
     // 1) Filtro de mediana
     const medVal = this.medianFilter(value);
 
@@ -235,15 +244,6 @@ export class HeartBeatProcessor {
 
     // 3) Suavizado exponencial
     const smoothed = this.calculateEMA(movAvgVal);
-
-    console.log('HeartBeatProcessor - Vital Signs Raw:', {
-      timestamp: new Date().toISOString(),
-      rawValue: value,
-      medianFiltered: medVal,
-      movingAverage: movAvgVal,
-      smoothedValue: smoothed,
-      baselineValue: this.baseline
-    });
 
     // Guardar en buffer para graficar
     this.signalBuffer.push(smoothed);
@@ -268,15 +268,6 @@ export class HeartBeatProcessor {
     // Valor "normalizado"
     const normalizedValue = smoothed - this.baseline;
 
-    console.log('HeartBeatProcessor - Signal Processing:', {
-      timestamp: new Date().toISOString(),
-      normalizedValue,
-      signalBufferSize: this.signalBuffer.length,
-      currentBaseline: this.baseline,
-      currentBPMHistory: this.bpmHistory,
-      currentSmoothBPM: this.getSmoothBPM()
-    });
-
     // Auto-reset si señal está muy baja
     this.autoResetIfSignalIsLow(Math.abs(normalizedValue));
 
@@ -298,23 +289,20 @@ export class HeartBeatProcessor {
     // Verificación final de pico
     const isConfirmedPeak = this.confirmPeak(isPeak, normalizedValue, confidence);
 
-    if (isConfirmedPeak) {
-      console.log('HeartBeatProcessor - Peak Detected:', {
-        timestamp: new Date().toISOString(),
-        normalizedValue,
-        confidence,
-        smoothDerivative,
-        timeSinceLastPeak: this.lastPeakTime ? Date.now() - this.lastPeakTime : null,
-        currentBPMHistory: this.bpmHistory
-      });
-    }
-
     // Si se confirma y no estamos en warm-up, actualizamos BPM & beep
     if (isConfirmedPeak && !this.isInWarmup()) {
       const now = Date.now();
       const timeSinceLastPeak = this.lastPeakTime
         ? now - this.lastPeakTime
         : Number.MAX_VALUE;
+
+      console.log('HeartBeatProcessor - Peak Detected:', {
+        timestamp: new Date().toISOString(),
+        timeSinceLastPeak,
+        normalizedValue,
+        currentBPM: this.getSmoothBPM(),
+        arrhythmiaCount: this.arrhythmiaCount
+      });
 
       // Verificamos que sea un pico temporalmente válido
       if (timeSinceLastPeak >= this.MIN_PEAK_TIME_MS) {
@@ -327,26 +315,20 @@ export class HeartBeatProcessor {
         // Beep en el momento exacto de confirmación
         this.playBeep(0.12);
         this.updateBPM();
-
-        console.log('HeartBeatProcessor - Vital Signs Update:', {
-          timestamp: new Date().toISOString(),
-          currentBPM: this.getSmoothBPM(),
-          rawBPM: this.calculateCurrentBPM(),
-          bpmHistory: this.bpmHistory,
-          arrhythmiaCount: this.arrhythmiaCount,
-          isInLearningPhase: this.isLearningPhase,
-          baselineRhythm: this.baselineRhythm
-        });
       }
     }
 
-    return {
+    const result = {
       bpm: Math.round(this.getSmoothBPM()),
       confidence,
       isPeak: isConfirmedPeak && !this.isInWarmup(),
       filteredValue: smoothed,
       arrhythmiaCount: this.arrhythmiaCount
     };
+
+    console.log('HeartBeatProcessor - Result:', result);
+
+    return result;
   }
 
   /**
