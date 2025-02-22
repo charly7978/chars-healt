@@ -51,6 +51,17 @@ export class VitalSignsProcessor {
    */
   private readonly SMA_WINDOW = 3;
 
+  // ───────── Propiedades de la clase ─────────
+  
+  /** Buffer de valores PPG */
+  private ppgValues: number[] = [];
+  
+  /** Último valor de SpO2 válido */
+  private lastValue: number = 0;
+
+  /** Buffer para el filtro SMA */
+  private smaBuffer: number[] = [];
+
   // ───────── Parámetros de Arritmias ─────────
 
   /** Ventana corta para análisis rápido */
@@ -305,7 +316,7 @@ export class VitalSignsProcessor {
       return { systolic: 120, diastolic: 80 };
     }
 
-    // Asumamos ~30 FPS => ~33ms / muestra
+    // Asumimos ~30 FPS => ~33ms / muestra
     const fps = 30;
     const msPerSample = 1000 / fps;
 
