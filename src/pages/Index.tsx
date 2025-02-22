@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
@@ -14,6 +13,11 @@ const Index = () => {
   const { heartRate, spo2, pressure, arrhythmiaCount, elapsedTime, isComplete } = useVitalMeasurement(isMonitoring);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
+  const processingRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    processingRef.current = isMonitoring;
+  }, [isMonitoring]);
 
   useEffect(() => {
     const handleMeasurementComplete = (e: Event) => {
@@ -27,9 +31,91 @@ const Index = () => {
 
   useEffect(() => {
     if (lastSignal) {
+      console.log("Index: Actualizando calidad de señal:", lastSignal.quality);
       setSignalQuality(lastSignal.quality);
     }
   }, [lastSignal]);
+
+  const handleStreamReady = (stream: MediaStream) => {
+    console.log("Index: Camera stream ready", stream.getVideoTracks()[0].getSettings());
+    const videoTrack = stream.getVideoTracks()[0];
+    const imageCapture = new ImageCapture(videoTrack);
+    
+    const tempCanvas = document.createElement('canvas');
+    const tempCtx = tempCanvas.getContext('2d');
+    if (!tempCtx) {
+      console.error("Index: No se pudo obtener el contexto 2D del canvas temporal");
+      return;
+    }
+    
+    const processImage = async () => {
+      if (!processingRef.current) {
+        console.log("Index: Monitoreo detenido, no se procesan más frames");
+        return;
+      }
+      
+      try {
+        const frame = await imageCapture.grabFrame();
+        console.log("Index: Frame capturado", {
+          width: frame.width,
+          height: frame.height
+        });
+        
+        tempCanvas.width = frame.width;
+        tempCanvas.height = frame.height;
+        tempCtx.drawImage(frame, 0, 0);
+        
+        const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
+        console.log("Index: ImageData generado", {
+          width: imageData.width,
+          height: imageData.height,
+          dataLength: imageData.data.length,
+          firstPixelRed: imageData.data[0]
+        });
+        
+        processFrame(imageData);
+        
+        if (processingRef.current) {
+          requestAnimationFrame(processImage);
+        }
+      } catch (error) {
+        console.error("Index: Error capturando frame:", error);
+        if (processingRef.current) {
+          requestAnimationFrame(processImage);
+        }
+      }
+    };
+
+    processImage();
+  };
+
+  const handleStartStop = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (!isMonitoring && !isCameraOn) {
+      setIsCameraOn(true);
+      startProcessing();
+      setTimeout(() => {
+        setIsMonitoring(true);
+        processingRef.current = true;
+      }, 500);
+    } else if (isMonitoring) {
+      setIsMonitoring(false);
+      processingRef.current = false;
+      stopProcessing();
+    }
+  };
+
+  const handleReset = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsMonitoring(false);
+    processingRef.current = false;
+    stopProcessing();
+    setSignalQuality(0);
+    setIsCameraOn(false);
+  };
 
   useEffect(() => {
     if (canvasRef.current && isMonitoring) {
@@ -72,84 +158,6 @@ const Index = () => {
       animate();
     }
   }, [isMonitoring, lastSignal]);
-
-  const handleStartStop = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    if (!isMonitoring && !isCameraOn) {
-      setIsCameraOn(true);
-      startProcessing();
-      setTimeout(() => setIsMonitoring(true), 500);
-    } else if (isMonitoring) {
-      setIsMonitoring(false);
-      stopProcessing();
-    }
-  };
-
-  const handleReset = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsMonitoring(false);
-    stopProcessing();
-    setSignalQuality(0);
-    setIsCameraOn(false);
-  };
-
-  const handleStreamReady = (stream: MediaStream) => {
-    console.log("Index: Camera stream ready", stream.getVideoTracks()[0].getSettings());
-    const videoTrack = stream.getVideoTracks()[0];
-    const imageCapture = new ImageCapture(videoTrack);
-    
-    // Creamos un canvas temporal para la conversión
-    const tempCanvas = document.createElement('canvas');
-    const tempCtx = tempCanvas.getContext('2d');
-    if (!tempCtx) {
-      console.error("Index: No se pudo obtener el contexto 2D del canvas temporal");
-      return;
-    }
-    
-    const processImage = async () => {
-      if (!isMonitoring) {
-        console.log("Index: Monitoreo detenido, no se procesan más frames");
-        return;
-      }
-      
-      try {
-        const frame = await imageCapture.grabFrame();
-        console.log("Index: Frame capturado", {
-          width: frame.width,
-          height: frame.height
-        });
-        
-        // Configuramos el tamaño del canvas temporal
-        tempCanvas.width = frame.width;
-        tempCanvas.height = frame.height;
-        
-        // Dibujamos el ImageBitmap en el canvas temporal
-        tempCtx.drawImage(frame, 0, 0);
-        
-        // Obtenemos los datos de la imagen como ImageData
-        const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
-        console.log("Index: ImageData generado", {
-          width: imageData.width,
-          height: imageData.height,
-          dataLength: imageData.data.length,
-          firstPixelRed: imageData.data[0]
-        });
-        
-        processFrame(imageData);
-      } catch (error) {
-        console.error("Index: Error capturando frame:", error);
-      }
-      
-      if (isMonitoring) {
-        requestAnimationFrame(processImage);
-      }
-    };
-
-    processImage();
-  };
 
   return (
     <div className="w-screen h-screen bg-gray-900 overflow-hidden">
