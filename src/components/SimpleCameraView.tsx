@@ -81,7 +81,26 @@ const SimpleCameraView = ({
             facingMode: currentCamera ? undefined : 'environment',
             width: { ideal: 640 },
             height: { ideal: 480 },
-            frameRate: { ideal: 30 }
+            frameRate: { ideal: 30 },
+            // Forzar modo normal de la cámara
+            whiteBalanceMode: { exact: "continuous" },
+            exposureMode: { exact: "continuous" },
+            exposureCompensation: { ideal: 0 },
+            brightness: { ideal: 100 },
+            contrast: { ideal: 100 },
+            saturation: { ideal: 100 },
+            sharpness: { ideal: 100 },
+            focusMode: { exact: "continuous" },
+            // Deshabilitar modo noche
+            colorTemperature: { ideal: 5000 }, // Temperatura de color natural
+            advanced: [{
+              // Estos son constraints específicos para Android
+              exposureTime: { ideal: 33333 }, // 1/30 segundo
+              sensitivityISO: { ideal: 100 }, // ISO bajo para evitar modo noche
+              torch: false,
+              noiseReduction: "fast",
+              autoExposurePriority: true
+            }]
           }
         };
 
@@ -90,6 +109,25 @@ const SimpleCameraView = ({
         }
 
         stream = await navigator.mediaDevices.getUserMedia(constraints);
+        
+        // Aplicar configuraciones adicionales al track de video
+        const videoTrack = stream.getVideoTracks()[0];
+        if (videoTrack) {
+          try {
+            await videoTrack.applyConstraints({
+              advanced: [{
+                torch: false,
+                manual_exposure: false,
+                exposure_time: 33333, // 1/30 segundo
+                exposure_compensation: 0,
+                white_balance_mode: "continuous",
+                focus_mode: "continuous"
+              }]
+            });
+          } catch (e) {
+            console.warn("No se pudieron aplicar todas las configuraciones avanzadas:", e);
+          }
+        }
         
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
@@ -146,6 +184,10 @@ const SimpleCameraView = ({
         className={`absolute top-0 left-0 min-w-full min-h-full w-auto h-auto z-0 ${
           isAndroid ? 'object-cover' : 'object-contain'
         }`}
+        style={{
+          willChange: 'transform', // Optimización de rendimiento
+          backfaceVisibility: 'hidden' // Optimización de rendimiento
+        }}
       />
       
       {error && (
