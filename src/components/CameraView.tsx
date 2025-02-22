@@ -13,6 +13,43 @@ const CameraView = ({ onStreamReady, isMonitoring, isFingerDetected = false, sig
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
+  const isAndroid = /Android/i.test(navigator.userAgent);
+
+  const normalizeImageData = (imageData: ImageData): ImageData => {
+    if (!isAndroid) return imageData;
+
+    const data = new Uint8ClampedArray(imageData.data);
+    const width = imageData.width;
+    const height = imageData.height;
+    
+    // Solo para Android: normalizar valores RGB
+    for (let i = 0; i < data.length; i += 4) {
+      // Aplicar un factor de normalización más suave para el canal rojo
+      data[i] = Math.min(255, Math.max(0, Math.round(data[i] * 0.85))); // Canal R
+      data[i + 1] = data[i + 1]; // Canal G sin cambios
+      data[i + 2] = data[i + 2]; // Canal B sin cambios
+      data[i + 3] = 255; // Canal Alpha
+    }
+
+    return new ImageData(data, width, height);
+  };
+
+  const captureFrame = () => {
+    if (!videoRef.current || !canvasRef.current) return null;
+
+    const canvas = canvasRef.current;
+    const video = videoRef.current;
+    const ctx = canvas.getContext('2d');
+    
+    if (!ctx) return null;
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0);
+
+    const originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    return normalizeImageData(originalImageData);
+  };
 
   const stopCamera = async () => {
     if (stream) {
@@ -71,6 +108,13 @@ const CameraView = ({ onStreamReady, isMonitoring, isFingerDetected = false, sig
       setStream(newStream);
       
       if (onStreamReady) {
+        // Sobrescribimos el método getImageData del canvas para normalizar la señal
+        const originalGetImageData = CanvasRenderingContext2D.prototype.getImageData;
+        CanvasRenderingContext2D.prototype.getImageData = function(...args) {
+          const originalImageData = originalGetImageData.apply(this, args);
+          return normalizeImageData(originalImageData);
+        };
+
         onStreamReady(newStream);
       }
     } catch (err) {
@@ -85,6 +129,11 @@ const CameraView = ({ onStreamReady, isMonitoring, isFingerDetected = false, sig
       stopCamera();
     }
     return () => {
+      // Restaurar el método original de getImageData
+      if (isAndroid) {
+        const originalGetImageData = CanvasRenderingContext2D.prototype.getImageData;
+        CanvasRenderingContext2D.prototype.getImageData = originalGetImageData;
+      }
       stopCamera();
     };
   }, [isMonitoring]);
