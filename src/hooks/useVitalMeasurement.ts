@@ -24,14 +24,14 @@ export const useVitalMeasurement = (isMeasuring: boolean) => {
         heartRate: 0,
         spo2: 0,
         pressure: "--/--",
-        arrhythmiaCount: lastArrhythmiaCount // Mantenemos el último conteo al detener
+        arrhythmiaCount: lastArrhythmiaCount
       });
       setElapsedTime(0);
       return;
     }
 
     const startTime = Date.now();
-    const MEASUREMENT_DURATION = 30000; // 30 segundos
+    const MEASUREMENT_DURATION = 30000;
 
     const interval = setInterval(() => {
       const currentTime = Date.now();
@@ -39,7 +39,7 @@ export const useVitalMeasurement = (isMeasuring: boolean) => {
       setElapsedTime(elapsed / 1000);
 
       // Actualizamos el conteo de arritmias desde el procesador global
-      if (window.heartBeatProcessor?.arrhythmiaCount !== undefined) {
+      if (window.heartBeatProcessor && typeof window.heartBeatProcessor.arrhythmiaCount === 'number') {
         setLastArrhythmiaCount(window.heartBeatProcessor.arrhythmiaCount);
         setMeasurements(prev => ({
           ...prev,
