@@ -1,3 +1,4 @@
+
 import { ProcessedSignal, ProcessingError, SignalProcessor } from '../types/signal';
 
 class KalmanFilter {
@@ -164,8 +165,7 @@ export class PPGSignalProcessor implements SignalProcessor {
         redValue,
         filtered,
         isFingerDetected,
-        quality,
-        stableFrames: this.stableFrameCount
+        quality
       });
 
       const processedSignal: ProcessedSignal = {
