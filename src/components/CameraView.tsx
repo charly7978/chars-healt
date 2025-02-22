@@ -36,6 +36,9 @@ const CameraView = ({
         throw new Error("getUserMedia no está soportado");
       }
 
+      // Detectamos si es Android por el user agent
+      const isAndroid = /android/i.test(navigator.userAgent);
+
       const constraints: MediaStreamConstraints = {
         video: {
           facingMode: 'environment',
@@ -48,9 +51,30 @@ const CameraView = ({
 
       const newStream = await navigator.mediaDevices.getUserMedia(constraints);
       
-      // Configuramos los settings básicos del video track
       const videoTrack = newStream.getVideoTracks()[0];
       if (videoTrack) {
+        // En Android, intentamos reducir el procesamiento
+        if (isAndroid) {
+          try {
+            await videoTrack.applyConstraints({
+              // Reducimos la resolución máxima en Android
+              width: { max: 1280 },
+              height: { max: 720 }
+            });
+            
+            // Liberamos recursos cuando no se usa
+            videoTrack.enabled = true;
+            videoRef.current?.addEventListener('pause', () => {
+              videoTrack.enabled = false;
+            });
+            videoRef.current?.addEventListener('play', () => {
+              videoTrack.enabled = true;
+            });
+          } catch (err) {
+            console.log("No se pudieron aplicar optimizaciones para Android:", err);
+          }
+        }
+
         const capabilities = videoTrack.getCapabilities();
         console.log('Camera capabilities:', capabilities);
         
@@ -64,6 +88,11 @@ const CameraView = ({
 
       if (videoRef.current) {
         videoRef.current.srcObject = newStream;
+        // Optimizaciones de renderizado para Android
+        if (isAndroid) {
+          videoRef.current.style.transform = 'translateZ(0)';
+          videoRef.current.style.backfaceVisibility = 'hidden';
+        }
       }
 
       setStream(newStream);
@@ -102,6 +131,10 @@ const CameraView = ({
         playsInline
         muted
         className="absolute top-0 left-0 min-w-full min-h-full w-auto h-auto z-0 object-cover"
+        style={{
+          willChange: 'transform',
+          transform: 'translateZ(0)'
+        }}
       />
       {isMonitoring && buttonPosition && (
         <div className="absolute bottom-24 left-1/2 transform -translate-x-1/2 z-20 flex flex-col items-center">
