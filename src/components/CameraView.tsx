@@ -1,3 +1,4 @@
+
 import React, { useRef, useEffect, useState } from 'react';
 import { Fingerprint } from 'lucide-react';
 
@@ -147,94 +148,6 @@ const CameraView = ({
     if (signalQuality > 75) return 'text-green-500';
     if (signalQuality > 50) return 'text-yellow-500';
     return 'text-red-500';
-  };
-
-  const handleStreamReady = (stream: MediaStream) => {
-    if (!isMonitoring) return;
-    
-    const videoTrack = stream.getVideoTracks()[0];
-    console.log("CameraView: Camera stream ready", {
-      settings: videoTrack.getSettings(),
-      constraints: videoTrack.getConstraints(),
-      capabilities: videoTrack.getCapabilities(),
-      platform: /Android/i.test(navigator.userAgent) ? 'Android' : 'Desktop'
-    });
-
-    const imageCapture = new ImageCapture(videoTrack);
-    
-    if (videoTrack.getCapabilities()?.torch) {
-      videoTrack.applyConstraints({
-        advanced: [{ torch: true }]
-      }).catch(err => console.error("Error activando linterna:", err));
-    }
-    
-    const tempCanvas = document.createElement('canvas');
-    const tempCtx = tempCanvas.getContext('2d');
-    if (!tempCtx) {
-      console.error("CameraView: No se pudo obtener el contexto 2D del canvas temporal");
-      return;
-    }
-    
-    let lastFrameTime = Date.now();
-    let frameCount = 0;
-    let droppedFrames = 0;
-    
-    const processImage = async () => {
-      if (!isMonitoring) {
-        console.log("CameraView: Monitoreo detenido, frames procesados:", frameCount);
-        return;
-      }
-      
-      try {
-        const now = Date.now();
-        const timeSinceLastFrame = now - lastFrameTime;
-        
-        // Control de frame rate para Android
-        if (/Android/i.test(navigator.userAgent) && timeSinceLastFrame < 33) { // ~30fps
-          droppedFrames++;
-          if (droppedFrames % 30 === 0) {
-            console.log("CameraView: Frames descartados:", droppedFrames);
-          }
-          requestAnimationFrame(processImage);
-          return;
-        }
-        
-        const frame = await imageCapture.grabFrame();
-        frameCount++;
-        
-        console.log("CameraView: Frame capturado", {
-          frameNumber: frameCount,
-          timeSinceLastFrame,
-          fps: 1000 / timeSinceLastFrame,
-          resolution: `${frame.width}x${frame.height}`,
-          timestamp: now
-        });
-        
-        tempCanvas.width = frame.width;
-        tempCanvas.height = frame.height;
-        tempCtx.drawImage(frame, 0, 0);
-        const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
-        processFrame(imageData);
-        
-        lastFrameTime = now;
-        
-        if (isMonitoring) {
-          requestAnimationFrame(processImage);
-        }
-      } catch (error) {
-        console.error("CameraView: Error capturando frame:", {
-          error,
-          frameCount,
-          lastFrameTime,
-          now: Date.now()
-        });
-        if (isMonitoring) {
-          requestAnimationFrame(processImage);
-        }
-      }
-    };
-
-    processImage();
   };
 
   return (
