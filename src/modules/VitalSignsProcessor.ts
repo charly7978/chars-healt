@@ -38,13 +38,13 @@ export class VitalSignsProcessor {
   /** Máximo de muestras PPG en el buffer (~10s si ~30FPS). */
   private readonly WINDOW_SIZE = 300;
 
-  /** Factor de calibración para SpO2 (ajustado para Android) */
-  private readonly SPO2_CALIBRATION_FACTOR = 0.85; // Reducido para mayor sensibilidad
+  /** Factor de calibración para SpO2 (ajustado para mediciones más precisas) */
+  private readonly SPO2_CALIBRATION_FACTOR = 1.05; // Aumentado para ajustar el rango máximo
 
-  /** Umbral mínimo de índice de perfusión (AC/DC) * 100 para confiar en SpO2 */
-  private readonly PERFUSION_INDEX_THRESHOLD = 0.05; // Muy reducido para Android
+  /** Umbral mínimo de índice de perfusión */
+  private readonly PERFUSION_INDEX_THRESHOLD = 0.05;
 
-  /** Ventana de promedios para SpO2 (reducida para más reactividad) */  
+  /** Ventana de promedios para SpO2 */  
   private readonly SPO2_WINDOW = 10;
 
   /** Tamaño de la ventana para el SMA */
@@ -182,13 +182,13 @@ export class VitalSignsProcessor {
 
   /**
    * calculateActualSpO2
-   * Versión optimizada para Android con mayor sensibilidad.
+   * Versión ajustada para evitar lecturas superiores a 98%.
    */
   private calculateActualSpO2(ppgValues: number[]): number {
     if (!this.baselineEstablished) return this.lastSpO2;
 
-    // Calculamos componentes con ventana reducida para mayor sensibilidad
-    const recentValues = ppgValues.slice(-60); // 2 segundos @30FPS
+    // Usamos una ventana más corta para mejor respuesta
+    const recentValues = ppgValues.slice(-60);
     const acComponent = this.calculateAC(recentValues);
     const dcComponent = this.calculateDC(recentValues);
 
@@ -197,9 +197,8 @@ export class VitalSignsProcessor {
       return this.lastSpO2;
     }
 
-    // Índice de perfusión con factor de amplificación para Android
-    const perfusionIndex = (acComponent / dcComponent) * 200; // Amplificado x2
-    
+    // Calculamos el índice de perfusión
+    const perfusionIndex = (acComponent / dcComponent) * 200;
     console.log("VitalSignsProcessor: Perfusion Index:", perfusionIndex);
     
     if (perfusionIndex < this.PERFUSION_INDEX_THRESHOLD * 100) {
@@ -209,26 +208,25 @@ export class VitalSignsProcessor {
 
     const { peakTimes, valleys } = this.findPeaksAndValleys(recentValues);
     
-    // Requerimos menos picos para comenzar a calcular
     if (peakTimes.length < 2) {
       console.log("VitalSignsProcessor: Picos insuficientes para SpO2");
       return this.lastSpO2;
     }
 
-    // Cálculo optimizado para Android
-    const ratio = (acComponent / dcComponent) * 2.5; // Factor aumentado
-    let spo2Raw = 110 - (20 * ratio * this.SPO2_CALIBRATION_FACTOR);
+    // Cálculo ajustado del SpO2 para nunca exceder 98%
+    const ratio = (acComponent / dcComponent) * 2.5;
+    let spo2Raw = Math.min(98, 105 - (18 * ratio * this.SPO2_CALIBRATION_FACTOR));
     
-    // Ajuste de calidad de señal más permisivo
+    // Verificamos calidad de señal
     const signalQuality = this.calculateSignalQuality(recentValues, peakTimes, valleys);
     console.log("VitalSignsProcessor: Calidad señal SpO2:", signalQuality);
 
-    // Ponderación más agresiva para valores nuevos
+    // Ponderación con más peso en valores nuevos para mejor respuesta
     const qualityWeight = Math.min((signalQuality / 100) * 1.5, 1);
     const newSpo2 = spo2Raw * qualityWeight + this.lastSpO2 * (1 - qualityWeight);
 
-    // Ajuste final más permisivo
-    spo2Raw = Math.min(100, Math.max(80, Math.round(newSpo2)));
+    // Aseguramos que el valor final esté en el rango fisiológico [85-98]
+    spo2Raw = Math.min(98, Math.max(85, Math.round(newSpo2)));
     
     console.log("VitalSignsProcessor: SpO2 Raw:", spo2Raw);
 
