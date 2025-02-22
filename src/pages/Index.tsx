@@ -76,6 +76,8 @@ const Index = () => {
     setIsCameraOn(true);
     setIsPaused(false);
     startProcessing();
+    resetVitalSigns();
+    processVitalSigns.startMonitoring();
     setElapsedTime(0);
     if (measurementTimerRef.current) {
       clearInterval(measurementTimerRef.current);
@@ -96,6 +98,10 @@ const Index = () => {
     setIsCameraOn(false);
     setIsPaused(false);
     stopProcessing();
+    const finalResults = processVitalSigns.stopMonitoring();
+    if (finalResults) {
+      setVitalSigns(finalResults);
+    }
     resetVitalSigns();
     setElapsedTime(0);
     if (measurementTimerRef.current) {
