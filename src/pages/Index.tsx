@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
@@ -11,6 +10,7 @@ import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import CalibrationDialog from "@/components/CalibrationDialog";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useNavigate } from "react-router-dom";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -27,6 +27,7 @@ const Index = () => {
   const [isCalibrating, setIsCalibrating] = useState(false);
   const [showCalibrationDialog, setShowCalibrationDialog] = useState(false);
   
+  const navigate = useNavigate();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { startProcessing, stopProcessing, lastSignal, processFrame, calibrate } = useSignalProcessor();
   const processingRef = useRef<boolean>(false);
@@ -185,7 +186,27 @@ const Index = () => {
   };
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      handleStopMeasurement();
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error("Error al cerrar sesión:", error);
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "No se pudo cerrar sesión. Intente nuevamente.",
+        });
+        return;
+      }
+      navigate("/auth");
+    } catch (error) {
+      console.error("Error inesperado al cerrar sesión:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Ocurrió un error inesperado. Intente nuevamente.",
+      });
+    }
   };
 
   const handleCalibration = async () => {
