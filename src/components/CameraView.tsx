@@ -20,85 +20,71 @@ const CameraView = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
 
   const stopCamera = async () => {
-    try {
-      if (streamRef.current) {
-        const tracks = streamRef.current.getTracks();
-        tracks.forEach(track => {
-          if (track.readyState === 'live') {
-            if (track.getCapabilities()?.torch) {
-              track.applyConstraints({
-                advanced: [{ torch: false }]
-              }).catch(console.error);
-            }
-            track.stop();
-          }
-        });
-      }
-      
+    if (stream) {
+      const tracks = stream.getTracks();
+      tracks.forEach(track => {
+        if (track.getCapabilities()?.torch) {
+          track.applyConstraints({
+            advanced: [{ torch: false }]
+          }).catch(err => console.error("Error desactivando linterna:", err));
+        }
+        track.stop();
+      });
       if (videoRef.current) {
         videoRef.current.srcObject = null;
       }
-      
-      streamRef.current = null;
       setStream(null);
-    } catch (err) {
-      console.error("Error al detener la cámara:", err);
     }
   };
 
   const startCamera = async () => {
     try {
-      await stopCamera(); // Asegurarnos de limpiar cualquier stream anterior
-
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error("getUserMedia no está soportado");
       }
 
       const isAndroid = /Android/i.test(navigator.userAgent);
       
-      const constraints: MediaStreamConstraints = {
-        video: {
-          facingMode: { exact: 'environment' },
-          width: { ideal: 1280, min: 640 },
-          height: { ideal: 720, min: 480 },
-          frameRate: { ideal: 30, min: 15 },
-          ...(isAndroid && {
-            resizeMode: 'crop-and-scale'
-          })
-        }
+      const constraints: MediaTrackConstraints = {
+        facingMode: 'environment',
+        width: { ideal: 1280, min: 640 },
+        height: { ideal: 720, min: 480 },
+        frameRate: { ideal: 30, min: 15 },
+        ...(isAndroid && {
+          resizeMode: 'crop-and-scale',
+          brightness: { ideal: 100 },
+          whiteBalanceMode: 'continuous'
+        })
       };
 
-      const newStream = await navigator.mediaDevices.getUserMedia(constraints);
-      
-      if (!videoRef.current) return;
-      
-      videoRef.current.srcObject = newStream;
-      streamRef.current = newStream;
-      
-      // Esperar a que el video esté listo
-      await new Promise((resolve) => {
-        if (videoRef.current) {
-          videoRef.current.onloadedmetadata = resolve;
-        }
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        video: constraints
       });
-
-      const videoTrack = newStream.getVideoTracks()[0];
       
-      // Intentar activar la linterna después de un pequeño retraso
-      setTimeout(async () => {
+      const videoTrack = newStream.getVideoTracks()[0];
+
+      if (isAndroid) {
         try {
-          if (videoTrack.getCapabilities()?.torch) {
-            await videoTrack.applyConstraints({
-              advanced: [{ torch: true }]
-            });
-          }
+          const capabilities = videoTrack.getCapabilities();
+          await videoTrack.applyConstraints({
+            advanced: [{
+              torch: true
+            }]
+          });
         } catch (err) {
-          console.log("No se pudo activar la linterna:", err);
+          console.log("No se pudieron aplicar configuraciones avanzadas:", err);
         }
-      }, 500);
+      } else if (videoTrack.getCapabilities()?.torch) {
+        await videoTrack.applyConstraints({
+          advanced: [{ torch: true }]
+        });
+      }
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = newStream;
+      }
 
       setStream(newStream);
       
@@ -107,28 +93,6 @@ const CameraView = ({
       }
     } catch (err) {
       console.error("Error al iniciar la cámara:", err);
-      // Intentar sin modo environment si falla
-      try {
-        const fallbackStream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: 'environment',
-            width: { ideal: 640 },
-            height: { ideal: 480 },
-            frameRate: { ideal: 30 }
-          }
-        });
-        
-        if (videoRef.current) {
-          videoRef.current.srcObject = fallbackStream;
-          streamRef.current = fallbackStream;
-          setStream(fallbackStream);
-          if (onStreamReady) {
-            onStreamReady(fallbackStream);
-          }
-        }
-      } catch (fallbackErr) {
-        console.error("Error en fallback de cámara:", fallbackErr);
-      }
     }
   };
 
@@ -157,10 +121,7 @@ const CameraView = ({
         autoPlay
         playsInline
         muted
-        style={{ 
-          objectFit: 'cover',
-          transform: 'scaleX(-1)' // Invertir horizontalmente para espejo
-        }}
+        style={{ objectFit: 'cover' }}
         className="absolute top-0 left-0 min-w-full min-h-full w-auto h-auto z-0"
       />
       <canvas
