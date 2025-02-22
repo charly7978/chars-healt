@@ -94,16 +94,35 @@ export class PPGSignalProcessor implements SignalProcessor {
     try {
       this.frameCount++;
       const redValue = this.extractRedChannel(imageData);
+      console.log("PPGSignalProcessor: Valor rojo extraído:", {
+        frameCount: this.frameCount,
+        redValue,
+        imageDataSize: `${imageData.width}x${imageData.height}`,
+        totalPixels: imageData.width * imageData.height
+      });
       
       // Establecer línea base en los primeros frames
       if (this.frameCount <= 10) {
         this.baselineRed += redValue / 10;
+        console.log("PPGSignalProcessor: Calculando línea base:", {
+          frameCount: this.frameCount,
+          currentBaselineRed: this.baselineRed
+        });
         return;
       }
 
       const filtered = this.applyFilters(redValue);
       const quality = this.calculateSignalQuality(filtered);
       
+      console.log("PPGSignalProcessor: Señal procesada:", {
+        frameCount: this.frameCount,
+        redValue,
+        filtered,
+        quality,
+        baselineRed: this.baselineRed,
+        bufferSize: this.frameBuffer.length
+      });
+
       const processedSignal: ProcessedSignal = {
         timestamp: Date.now(),
         rawValue: redValue,
@@ -113,14 +132,13 @@ export class PPGSignalProcessor implements SignalProcessor {
       };
 
       this.lastValue = filtered;
-      console.log("PPGSignalProcessor: Señal procesada:", {
-        rawValue: redValue,
-        filtered,
-        quality,
-        frameCount: this.frameCount
-      });
       
-      this.onSignalReady?.(processedSignal);
+      if (this.onSignalReady) {
+        console.log("PPGSignalProcessor: Enviando señal al callback");
+        this.onSignalReady(processedSignal);
+      } else {
+        console.warn("PPGSignalProcessor: No hay callback onSignalReady configurado");
+      }
 
     } catch (error) {
       console.error("PPGSignalProcessor: Error procesando frame", error);
@@ -138,7 +156,14 @@ export class PPGSignalProcessor implements SignalProcessor {
       count++;
     }
     
-    return redSum / count;
+    const avgRed = redSum / count;
+    console.log("PPGSignalProcessor: Canal rojo extraído:", {
+      totalRed: redSum,
+      pixelCount: count,
+      average: avgRed
+    });
+    
+    return avgRed;
   }
 
   private detectROI(redChannel: number): ProcessedSignal['roi'] {

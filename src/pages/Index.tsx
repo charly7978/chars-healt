@@ -97,20 +97,30 @@ const Index = () => {
   };
 
   const handleStreamReady = (stream: MediaStream) => {
-    console.log("Camera stream ready");
+    console.log("Index: Camera stream ready", stream.getVideoTracks()[0].getSettings());
     const videoTrack = stream.getVideoTracks()[0];
     const imageCapture = new ImageCapture(videoTrack);
     
     // Creamos un canvas temporal para la conversión
     const tempCanvas = document.createElement('canvas');
     const tempCtx = tempCanvas.getContext('2d');
-    if (!tempCtx) return;
+    if (!tempCtx) {
+      console.error("Index: No se pudo obtener el contexto 2D del canvas temporal");
+      return;
+    }
     
     const processImage = async () => {
-      if (!isMonitoring) return;
+      if (!isMonitoring) {
+        console.log("Index: Monitoreo detenido, no se procesan más frames");
+        return;
+      }
       
       try {
         const frame = await imageCapture.grabFrame();
+        console.log("Index: Frame capturado", {
+          width: frame.width,
+          height: frame.height
+        });
         
         // Configuramos el tamaño del canvas temporal
         tempCanvas.width = frame.width;
@@ -121,11 +131,16 @@ const Index = () => {
         
         // Obtenemos los datos de la imagen como ImageData
         const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
+        console.log("Index: ImageData generado", {
+          width: imageData.width,
+          height: imageData.height,
+          dataLength: imageData.data.length,
+          firstPixelRed: imageData.data[0]
+        });
         
-        // Ahora sí pasamos ImageData al procesador
         processFrame(imageData);
       } catch (error) {
-        console.error("Error capturando frame:", error);
+        console.error("Index: Error capturando frame:", error);
       }
       
       if (isMonitoring) {
