@@ -2,8 +2,10 @@
 import * as React from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Activity } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { motion } from "framer-motion";
+import { Input } from "@/components/ui/input";
 
 interface CalibrationDialogProps {
   isOpen: boolean;
@@ -18,126 +20,116 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({
   onCalibrationStart,
   onCalibrationEnd
 }) => {
-  const [progress, setProgress] = React.useState(0);
-  const [status, setStatus] = React.useState<string>("");
-  const [isCalibrating, setIsCalibrating] = React.useState(false);
+  const [systolic, setSystolic] = React.useState<string>("");
+  const [diastolic, setDiastolic] = React.useState<string>("");
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
 
-  const startCalibration = async () => {
+  const handleCalibration = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         return;
       }
 
-      setIsCalibrating(true);
+      setIsSubmitting(true);
       onCalibrationStart();
-      setProgress(0);
-      setStatus("Iniciando calibración...");
 
       await supabase
         .from('calibration_settings')
         .upsert({
           user_id: session.user.id,
-          status: 'in_progress',
+          status: 'completed',
+          is_active: true,
+          systolic_reference: parseInt(systolic),
+          diastolic_reference: parseInt(diastolic),
           last_calibration_date: new Date().toISOString()
         });
 
-      const calibrationSteps = [
-        { name: "Ajustando sensores...", duration: 3000 },
-        { name: "Calibrando intensidad de luz...", duration: 3000 },
-        { name: "Optimizando detección de pulso...", duration: 4000 },
-        { name: "Ajustando filtros de señal...", duration: 3000 },
-        { name: "Configurando parámetros finales...", duration: 2000 }
-      ];
-
-      for (const [index, step] of calibrationSteps.entries()) {
-        setStatus(step.name);
-        setProgress((index * 100) / calibrationSteps.length);
-        await new Promise(resolve => setTimeout(resolve, step.duration));
-      }
-
-      await supabase
-        .from('calibration_settings')
-        .update({
-          status: 'completed',
-          is_active: true,
-          stability_threshold: 5.0,
-          quality_threshold: 0.8,
-          perfusion_index: 0.06
-        })
-        .eq('user_id', session.user.id);
-
-      setProgress(100);
-      setIsCalibrating(false);
       onCalibrationEnd();
-
-      // Cerramos el diálogo después de un breve delay
       setTimeout(() => {
         onClose();
       }, 500);
 
     } catch (error) {
       console.error("Error durante la calibración:", error);
-      setIsCalibrating(false);
       onCalibrationEnd();
       onClose();
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  React.useEffect(() => {
-    if (isOpen) {
-      startCalibration();
-    }
-  }, [isOpen]);
-
   return (
     <Dialog open={isOpen} onOpenChange={() => {
-      if (!isCalibrating) {
+      if (!isSubmitting) {
         onClose();
       }
     }}>
-      <DialogContent className="sm:max-w-md">
-        <div className="flex items-center justify-between mb-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => {
-              if (!isCalibrating) {
-                onClose();
-              }
-            }}
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <h2 className="text-lg font-semibold">Calibración del Sistema</h2>
-          <div className="w-9" />
-        </div>
-
-        <div className="space-y-6">
-          <div className="flex justify-center">
-            <Activity className={`h-12 w-12 ${isCalibrating ? 'animate-pulse text-blue-500' : 'text-gray-400'}`} />
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span>{status}</span>
-              <span>{Math.round(progress)}%</span>
+      <DialogContent 
+        className="sm:max-w-md perspective-1000"
+        asChild
+      >
+        <motion.div
+          initial={{ rotateY: -90 }}
+          animate={{ rotateY: 0 }}
+          exit={{ rotateY: 90 }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+          style={{ transformStyle: "preserve-3d" }}
+        >
+          <div className="flex flex-col space-y-4">
+            <div className="flex items-center justify-between">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  if (!isSubmitting) {
+                    onClose();
+                  }
+                }}
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+              <h2 className="text-lg font-semibold">Calibración Manual</h2>
+              <div className="w-9" />
             </div>
-            <div className="h-2 bg-gray-200 rounded-full">
-              <div 
-                className="h-full bg-blue-500 rounded-full transition-all duration-500"
-                style={{ width: `${progress}%` }}
-              />
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Presión Sistólica</label>
+                <Input
+                  type="number"
+                  placeholder="120"
+                  value={systolic}
+                  onChange={(e) => setSystolic(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Presión Diastólica</label>
+                <Input
+                  type="number"
+                  placeholder="80"
+                  value={diastolic}
+                  onChange={(e) => setDiastolic(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+
+              <Button
+                className="w-full"
+                onClick={handleCalibration}
+                disabled={!systolic || !diastolic || isSubmitting}
+              >
+                {isSubmitting ? "Calibrando..." : "Calibrar"}
+              </Button>
+
+              <p className="text-sm text-gray-500 text-center">
+                Ingrese los valores de su última medición de presión arterial para calibrar el sistema
+              </p>
             </div>
           </div>
-
-          <p className="text-sm text-gray-500 text-center">
-            {isCalibrating 
-              ? "Por favor, espere mientras se completa la calibración..."
-              : "Calibración completada"
-            }
-          </p>
-        </div>
+        </motion.div>
       </DialogContent>
     </Dialog>
   );
