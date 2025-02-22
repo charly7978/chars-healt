@@ -21,16 +21,14 @@ const SimpleCameraView = ({
   const [currentCamera, setCurrentCamera] = useState<string>('');
   const [error, setError] = useState<string>('');
   const [isAndroid, setIsAndroid] = useState(false);
-  const streamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
     setIsAndroid(/Android/i.test(navigator.userAgent));
   }, []);
 
   const getAvailableCameras = async () => {
-    if (availableCameras.length > 0) return; // Evitar escaneos innecesarios
-
     try {
+      await navigator.mediaDevices.getUserMedia({ video: true });
       const devices = await navigator.mediaDevices.enumerateDevices();
       const cameras = devices.filter(device => device.kind === 'videoinput');
       setAvailableCameras(cameras);
@@ -39,8 +37,7 @@ const SimpleCameraView = ({
         const backCamera = cameras.find(camera => 
           camera.label.toLowerCase().includes('back') || 
           camera.label.toLowerCase().includes('trasera') ||
-          camera.label.toLowerCase().includes('environment') ||
-          camera.label.toLowerCase().includes('0')
+          camera.label.toLowerCase().includes('environment')
         );
         
         if (backCamera) {
@@ -67,9 +64,11 @@ const SimpleCameraView = ({
     if (isMonitoring) {
       getAvailableCameras();
     }
-  }, [isMonitoring, isAndroid]);
+  }, [isMonitoring]);
 
   useEffect(() => {
+    let stream: MediaStream | null = null;
+
     const startCamera = async () => {
       try {
         if (!navigator.mediaDevices?.getUserMedia) {
@@ -80,26 +79,20 @@ const SimpleCameraView = ({
           video: {
             deviceId: currentCamera ? { exact: currentCamera } : undefined,
             facingMode: currentCamera ? undefined : 'environment',
-            width: { ideal: isAndroid ? 720 : 640 }, // Reducida para mejor rendimiento
-            height: { ideal: isAndroid ? 480 : 480 },
-            frameRate: { ideal: isAndroid ? 15 : 30 }, // Reducido en Android
-            aspectRatio: { ideal: 4/3 }
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            frameRate: { ideal: 30 }
           }
         };
 
-        // Limpiar stream anterior
-        if (streamRef.current) {
-          streamRef.current.getTracks().forEach(track => {
-            track.stop();
-            streamRef.current?.removeTrack(track);
-          });
+        if (stream) {
+          stream.getTracks().forEach(track => track.stop());
         }
 
-        const newStream = await navigator.mediaDevices.getUserMedia(constraints);
-        streamRef.current = newStream;
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
         
         if (videoRef.current) {
-          videoRef.current.srcObject = newStream;
+          videoRef.current.srcObject = stream;
           videoRef.current.setAttribute('playsinline', 'true');
           
           if (isAndroid) {
@@ -109,7 +102,7 @@ const SimpleCameraView = ({
           }
           
           if (onStreamReady) {
-            onStreamReady(newStream);
+            onStreamReady(stream);
           }
         }
       } catch (err) {
@@ -119,12 +112,8 @@ const SimpleCameraView = ({
     };
 
     const stopCamera = () => {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => {
-          track.stop();
-          streamRef.current?.removeTrack(track);
-        });
-        streamRef.current = null;
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
       }
       if (videoRef.current) {
         videoRef.current.srcObject = null;
@@ -133,8 +122,6 @@ const SimpleCameraView = ({
 
     if (isMonitoring && currentCamera) {
       startCamera();
-    } else {
-      stopCamera();
     }
 
     return () => {
