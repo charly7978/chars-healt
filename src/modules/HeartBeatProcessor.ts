@@ -1,3 +1,4 @@
+
 export class HeartBeatProcessor {
   // Constantes ajustadas según las nuevas recomendaciones
   private readonly SAMPLE_RATE = 30;
@@ -7,16 +8,16 @@ export class HeartBeatProcessor {
   private readonly MIN_BPM = 40;
   private readonly BEEP_FREQUENCY = 1000;
   private readonly BEEP_DURATION = 50;
-  private readonly SIGNAL_THRESHOLD = 0.5;    // Aumentado a 0.5 para mayor robustez
-  private readonly MIN_CONFIDENCE = 0.85;     // Aumentado a 0.85 para mayor confianza
-  private readonly DERIVATIVE_THRESHOLD = -0.065; // Más exigente para detectar cambios más pronunciados
+  private readonly SIGNAL_THRESHOLD = 0.5;
+  private readonly MIN_CONFIDENCE = 0.85;
+  private readonly DERIVATIVE_THRESHOLD = -0.065;
   private readonly MIN_PEAK_TIME_MS = 315;
   private readonly WARMUP_TIME_MS = 5000;
-  private readonly MOVING_AVERAGE_WINDOW = 7;  // Aumentado a 7 para mejor suavizado
-  private readonly MEDIAN_FILTER_WINDOW = 5;   // Nuevo: ventana para filtro de mediana
+  private readonly MOVING_AVERAGE_WINDOW = 7;
+  private readonly MEDIAN_FILTER_WINDOW = 5;
   private readonly EMA_ALPHA = 0.2;
-  private readonly INHIBITION_TIME_MS = 300;   // Nuevo: tiempo de inhibición entre pulsos
-  private readonly END_CUTOFF_TIME_MS = 2000;  // Nuevo: tiempo de corte al final
+  private readonly INHIBITION_TIME_MS = 300;
+  private readonly END_CUTOFF_TIME_MS = 2000;
 
   private signalBuffer: number[] = [];
   private movingAverageBuffer: number[] = [];
@@ -127,7 +128,6 @@ export class HeartBeatProcessor {
     confidence: number;
     isPeak: boolean;
   } {
-    // Aplicar cadena de filtros
     const medianFiltered = this.calculateMedianFilter(value);
     const movingAvg = this.calculateMovingAverage(medianFiltered);
     const smoothedValue = this.calculateEMA(movingAvg);
@@ -154,7 +154,6 @@ export class HeartBeatProcessor {
     const { isPeak, confidence } = this.detectPeak(normalizedValue, smoothDerivative);
     this.lastValue = smoothedValue;
 
-    // Sistema de confirmación de picos y reproducción del beep
     const isConfirmedPeak = this.confirmPeak(isPeak, normalizedValue, confidence);
 
     if (isConfirmedPeak && !this.isInWarmup() && !this.isInEndCutoff()) {
@@ -165,7 +164,6 @@ export class HeartBeatProcessor {
         this.previousPeakTime = this.lastPeakTime;
         this.lastPeakTime = currentTime;
         
-        // Actualizar BPM antes de reproducir el beep
         this.updateBPM();
         void this.playBeep(0.1);
 
@@ -196,7 +194,6 @@ export class HeartBeatProcessor {
       this.peakConfirmationBuffer.shift();
     }
 
-    // Doble chequeo: confirmar que hay un descenso claro después del pico
     if (isPeak && !this.lastConfirmedPeak && confidence > this.MIN_CONFIDENCE) {
       const hasDescendingTrend = this.peakConfirmationBuffer.length === 3 &&
         this.peakConfirmationBuffer[2] < this.peakConfirmationBuffer[1] &&
@@ -262,7 +259,6 @@ export class HeartBeatProcessor {
     if (this.bpmHistory.length < 2) return 0;
 
     const sorted = [...this.bpmHistory].sort((a, b) => a - b);
-    // Usar mediana en lugar de media para mayor robustez
     if (sorted.length % 2 === 1) {
       return Math.round(sorted[Math.floor(sorted.length / 2)]);
     } else {
@@ -276,13 +272,11 @@ export class HeartBeatProcessor {
     if (this.bpmHistory.length < 5) return 0;
 
     const sorted = [...this.bpmHistory].sort((a, b) => a - b);
-    // Descartar el 15% superior e inferior para mayor robustez
     const cut = Math.round(sorted.length * 0.15);
     const trimmed = sorted.slice(cut, sorted.length - cut);
 
     if (trimmed.length === 0) return 0;
 
-    // Usar mediana para el resultado final
     const medianIndex = Math.floor(trimmed.length / 2);
     return trimmed.length % 2 === 0
       ? Math.round((trimmed[medianIndex - 1] + trimmed[medianIndex]) / 2)
