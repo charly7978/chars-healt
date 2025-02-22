@@ -18,9 +18,23 @@ const VitalSign = ({ label, value, unit }: VitalSignProps) => {
       };
     }
     
+    if (value === "ARRITMIA DETECTADA") {
+      return {
+        text: "ARRITMIA DETECTADA",
+        color: "text-medical-red"
+      };
+    }
+
+    if (typeof value === 'number' && value > 0) {
+      return {
+        text: `${value} ARRITMIAS`,
+        color: "text-medical-red"
+      };
+    }
+    
     return {
-      text: value === "ARRITMIA DETECTADA" ? "ARRITMIA DETECTADA" : "SIN ARRITMIAS",
-      color: value === "ARRITMIA DETECTADA" ? "text-medical-red" : "text-[#0FA0CE]"
+      text: "SIN ARRITMIAS",
+      color: "text-[#0FA0CE]"
     };
   };
 
