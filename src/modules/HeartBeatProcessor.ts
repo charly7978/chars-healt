@@ -1,3 +1,4 @@
+
 export class HeartBeatProcessor {
   private readonly SAMPLE_RATE = 30;
   private readonly WINDOW_SIZE = 60;
@@ -7,8 +8,9 @@ export class HeartBeatProcessor {
   private readonly BEEP_FREQUENCY = 1000;
   private readonly BEEP_DURATION = 50;
   private readonly SIGNAL_THRESHOLD = 0.15;
-  private readonly MIN_CONFIDENCE = 0.3;
-  private readonly DERIVATIVE_THRESHOLD = -0.001;
+  private readonly MIN_CONFIDENCE = 0.35;  // Ligero ajuste para ser más selectivo
+  private readonly DERIVATIVE_THRESHOLD = -0.002;  // Ajuste sutil para requerir cambios más significativos
+  private readonly MIN_PEAK_TIME_MS = 300;  // Mínimo tiempo entre picos válidos (200ms = 300bpm)
 
   private signalBuffer: number[] = [];
   private lastPeakTime: number | null = null;
@@ -106,14 +108,26 @@ export class HeartBeatProcessor {
     this.lastValue = value;
 
     if (isPeak && confidence > this.MIN_CONFIDENCE) {
-      console.log("[ProcessSignal] Peak detected", {
-        currentTime: Date.now(),
-        lastPeakTime: this.lastPeakTime,
-        previousPeakTime: this.previousPeakTime
-      });
+      // Validación adicional del intervalo entre picos
+      const currentTime = Date.now();
+      const timeSinceLastPeak = this.lastPeakTime ? currentTime - this.lastPeakTime : Infinity;
       
-      this.playBeep(0.1);
-      this.updateBPM(Date.now());
+      // Solo procesar si el intervalo es razonable
+      if (timeSinceLastPeak >= this.MIN_PEAK_TIME_MS) {
+        console.log("[ProcessSignal] Peak detected", {
+          currentTime,
+          timeSinceLastPeak,
+          confidence
+        });
+        
+        this.playBeep(0.1);
+        this.updateBPM(currentTime);
+      } else {
+        console.log("[ProcessSignal] Peak ignored - too close", {
+          timeSinceLastPeak,
+          minRequired: this.MIN_PEAK_TIME_MS
+        });
+      }
     }
 
     const bpm = this.calculateCurrentBPM();
@@ -129,19 +143,22 @@ export class HeartBeatProcessor {
     const currentTime = Date.now();
     const timeSinceLastPeak = this.lastPeakTime ? currentTime - this.lastPeakTime : Infinity;
     
-    if (timeSinceLastPeak < 250) {
+    if (timeSinceLastPeak < this.MIN_PEAK_TIME_MS) {
       return { isPeak: false, confidence: 0 };
     }
 
+    // Criterios más estrictos para la detección de picos
     const isPeak = derivative < this.DERIVATIVE_THRESHOLD && 
                    normalizedValue > this.SIGNAL_THRESHOLD &&
-                   this.lastValue > this.baseline;
+                   this.lastValue > this.baseline &&
+                   Math.abs(derivative) < Math.abs(this.DERIVATIVE_THRESHOLD) * 3; // Evitar cambios demasiado bruscos
 
     if (isPeak) {
       this.previousPeakTime = this.lastPeakTime;
       this.lastPeakTime = currentTime;
     }
 
+    // Cálculo de confianza más estricto
     const amplitudeConfidence = Math.min(Math.max(Math.abs(normalizedValue) / (this.SIGNAL_THRESHOLD * 2), 0), 1);
     const derivativeConfidence = Math.min(Math.max(Math.abs(derivative) / Math.abs(this.DERIVATIVE_THRESHOLD), 0), 1);
     const confidence = (amplitudeConfidence + derivativeConfidence) / 2;
