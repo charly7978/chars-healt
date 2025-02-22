@@ -8,16 +8,19 @@ import { useSignalProcessor } from "@/hooks/useSignalProcessor";
 import SignalQualityIndicator from "@/components/SignalQualityIndicator";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
+import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [signalQuality, setSignalQuality] = useState(0);
+  const [vitalSigns, setVitalSigns] = useState({ spo2: 0, pressure: "--/--" });
   const { heartRate, spo2, pressure, arrhythmiaCount, elapsedTime, isComplete } = useVitalMeasurement(isMonitoring);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const processingRef = useRef<boolean>(false);
   const { processSignal, reset: resetHeartBeat } = useHeartBeatProcessor();
+  const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
   useEffect(() => {
     processingRef.current = isMonitoring;
@@ -32,14 +35,22 @@ const Index = () => {
 
   useEffect(() => {
     if (lastSignal && lastSignal.fingerDetected) {
-      console.log("Index: Procesando señal cardíaca", {
+      console.log("Index: Procesando señal cardíaca y vital", {
         value: lastSignal.filteredValue,
         fingerDetected: lastSignal.fingerDetected,
         quality: lastSignal.quality
       });
+      
+      // Procesar señal cardíaca
       processSignal(lastSignal.filteredValue);
+      
+      // Procesar signos vitales (SpO2 y presión)
+      const vitals = processVitalSigns(lastSignal.filteredValue);
+      if (vitals) {
+        setVitalSigns(vitals);
+      }
     }
-  }, [lastSignal, processSignal]);
+  }, [lastSignal, processSignal, processVitalSigns]);
 
   useEffect(() => {
     const handleMeasurementComplete = (e: Event) => {
@@ -135,6 +146,8 @@ const Index = () => {
     e.stopPropagation();
     handleStopMeasurement();
     resetHeartBeat();
+    resetVitalSigns();
+    setVitalSigns({ spo2: 0, pressure: "--/--" });
   };
 
   return (
@@ -168,8 +181,8 @@ const Index = () => {
 
             <div className="grid grid-cols-2 gap-2">
               <VitalSign label="Heart Rate" value={heartRate} unit="BPM" />
-              <VitalSign label="SpO2" value={spo2} unit="%" />
-              <VitalSign label="Blood Pressure" value={pressure} unit="mmHg" />
+              <VitalSign label="SpO2" value={vitalSigns.spo2} unit="%" />
+              <VitalSign label="Blood Pressure" value={vitalSigns.pressure} unit="mmHg" />
               <VitalSign label="Arrhythmias" value={arrhythmiaCount} unit="events" />
             </div>
           </div>
