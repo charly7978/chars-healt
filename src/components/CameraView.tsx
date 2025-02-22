@@ -13,43 +13,6 @@ const CameraView = ({ onStreamReady, isMonitoring, isFingerDetected = false, sig
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
-  const isAndroid = /Android/i.test(navigator.userAgent);
-
-  const normalizeImageData = (imageData: ImageData): ImageData => {
-    if (!isAndroid) return imageData;
-
-    const data = new Uint8ClampedArray(imageData.data);
-    const width = imageData.width;
-    const height = imageData.height;
-    
-    // Solo para Android: normalizar valores RGB
-    for (let i = 0; i < data.length; i += 4) {
-      // Aplicar un factor de normalización más suave para el canal rojo
-      data[i] = Math.min(255, Math.max(0, Math.round(data[i] * 0.85))); // Canal R
-      data[i + 1] = data[i + 1]; // Canal G sin cambios
-      data[i + 2] = data[i + 2]; // Canal B sin cambios
-      data[i + 3] = 255; // Canal Alpha
-    }
-
-    return new ImageData(data, width, height);
-  };
-
-  const captureFrame = () => {
-    if (!videoRef.current || !canvasRef.current) return null;
-
-    const canvas = canvasRef.current;
-    const video = videoRef.current;
-    const ctx = canvas.getContext('2d');
-    
-    if (!ctx) return null;
-
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    ctx.drawImage(video, 0, 0);
-
-    const originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    return normalizeImageData(originalImageData);
-  };
 
   const stopCamera = async () => {
     if (stream) {
@@ -80,8 +43,9 @@ const CameraView = ({ onStreamReady, isMonitoring, isFingerDetected = false, sig
       const constraints = {
         video: {
           facingMode: 'environment',
-          width: isAndroid ? { ideal: 640 } : { ideal: 1280 },
-          height: isAndroid ? { ideal: 480 } : { ideal: 720 }
+          width: isAndroid ? { ideal: 480, max: 640 } : { ideal: 1280 },
+          height: isAndroid ? { ideal: 360, max: 480 } : { ideal: 720 },
+          frameRate: isAndroid ? { ideal: 15, max: 30 } : { ideal: 30 }
         }
       };
 
@@ -94,33 +58,30 @@ const CameraView = ({ onStreamReady, isMonitoring, isFingerDetected = false, sig
       const newStream = await navigator.mediaDevices.getUserMedia(constraints);
       const videoTrack = newStream.getVideoTracks()[0];
       
-      // Log detallado de las capacidades de la cámara
-      const capabilities = videoTrack.getCapabilities();
-      const settings = videoTrack.getSettings();
-      
-      console.log("Camera Capabilities:", {
-        capabilities,
-        currentSettings: settings,
-        trackLabel: videoTrack.label,
-        trackConstraints: videoTrack.getConstraints()
-      });
-
-      // Log de los valores iniciales de los frames
-      if (videoRef.current) {
-        videoRef.current.onloadedmetadata = () => {
-          console.log("Video metadata loaded:", {
-            videoWidth: videoRef.current?.videoWidth,
-            videoHeight: videoRef.current?.videoHeight,
-            readyState: videoRef.current?.readyState,
-            frameRate: settings.frameRate
-          });
-        };
-      }
-      
       if (videoTrack.getCapabilities()?.torch) {
         await videoTrack.applyConstraints({
           advanced: [{ torch: true }]
         });
+      }
+
+      if (isAndroid) {
+        const capabilities = videoTrack.getCapabilities();
+        console.log("Camera capabilities:", capabilities);
+        
+        if (capabilities.exposureMode) {
+          try {
+            const exposureConstraints: MediaTrackConstraintSet = {
+              exposureMode: 'manual',
+              exposureTime: 1000
+            };
+            
+            await videoTrack.applyConstraints({
+              advanced: [exposureConstraints]
+            });
+          } catch (err) {
+            console.log("No se pudo ajustar exposición manual:", err);
+          }
+        }
       }
 
       if (videoRef.current) {
@@ -130,29 +91,6 @@ const CameraView = ({ onStreamReady, isMonitoring, isFingerDetected = false, sig
       setStream(newStream);
       
       if (onStreamReady) {
-        // Sobrescribimos el método getImageData del canvas para normalizar la señal
-        const originalGetImageData = CanvasRenderingContext2D.prototype.getImageData;
-        CanvasRenderingContext2D.prototype.getImageData = function(...args) {
-          const originalImageData = originalGetImageData.apply(this, args);
-          
-          // Log de los valores de píxeles para diagnóstico
-          if (isAndroid) {
-            const sampleSize = 1000;
-            let redSum = 0;
-            for (let i = 0; i < sampleSize * 4; i += 4) {
-              redSum += originalImageData.data[i];
-            }
-            console.log("Image Data Sample:", {
-              avgRedValue: redSum / sampleSize,
-              width: originalImageData.width,
-              height: originalImageData.height,
-              timestamp: Date.now()
-            });
-          }
-          
-          return normalizeImageData(originalImageData);
-        };
-
         onStreamReady(newStream);
       }
     } catch (err) {
@@ -167,11 +105,6 @@ const CameraView = ({ onStreamReady, isMonitoring, isFingerDetected = false, sig
       stopCamera();
     }
     return () => {
-      // Restaurar el método original de getImageData
-      if (isAndroid) {
-        const originalGetImageData = CanvasRenderingContext2D.prototype.getImageData;
-        CanvasRenderingContext2D.prototype.getImageData = originalGetImageData;
-      }
       stopCamera();
     };
   }, [isMonitoring]);
