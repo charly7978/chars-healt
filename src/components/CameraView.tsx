@@ -41,19 +41,17 @@ const CameraView = ({ onStreamReady, isMonitoring, isFingerDetected = false, sig
       const isAndroid = /Android/i.test(navigator.userAgent);
       
       // Intentamos usar la misma configuración de Windows en Android
-      const constraints = {
-        video: {
-          facingMode: 'environment',
-          width: { ideal: 1280, min: 640 },
-          height: { ideal: 720, min: 480 },
-          frameRate: { ideal: 30, min: 15 },
-          // Intentamos forzar configuraciones específicas en Android
-          ...(isAndroid && {
-            resizeMode: 'crop-and-scale',
-            brightness: { ideal: 100 },
-            whiteBalanceMode: 'continuous'
-          })
-        }
+      const constraints: MediaTrackConstraints = {
+        facingMode: 'environment',
+        width: { ideal: 1280, min: 640 },
+        height: { ideal: 720, min: 480 },
+        frameRate: { ideal: 30, min: 15 },
+        // Intentamos forzar configuraciones específicas en Android
+        ...(isAndroid && {
+          resizeMode: 'crop-and-scale',
+          brightness: { ideal: 100 },
+          whiteBalanceMode: 'continuous'
+        })
       };
 
       console.log("Camera constraints:", { 
@@ -62,7 +60,10 @@ const CameraView = ({ onStreamReady, isMonitoring, isFingerDetected = false, sig
         userAgent: navigator.userAgent 
       });
 
-      const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        video: constraints
+      });
+      
       const videoTrack = newStream.getVideoTracks()[0];
 
       // Intentamos aplicar configuraciones adicionales en Android
@@ -71,14 +72,11 @@ const CameraView = ({ onStreamReady, isMonitoring, isFingerDetected = false, sig
           const capabilities = videoTrack.getCapabilities();
           console.log("Android camera capabilities:", capabilities);
           
-          const settings = {
-            ...capabilities,
+          await videoTrack.applyConstraints({
             advanced: [{
               torch: true
             }]
-          };
-
-          await videoTrack.applyConstraints(settings);
+          });
         } catch (err) {
           console.log("No se pudieron aplicar configuraciones avanzadas:", err);
         }
