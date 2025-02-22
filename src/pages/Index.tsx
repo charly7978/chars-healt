@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
@@ -19,13 +18,6 @@ const Index = () => {
   const processingRef = useRef<boolean>(false);
   const streamRef = useRef<MediaStream | null>(null);
   const animationFrameRef = useRef<number>();
-
-  // Efecto para manejar la finalización automática después de 22 segundos
-  useEffect(() => {
-    if (isComplete && isMonitoring) {
-      handleStopMeasurement();
-    }
-  }, [isComplete, isMonitoring]);
 
   useEffect(() => {
     processingRef.current = isMonitoring;
@@ -73,11 +65,6 @@ const Index = () => {
       
       try {
         const frame = await imageCapture.grabFrame();
-        console.log("Index: Frame capturado", {
-          width: frame.width,
-          height: frame.height
-        });
-        
         tempCanvas.width = frame.width;
         tempCanvas.height = frame.height;
         tempCtx.drawImage(frame, 0, 0);
@@ -105,19 +92,16 @@ const Index = () => {
   const handleStartMeasurement = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
     console.log("Index: Iniciando medición");
     setIsCameraOn(true);
   };
 
   const cleanupResources = () => {
-    // Detener el procesamiento de frames
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = undefined;
     }
 
-    // Detener y limpiar el stream de la cámara
     if (streamRef.current) {
       const tracks = streamRef.current.getTracks();
       tracks.forEach(track => {
@@ -130,19 +114,14 @@ const Index = () => {
       });
       streamRef.current = null;
     }
-
-    // Resetear estados
-    setCurrentBPM(0);
-    setMeasurementConfidence(0);
-    setSignalQuality(0);
-    processingRef.current = false;
   };
 
   const handleStopMeasurement = () => {
     console.log("Index: Deteniendo medición");
     setIsMonitoring(false);
-    setIsCameraOn(false);
+    processingRef.current = false;
     stopProcessing();
+    setIsCameraOn(false);
     cleanupResources();
   };
 
@@ -158,7 +137,6 @@ const Index = () => {
     console.log("Index: Calibrando...");
   };
 
-  // Cleanup effect cuando el componente se desmonta
   useEffect(() => {
     return () => {
       cleanupResources();
