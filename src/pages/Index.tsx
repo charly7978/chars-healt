@@ -2,7 +2,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
-import { useVitalMeasurement } from "@/hooks/useVitalMeasurement";
 import CameraView from "@/components/CameraView";
 import { useSignalProcessor } from "@/hooks/useSignalProcessor";
 import SignalQualityIndicator from "@/components/SignalQualityIndicator";
@@ -15,15 +14,39 @@ const Index = () => {
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [signalQuality, setSignalQuality] = useState(0);
   const [vitalSigns, setVitalSigns] = useState({ spo2: 0, pressure: "--/--" });
-  const { heartRate, spo2, pressure, arrhythmiaCount, elapsedTime, isComplete } = useVitalMeasurement(isMonitoring);
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const [heartRate, setHeartRate] = useState(0);
+  const [arrhythmiaCount, setArrhythmiaCount] = useState<string | number>(0);
+  
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const processingRef = useRef<boolean>(false);
-  const { processSignal, reset: resetHeartBeat } = useHeartBeatProcessor();
+  const { processSignal: processHeartBeat, reset: resetHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
   useEffect(() => {
     processingRef.current = isMonitoring;
+  }, [isMonitoring]);
+
+  useEffect(() => {
+    if (!isMonitoring) {
+      setElapsedTime(0);
+      return;
+    }
+
+    const startTime = Date.now();
+    const interval = setInterval(() => {
+      const currentTime = Date.now();
+      const elapsed = (currentTime - startTime) / 1000;
+      setElapsedTime(elapsed);
+
+      if (elapsed >= 30) {
+        const event = new CustomEvent('measurementComplete');
+        window.dispatchEvent(event);
+      }
+    }, 200);
+
+    return () => clearInterval(interval);
   }, [isMonitoring]);
 
   useEffect(() => {
@@ -42,7 +65,11 @@ const Index = () => {
       });
       
       // Procesar señal cardíaca
-      processSignal(lastSignal.filteredValue);
+      const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
+      if (heartBeatResult) {
+        setHeartRate(heartBeatResult.bpm || 0);
+        setArrhythmiaCount(heartBeatResult.arrhythmiaCount || 0);
+      }
       
       // Procesar signos vitales (SpO2 y presión)
       const vitals = processVitalSigns(lastSignal.filteredValue);
@@ -50,7 +77,7 @@ const Index = () => {
         setVitalSigns(vitals);
       }
     }
-  }, [lastSignal, processSignal, processVitalSigns]);
+  }, [lastSignal, processHeartBeat, processVitalSigns]);
 
   useEffect(() => {
     const handleMeasurementComplete = (e: Event) => {
@@ -148,6 +175,8 @@ const Index = () => {
     resetHeartBeat();
     resetVitalSigns();
     setVitalSigns({ spo2: 0, pressure: "--/--" });
+    setHeartRate(0);
+    setArrhythmiaCount(0);
   };
 
   return (
@@ -205,7 +234,7 @@ const Index = () => {
               onClick={isMonitoring ? handleStopMeasurement : handleStartMeasurement}
               size="sm"
               className={`flex-1 ${isMonitoring ? 'bg-medical-red/80 hover:bg-medical-red' : 'bg-medical-blue/80 hover:bg-medical-blue'} text-white text-xs py-1.5`}
-              disabled={isComplete && !isMonitoring}
+              disabled={elapsedTime >= 30 && !isMonitoring}
             >
               {isMonitoring ? 'Detener' : 'Iniciar'}
             </Button>
