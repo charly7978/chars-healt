@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -81,14 +82,46 @@ const CalibrationDialog = ({ isOpen, onClose, isCalibrating }: CalibrationDialog
         throw new Error("Usuario no autenticado");
       }
 
-      await supabase
+      // Primero verificamos si existe un registro de calibración
+      const { data: existingSettings, error: settingsError } = await supabase
         .from('calibration_settings')
-        .update({ 
-          status: 'in_progress' as const,
-          last_calibration_date: new Date().toISOString()
-        })
-        .eq('user_id', user.id);
+        .select()
+        .eq('user_id', user.id)
+        .maybeSingle();
 
+      if (settingsError) {
+        throw new Error("Error al obtener la configuración de calibración");
+      }
+
+      // Si no existe, creamos uno nuevo
+      if (!existingSettings) {
+        const { error: insertError } = await supabase
+          .from('calibration_settings')
+          .insert({
+            user_id: user.id,
+            status: 'in_progress' as const,
+            last_calibration_date: new Date().toISOString()
+          });
+
+        if (insertError) {
+          throw new Error("Error al crear la configuración de calibración");
+        }
+      } else {
+        // Si existe, actualizamos el estado
+        const { error: updateError } = await supabase
+          .from('calibration_settings')
+          .update({ 
+            status: 'in_progress' as const,
+            last_calibration_date: new Date().toISOString()
+          })
+          .eq('user_id', user.id);
+
+        if (updateError) {
+          throw new Error("Error al actualizar la configuración de calibración");
+        }
+      }
+
+      // Paso 1: Calibración de Sensibilidad Lumínica
       setCurrentStep(1);
       
       // Ajuste de ganancia del sensor
@@ -109,6 +142,7 @@ const CalibrationDialog = ({ isOpen, onClose, isCalibrating }: CalibrationDialog
       setCalibrationResults(prev => ({ ...prev, dynamicOffset: offset }));
       setProgress(45);
 
+      // Paso 2: Procesamiento Digital
       setCurrentStep(2);
 
       // Configuración Kalman
@@ -128,6 +162,7 @@ const CalibrationDialog = ({ isOpen, onClose, isCalibrating }: CalibrationDialog
       await optimizeSamplingRate();
       setProgress(85);
 
+      // Paso 3: Algoritmos Vitales
       setCurrentStep(3);
 
       // Calibración de detector de picos
@@ -146,7 +181,7 @@ const CalibrationDialog = ({ isOpen, onClose, isCalibrating }: CalibrationDialog
       setProgress(100);
 
       // Actualizamos el estado en Supabase con los resultados de la calibración
-      await supabase
+      const { error: finalUpdateError } = await supabase
         .from('calibration_settings')
         .update({
           stability_threshold: calibrationResults.gainLevel,
@@ -158,6 +193,10 @@ const CalibrationDialog = ({ isOpen, onClose, isCalibrating }: CalibrationDialog
           is_active: true
         })
         .eq('user_id', user.id);
+
+      if (finalUpdateError) {
+        throw new Error("Error al guardar los resultados de la calibración");
+      }
 
       setCalibrationComplete(true);
 
@@ -323,7 +362,7 @@ const CalibrationDialog = ({ isOpen, onClose, isCalibrating }: CalibrationDialog
         throw new Error("Usuario no autenticado");
       }
 
-      await supabase
+      const { error: resetError } = await supabase
         .from('calibration_settings')
         .update({
           stability_threshold: 5.0,
@@ -335,6 +374,10 @@ const CalibrationDialog = ({ isOpen, onClose, isCalibrating }: CalibrationDialog
           is_active: true
         })
         .eq('user_id', user.id);
+
+      if (resetError) {
+        throw new Error("Error al restablecer la configuración");
+      }
 
       toast({
         title: "Configuración Restaurada",
