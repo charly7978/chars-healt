@@ -5,12 +5,24 @@ import { HeartBeatProcessor } from '../modules/HeartBeatProcessor';
 export const useHeartBeatProcessor = () => {
   const [processor] = useState(() => {
     const newProcessor = new HeartBeatProcessor();
-    // Asignamos el procesador a window para que esté disponible globalmente
-    window.heartBeatProcessor = newProcessor;
+    if (typeof window !== 'undefined') {
+      window.heartBeatProcessor = newProcessor;
+    }
     return newProcessor;
   });
+  
   const [currentBPM, setCurrentBPM] = useState(0);
   const [confidence, setConfidence] = useState(0);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.heartBeatProcessor = processor;
+      
+      return () => {
+        window.heartBeatProcessor = undefined;
+      };
+    }
+  }, [processor]);
 
   const processSignal = useCallback((value: number) => {
     const result = processor.processSignal(value);
@@ -26,13 +38,6 @@ export const useHeartBeatProcessor = () => {
     setCurrentBPM(0);
     setConfidence(0);
   }, [processor]);
-
-  // Limpiamos el procesador global cuando el componente se desmonta
-  useEffect(() => {
-    return () => {
-      window.heartBeatProcessor = undefined;
-    };
-  }, []);
 
   return {
     currentBPM,
