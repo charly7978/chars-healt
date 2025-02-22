@@ -10,18 +10,25 @@ export const useVitalSignsProcessor = () => {
   const processSignal = useCallback((value: number, rrData?: { intervals: number[], lastPeakTime: number | null }) => {
     const result = processor.processSignal(value, rrData);
     
-    // Si se detecta una arritmia, marcamos el flag y sumamos al contador
+    // Si se detecta una arritmia, sumamos al contador
     if (result.arrhythmiaStatus === "ARRITMIA DETECTADA") {
       if (!hasDetectedArrhythmia) {
         setArrhythmiaCounter(prev => prev + 1);
+        setHasDetectedArrhythmia(true);
       }
-      setHasDetectedArrhythmia(true);
+    } else {
+      // Si no hay arritmia, reseteamos el flag para poder detectar la próxima
+      setHasDetectedArrhythmia(false);
     }
     
-    // Retornamos el contador como arrhythmiaStatus si hay arritmias detectadas
+    // Convertimos el contador a string para mantener la compatibilidad de tipos
+    const displayStatus = arrhythmiaCounter > 0 ? 
+      `ARRITMIA DETECTADA` : 
+      result.arrhythmiaStatus;
+    
     return {
       ...result,
-      arrhythmiaStatus: arrhythmiaCounter > 0 ? arrhythmiaCounter : result.arrhythmiaStatus
+      arrhythmiaStatus: displayStatus
     };
   }, [processor, hasDetectedArrhythmia, arrhythmiaCounter]);
 
