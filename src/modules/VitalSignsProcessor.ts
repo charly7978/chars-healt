@@ -1,18 +1,18 @@
 
 export class VitalSignsProcessor {
   private ppgValues: number[] = [];
-  private readonly WINDOW_SIZE = 300; // 5 segundos a 60fps
-  private readonly AC_DC_RATIO_RED = 0.4; // Ratio típico para luz roja
-  private readonly PERFUSION_INDEX_THRESHOLD = 0.5;
+  private readonly WINDOW_SIZE = 300;
+  private readonly SPO2_CALIBRATION_FACTOR = 0.95;
+  private readonly PERFUSION_INDEX_THRESHOLD = 0.2;
+  private lastSpO2: number = 98;
   private lastSystolic: number = 120;
   private lastDiastolic: number = 80;
-  private lastSpO2: number = 98;
   private baselineEstablished: boolean = false;
   private movingAverageSpO2: number[] = [];
-  private readonly SPO2_WINDOW = 10;
+  private readonly SPO2_WINDOW = 15;
 
   constructor() {
-    console.log('VitalSignsProcessor: Inicializando con parámetros reales');
+    console.log('VitalSignsProcessor: Inicializando procesador de señales vitales');
   }
 
   processSignal(ppgValue: number): { spo2: number; pressure: string } {
@@ -22,6 +22,7 @@ export class VitalSignsProcessor {
       this.ppgValues.shift();
     }
 
+    // Establecer línea base con suficientes muestras
     if (!this.baselineEstablished && this.ppgValues.length >= 60) {
       this.establishBaseline();
     }
@@ -33,37 +34,41 @@ export class VitalSignsProcessor {
       };
     }
 
-    // Cálculo de SpO2 con suavizado y restricciones fisiológicas
-    const rawSpo2 = this.calculateRealSpO2(this.ppgValues);
+    // Análisis SpO2 basado en la señal PPG real
+    const rawSpo2 = this.calculateActualSpO2(this.ppgValues);
     this.updateMovingAverageSpO2(rawSpo2);
-    const smoothedSpo2 = this.getSmoothedSpO2();
-    this.lastSpO2 = smoothedSpo2;
+    const finalSpo2 = this.getSmoothedSpO2();
+    this.lastSpO2 = finalSpo2;
 
-    // Cálculo de presión arterial con variaciones sutiles
-    const { systolic, diastolic } = this.calculateRealBloodPressure(this.ppgValues);
+    // Análisis de presión arterial basado en características de la onda PPG
+    const { systolic, diastolic } = this.calculateActualBloodPressure(this.ppgValues);
     this.lastSystolic = systolic;
     this.lastDiastolic = diastolic;
 
     return {
-      spo2: smoothedSpo2,
+      spo2: finalSpo2,
       pressure: `${systolic}/${diastolic}`
     };
   }
 
   private establishBaseline() {
-    // Establecer línea base inicial para mediciones más estables
     const baselineValues = this.ppgValues.slice(0, 60);
     const avgValue = baselineValues.reduce((a, b) => a + b, 0) / baselineValues.length;
     
     if (avgValue > 0) {
       this.baselineEstablished = true;
-      this.lastSpO2 = 98; // Valor inicial saludable
-      this.lastSystolic = 120;
-      this.lastDiastolic = 80;
+      
+      // Calcular valores iniciales basados en la señal real
+      const initialSpO2 = this.calculateActualSpO2(baselineValues);
+      const { systolic, diastolic } = this.calculateActualBloodPressure(baselineValues);
+      
+      this.lastSpO2 = initialSpO2;
+      this.lastSystolic = systolic;
+      this.lastDiastolic = diastolic;
     }
   }
 
-  private calculateRealSpO2(ppgValues: number[]): number {
+  private calculateActualSpO2(ppgValues: number[]): number {
     const acComponent = this.calculateAC(ppgValues);
     const dcComponent = this.calculateDC(ppgValues);
     
@@ -71,28 +76,134 @@ export class VitalSignsProcessor {
       return this.lastSpO2;
     }
 
-    // Ratio R/IR con ajuste para mayor estabilidad
-    const ratio = Math.abs((acComponent / dcComponent) / this.AC_DC_RATIO_RED);
-    
-    // Coeficientes calibrados para mediciones más estables
-    const A = 110;
-    const B = 25;
-    let spo2 = A - (B * ratio);
-    
-    // Ajuste basado en el índice de perfusión con umbral más alto
+    // Cálculo del índice de perfusión real
     const perfusionIndex = (acComponent / dcComponent) * 100;
     if (perfusionIndex < this.PERFUSION_INDEX_THRESHOLD) {
       return this.lastSpO2;
     }
+
+    // Análisis de la forma de onda PPG
+    const { peakTimes, valleys } = this.findPeaksAndValleys(ppgValues);
+    if (peakTimes.length < 2) {
+      return this.lastSpO2;
+    }
+
+    // Cálculo basado en la absorción de luz real
+    const ratio = (acComponent / dcComponent);
+    const spo2Raw = 110 - (25 * ratio * this.SPO2_CALIBRATION_FACTOR);
     
-    // Límites fisiológicos más estrictos
-    spo2 = Math.max(94, Math.min(100, spo2));
+    // Ajuste basado en la calidad de la señal
+    const signalQuality = this.calculateSignalQuality(ppgValues, peakTimes, valleys);
+    const qualityWeight = signalQuality / 100;
     
-    // Variación máxima permitida por ciclo
-    const maxVariation = 0.5;
-    spo2 = Math.max(this.lastSpO2 - maxVariation, Math.min(this.lastSpO2 + maxVariation, spo2));
+    // Valor final con corrección por calidad
+    const spo2 = Math.round((spo2Raw * qualityWeight + this.lastSpO2 * (1 - qualityWeight)));
     
-    return Math.round(spo2);
+    return Math.min(100, Math.max(85, spo2));
+  }
+
+  private calculateActualBloodPressure(ppgValues: number[]): { systolic: number; diastolic: number } {
+    const { peakTimes, valleys } = this.findPeaksAndValleys(ppgValues);
+    
+    if (peakTimes.length < 2) {
+      return { systolic: this.lastSystolic, diastolic: this.lastDiastolic };
+    }
+
+    // Análisis del tiempo de tránsito del pulso (PTT)
+    const pttValues = [];
+    for (let i = 1; i < peakTimes.length; i++) {
+      pttValues.push(peakTimes[i] - peakTimes[i-1]);
+    }
+    const avgPTT = pttValues.reduce((a, b) => a + b, 0) / pttValues.length;
+
+    // Análisis de la forma de onda
+    const amplitudes = this.calculateWaveformAmplitudes(ppgValues, peakTimes, valleys);
+    const dicroticNotchPosition = this.findDicroticNotch(ppgValues, peakTimes, valleys);
+
+    // Cálculo de presión basado en características de la onda
+    const systolic = Math.round(120 + (1000/avgPTT - 8) * 2);
+    const diastolic = Math.round(systolic - (40 + amplitudes.amplitude * 0.2));
+
+    // Aplicar límites fisiológicos
+    const finalSystolic = Math.min(180, Math.max(90, systolic));
+    const finalDiastolic = Math.min(110, Math.max(60, diastolic));
+
+    return {
+      systolic: finalSystolic,
+      diastolic: finalDiastolic
+    };
+  }
+
+  private calculateSignalQuality(values: number[], peaks: number[], valleys: number[]): number {
+    const amplitudes = peaks.map((peak, i) => {
+      if (valleys[i]) {
+        return Math.abs(values[peak] - values[valleys[i]]);
+      }
+      return 0;
+    });
+
+    const avgAmplitude = amplitudes.reduce((a, b) => a + b, 0) / amplitudes.length;
+    const variability = amplitudes.reduce((a, b) => a + Math.abs(b - avgAmplitude), 0) / amplitudes.length;
+    
+    const quality = Math.max(0, Math.min(100, 100 * (1 - variability/avgAmplitude)));
+    return quality;
+  }
+
+  private calculateWaveformAmplitudes(values: number[], peaks: number[], valleys: number[]) {
+    const amplitudes = peaks.map((peak, i) => {
+      if (valleys[i]) {
+        return values[peak] - values[valleys[i]];
+      }
+      return 0;
+    });
+
+    return {
+      amplitude: Math.mean(amplitudes.filter(a => a > 0)),
+      variation: Math.std(amplitudes.filter(a => a > 0))
+    };
+  }
+
+  private findDicroticNotch(values: number[], peaks: number[], valleys: number[]): number[] {
+    const notches = [];
+    for (let i = 0; i < peaks.length - 1; i++) {
+      const start = peaks[i];
+      const end = peaks[i + 1];
+      const segment = values.slice(start, end);
+      const notchIndex = segment.findIndex((v, j) => 
+        j > 0 && j < segment.length - 1 &&
+        v < segment[j-1] && v < segment[j+1]
+      );
+      if (notchIndex > 0) {
+        notches.push(start + notchIndex);
+      }
+    }
+    return notches;
+  }
+
+  private calculateAC(values: number[]): number {
+    return Math.max(...values) - Math.min(...values);
+  }
+
+  private calculateDC(values: number[]): number {
+    return values.reduce((a, b) => a + b, 0) / values.length;
+  }
+
+  private findPeaksAndValleys(values: number[]): { peakTimes: number[], valleys: number[] } {
+    const peakTimes: number[] = [];
+    const valleys: number[] = [];
+    
+    for (let i = 2; i < values.length - 2; i++) {
+      if (values[i] > values[i-1] && values[i] > values[i-2] && 
+          values[i] > values[i+1] && values[i] > values[i+2]) {
+        peakTimes.push(i);
+      }
+      if (values[i] < values[i-1] && values[i] < values[i-2] && 
+          values[i] < values[i+1] && values[i] < values[i+2]) {
+        valleys.push(i);
+      }
+    }
+    
+    return { peakTimes, valleys };
   }
 
   private updateMovingAverageSpO2(newValue: number) {
@@ -104,90 +215,15 @@ export class VitalSignsProcessor {
 
   private getSmoothedSpO2(): number {
     if (this.movingAverageSpO2.length === 0) return this.lastSpO2;
-    const avg = this.movingAverageSpO2.reduce((a, b) => a + b, 0) / this.movingAverageSpO2.length;
-    return Math.round(avg);
-  }
-
-  private calculateRealBloodPressure(ppgValues: number[]): { systolic: number; diastolic: number } {
-    const { peakTimes, valleys } = this.findPeaksAndValleys(ppgValues);
     
-    if (peakTimes.length < 2 || !this.baselineEstablished) {
-      return { systolic: this.lastSystolic, diastolic: this.lastDiastolic };
-    }
-
-    // Cálculo del PTT con mayor estabilidad
-    const pttValues = [];
-    for (let i = 1; i < peakTimes.length; i++) {
-      pttValues.push(peakTimes[i] - peakTimes[i-1]);
-    }
-    const avgPTT = pttValues.reduce((a, b) => a + b, 0) / pttValues.length;
-
-    // Velocidad de onda de pulso (PWV) con factor de estabilización
-    const pwv = 1000 / (avgPTT + 1); // Evitar división por cero
-
-    // Base estable para las presiones
-    let systolic = this.lastSystolic;
-    let diastolic = this.lastDiastolic;
-
-    // Ajustes sutiles basados en la señal PPG
-    const pulseAmplitude = this.calculatePulseAmplitude(peakTimes, valleys, ppgValues);
-    const amplitudeEffect = pulseAmplitude * 0.1; // Reducido el efecto de la amplitud
-
-    // Aplicar cambios graduales
-    systolic += (Math.random() * 2 - 1) * amplitudeEffect;
-    diastolic += (Math.random() * 2 - 1) * (amplitudeEffect * 0.5);
-
-    // Mantener rangos fisiológicos realistas
-    systolic = Math.max(110, Math.min(130, systolic));
-    diastolic = Math.max(70, Math.min(85, diastolic));
+    // Eliminar valores atípicos
+    const sorted = [...this.movingAverageSpO2].sort((a, b) => a - b);
+    const q1 = sorted[Math.floor(sorted.length * 0.25)];
+    const q3 = sorted[Math.floor(sorted.length * 0.75)];
+    const iqr = q3 - q1;
+    const validValues = this.movingAverageSpO2.filter(v => v >= q1 - 1.5 * iqr && v <= q3 + 1.5 * iqr);
     
-    // Asegurar que diastólica siempre sea menor que sistólica
-    if (diastolic >= systolic - 30) {
-      diastolic = systolic - 30;
-    }
-
-    return {
-      systolic: Math.round(systolic),
-      diastolic: Math.round(diastolic)
-    };
-  }
-
-  private calculateAC(values: number[]): number {
-    const max = Math.max(...values);
-    const min = Math.min(...values);
-    return max - min;
-  }
-
-  private calculateDC(values: number[]): number {
-    return values.reduce((a, b) => a + b, 0) / values.length;
-  }
-
-  private findPeaksAndValleys(values: number[]): { peakTimes: number[], valleys: number[] } {
-    const peakTimes: number[] = [];
-    const valleys: number[] = [];
-    
-    for (let i = 1; i < values.length - 1; i++) {
-      if (values[i] > values[i-1] && values[i] > values[i+1]) {
-        peakTimes.push(i);
-      }
-      if (values[i] < values[i-1] && values[i] < values[i+1]) {
-        valleys.push(i);
-      }
-    }
-    
-    return { peakTimes, valleys };
-  }
-
-  private calculatePulseAmplitude(peakTimes: number[], valleys: number[], values: number[]): number {
-    let amplitudeSum = 0;
-    let count = 0;
-    
-    for (let i = 0; i < Math.min(peakTimes.length, valleys.length); i++) {
-      amplitudeSum += values[peakTimes[i]] - values[valleys[i]];
-      count++;
-    }
-    
-    return count > 0 ? amplitudeSum / count : 0;
+    return Math.round(validValues.reduce((a, b) => a + b, 0) / validValues.length);
   }
 
   reset(): void {
