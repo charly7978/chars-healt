@@ -63,9 +63,13 @@ export default {
           "0%, 100%": { transform: "scale(1)" },
           "50%": { transform: "scale(1.1)" },
         },
-        "flip-in": {
-          "0%": { transform: "rotateY(0deg)" },
-          "100%": { transform: "rotateY(180deg)" }
+        "card-flip": {
+          "0%": { 
+            transform: "rotateY(0deg)",
+          },
+          "100%": { 
+            transform: "rotateY(180deg)",
+          }
         },
         "progress": {
           "0%": { transform: "translateX(-100%)" },
@@ -79,7 +83,7 @@ export default {
       },
       animation: {
         "heart-beat": "heart-beat 1s ease-in-out infinite",
-        "flip-in": "flip-in 1s ease-out forwards",
+        "flip": "card-flip 1.5s cubic-bezier(0.4, 0, 0.2, 1) forwards"
       }
     },
   },
