@@ -26,6 +26,7 @@ const Index = () => {
   const [isCalibrating, setIsCalibrating] = useState(false);
   const [showCalibrationDialog, setShowCalibrationDialog] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [wasMeasuring, setWasMeasuring] = useState(false);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { startProcessing, stopProcessing, lastSignal, processFrame, calibrate } = useSignalProcessor();
@@ -58,9 +59,11 @@ const Index = () => {
 
   useEffect(() => {
     if (!isMonitoring) {
-      setElapsedTime(0);
-      setArrhythmiaCount("--");
-      setVitalSigns(prev => ({ ...prev, arrhythmiaStatus: "--" }));
+      if (!isCalibrating) {
+        setElapsedTime(0);
+        setArrhythmiaCount("--");
+        setVitalSigns(prev => ({ ...prev, arrhythmiaStatus: "--" }));
+      }
       return;
     }
 
@@ -77,7 +80,7 @@ const Index = () => {
     }, 200);
 
     return () => clearInterval(interval);
-  }, [isMonitoring]);
+  }, [isMonitoring, isCalibrating]);
 
   useEffect(() => {
     if (lastSignal) {
@@ -94,11 +97,9 @@ const Index = () => {
         quality: lastSignal.quality
       });
       
-      // Procesar señal cardíaca
       const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
       setHeartRate(heartBeatResult.bpm);
       
-      // Procesar signos vitales (SpO2, presión y arritmias)
       const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
       if (vitals) {
         setVitalSigns(vitals);
@@ -146,7 +147,7 @@ const Index = () => {
     }
     
     const processImage = async () => {
-      if (!processingRef.current) {
+      if (!processingRef.current && !isCalibrating) {
         console.log("Index: Monitoreo detenido, no se procesan más frames");
         return;
       }
@@ -161,12 +162,12 @@ const Index = () => {
         const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
         processFrame(imageData);
         
-        if (processingRef.current) {
+        if (processingRef.current || isCalibrating) {
           requestAnimationFrame(processImage);
         }
       } catch (error) {
         console.error("Index: Error capturando frame:", error);
-        if (processingRef.current) {
+        if (processingRef.current || isCalibrating) {
           requestAnimationFrame(processImage);
         }
       }
@@ -201,18 +202,22 @@ const Index = () => {
     processingRef.current = false;
     stopProcessing();
     setSignalQuality(0);
-    setIsCameraOn(false);
+    if (!isCalibrating) {
+      setIsCameraOn(false);
+    }
   };
 
   const handleReset = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    handleStopMeasurement();
-    resetVitalSigns();
-    setVitalSigns({ spo2: 0, pressure: "--/--", arrhythmiaStatus: "--" });
-    setHeartRate(0);
-    setArrhythmiaCount("--");
-    console.log("Index: Medición reiniciada, valores reseteados");
+    if (!isCalibrating) {
+      handleStopMeasurement();
+      resetVitalSigns();
+      setVitalSigns({ spo2: 0, pressure: "--/--", arrhythmiaStatus: "--" });
+      setHeartRate(0);
+      setArrhythmiaCount("--");
+      console.log("Index: Medición reiniciada, valores reseteados");
+    }
   };
 
   const handleCalibration = async () => {
@@ -226,22 +231,20 @@ const Index = () => {
     }
 
     try {
+      setWasMeasuring(isMonitoring);
+      setIsMonitoring(false);
+      
       setIsCalibrating(true);
       setShowCalibrationDialog(true);
-      
-      await new Promise(resolve => setTimeout(resolve, 5000));
       
       const success = await calibrate();
       
       if (success) {
-        setIsCalibrating(false);
-        setTimeout(() => {
-          toast({
-            title: "Calibración Exitosa",
-            description: "Los parámetros han sido ajustados para esta sesión.",
-            duration: 3000,
-          });
-        }, 500);
+        toast({
+          title: "Calibración Exitosa",
+          description: "Los parámetros han sido ajustados para esta sesión.",
+          duration: 3000,
+        });
       } else {
         throw new Error("Error en el proceso de calibración");
       }
@@ -253,8 +256,12 @@ const Index = () => {
         description: "Ocurrió un error inesperado.",
         duration: 3000,
       });
+    } finally {
       setIsCalibrating(false);
       setShowCalibrationDialog(false);
+      if (wasMeasuring) {
+        setIsMonitoring(true);
+      }
     }
   };
 
@@ -300,7 +307,7 @@ const Index = () => {
               onClick={handleCalibration}
               size="sm"
               className="flex-1 bg-medical-blue/80 hover:bg-medical-blue text-white text-xs py-1.5"
-              disabled={isCalibrating || !isMonitoring || !isAuthenticated}
+              disabled={isCalibrating || !isCameraOn || !isAuthenticated}
             >
               {isCalibrating ? "Calibrando..." : "Calibrar"}
             </Button>
@@ -309,7 +316,7 @@ const Index = () => {
               onClick={isMonitoring ? handleStopMeasurement : handleStartMeasurement}
               size="sm"
               className={`flex-1 ${isMonitoring ? 'bg-medical-red/80 hover:bg-medical-red' : 'bg-medical-blue/80 hover:bg-medical-blue'} text-white text-xs py-1.5`}
-              disabled={elapsedTime >= 30 && !isMonitoring}
+              disabled={(elapsedTime >= 30 && !isMonitoring) || isCalibrating}
             >
               {isMonitoring ? 'Detener' : 'Iniciar'}
             </Button>
@@ -318,6 +325,7 @@ const Index = () => {
               onClick={handleReset}
               size="sm"
               className="flex-1 bg-gray-600/80 hover:bg-gray-600 text-white text-xs py-1.5"
+              disabled={isCalibrating}
             >
               Reset
             </Button>
@@ -327,7 +335,12 @@ const Index = () => {
 
       <CalibrationDialog
         isOpen={showCalibrationDialog}
-        onClose={() => setShowCalibrationDialog(false)}
+        onClose={() => {
+          setShowCalibrationDialog(false);
+          if (wasMeasuring) {
+            setIsMonitoring(true);
+          }
+        }}
         isCalibrating={isCalibrating}
       />
     </div>
