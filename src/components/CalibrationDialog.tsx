@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -59,6 +58,24 @@ const CalibrationDialog = ({ isOpen, onClose, isCalibrating }: CalibrationDialog
   });
 
   useEffect(() => {
+    const checkUserSession = async () => {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      if (error || !session) {
+        toast({
+          variant: "destructive",
+          title: "Error de Autenticación",
+          description: "Por favor, inicie sesión para continuar"
+        });
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      checkUserSession();
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
     if (isCalibrating) {
       setIsFlipped(true);
       setCurrentStep(0);
@@ -77,10 +94,12 @@ const CalibrationDialog = ({ isOpen, onClose, isCalibrating }: CalibrationDialog
 
   const startRealCalibration = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session?.user) {
         throw new Error("Usuario no autenticado");
       }
+
+      const user = session.user;
 
       // Primero verificamos si existe un registro de calibración
       const { data: existingSettings, error: settingsError } = await supabase
@@ -90,6 +109,7 @@ const CalibrationDialog = ({ isOpen, onClose, isCalibrating }: CalibrationDialog
         .maybeSingle();
 
       if (settingsError) {
+        console.error("Error al obtener configuración:", settingsError);
         throw new Error("Error al obtener la configuración de calibración");
       }
 
@@ -99,11 +119,17 @@ const CalibrationDialog = ({ isOpen, onClose, isCalibrating }: CalibrationDialog
           .from('calibration_settings')
           .insert({
             user_id: user.id,
-            status: 'in_progress' as const,
-            last_calibration_date: new Date().toISOString()
+            status: 'in_progress',
+            last_calibration_date: new Date().toISOString(),
+            stability_threshold: 5.0,
+            quality_threshold: 0.7,
+            perfusion_index: 0.05,
+            red_threshold_min: 30,
+            red_threshold_max: 250
           });
 
         if (insertError) {
+          console.error("Error al crear configuración:", insertError);
           throw new Error("Error al crear la configuración de calibración");
         }
       } else {
@@ -111,12 +137,13 @@ const CalibrationDialog = ({ isOpen, onClose, isCalibrating }: CalibrationDialog
         const { error: updateError } = await supabase
           .from('calibration_settings')
           .update({ 
-            status: 'in_progress' as const,
+            status: 'in_progress',
             last_calibration_date: new Date().toISOString()
           })
           .eq('user_id', user.id);
 
         if (updateError) {
+          console.error("Error al actualizar configuración:", updateError);
           throw new Error("Error al actualizar la configuración de calibración");
         }
       }
@@ -189,29 +216,34 @@ const CalibrationDialog = ({ isOpen, onClose, isCalibrating }: CalibrationDialog
           perfusion_index: calibrationResults.dynamicOffset,
           red_threshold_min: Math.round(calibrationResults.kalmanQ * 100),
           red_threshold_max: Math.round(calibrationResults.kalmanR * 100),
-          status: 'completed' as const,
+          status: 'completed',
           is_active: true
         })
         .eq('user_id', user.id);
 
       if (finalUpdateError) {
+        console.error("Error al guardar resultados:", finalUpdateError);
         throw new Error("Error al guardar los resultados de la calibración");
       }
 
       setCalibrationComplete(true);
+      toast({
+        title: "Calibración Exitosa",
+        description: "Se han guardado los nuevos parámetros"
+      });
 
     } catch (error) {
       console.error("Error durante la calibración:", error);
       
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
         await supabase
           .from('calibration_settings')
           .update({ 
-            status: 'failed' as const,
+            status: 'failed',
             is_active: false
           })
-          .eq('user_id', user.id);
+          .eq('user_id', session.user.id);
       }
 
       toast({
@@ -219,6 +251,7 @@ const CalibrationDialog = ({ isOpen, onClose, isCalibrating }: CalibrationDialog
         title: "Error de Calibración",
         description: "Ocurrió un error durante el proceso de calibración"
       });
+      onClose();
     }
   };
 
@@ -357,8 +390,8 @@ const CalibrationDialog = ({ isOpen, onClose, isCalibrating }: CalibrationDialog
 
   const handleResetDefaults = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session?.user) {
         throw new Error("Usuario no autenticado");
       }
 
@@ -370,12 +403,13 @@ const CalibrationDialog = ({ isOpen, onClose, isCalibrating }: CalibrationDialog
           perfusion_index: 0.05,
           red_threshold_min: 30,
           red_threshold_max: 250,
-          status: 'pending' as const,
+          status: 'pending',
           is_active: true
         })
-        .eq('user_id', user.id);
+        .eq('user_id', session.user.id);
 
       if (resetError) {
+        console.error("Error al restablecer configuración:", resetError);
         throw new Error("Error al restablecer la configuración");
       }
 
