@@ -36,27 +36,39 @@ export const useVitalMeasurement = (isMeasuring: boolean) => {
 
     const updateMeasurements = () => {
       const processor = window.heartBeatProcessor;
-      if (processor) {
-        // Obtenemos los valores directamente del procesador
-        const currentBPM = processor.getFinalBPM();
-        const currentCount = processor.arrhythmiaCount;
-        
-        console.log('VitalMeasurement: Actualizando medidas:', { 
-          bpm: currentBPM, 
-          arritmias: currentCount,
-          timestamp: new Date().toISOString()
-        });
-        
-        setLastArrhythmiaCount(currentCount);
-        setMeasurements(prev => ({
-          ...prev,
-          heartRate: currentBPM || 0,
-          arrhythmiaCount: currentCount
-        }));
+      if (!processor) {
+        console.warn('VitalMeasurement: No se encontró el procesador');
+        return;
       }
+
+      // 1. Obtener BPM usando getSmoothBPM en lugar de getFinalBPM
+      const bpm = processor.getSmoothBPM?.() || processor.getFinalBPM() || 0;
+      const arrCount = processor.arrhythmiaCount || 0;
+
+      // Log detallado para debug
+      console.log('VitalMeasurement: Valores actuales:', {
+        processor: !!processor,
+        bpm,
+        arrCount,
+        timestamp: new Date().toISOString()
+      });
+
+      // 2. Actualizar estado solo si los valores son diferentes
+      setMeasurements(prev => {
+        if (prev.heartRate === bpm && prev.arrhythmiaCount === arrCount) {
+          return prev; // No actualizar si no hay cambios
+        }
+        return {
+          ...prev,
+          heartRate: bpm,
+          arrhythmiaCount: arrCount
+        };
+      });
+
+      setLastArrhythmiaCount(arrCount);
     };
 
-    // Actualizamos inmediatamente la primera vez
+    // Actualizar inmediatamente
     updateMeasurements();
 
     const interval = setInterval(() => {
@@ -64,16 +76,14 @@ export const useVitalMeasurement = (isMeasuring: boolean) => {
       const elapsed = currentTime - startTime;
       setElapsedTime(elapsed / 1000);
 
-      // Actualizamos medidas en cada intervalo
       updateMeasurements();
 
       if (elapsed >= MEASUREMENT_DURATION) {
         clearInterval(interval);
         const event = new CustomEvent('measurementComplete');
         window.dispatchEvent(event);
-        return;
       }
-    }, 1000);
+    }, 200); // Actualizamos más frecuentemente para no perder valores
 
     return () => clearInterval(interval);
   }, [isMeasuring]);
