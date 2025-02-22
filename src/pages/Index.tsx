@@ -5,6 +5,7 @@ import { useVitalMeasurement } from "@/hooks/useVitalMeasurement";
 import CameraView from "@/components/CameraView";
 import { useSignalProcessor } from "@/hooks/useSignalProcessor";
 import SignalQualityIndicator from "@/components/SignalQualityIndicator";
+import PPGSignalMeter from "@/components/PPGSignalMeter";
 import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import HeartRateDisplay from "@/components/HeartRateDisplay";
 
@@ -34,10 +35,17 @@ const Index = () => {
 
   useEffect(() => {
     if (lastSignal) {
-      console.log("Index: Actualizando calidad de señal:", lastSignal.quality);
-      setSignalQuality(lastSignal.quality);
+      console.log("Index: Procesando señal cardíaca", {
+        value: lastSignal.filteredValue,
+        fingerDetected: lastSignal.fingerDetected,
+        quality: lastSignal.quality
+      });
+      
+      if (lastSignal.fingerDetected) {
+        processSignal(lastSignal.filteredValue);
+      }
     }
-  }, [lastSignal]);
+  }, [lastSignal, processSignal]);
 
   const handleStreamReady = (stream: MediaStream) => {
     console.log("Index: Camera stream ready", stream.getVideoTracks()[0].getSettings());
@@ -189,16 +197,14 @@ const Index = () => {
           </div>
 
           <div className="flex-1 flex flex-col justify-center gap-2 max-w-md mx-auto w-full">
-            <div className="bg-black/40 backdrop-blur-sm rounded-lg p-2">
-              <canvas 
-                ref={canvasRef} 
-                width={400} 
-                height={100}
-                className="w-full h-20 rounded bg-black/60"
-              />
-            </div>
+            <PPGSignalMeter 
+              value={lastSignal?.filteredValue || 0}
+              quality={lastSignal?.quality || 0}
+              isFingerDetected={lastSignal?.fingerDetected || false}
+            />
 
             <SignalQualityIndicator quality={signalQuality} />
+            <HeartRateDisplay bpm={currentBPM} confidence={confidence} />
 
             <div className="grid grid-cols-2 gap-2">
               <VitalSign label="Heart Rate" value={heartRate} unit="BPM" />
@@ -206,8 +212,6 @@ const Index = () => {
               <VitalSign label="Blood Pressure" value={pressure} unit="mmHg" />
               <VitalSign label="Arrhythmias" value={arrhythmiaCount} unit="events" />
             </div>
-
-            <HeartRateDisplay bpm={currentBPM} confidence={confidence} />
           </div>
 
           <div className="flex justify-center gap-2 w-full max-w-md mx-auto">
