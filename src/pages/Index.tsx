@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
@@ -326,7 +327,6 @@ const Index = () => {
       
       {showCalibrationDialog && (
         <CalibrationDialog
-          isOpen={showCalibrationDialog}
           onClose={() => setShowCalibrationDialog(false)}
           isCalibrating={isCalibrating}
         />
