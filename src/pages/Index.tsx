@@ -74,10 +74,9 @@ const Index = () => {
       setHeartRate(heartBeatResult.bpm);
       
       // Procesar signos vitales (SpO2, presión y arritmias)
-      const vitals = processVitalSigns(lastSignal.filteredValue);
+      const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
       if (vitals) {
         setVitalSigns(vitals);
-        // Actualizar el estado de arritmias y registrar logs
         setArrhythmiaCount(vitals.arrhythmiaStatus);
 
         console.log("Index: Actualización de signos vitales", {
@@ -86,7 +85,8 @@ const Index = () => {
           spo2: vitals.spo2,
           bloodPressure: vitals.pressure,
           arrhythmiaStatus: vitals.arrhythmiaStatus,
-          signalQuality: lastSignal.quality
+          signalQuality: lastSignal.quality,
+          rrData: heartBeatResult.rrData
         });
       }
     }

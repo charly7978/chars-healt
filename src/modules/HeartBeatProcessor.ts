@@ -1,4 +1,3 @@
-
 /**
  * HeartBeatProcessor
  * 
@@ -357,5 +356,12 @@ export class HeartBeatProcessor {
     this.peakCandidateIndex = null;
     this.peakCandidateValue = 0;
     this.lowSignalCount = 0;
+  }
+
+  public getRRIntervals(): { intervals: number[], lastPeakTime: number | null } {
+    return {
+      intervals: [...this.bpmHistory],
+      lastPeakTime: this.lastPeakTime
+    };
   }
 }

@@ -8,6 +8,10 @@ interface HeartBeatResult {
   isPeak: boolean;
   filteredValue?: number;
   arrhythmiaCount: number;
+  rrData?: {
+    intervals: number[];
+    lastPeakTime: number | null;
+  };
 }
 
 export const useHeartBeatProcessor = () => {
@@ -43,11 +47,14 @@ export const useHeartBeatProcessor = () => {
     });
 
     const result = processor.processSignal(value);
+    const rrData = processor.getRRIntervals(); // Obtenemos los datos RR
+
     console.log('useHeartBeatProcessor - result:', {
       bpm: result.bpm,
       confidence: result.confidence,
       isPeak: result.isPeak,
       arrhythmiaCount: result.arrhythmiaCount,
+      rrIntervals: rrData.intervals,
       timestamp: new Date().toISOString()
     });
     
@@ -56,7 +63,10 @@ export const useHeartBeatProcessor = () => {
       setConfidence(result.confidence);
     }
 
-    return result;
+    return {
+      ...result,
+      rrData // Incluimos los datos RR en el resultado
+    };
   }, [processor]);
 
   const reset = useCallback(() => {

@@ -52,7 +52,7 @@ export class VitalSignsProcessor {
   private readonly SMA_WINDOW = 3;
 
   // ───────── Parámetros de Arritmias ─────────
-  
+
   /** Ventana corta para análisis rápido */
   private readonly RR_WINDOW_SIZE = 5;
   
@@ -154,7 +154,10 @@ export class VitalSignsProcessor {
   /**
    * processSignal
    */
-  public processSignal(ppgValue: number): {
+  public processSignal(
+    ppgValue: number,
+    rrData?: { intervals: number[]; lastPeakTime: number | null }
+  ): {
     spo2: number;
     pressure: string;
     arrhythmiaStatus: string;
@@ -162,7 +165,8 @@ export class VitalSignsProcessor {
     console.log("VitalSignsProcessor: Entrada de señal", {
       ppgValue,
       isLearning: this.isLearningPhase,
-      rrIntervalsCount: this.rrIntervals.length
+      rrIntervalsCount: this.rrIntervals.length,
+      receivedRRData: rrData
     });
 
     const filteredValue = this.applySMAFilter(ppgValue);
@@ -172,10 +176,14 @@ export class VitalSignsProcessor {
       this.ppgValues.shift();
     }
 
-    // Detectar picos y procesar latidos
-    const isPeak = this.detectPeak(filteredValue);
-    if (isPeak) {
-      this.processHeartBeat();
+    // Si recibimos datos RR, los usamos directamente
+    if (rrData && rrData.intervals.length > 0) {
+      this.rrIntervals = [...rrData.intervals];
+      this.lastPeakTime = rrData.lastPeakTime;
+      
+      if (!this.isLearningPhase && this.rrIntervals.length >= this.RR_WINDOW_SIZE) {
+        this.detectArrhythmia();
+      }
     }
 
     // Calcular SpO2 y presión (sin cambios)
@@ -199,8 +207,7 @@ export class VitalSignsProcessor {
       isLearningPhase: this.isLearningPhase,
       arrhythmiaDetected: this.arrhythmiaDetected,
       arrhythmiaStatus,
-      timeSinceStart,
-      learningPeriod: this.ARRHYTHMIA_LEARNING_PERIOD
+      rrIntervals: this.rrIntervals.length
     });
 
     return {
