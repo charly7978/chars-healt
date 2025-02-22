@@ -13,10 +13,12 @@ export const useVitalSignsProcessor = () => {
       setArrhythmiaCounter(prev => prev + 1);
     }
     
+    const status = arrhythmiaCounter > 0 ? "ARRITMIA DETECTADA" : "SIN ARRITMIAS";
+    
     return {
       spo2: result.spo2,
       pressure: result.pressure,
-      arrhythmiaStatus: arrhythmiaCounter > 0 ? "ARRITMIA DETECTADA" : "SIN ARRITMIAS"
+      arrhythmiaStatus: `${status}|${arrhythmiaCounter}`
     };
   }, [processor, arrhythmiaCounter]);
 
