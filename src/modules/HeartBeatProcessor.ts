@@ -119,7 +119,7 @@ export class HeartBeatProcessor {
   private lastRhythmTime: number | null = null;
   private isLearningPhase = true;
   private baselineRhythm: number = 0;
-  private arrhythmiaCount = 0;
+  public arrhythmiaCount = 0; // Cambiado a público
   private measurementStartTime: number = 0;
 
   constructor() {
