@@ -276,11 +276,8 @@ export class VitalSignsProcessor {
   private calculateActualBloodPressure(ppgValues: number[]): { systolic: number; diastolic: number } {
     const { peakTimes, valleys } = this.findPeaksAndValleys(ppgValues);
     
-    if (peakTimes.length < 4) {
-      return { 
-        systolic: this.lastValidPressure?.systolic || 0,
-        diastolic: this.lastValidPressure?.diastolic || 0 
-      };
+    if (peakTimes.length < 2) {
+      return { systolic: this.lastSystolic, diastolic: this.lastDiastolic };
     }
 
     // Análisis de intervalos entre picos (PTT)
@@ -289,23 +286,16 @@ export class VitalSignsProcessor {
     
     for (let i = 1; i < peakTimes.length; i++) {
       const ptt = peakTimes[i] - peakTimes[i-1];
-      if (ptt >= 20 && ptt <= 180) {
-        pttValues.push(ptt);
-      }
+      pttValues.push(ptt);
       
       if (valleys[i-1]) {
         const amplitude = ppgValues[peakTimes[i]] - ppgValues[valleys[i-1]];
-        if (amplitude > 0) {
-          amplitudes.push(amplitude);
-        }
+        amplitudes.push(amplitude);
       }
     }
 
     if (pttValues.length < 3 || amplitudes.length < 3) {
-      return { 
-        systolic: this.lastValidPressure?.systolic || 0,
-        diastolic: this.lastValidPressure?.diastolic || 0 
-      };
+      return { systolic: this.lastSystolic, diastolic: this.lastDiastolic };
     }
 
     // Análisis estadístico del PTT y amplitudes
@@ -320,8 +310,8 @@ export class VitalSignsProcessor {
 
     // Cálculo de presión basado en PTT y amplitud
     // La relación PTT-presión es inversamente proporcional
-    let systolic = Math.round((1000 / avgPTT) * 6 * confidenceFactor);
-    let diastolic = Math.round(systolic * 0.65 + (avgAmplitude * 0.1));
+    let systolic = Math.round((1000 / avgPTT) * 3);
+    let diastolic = Math.round(systolic * (0.5 + (avgAmplitude * 0.001)));
 
     // Límites fisiológicos realistas
     systolic = Math.min(160, Math.max(70, systolic));
@@ -329,10 +319,7 @@ export class VitalSignsProcessor {
 
     // Verificación de coherencia
     if (systolic - diastolic < 20 || systolic - diastolic > 80) {
-      return { 
-        systolic: this.lastValidPressure?.systolic || 0,
-        diastolic: this.lastValidPressure?.diastolic || 0 
-      };
+      return { systolic: this.lastSystolic, diastolic: this.lastDiastolic };
     }
 
     // Actualizar última presión válida
@@ -486,6 +473,5 @@ export class VitalSignsProcessor {
     this.movingAverageSpO2 = [];
     this.smaBuffer = [];
     this.measurementStartTime = Date.now();
-    this.lastValidPressure = null;
   }
 }
