@@ -1,6 +1,6 @@
 
 import React, { useRef, useEffect, useState } from 'react';
-import { Fingerprint, Camera, RefreshCcw } from 'lucide-react';
+import { Fingerprint, SwitchCamera } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 
 interface SimpleCameraViewProps {
@@ -23,13 +23,22 @@ const SimpleCameraView = ({
 
   const getAvailableCameras = async () => {
     try {
+      await navigator.mediaDevices.getUserMedia({ video: true }); // Solicitar permiso primero
       const devices = await navigator.mediaDevices.enumerateDevices();
       const cameras = devices.filter(device => device.kind === 'videoinput');
       setAvailableCameras(cameras);
       console.log("Cámaras disponibles:", cameras);
       
-      // Si no hay cámara seleccionada, usar la primera
-      if (!currentCamera && cameras.length > 0) {
+      // En móvil, intentar usar la cámara trasera primero
+      const backCamera = cameras.find(camera => 
+        camera.label.toLowerCase().includes('back') || 
+        camera.label.toLowerCase().includes('trasera') ||
+        camera.label.toLowerCase().includes('environment')
+      );
+      
+      if (backCamera) {
+        setCurrentCamera(backCamera.deviceId);
+      } else if (cameras.length > 0) {
         setCurrentCamera(cameras[0].deviceId);
       }
     } catch (err) {
@@ -57,18 +66,25 @@ const SimpleCameraView = ({
           throw new Error("getUserMedia no está soportado");
         }
 
-        // Configuración optimizada para rendimiento con propiedades válidas
+        // Configuración optimizada para calidad de imagen
         const constraints: MediaStreamConstraints = {
           video: {
             deviceId: currentCamera ? { exact: currentCamera } : undefined,
             facingMode: currentCamera ? undefined : 'environment',
-            width: { ideal: 320 },
-            height: { ideal: 240 },
-            frameRate: { ideal: 15 }
-          }
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            frameRate: { ideal: 30 },
+            // Configuraciones avanzadas para mejorar la calidad
+            exposureMode: 'manual',
+            exposureTime: 1000, // 1ms exposure time
+            whiteBalanceMode: 'manual',
+            exposureCompensation: 1.0,
+            brightness: 1.0,
+            contrast: 1.0
+          } as MediaTrackConstraints
         };
 
-        // Si hay un stream anterior, detenerlo
+        // Detener stream anterior
         if (stream) {
           stream.getTracks().forEach(track => track.stop());
         }
@@ -77,8 +93,6 @@ const SimpleCameraView = ({
         
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          
-          // Aplicar configuraciones adicionales al video
           videoRef.current.setAttribute('playsinline', 'true');
           videoRef.current.setAttribute('autoplay', 'true');
           
@@ -86,22 +100,31 @@ const SimpleCameraView = ({
             onStreamReady(stream);
           }
 
-          // Configurar la linterna si está disponible
+          // Configurar track de video
           const track = stream.getVideoTracks()[0];
           console.log("Capacidades de la cámara:", track.getCapabilities());
           
-          videoRef.current.onloadedmetadata = async () => {
-            try {
-              if (track?.getCapabilities()?.torch) {
-                await track.applyConstraints({
-                  advanced: [{ torch: true }]
-                });
-                console.log("Linterna activada");
-              }
-            } catch (err) {
-              console.log("No se pudo activar la linterna:", err);
+          // Intentar ajustar configuraciones avanzadas si están disponibles
+          const capabilities = track.getCapabilities();
+          if (capabilities) {
+            const settings: MediaTrackSettings = {};
+            
+            if (capabilities.exposureMode) {
+              settings.exposureMode = 'manual';
             }
-          };
+            if (capabilities.exposureTime) {
+              settings.exposureTime = 1000;
+            }
+            if (capabilities.whiteBalanceMode) {
+              settings.whiteBalanceMode = 'manual';
+            }
+            
+            try {
+              await track.applyConstraints({ advanced: [settings] });
+            } catch (err) {
+              console.log("No se pudieron aplicar configuraciones avanzadas:", err);
+            }
+          }
         }
       } catch (err) {
         console.error("Error al iniciar la cámara:", err);
@@ -157,10 +180,10 @@ const SimpleCameraView = ({
         <Button
           variant="secondary"
           size="icon"
-          className="absolute top-4 right-4 z-30 bg-black/30"
+          className="absolute top-4 right-4 z-30 bg-black/30 hover:bg-black/50"
           onClick={switchCamera}
         >
-          <RefreshCcw className="h-4 w-4" />
+          <SwitchCamera className="h-4 w-4" />
         </Button>
       )}
       
