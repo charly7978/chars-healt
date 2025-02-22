@@ -1,3 +1,4 @@
+
 import type { Config } from "tailwindcss";
 
 export default {
@@ -62,10 +63,31 @@ export default {
           "0%, 100%": { transform: "scale(1)" },
           "50%": { transform: "scale(1.1)" },
         },
+        "flip-in": {
+          "0%": { transform: "rotateY(0deg)" },
+          "100%": { transform: "rotateY(180deg)" }
+        },
+        "progress": {
+          "0%": { transform: "translateX(-100%)" },
+          "50%": { transform: "translateX(100%)" },
+          "100%": { transform: "translateX(-100%)" }
+        },
+        "equalize": {
+          "0%, 100%": { height: "2rem" },
+          "50%": { height: "0.5rem" }
+        }
       },
       animation: {
         "heart-beat": "heart-beat 1s ease-in-out infinite",
       },
+      utilities: {
+        ".backface-hidden": {
+          "backface-visibility": "hidden",
+        },
+        ".perspective-1000": {
+          "perspective": "1000px",
+        },
+      }
     },
   },
   plugins: [require("tailwindcss-animate")],
