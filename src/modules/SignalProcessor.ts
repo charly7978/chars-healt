@@ -1,3 +1,4 @@
+
 import { ProcessedSignal, ProcessingError, SignalProcessor } from '../types/signal';
 import { VitalSignalProcessor } from './VitalSignalProcessor';
 
@@ -28,7 +29,7 @@ export class PPGSignalProcessor implements SignalProcessor {
   private vitalProcessor: VitalSignalProcessor;
   private lastValues: number[] = [];
   private readonly BUFFER_SIZE = 10;
-  private readonly MIN_RED_THRESHOLD = 30;
+  private readonly MIN_RED_THRESHOLD = 100; // Ajustado para mejor detección
   private readonly MAX_RED_THRESHOLD = 250;
   private readonly STABILITY_WINDOW = 5;
   private readonly MIN_STABILITY_COUNT = 3;
@@ -105,6 +106,7 @@ export class PPGSignalProcessor implements SignalProcessor {
       }
 
       const { isFingerDetected, quality } = this.analyzeSignal(filtered, redValue);
+      console.log("Análisis de señal:", { redValue, filtered, isFingerDetected, quality });
 
       let heartRate = 0;
       let confidence = 0;
@@ -134,7 +136,7 @@ export class PPGSignalProcessor implements SignalProcessor {
         fingerDetected: isFingerDetected,
         heartRate: heartRate,
         confidence: confidence,
-        roi: this.detectROI(redValue)
+        roi: this.detectROI(imageData)
       };
 
       this.onSignalReady?.(processedSignal);
@@ -150,10 +152,11 @@ export class PPGSignalProcessor implements SignalProcessor {
     let redSum = 0;
     let count = 0;
     
-    const startX = Math.floor(imageData.width * 0.375);
-    const endX = Math.floor(imageData.width * 0.625);
-    const startY = Math.floor(imageData.height * 0.375);
-    const endY = Math.floor(imageData.height * 0.625);
+    // Ajustado para analizar una región más precisa
+    const startX = Math.floor(imageData.width * 0.4);
+    const endX = Math.floor(imageData.width * 0.6);
+    const startY = Math.floor(imageData.height * 0.4);
+    const endY = Math.floor(imageData.height * 0.6);
     
     for (let y = startY; y < endY; y++) {
       for (let x = startX; x < endX; x++) {
@@ -164,11 +167,13 @@ export class PPGSignalProcessor implements SignalProcessor {
     }
     
     const avgRed = redSum / count;
+    console.log("Valor promedio de rojo:", avgRed);
     return avgRed;
   }
 
   private analyzeSignal(filtered: number, rawValue: number): { isFingerDetected: boolean, quality: number } {
     const isInRange = rawValue >= this.MIN_RED_THRESHOLD && rawValue <= this.MAX_RED_THRESHOLD;
+    console.log("Análisis de rango:", { rawValue, isInRange, min: this.MIN_RED_THRESHOLD, max: this.MAX_RED_THRESHOLD });
     
     if (!isInRange) {
       this.stableFrameCount = 0;
@@ -186,6 +191,7 @@ export class PPGSignalProcessor implements SignalProcessor {
     }, 0) / (recentValues.length - 1);
 
     const isStable = avgVariation < 5;
+    console.log("Análisis de estabilidad:", { avgVariation, isStable, stableFrameCount: this.stableFrameCount });
 
     if (isStable) {
       this.stableFrameCount++;
@@ -204,15 +210,16 @@ export class PPGSignalProcessor implements SignalProcessor {
       quality = Math.round((stabilityScore * 0.7 + intensityScore * 0.3) * 100);
     }
 
+    console.log("Resultado final:", { isFingerDetected, quality });
     return { isFingerDetected, quality };
   }
 
-  private detectROI(redValue: number): ProcessedSignal['roi'] {
+  private detectROI(imageData: ImageData): ProcessedSignal['roi'] {
     return {
-      x: 0,
-      y: 0,
-      width: 100,
-      height: 100
+      x: Math.floor(imageData.width * 0.4),
+      y: Math.floor(imageData.height * 0.4),
+      width: Math.floor(imageData.width * 0.2),
+      height: Math.floor(imageData.height * 0.2)
     };
   }
 
