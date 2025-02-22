@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from "react";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import React, { useState } from "react";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { RotateCcw, Timer, Settings, CheckCircle2 } from "lucide-react";
+import { RotateCcw, Timer, Settings, CheckCircle2, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -101,7 +101,6 @@ const CalibrationDialog = ({ isOpen, onClose, isCalibrating }: CalibrationDialog
 
       const user = session.user;
 
-      // Primero verificamos si existe un registro de calibración
       const { data: existingSettings, error: settingsError } = await supabase
         .from('calibration_settings')
         .select()
@@ -113,7 +112,6 @@ const CalibrationDialog = ({ isOpen, onClose, isCalibrating }: CalibrationDialog
         throw new Error("Error al obtener la configuración de calibración");
       }
 
-      // Si no existe, creamos uno nuevo
       if (!existingSettings) {
         const { error: insertError } = await supabase
           .from('calibration_settings')
@@ -133,7 +131,6 @@ const CalibrationDialog = ({ isOpen, onClose, isCalibrating }: CalibrationDialog
           throw new Error("Error al crear la configuración de calibración");
         }
       } else {
-        // Si existe, actualizamos el estado
         const { error: updateError } = await supabase
           .from('calibration_settings')
           .update({ 
@@ -148,66 +145,53 @@ const CalibrationDialog = ({ isOpen, onClose, isCalibrating }: CalibrationDialog
         }
       }
 
-      // Paso 1: Calibración de Sensibilidad Lumínica
       setCurrentStep(1);
       
-      // Ajuste de ganancia del sensor
       setCurrentProcess(1);
       const gainLevel = await adjustSensorGain();
       setCalibrationResults(prev => ({ ...prev, gainLevel }));
       setProgress(15);
 
-      // Optimización de umbral
       setCurrentProcess(2);
       const threshold = await optimizeDetectionThreshold();
       setCalibrationResults(prev => ({ ...prev, detectionThreshold: threshold }));
       setProgress(30);
 
-      // Calibración de offset
       setCurrentProcess(3);
       const offset = await calibrateDynamicOffset();
       setCalibrationResults(prev => ({ ...prev, dynamicOffset: offset }));
       setProgress(45);
 
-      // Paso 2: Procesamiento Digital
       setCurrentStep(2);
 
-      // Configuración Kalman
       setCurrentProcess(1);
       const { Q, R } = await configureKalmanFilter();
       setCalibrationResults(prev => ({ ...prev, kalmanQ: Q, kalmanR: R }));
       setProgress(60);
 
-      // Ajuste de ventana
       setCurrentProcess(2);
       const windowSize = await adjustAnalysisWindow();
       setCalibrationResults(prev => ({ ...prev, windowSize }));
       setProgress(75);
 
-      // Optimización de muestreo
       setCurrentProcess(3);
       await optimizeSamplingRate();
       setProgress(85);
 
-      // Paso 3: Algoritmos Vitales
       setCurrentStep(3);
 
-      // Calibración de detector de picos
       setCurrentProcess(1);
       await calibratePeakDetector();
       setProgress(90);
 
-      // Ajuste de índice de perfusión
       setCurrentProcess(2);
       await adjustPerfusionIndex();
       setProgress(95);
 
-      // Optimización final
       setCurrentProcess(3);
       await optimizePPGMetrics();
       setProgress(100);
 
-      // Actualizamos el estado en Supabase con los resultados de la calibración
       const { error: finalUpdateError } = await supabase
         .from('calibration_settings')
         .update({
@@ -430,6 +414,17 @@ const CalibrationDialog = ({ isOpen, onClose, isCalibrating }: CalibrationDialog
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-xl p-0 overflow-hidden bg-gradient-to-br from-gray-900 to-gray-800 border-0">
+        <div className="absolute top-4 left-4 z-50">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-gray-400 hover:text-white"
+            onClick={onClose}
+          >
+            <ArrowLeft className="h-6 w-6" />
+          </Button>
+        </div>
+        <DialogTitle className="sr-only">Sistema de Calibración</DialogTitle>
         <div className="relative w-full h-[600px] [perspective:1200px]">
           <div 
             className={`

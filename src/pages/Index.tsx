@@ -236,6 +236,7 @@ const Index = () => {
     try {
       setWasMeasuring(isMonitoring);
       setIsMonitoring(false);
+      processingRef.current = false;
       
       setIsCalibrating(true);
       setShowCalibrationDialog(true);
@@ -248,6 +249,11 @@ const Index = () => {
           description: "Los parámetros han sido ajustados para esta sesión.",
           duration: 3000,
         });
+        
+        if (wasMeasuring) {
+          setIsMonitoring(true);
+          processingRef.current = true;
+        }
       } else {
         throw new Error("Error en el proceso de calibración");
       }
@@ -262,11 +268,6 @@ const Index = () => {
     } finally {
       setIsCalibrating(false);
       setShowCalibrationDialog(false);
-      if (wasMeasuring) {
-        console.log("Reanudando medición después de calibración");
-        setIsMonitoring(true);
-        processingRef.current = true;
-      }
     }
   };
 
