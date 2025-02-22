@@ -249,53 +249,50 @@ export class VitalSignsProcessor {
 
   /**
    * calculateSpO2
-   * Calcula la saturación de oxígeno con límites fisiológicos realistas
-   * y respuesta más gradual a cambios.
+   * Calcula la saturación de oxígeno empezando desde 0,
+   * sin valores predeterminados.
    */
   private calculateSpO2(values: number[]): number {
-    // Mínimo de muestras para estabilidad
+    // Si no hay suficientes muestras, retornar 0
     if (values.length < 30) {
-      return this.lastValue || 95; // Valor inicial razonable
+      return 0;
     }
 
     // Calcular componentes AC y DC
     const dc = this.calculateDC(values);
-    if (dc === 0) return this.lastValue || 95;
+    if (dc === 0) return 0;
 
     const ac = this.calculateAC(values);
     
     // Índice de perfusión más sensible
     const perfusionIndex = ac / dc;
     
+    // Con perfusión insuficiente, retornar 0
     if (perfusionIndex < this.PERFUSION_INDEX_THRESHOLD) {
-      // Con mala perfusión, degradamos gradualmente
-      return Math.max(88, this.lastValue - 1);
+      return 0;
     }
 
     // Ratio R normalizado [0-1] para mejor control
     const R = Math.min(1, (ac / dc) / this.SPO2_CALIBRATION_FACTOR);
     
-    // Base SpO2 más conservadora
+    // Base SpO2 calculada desde la señal real
     let spO2 = Math.round(98 - (10 * R));
 
-    // Ajustes más graduales según perfusión
+    // Ajustes según perfusión
     if (perfusionIndex > 0.15) {
-      // Buena perfusión: ajuste suave hacia arriba
       spO2 = Math.min(98, spO2 + 1);
     } else if (perfusionIndex < 0.08) {
-      // Perfusión pobre: ajuste suave hacia abajo
       spO2 = Math.max(88, spO2 - 1);
     }
 
-    // Límites fisiológicos estrictos [88-98]
+    // Límites fisiológicos [88-98]
     spO2 = Math.max(88, Math.min(98, spO2));
 
-    // Media móvil más suave (70% nuevo, 30% anterior)
+    // Media móvil suave solo si hay valor previo válido
     if (this.lastValue > 0) {
       spO2 = Math.round((spO2 * 0.7) + (this.lastValue * 0.3));
     }
 
-    // Log detallado para debugging
     console.log("VitalSignsProcessor: Cálculo SpO2", {
       ac,
       dc,
