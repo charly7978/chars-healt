@@ -40,23 +40,29 @@ const CameraView = ({
       const constraints: MediaStreamConstraints = {
         video: {
           facingMode: 'environment',
-          width: { ideal: 1280, min: 720 },  // Aumentamos la resolución mínima
-          height: { ideal: 720, min: 480 },  // Mantenemos una buena resolución base
-          frameRate: { min: 25, ideal: 30 }, // Aumentamos el frame rate mínimo
-          aspectRatio: { ideal: 16/9 }       // Cambiamos a 16:9 para mejor calidad
-        }
+          width: { ideal: 1280, min: 720 },
+          height: { ideal: 720, min: 480 },
+          frameRate: { min: 25, ideal: 30 },
+          aspectRatio: { ideal: 16/9 },
+          // Ajustamos la exposición y el balance de blancos para mejor calidad
+          whiteBalanceMode: 'continuous',
+          exposureMode: 'continuous',
+          // Establecemos prioridad en la exposición para mejor detección de cambios de color
+          exposureCompensation: 0,
+          exposurePriority: 'continuous'
+        } as MediaTrackConstraints
       };
 
       const newStream = await navigator.mediaDevices.getUserMedia(constraints);
       
-      // Intentamos optimizar el track de video sin forzar configuraciones
+      // Configuramos el track de video con los parámetros que soporta el estándar
       const videoTrack = newStream.getVideoTracks()[0];
       if (videoTrack) {
         try {
           await videoTrack.applyConstraints({
             advanced: [{
-              brightness: 1,
-              saturation: 100
+              exposureMode: 'continuous',
+              whiteBalanceMode: 'continuous'
             }]
           });
         } catch (err) {
