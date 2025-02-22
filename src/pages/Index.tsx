@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
@@ -6,6 +5,8 @@ import { useVitalMeasurement } from "@/hooks/useVitalMeasurement";
 import CameraView from "@/components/CameraView";
 import { useSignalProcessor } from "@/hooks/useSignalProcessor";
 import SignalQualityIndicator from "@/components/SignalQualityIndicator";
+import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
+import HeartRateDisplay from "@/components/HeartRateDisplay";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -15,6 +16,7 @@ const Index = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const processingRef = useRef<boolean>(false);
+  const { currentBPM, confidence, processSignal, reset: resetHeartBeat } = useHeartBeatProcessor();
 
   useEffect(() => {
     processingRef.current = isMonitoring;
@@ -122,6 +124,7 @@ const Index = () => {
     e.preventDefault();
     e.stopPropagation();
     handleStopMeasurement();
+    resetHeartBeat();
   };
 
   useEffect(() => {
@@ -203,6 +206,8 @@ const Index = () => {
               <VitalSign label="Blood Pressure" value={pressure} unit="mmHg" />
               <VitalSign label="Arrhythmias" value={arrhythmiaCount} unit="events" />
             </div>
+
+            <HeartRateDisplay bpm={currentBPM} confidence={confidence} />
           </div>
 
           <div className="flex justify-center gap-2 w-full max-w-md mx-auto">
