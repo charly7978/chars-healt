@@ -55,7 +55,7 @@ export const useVitalSignsProcessor = () => {
       return {
         spo2: 0,
         pressure: "--/--",
-        arrhythmiaStatus: arrhythmiaCount.toString() // Convertimos el número a string
+        arrhythmiaStatus: arrhythmiaCount
       };
     }
     return null;

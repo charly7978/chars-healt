@@ -27,17 +27,17 @@ export class PPGSignalProcessor implements SignalProcessor {
   private lastValues: number[] = [];
   private readonly DEFAULT_CONFIG = {
     BUFFER_SIZE: 10,
-    MIN_RED_THRESHOLD: 80,
-    MAX_RED_THRESHOLD: 175,
+    MIN_RED_THRESHOLD: 95,
+    MAX_RED_THRESHOLD: 240,
     STABILITY_WINDOW: 6,
-    MIN_STABILITY_COUNT: 2
+    MIN_STABILITY_COUNT: 3
   };
   private currentConfig: typeof this.DEFAULT_CONFIG;
   private readonly BUFFER_SIZE = 10;
-  private readonly MIN_RED_THRESHOLD = 80;
-  private readonly MAX_RED_THRESHOLD = 175;
+  private readonly MIN_RED_THRESHOLD = 95;
+  private readonly MAX_RED_THRESHOLD = 240;
   private readonly STABILITY_WINDOW = 6;
-  private readonly MIN_STABILITY_COUNT = 2;
+  private readonly MIN_STABILITY_COUNT = 3;
   private stableFrameCount: number = 0;
   private lastStableValue: number = 0;
   
