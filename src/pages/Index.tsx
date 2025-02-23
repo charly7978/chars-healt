@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
@@ -43,12 +42,15 @@ const Index = () => {
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns } = useVitalSignsProcessor();
 
+  const handleStreamReady = (stream: MediaStream) => {
+    console.log("Stream listo para procesar");
+  };
+
   const saveMeasurement = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      // Simplemente guardar los valores tal como están
       const measurementData = {
         user_id: session.user.id,
         heart_rate: Math.round(heartRate),
