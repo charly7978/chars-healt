@@ -148,6 +148,29 @@ const Index = () => {
             onReset={stopMonitoring}
           />
 
+          {/* Displays de signos vitales */}
+          <div className="absolute top-20 right-4 space-y-2 z-20">
+            <VitalSign 
+              label="Heart Rate"
+              value={heartRate || "--"}
+              unit="BPM"
+            />
+            <VitalSign 
+              label="SpO2"
+              value={vitalSigns.spo2 || "--"}
+              unit="%"
+            />
+            <VitalSign 
+              label="Blood Pressure"
+              value={vitalSigns.pressure}
+              unit="mmHg"
+            />
+            <VitalSign 
+              label="Arrhythmias"
+              value={`${vitalSigns.arrhythmiaStatus}|${arrhythmiaCount}`}
+            />
+          </div>
+
           {isMonitoring && (
             <div className="absolute bottom-20 left-0 right-0 text-center">
               <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 30s</span>

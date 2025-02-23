@@ -158,7 +158,7 @@ const PPGSignalMeter = ({
         ref={canvasRef}
         width={CANVAS_WIDTH}
         height={CANVAS_HEIGHT}
-        className="w-full h-[calc(100%-180px)]"
+        className="w-full h-[calc(100%-120px)]" // Ajustado para botones más pequeños
       />
 
       <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center bg-black/40">
@@ -191,16 +191,16 @@ const PPGSignalMeter = ({
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 h-[100px] grid grid-cols-2">
+      <div className="fixed bottom-0 left-0 right-0 h-[80px] grid grid-cols-2"> {/* Altura reducida de 100px a 80px */}
         <button 
           onClick={onStartMeasurement}
-          className="w-full h-full bg-black hover:bg-black/80 text-3xl font-bold text-white border-t border-r border-gray-800 transition-colors"
+          className="w-full h-full bg-black hover:bg-black/80 text-2xl font-bold text-white border-t border-r border-gray-800 transition-colors" // Texto más pequeño
         >
           INICIAR
         </button>
         <button 
           onClick={handleReset}
-          className="w-full h-full bg-black hover:bg-black/80 text-3xl font-bold text-white border-t border-gray-800 transition-colors"
+          className="w-full h-full bg-black hover:bg-black/80 text-2xl font-bold text-white border-t border-gray-800 transition-colors" // Texto más pequeño
         >
           RESET
         </button>
