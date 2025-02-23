@@ -16,12 +16,13 @@ const PPGSignalMeter = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dataRef = useRef<{time: number, value: number}[]>([]);
   const [startTime] = useState<number>(Date.now());
-  const WINDOW_WIDTH_MS = 6000; // Ventana de 6 segundos visible
-  const CANVAS_WIDTH = 1000; // Aumentado de 800 a 1000
-  const CANVAS_HEIGHT = 400; // Aumentado de 300 a 400
-  const MIN_PEAK_INTERVAL = 800; // Aumentado de 300 a 800ms para hacer más lento el parpadeo
+  const WINDOW_WIDTH_MS = 6000; // Ventana de 6 segundos
+  const CANVAS_WIDTH = 1500; // SIGNIFICATIVAMENTE más grande
+  const CANVAS_HEIGHT = 600; // SIGNIFICATIVAMENTE más grande
+  const MIN_PEAK_INTERVAL = 1200; // Mucho más lento para mejor visualización
   const lastPeakRef = useRef<number>(0);
   const animationFrameRef = useRef<number>();
+  const smoothingFactor = 0.15; // Factor de suavizado para el barrido
 
   useEffect(() => {
     if (!canvasRef.current || !isFingerDetected) return;
@@ -32,16 +33,19 @@ const PPGSignalMeter = ({
 
     const currentTime = Date.now();
     
-    // Agregar nuevo punto de datos con interpolación para suavizar
+    // Suavizado mejorado con más puntos de interpolación
     const lastPoint = dataRef.current[dataRef.current.length - 1];
     if (lastPoint) {
       const timeDiff = currentTime - lastPoint.time;
       const valueDiff = value - lastPoint.value;
-      const steps = Math.min(Math.floor(timeDiff / 16), 5); // max 5 puntos interpolados
+      const steps = Math.min(Math.floor(timeDiff / 8), 10); // Más puntos de interpolación
       
       for (let i = 1; i <= steps; i++) {
         const interpolatedTime = lastPoint.time + (timeDiff * (i / steps));
-        const interpolatedValue = lastPoint.value + (valueDiff * (i / steps));
+        const interpolatedValue = lastPoint.value + 
+          (valueDiff * (i / steps)) * (1 - smoothingFactor) + 
+          lastPoint.value * smoothingFactor;
+        
         dataRef.current.push({
           time: interpolatedTime,
           value: interpolatedValue
@@ -54,22 +58,20 @@ const PPGSignalMeter = ({
       });
     }
 
-    // Mantener solo los últimos 6 segundos de datos
     const cutoffTime = currentTime - WINDOW_WIDTH_MS;
     dataRef.current = dataRef.current.filter(point => point.time >= cutoffTime);
 
     const render = () => {
-      // Limpiar canvas
       ctx.fillStyle = '#000000';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Dibujar cuadrícula con un verde más suave
-      ctx.strokeStyle = 'rgba(0, 255, 0, 0.15)';
+      // Cuadrícula mejorada con efecto de profundidad
+      ctx.strokeStyle = 'rgba(0, 255, 0, 0.08)';
       ctx.lineWidth = 1;
 
-      // Grid vertical (tiempo) - cada línea representa 0.2 segundos
-      const timeInterval = WINDOW_WIDTH_MS / 30; // 30 divisiones
-      for (let i = 0; i <= 30; i++) {
+      // Grid vertical más denso
+      const timeInterval = WINDOW_WIDTH_MS / 60; // 60 divisiones
+      for (let i = 0; i <= 60; i++) {
         const x = canvas.width - (canvas.width * (i * timeInterval) / WINDOW_WIDTH_MS);
         ctx.beginPath();
         ctx.moveTo(x, 0);
@@ -77,45 +79,48 @@ const PPGSignalMeter = ({
         ctx.stroke();
       }
 
-      // Grid horizontal (amplitud)
-      for (let i = 0; i <= 8; i++) {
-        const y = (canvas.height / 8) * i;
+      // Grid horizontal más denso
+      for (let i = 0; i <= 12; i++) {
+        const y = (canvas.height / 12) * i;
         ctx.beginPath();
         ctx.moveTo(0, y);
         ctx.lineTo(canvas.width, y);
         ctx.stroke();
       }
 
-      // Procesar y dibujar señal PPG
       const data = dataRef.current;
       if (data.length > 1) {
         const minVal = Math.min(...data.map(d => d.value));
         const maxVal = Math.max(...data.map(d => d.value));
         const range = maxVal - minVal || 1;
 
-        // Dibujar onda PPG con efecto de brillo
+        // Efecto de resplandor mejorado
         ctx.shadowColor = '#00ff00';
-        ctx.shadowBlur = 10;
+        ctx.shadowBlur = 20;
         ctx.beginPath();
         ctx.strokeStyle = '#00ff00';
-        ctx.lineWidth = 2.5;
+        ctx.lineWidth = 4; // Línea más gruesa
 
+        // Dibujar línea principal con curvas suaves
+        let firstPoint = true;
         data.forEach((point, index) => {
           const x = canvas.width - ((currentTime - point.time) * canvas.width / WINDOW_WIDTH_MS);
           const normalizedY = (point.value - minVal) / range;
           const y = canvas.height - (normalizedY * canvas.height * 0.8 + canvas.height * 0.1);
           
-          if (index === 0) {
+          if (firstPoint) {
             ctx.moveTo(x, y);
+            firstPoint = false;
           } else {
-            // Usar curvas de Bézier para suavizar la línea
+            // Curvas de Bézier más suaves
             const prevPoint = data[index - 1];
             const prevX = canvas.width - ((currentTime - prevPoint.time) * canvas.width / WINDOW_WIDTH_MS);
             const xc = (prevX + x) / 2;
-            ctx.quadraticCurveTo(prevX, y, xc, y);
+            const yc = (y + canvas.height - (((prevPoint.value - minVal) / range) * canvas.height * 0.8 + canvas.height * 0.1)) / 2;
+            ctx.quadraticCurveTo(prevX, y, xc, yc);
           }
 
-          // Detectar y marcar arritmias con una transición más suave
+          // Sistema mejorado de detección de arritmias
           if (index > 2 && index < data.length - 1) {
             const prev2 = data[index - 2].value;
             const prev1 = data[index - 1].value;
@@ -136,24 +141,27 @@ const PPGSignalMeter = ({
                 ctx.fillStyle = `rgba(255, 0, 0, ${opacity})`;
                 ctx.strokeStyle = `rgba(255, 0, 0, ${opacity})`;
                 
-                // Círculo rojo en el pico con brillo
+                // Marcador de arritmia mejorado
                 ctx.shadowColor = '#ff0000';
-                ctx.shadowBlur = 15;
+                ctx.shadowBlur = 30;
+                
+                // Círculo más grande
                 ctx.beginPath();
-                ctx.arc(x, y, 6, 0, 2 * Math.PI);
+                ctx.arc(x, y, 12, 0, 2 * Math.PI);
                 ctx.fill();
                 
-                // Línea vertical roja punteada con desvanecimiento
+                // Línea vertical con patrón mejorado
                 ctx.beginPath();
-                ctx.setLineDash([5, 5]);
+                ctx.setLineDash([10, 10]);
+                ctx.lineWidth = 3;
                 ctx.moveTo(x, 0);
                 ctx.lineTo(x, canvas.height);
                 ctx.stroke();
                 
-                // Texto "ARRITMIA" con mejor visibilidad
-                ctx.shadowBlur = 0;
-                ctx.font = 'bold 14px monospace';
-                ctx.fillText('ARRITMIA', x + 8, y - 15);
+                // Texto de arritmia más visible
+                ctx.shadowBlur = 5;
+                ctx.font = 'bold 20px monospace';
+                ctx.fillText('ARRITMIA', x + 15, y - 20);
                 
                 ctx.restore();
                 lastPeakRef.current = currentTime;
@@ -177,11 +185,11 @@ const PPGSignalMeter = ({
   }, [value, quality, isFingerDetected]);
 
   return (
-    <div className="bg-black/40 backdrop-blur-sm rounded-lg p-4 w-full max-w-[95vw] mx-auto">
+    <div className="bg-black/40 backdrop-blur-sm rounded-lg p-4 w-full h-[80vh] max-h-[800px]">
       <div className="flex justify-between items-center mb-2">
-        <span className="text-sm font-semibold text-white/90">Monitor PPG</span>
+        <span className="text-lg font-semibold text-white/90">Monitor PPG</span>
         <span 
-          className="text-sm font-medium"
+          className="text-lg font-medium"
           style={{ 
             color: quality > 75 ? '#00ff00' : quality > 50 ? '#ffff00' : '#ff0000' 
           }}
@@ -193,10 +201,10 @@ const PPGSignalMeter = ({
         ref={canvasRef}
         width={CANVAS_WIDTH}
         height={CANVAS_HEIGHT}
-        className="w-full h-auto rounded bg-black/60"
+        className="w-full h-full rounded bg-black/60"
       />
-      <div className="mt-2 text-sm text-red-500 flex items-center gap-2">
-        <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse"></div>
+      <div className="mt-4 text-lg text-red-500 flex items-center gap-3">
+        <div className="w-4 h-4 rounded-full bg-red-500 animate-pulse"></div>
         <span>Indicador de Arritmia</span>
       </div>
     </div>
