@@ -12,293 +12,203 @@ import CalibrationDialog from "@/components/CalibrationDialog";
 import { Play, Square } from "lucide-react";
 
 const Index = () => {
-  const [isMonitoring, setIsMonitoring] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
-  const [isCameraOn, setIsCameraOn] = useState(false);
-  const [signalQuality, setSignalQuality] = useState(0);
-  const [vitalSigns, setVitalSigns] = useState({ 
-    spo2: 0, 
-    pressure: "--/--",
-    arrhythmiaStatus: "--" 
-  });
-  const [heartRate, setHeartRate] = useState(0);
-  const [arrhythmiaCount, setArrhythmiaCount] = useState<string | number>("--");
-  const [showCalibrationDialog, setShowCalibrationDialog] = useState(false);
-  const [elapsedTime, setElapsedTime] = useState(0);
+  const [isCameraActive, setIsCameraActive] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const [resultData, setResultData] = useState<Array<{time: number, value: number, isPeak: boolean}>>([]);
-  const measurementTimerRef = useRef<number | null>(null);
-  
-  const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
-  const { processSignal: processHeartBeat } = useHeartBeatProcessor();
-  const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
+  const [isCalibrating, setIsCalibrating] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [lastErrorMessage, setLastErrorMessage] = useState<string | null>(null);
+  const [rrData, setRRData] = useState<{ intervals: number[]; lastPeakTime: number | null } | null>(null);
 
-  const handleCalibrationClick = () => {
-    if (isMonitoring) {
-      setShowCalibrationDialog(true);
-    }
-  };
+  const cameraViewRef = useRef<any>(null);
+  const {
+    isProcessing,
+    lastSignal,
+    error,
+    startProcessing,
+    stopProcessing,
+    calibrate,
+    processFrame
+  } = useSignalProcessor();
+  const heartBeatProcessor = useHeartBeatProcessor();
+  const vitalSignsProcessor = useVitalSignsProcessor();
 
-  const startMonitoring = () => {
-    setIsMonitoring(true);
-    setIsCameraOn(true);
-    setIsPaused(false);
-    startProcessing();
-    setElapsedTime(0);
-    
-    if (measurementTimerRef.current) {
-      clearInterval(measurementTimerRef.current);
-    }
-    
-    measurementTimerRef.current = window.setInterval(() => {
-      setElapsedTime(prev => {
-        if (prev >= 30) {
-          stopMonitoring();
-          return 30;
-        }
-        return prev + 1;
-      });
-    }, 1000);
-  };
-
-  const stopMonitoring = () => {
-    setIsMonitoring(false);
-    setIsCameraOn(false);
-    setIsPaused(false);
-    stopProcessing();
-    resetVitalSigns();
-    setElapsedTime(0);
-    
-    if (measurementTimerRef.current) {
-      clearInterval(measurementTimerRef.current);
-      measurementTimerRef.current = null;
-    }
-  };
-
-  const pauseMonitoring = () => {
-    if (isMonitoring) {
-      setIsPaused(true);
-      stopProcessing();
-      if (measurementTimerRef.current) {
-        clearInterval(measurementTimerRef.current);
-        measurementTimerRef.current = null;
-      }
-    }
-  };
-
-  const resumeMonitoring = () => {
-    if (isMonitoring) {
-      setIsPaused(false);
-      startProcessing();
-      if (elapsedTime < 30 && !measurementTimerRef.current) {
-        measurementTimerRef.current = window.setInterval(() => {
-          setElapsedTime(prev => {
-            if (prev >= 30) {
-              if (measurementTimerRef.current) {
-                clearInterval(measurementTimerRef.current);
-                measurementTimerRef.current = null;
-              }
-              return 30;
-            }
-            return prev + 1;
-          });
-        }, 1000);
-      }
-    }
-  };
+  const [arrhythmiaStatus, setArrhythmiaStatus] = useState<string>("SIN ARRITMIAS|0");
 
   useEffect(() => {
-    return () => {
-      if (measurementTimerRef.current) {
-        clearInterval(measurementTimerRef.current);
-        measurementTimerRef.current = null;
-      }
-    };
-  }, []);
+    if (lastSignal && rrData) {
+      const result = vitalSignsProcessor.processSignal(
+        lastSignal.filteredValue,
+        rrData
+      );
+      setArrhythmiaStatus(result.arrhythmiaStatus);
+    }
+  }, [lastSignal, rrData, vitalSignsProcessor]);
 
-  const handleCalibrationStart = () => {
-    if (isMonitoring) {
-      pauseMonitoring();
+  const toggleCamera = async () => {
+    if (!cameraViewRef.current) return;
+
+    if (!isCameraActive) {
+      try {
+        await cameraViewRef.current.startCamera();
+        setIsCameraActive(true);
+        setCameraError(null);
+      } catch (err: any) {
+        console.error("Error starting camera:", err);
+        setCameraError(err.message || "Failed to start camera.");
+        setLastErrorMessage(err.message || "Failed to start camera.");
+      }
+    } else {
+      cameraViewRef.current.stopCamera();
+      setIsCameraActive(false);
     }
   };
 
-  const handleCalibrationEnd = () => {
-    if (isMonitoring) {
-      resumeMonitoring();
-    }
-  };
-
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        if (isMonitoring && !isPaused) {
-          pauseMonitoring();
-        }
-      } else {
-        if (isMonitoring && isPaused && !showCalibrationDialog) {
-          resumeMonitoring();
-        }
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [isMonitoring, isPaused, showCalibrationDialog]);
-
-  const handleStreamReady = (stream: MediaStream) => {
-    if (!isMonitoring) return;
-    
-    console.log("Index: Camera stream ready", stream.getVideoTracks()[0].getSettings());
-    const videoTrack = stream.getVideoTracks()[0];
-    const imageCapture = new ImageCapture(videoTrack);
-    
-    if (videoTrack.getCapabilities()?.torch) {
-      videoTrack.applyConstraints({
-        advanced: [{ torch: true }]
-      }).catch(err => console.error("Error activando linterna:", err));
-    }
-    
-    const tempCanvas = document.createElement('canvas');
-    const tempCtx = tempCanvas.getContext('2d');
-    if (!tempCtx) {
-      console.error("Index: No se pudo obtener el contexto 2D del canvas temporal");
+  const startCapture = async () => {
+    if (!isCameraActive) {
+      alert("Por favor, activa la cámara primero.");
       return;
     }
-    
-    const processImage = async () => {
-      if (!isMonitoring) {
-        console.log("Index: Monitoreo detenido, no se procesan más frames");
-        return;
-      }
-      
-      try {
-        const frame = await imageCapture.grabFrame();
-        tempCanvas.width = frame.width;
-        tempCanvas.height = frame.height;
-        tempCtx.drawImage(frame, 0, 0);
-        const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
-        processFrame(imageData);
-        
-        if (isMonitoring) {
-          requestAnimationFrame(processImage);
-        }
-      } catch (error) {
-        console.error("Index: Error capturando frame:", error);
-        if (isMonitoring) {
-          requestAnimationFrame(processImage);
-        }
-      }
-    };
 
-    processImage();
+    if (isProcessing) {
+      stopProcessing();
+    }
+
+    heartBeatProcessor.reset();
+    vitalSignsProcessor.reset();
+
+    startProcessing();
+    setResultData([]);
   };
 
-  useEffect(() => {
-    if (lastSignal && lastSignal.fingerDetected && isMonitoring) {
-      const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
-      setHeartRate(heartBeatResult.bpm);
-      
-      const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
-      if (vitals) {
-        setVitalSigns(vitals);
-        setArrhythmiaCount(vitals.arrhythmiaStatus);
-      }
-      
-      setSignalQuality(lastSignal.quality);
-    }
-  }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
-
-  const handlePPGDataReady = (data: Array<{time: number, value: number, isPeak: boolean}>) => {
-    setResultData(data);
+  const stopCapture = () => {
+    stopProcessing();
+    const finalBPM = heartBeatProcessor.getFinalBPM();
+    console.log("Final BPM:", finalBPM);
     setShowResults(true);
+  };
+
+  const onFrameProcessed = (imageData: ImageData) => {
+    processFrame(imageData);
+
+    if (lastSignal) {
+      const { bpm, isPeak, filteredValue } = heartBeatProcessor.processSignal(lastSignal.filteredValue);
+      setRRData(heartBeatProcessor.getRRIntervals());
+
+      setResultData(prev => {
+        const time = Date.now() - (Date.now() % 33); // Ajuste para simular 30 FPS
+        const last = prev[prev.length - 1];
+        if (last && time - last.time < 33) {
+          return prev;
+        }
+        return [...prev, { time: time % 30000, value: filteredValue, isPeak }];
+      });
+    }
+  };
+
+  const handleCalibrationStart = () => {
+    setIsCalibrating(true);
+  };
+
+  const handleCalibrationClose = () => {
+    setIsCalibrating(false);
+  };
+
+  const handleCalibration = async () => {
+    const success = await calibrate();
+    setIsCalibrating(false);
+    if (success) {
+      alert("Calibración exitosa!");
+    } else {
+      alert("Error en la calibración. Intenta de nuevo.");
+    }
   };
 
   return (
     <div className="w-screen h-screen bg-gray-900 overflow-hidden">
       <div className="relative w-full h-full">
-        <div className="absolute inset-0">
-          <CameraView 
-            onStreamReady={handleStreamReady}
-            isMonitoring={isCameraOn}
-            isFingerDetected={lastSignal?.fingerDetected}
-            signalQuality={signalQuality}
-            buttonPosition={document.querySelector('.measure-button')?.getBoundingClientRect()}
-          />
+        <CameraView
+          ref={cameraViewRef}
+          active={isCameraActive}
+          onError={setCameraError}
+          onFrameProcessed={onFrameProcessed}
+        />
+
+        <div className="absolute top-4 left-4 z-10 text-white">
+          <div className="flex items-center space-x-2">
+            <SignalQualityIndicator quality={lastSignal?.quality || 0} />
+            <PPGSignalMeter value={lastSignal?.filteredValue || 0} />
+          </div>
+          {cameraError && (
+            <div className="text-red-500 text-sm mt-2">
+              Error de cámara: {cameraError}
+            </div>
+          )}
+          {lastErrorMessage && (
+            <div className="text-red-500 text-sm mt-2">
+              Último error: {lastErrorMessage}
+            </div>
+          )}
         </div>
 
-        <div className="relative z-10 h-full flex flex-col justify-between p-4">
-          <div className="flex justify-between items-start w-full">
-            <h1 className="text-lg font-bold text-white bg-black/30 px-3 py-1 rounded">PPG Monitor</h1>
-          </div>
-
-          <div className="flex-1 flex flex-col justify-center gap-2 max-w-md mx-auto w-full mt-[-12rem]">
-            <div className="relative">
-              <PPGSignalMeter 
-                value={lastSignal?.filteredValue || 0}
-                quality={lastSignal?.quality || 0}
-                isFingerDetected={lastSignal?.fingerDetected || false}
-                isComplete={elapsedTime >= 30}
-                onDataReady={handlePPGDataReady}
-              />
-            </div>
-
-            <SignalQualityIndicator 
-              quality={signalQuality} 
-              isMonitoring={isMonitoring}
-            />
-
-            <div className="grid grid-cols-2 gap-2">
-              <VitalSign label="Heart Rate" value={heartRate} unit="BPM" />
-              <VitalSign label="SpO2" value={vitalSigns.spo2} unit="%" />
-              <VitalSign label="Blood Pressure" value={vitalSigns.pressure} unit="mmHg" />
-              <VitalSign label="Arrhythmias" value={arrhythmiaCount} />
-            </div>
-          </div>
-
-          <div className="flex flex-col items-center gap-2 w-full max-w-md mx-auto mt-[-8rem]">
-            {isMonitoring && (
-              <div className="text-xs font-medium text-gray-300 mb-1">
-                Tiempo: {elapsedTime}s / 30s
-              </div>
-            )}
+        <div className="absolute bottom-4 left-4 right-4 z-10 flex justify-between">
+          <Button onClick={toggleCamera} disabled={isProcessing}>
+            {isCameraActive ? "Detener Cámara" : "Iniciar Cámara"}
+          </Button>
+          <div>
             <Button
-              onClick={isMonitoring ? stopMonitoring : startMonitoring}
-              className={`w-full measure-button ${
-                isMonitoring 
-                  ? 'bg-red-600/80 hover:bg-red-600' 
-                  : 'bg-green-600/80 hover:bg-green-600'
-              } text-white`}
+              variant="secondary"
+              onClick={handleCalibrationStart}
+              disabled={isProcessing}
             >
-              {isMonitoring ? (
-                <>
-                  <Square className="h-4 w-4 mr-2" />
-                  Detener Medición
-                </>
-              ) : (
-                <>
-                  <Play className="h-4 w-4 mr-2" />
-                  Iniciar Medición
-                </>
-              )}
+              Calibrar
+            </Button>
+            <Button
+              className="ml-2"
+              onClick={startCapture}
+              disabled={isProcessing}
+            >
+              <Play className="mr-2 h-4 w-4" />
+              Capturar
+            </Button>
+            <Button onClick={stopCapture} disabled={!isProcessing}>
+              <Square className="mr-2 h-4 w-4" />
+              Detener
             </Button>
           </div>
         </div>
+
+        <div className="absolute top-4 right-4 z-10 text-white">
+          <VitalSign
+            label="BPM"
+            value={heartBeatProcessor.getFinalBPM()}
+            unit="lpm"
+          />
+          <VitalSign
+            label="SpO2"
+            value={70}
+            unit="%"
+          />
+          <VitalSign
+            label="Presión"
+            value={120/80}
+            unit="mmHg"
+          />
+        </div>
+
+        <PPGResultDialog
+          isOpen={showResults}
+          onClose={() => setShowResults(false)}
+          signalData={resultData}
+          arrhythmias={arrhythmiaStatus}
+        />
+
+        <CalibrationDialog
+          isOpen={isCalibrating}
+          onClose={handleCalibrationClose}
+          onCalibrate={handleCalibration}
+        />
       </div>
-
-      <PPGResultDialog
-        isOpen={showResults}
-        onClose={() => setShowResults(false)}
-        signalData={resultData}
-      />
-
-      <CalibrationDialog
-        isOpen={showCalibrationDialog}
-        onClose={() => setShowCalibrationDialog(false)}
-        onCalibrationStart={handleCalibrationStart}
-        onCalibrationEnd={handleCalibrationEnd}
-      />
     </div>
   );
 };
