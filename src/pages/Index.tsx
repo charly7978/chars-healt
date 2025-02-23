@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -27,11 +28,10 @@ const Index = () => {
   useEffect(() => {
     const preventScroll = (e: Event) => e.preventDefault();
     
-    // Intento de bloqueo de orientación
     const lockOrientation = async () => {
       try {
-        if (screen?.orientation) {
-          await screen.orientation.lock?.('portrait');
+        if (screen?.orientation?.lock) {
+          await screen.orientation.lock('portrait');
         }
       } catch (error) {
         console.log('No se pudo bloquear la orientación:', error);
@@ -143,7 +143,7 @@ const Index = () => {
       const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
       if (vitals) {
         setVitalSigns(vitals);
-        setArrhythmiaCount(vitals.arrhythmiaStatus);
+        setArrhythmiaCount(vitals.arrhythmiaStatus.split('|')[1] || "--");
       }
       
       setSignalQuality(lastSignal.quality);
@@ -151,7 +151,7 @@ const Index = () => {
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
 
   return (
-    <div className="fixed inset-0 flex flex-col bg-black h-[100dvh] w-screen overflow-hidden">
+    <div className="fixed inset-0 flex flex-col bg-black h-screen w-screen overflow-hidden" style={{ height: '100dvh' }}>
       <div className="flex-1 relative">
         <div className="absolute inset-0">
           <CameraView 
@@ -196,7 +196,7 @@ const Index = () => {
                 />
                 <VitalSign 
                   label="ARRITMIAS"
-                  value={`${vitalSigns.arrhythmiaStatus}|${arrhythmiaCount}`}
+                  value={`${vitalSigns.arrhythmiaStatus}`}
                 />
               </div>
             </div>
@@ -208,7 +208,7 @@ const Index = () => {
             </div>
           )}
 
-          <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 mt-auto">
+          <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 mt-auto safe-bottom">
             <button 
               onClick={startMonitoring}
               className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
