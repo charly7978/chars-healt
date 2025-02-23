@@ -39,12 +39,9 @@ const Index = () => {
   const handleStreamReady = (stream: MediaStream) => {
     try {
       console.log("Stream ready, initializing video processing");
-      
       const videoTrack = stream.getVideoTracks()[0];
-      
       if (videoTrack) {
         videoTrack.enabled = true;
-        
         if ('ImageCapture' in window) {
           const imageCapture = new (window as any).ImageCapture(videoTrack);
           imageCapture.torch?.(true).catch(console.error);
@@ -114,12 +111,20 @@ const Index = () => {
     }
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
 
+  useEffect(() => {
+    return () => {
+      if (measurementTimerRef.current) {
+        clearInterval(measurementTimerRef.current);
+      }
+    };
+  }, []);
+
   return (
     <div className="w-screen h-screen bg-gray-900 overflow-hidden">
       <div className="relative w-full h-full">
         <div className="absolute inset-0">
           <CameraView 
-            onStreamReady={handleStreamReady} 
+            onStreamReady={handleStreamReady}
             isMonitoring={isCameraOn}
             isFingerDetected={lastSignal?.fingerDetected}
             signalQuality={signalQuality}
