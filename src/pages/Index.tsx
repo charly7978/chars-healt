@@ -140,16 +140,8 @@ const Index = () => {
         </div>
 
         <div className="relative z-10 h-full">
-          <PPGSignalMeter 
-            value={lastSignal?.filteredValue || 0}
-            quality={lastSignal?.quality || 0}
-            isFingerDetected={lastSignal?.fingerDetected || false}
-            onStartMeasurement={startMonitoring}
-            onReset={stopMonitoring}
-          />
-
-          {/* Displays de signos vitales */}
-          <div className="absolute top-20 right-4 space-y-2 z-20">
+          {/* Top displays */}
+          <div className="absolute top-20 left-0 right-0 px-4 flex justify-between z-20">
             <VitalSign 
               label="Heart Rate"
               value={heartRate || "--"}
@@ -160,6 +152,18 @@ const Index = () => {
               value={vitalSigns.spo2 || "--"}
               unit="%"
             />
+          </div>
+
+          <PPGSignalMeter 
+            value={lastSignal?.filteredValue || 0}
+            quality={lastSignal?.quality || 0}
+            isFingerDetected={lastSignal?.fingerDetected || false}
+            onStartMeasurement={startMonitoring}
+            onReset={stopMonitoring}
+          />
+
+          {/* Bottom displays */}
+          <div className="absolute bottom-[100px] left-0 right-0 px-4 flex justify-between z-20">
             <VitalSign 
               label="Blood Pressure"
               value={vitalSigns.pressure}
