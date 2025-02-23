@@ -23,6 +23,7 @@ const CameraView = ({
 }: CameraViewProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
+  const [isVideoReady, setIsVideoReady] = useState(false);
 
   const stopCamera = async () => {
     if (stream) {
@@ -33,6 +34,7 @@ const CameraView = ({
         videoRef.current.srcObject = null;
       }
       setStream(null);
+      setIsVideoReady(false);
     }
   };
 
@@ -54,6 +56,23 @@ const CameraView = ({
       
       if (videoRef.current) {
         videoRef.current.srcObject = newStream;
+        
+        // Wait for video metadata to load
+        await new Promise<void>((resolve) => {
+          if (!videoRef.current) return;
+          
+          const handleLoaded = () => {
+            setIsVideoReady(true);
+            resolve();
+          };
+          
+          videoRef.current.onloadedmetadata = handleLoaded;
+          
+          // If the video is already loaded, resolve immediately
+          if (videoRef.current.readyState >= 2) {
+            handleLoaded();
+          }
+        });
       }
 
       setStream(newStream);
@@ -82,19 +101,31 @@ const CameraView = ({
 
   useEffect(() => {
     const processVideoFrame = () => {
-      if (!videoRef.current || !onFrameProcessed || !stream) return;
+      if (!videoRef.current || !onFrameProcessed || !stream || !isVideoReady) return;
+
+      const video = videoRef.current;
+      
+      // Check if video has valid dimensions
+      if (video.videoWidth === 0 || video.videoHeight === 0) {
+        console.warn('Video dimensions not ready yet');
+        return;
+      }
 
       const canvas = document.createElement('canvas');
       const context = canvas.getContext('2d');
       if (!context) return;
 
-      const { videoWidth, videoHeight } = videoRef.current;
-      canvas.width = videoWidth;
-      canvas.height = videoHeight;
+      // Set canvas size to match video dimensions
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
 
-      context.drawImage(videoRef.current, 0, 0);
-      const imageData = context.getImageData(0, 0, videoWidth, videoHeight);
-      onFrameProcessed(imageData);
+      try {
+        context.drawImage(video, 0, 0);
+        const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+        onFrameProcessed(imageData);
+      } catch (error) {
+        console.error('Error processing video frame:', error);
+      }
     };
 
     let frameId: number;
@@ -103,7 +134,7 @@ const CameraView = ({
       frameId = requestAnimationFrame(animate);
     };
 
-    if (isMonitoring && stream) {
+    if (isMonitoring && stream && isVideoReady) {
       animate();
     }
 
@@ -112,7 +143,7 @@ const CameraView = ({
         cancelAnimationFrame(frameId);
       }
     };
-  }, [isMonitoring, stream, onFrameProcessed]);
+  }, [isMonitoring, stream, onFrameProcessed, isVideoReady]);
 
   return (
     <div className="relative w-full h-full bg-black">
