@@ -123,42 +123,25 @@ const Index = () => {
         throw new Error("No hay sesión activa");
       }
 
-      const hr = Math.round(heartRate);
-      const sp = Math.round(vitalSigns.spo2);
-      const [systolicStr, diastolicStr] = vitalSigns.pressure.split('/');
-      const sys = parseInt(systolicStr);
-      const dia = parseInt(diastolicStr);
-      const qual = Math.round(signalQuality);
-      const arr = extractArrhythmiaCount(arrhythmiaCount);
-
-      const errors = [];
-      if (!hr || hr < 40 || hr > 200) errors.push("Frecuencia cardíaca");
-      if (!sp || sp < 80 || sp > 100) errors.push("SpO2");
-      if (!sys || sys < 90 || sys > 180 || !dia || dia < 50 || dia > 120) errors.push("Presión arterial");
-      if (!qual || qual < 0 || qual > 100) errors.push("Calidad de señal");
-
-      if (errors.length > 0) {
-        throw new Error(`Valores incorrectos: ${errors.join(", ")}`);
-      }
-
       const measurementData = {
         user_id: session.user.id,
-        heart_rate: hr,
-        spo2: sp,
-        systolic: sys,
-        diastolic: dia,
-        arrhythmia_count: arr,
-        quality: qual,
+        heart_rate: Math.round(heartRate) || 0,
+        spo2: Math.round(vitalSigns.spo2) || 0,
+        systolic: parseInt(vitalSigns.pressure.split('/')[0]) || 0,
+        diastolic: parseInt(vitalSigns.pressure.split('/')[1]) || 0,
+        arrhythmia_count: extractArrhythmiaCount(arrhythmiaCount),
+        quality: Math.round(signalQuality) || 0,
         measured_at: new Date().toISOString()
       };
 
-      console.log("Guardando medición:", measurementData);
+      console.log("Intentando guardar medición:", measurementData);
 
       const { error } = await supabase
         .from('measurements')
         .insert(measurementData);
 
       if (error) {
+        console.error("Error de Supabase:", error);
         throw error;
       }
 
@@ -173,7 +156,7 @@ const Index = () => {
       console.error("Error al guardar medición:", error);
       toast({
         title: "Error al guardar",
-        description: error instanceof Error ? error.message : "No se pudo guardar la medición",
+        description: "No se pudo guardar la medición. Por favor intente nuevamente.",
         variant: "destructive"
       });
     }
@@ -218,34 +201,29 @@ const Index = () => {
     
     measurementTimerRef.current = window.setInterval(() => {
       setElapsedTime(prev => {
-        if (prev >= 30) {
+        const next = prev + 1;
+        if (next >= 30) {
           stopMonitoring();
-          saveMeasurement();
           return 30;
         }
-        return prev + 1;
+        return next;
       });
     }, 1000);
   };
 
   const stopMonitoring = () => {
-    setIsMonitoring(false);
-    setIsCameraOn(false);
-    setIsPaused(false);
-    stopProcessing();
-    if (measurementTimerRef.current) {
-      clearInterval(measurementTimerRef.current);
-      measurementTimerRef.current = null;
-    }
-    
-    if (elapsedTime >= 15) {
+    if (isMonitoring) {
+      setIsMonitoring(false);
+      setIsCameraOn(false);
+      setIsPaused(false);
+      stopProcessing();
+      
+      if (measurementTimerRef.current) {
+        clearInterval(measurementTimerRef.current);
+        measurementTimerRef.current = null;
+      }
+      
       saveMeasurement();
-    } else {
-      toast({
-        title: "Medición incompleta",
-        description: "La medición debe durar al menos 15 segundos",
-        variant: "destructive"
-      });
     }
   };
 
