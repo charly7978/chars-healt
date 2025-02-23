@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -30,7 +29,7 @@ const Index = () => {
     
     const lockOrientation = async () => {
       try {
-        if (screen?.orientation?.lock) {
+        if (screen.orientation) {
           await screen.orientation.lock('portrait');
         }
       } catch (error) {
@@ -152,8 +151,7 @@ const Index = () => {
 
   return (
     <div className="fixed inset-0 flex flex-col bg-black" style={{ 
-      height: '100vh',
-      height: '-webkit-fill-available',
+      height: 'calc(100vh + env(safe-area-inset-bottom))',
       paddingTop: 'env(safe-area-inset-top)',
       paddingBottom: 'env(safe-area-inset-bottom)'
     }}>
