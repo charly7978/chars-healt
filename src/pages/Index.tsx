@@ -1,16 +1,19 @@
-
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
 import { useSignalProcessor } from "@/hooks/useSignalProcessor";
+import SignalQualityIndicator from "@/components/SignalQualityIndicator";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
+import PPGResultDialog from "@/components/PPGResultDialog";
 import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
+import CalibrationDialog from "@/components/CalibrationDialog";
 import { Play, Square } from "lucide-react";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [signalQuality, setSignalQuality] = useState(0);
   const [vitalSigns, setVitalSigns] = useState({ 
@@ -20,22 +23,28 @@ const Index = () => {
   });
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState<string | number>("--");
+  const [showCalibrationDialog, setShowCalibrationDialog] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
+  const [showResults, setShowResults] = useState(false);
+  const [resultData, setResultData] = useState<Array<{time: number, value: number, isPeak: boolean}>>([]);
   const measurementTimerRef = useRef<number | null>(null);
-  const processingRef = useRef(false);
-  const imageCaptureRef = useRef<ImageCapture | null>(null);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
+  const handleCalibrationClick = () => {
+    if (isMonitoring) {
+      setShowCalibrationDialog(true);
+    }
+  };
+
   const startMonitoring = () => {
-    console.log("Starting monitoring...");
     setIsMonitoring(true);
     setIsCameraOn(true);
+    setIsPaused(false);
     startProcessing();
     setElapsedTime(0);
-    processingRef.current = true;
     
     if (measurementTimerRef.current) {
       clearInterval(measurementTimerRef.current);
@@ -53,10 +62,9 @@ const Index = () => {
   };
 
   const stopMonitoring = () => {
-    console.log("Stopping monitoring...");
-    processingRef.current = false;
     setIsMonitoring(false);
     setIsCameraOn(false);
+    setIsPaused(false);
     stopProcessing();
     resetVitalSigns();
     setElapsedTime(0);
@@ -65,54 +73,120 @@ const Index = () => {
       clearInterval(measurementTimerRef.current);
       measurementTimerRef.current = null;
     }
-
-    imageCaptureRef.current = null;
   };
 
-  const handleStreamReady = (stream: MediaStream) => {
-    if (!isMonitoring) {
-      console.log("Not monitoring, ignoring stream");
-      return;
+  const pauseMonitoring = () => {
+    if (isMonitoring) {
+      setIsPaused(true);
+      stopProcessing();
+      if (measurementTimerRef.current) {
+        clearInterval(measurementTimerRef.current);
+        measurementTimerRef.current = null;
+      }
     }
+  };
+
+  const resumeMonitoring = () => {
+    if (isMonitoring) {
+      setIsPaused(false);
+      startProcessing();
+      if (elapsedTime < 30 && !measurementTimerRef.current) {
+        measurementTimerRef.current = window.setInterval(() => {
+          setElapsedTime(prev => {
+            if (prev >= 30) {
+              if (measurementTimerRef.current) {
+                clearInterval(measurementTimerRef.current);
+                measurementTimerRef.current = null;
+              }
+              return 30;
+            }
+            return prev + 1;
+          });
+        }, 1000);
+      }
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (measurementTimerRef.current) {
+        clearInterval(measurementTimerRef.current);
+        measurementTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const handleCalibrationStart = () => {
+    if (isMonitoring) {
+      pauseMonitoring();
+    }
+  };
+
+  const handleCalibrationEnd = () => {
+    if (isMonitoring) {
+      resumeMonitoring();
+    }
+  };
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        if (isMonitoring && !isPaused) {
+          pauseMonitoring();
+        }
+      } else {
+        if (isMonitoring && isPaused && !showCalibrationDialog) {
+          resumeMonitoring();
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [isMonitoring, isPaused, showCalibrationDialog]);
+
+  const handleStreamReady = (stream: MediaStream) => {
+    if (!isMonitoring) return;
     
-    console.log("Camera stream ready", stream.getVideoTracks()[0].getSettings());
+    console.log("Index: Camera stream ready", stream.getVideoTracks()[0].getSettings());
     const videoTrack = stream.getVideoTracks()[0];
-    imageCaptureRef.current = new ImageCapture(videoTrack);
+    const imageCapture = new ImageCapture(videoTrack);
     
     if (videoTrack.getCapabilities()?.torch) {
       videoTrack.applyConstraints({
         advanced: [{ torch: true }]
-      }).catch(err => console.error("Error activating torch:", err));
+      }).catch(err => console.error("Error activando linterna:", err));
     }
     
     const tempCanvas = document.createElement('canvas');
     const tempCtx = tempCanvas.getContext('2d');
     if (!tempCtx) {
-      console.error("Could not get 2D context");
+      console.error("Index: No se pudo obtener el contexto 2D del canvas temporal");
       return;
     }
     
     const processImage = async () => {
-      if (!processingRef.current || !imageCaptureRef.current) {
-        console.log("Processing stopped or no ImageCapture");
+      if (!isMonitoring) {
+        console.log("Index: Monitoreo detenido, no se procesan más frames");
         return;
       }
       
       try {
-        const frame = await imageCaptureRef.current.grabFrame();
+        const frame = await imageCapture.grabFrame();
         tempCanvas.width = frame.width;
         tempCanvas.height = frame.height;
         tempCtx.drawImage(frame, 0, 0);
         const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
-        
         processFrame(imageData);
         
-        if (processingRef.current) {
+        if (isMonitoring) {
           requestAnimationFrame(processImage);
         }
       } catch (error) {
-        console.error("Error capturing frame:", error);
-        if (processingRef.current) {
+        console.error("Index: Error capturando frame:", error);
+        if (isMonitoring) {
           requestAnimationFrame(processImage);
         }
       }
@@ -123,7 +197,6 @@ const Index = () => {
 
   useEffect(() => {
     if (lastSignal && lastSignal.fingerDetected && isMonitoring) {
-      console.log("Processing signal:", lastSignal);
       const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
       setHeartRate(heartBeatResult.bpm);
       
@@ -137,12 +210,10 @@ const Index = () => {
     }
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
 
-  useEffect(() => {
-    return () => {
-      console.log("Index cleanup");
-      stopMonitoring();
-    };
-  }, []);
+  const handlePPGDataReady = (data: Array<{time: number, value: number, isPeak: boolean}>) => {
+    setResultData(data);
+    setShowResults(true);
+  };
 
   return (
     <div className="w-screen h-screen bg-gray-900 overflow-hidden">
@@ -159,18 +230,24 @@ const Index = () => {
 
         <div className="relative z-10 h-full flex flex-col justify-between p-4">
           <div className="flex justify-between items-start w-full">
-            <h1 className="text-lg font-bold text-white bg-black/30 px-3 py-1 rounded">Monitor PPG</h1>
+            <h1 className="text-lg font-bold text-white bg-black/30 px-3 py-1 rounded">PPG Monitor</h1>
           </div>
 
-          <div className="flex-1 flex flex-col justify-center gap-2 max-w-md mx-auto w-full">
+          <div className="flex-1 flex flex-col justify-center gap-2 max-w-md mx-auto w-full mt-[-12rem]">
             <div className="relative">
               <PPGSignalMeter 
                 value={lastSignal?.filteredValue || 0}
                 quality={lastSignal?.quality || 0}
                 isFingerDetected={lastSignal?.fingerDetected || false}
                 isComplete={elapsedTime >= 30}
+                onDataReady={handlePPGDataReady}
               />
             </div>
+
+            <SignalQualityIndicator 
+              quality={signalQuality} 
+              isMonitoring={isMonitoring}
+            />
 
             <div className="grid grid-cols-2 gap-2">
               <VitalSign label="Heart Rate" value={heartRate} unit="BPM" />
@@ -180,7 +257,7 @@ const Index = () => {
             </div>
           </div>
 
-          <div className="flex flex-col items-center gap-2 w-full max-w-md mx-auto">
+          <div className="flex flex-col items-center gap-2 w-full max-w-md mx-auto mt-[-8rem]">
             {isMonitoring && (
               <div className="text-xs font-medium text-gray-300 mb-1">
                 Tiempo: {elapsedTime}s / 30s
@@ -209,6 +286,19 @@ const Index = () => {
           </div>
         </div>
       </div>
+
+      <PPGResultDialog
+        isOpen={showResults}
+        onClose={() => setShowResults(false)}
+        signalData={resultData}
+      />
+
+      <CalibrationDialog
+        isOpen={showCalibrationDialog}
+        onClose={() => setShowCalibrationDialog(false)}
+        onCalibrationStart={handleCalibrationStart}
+        onCalibrationEnd={handleCalibrationEnd}
+      />
     </div>
   );
 };

@@ -19,89 +19,108 @@ const CameraView = ({
 }: CameraViewProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const processingRef = useRef(false);
 
   const stopCamera = async () => {
-    console.log("Stopping camera...");
-    processingRef.current = false;
-    
-    try {
-      if (streamRef.current) {
-        const tracks = streamRef.current.getTracks();
-        tracks.forEach(track => {
-          console.log("Stopping track:", track.label);
-          track.stop();
-        });
-      }
-      
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-      }
-      
-      streamRef.current = null;
+    if (stream) {
+      stream.getTracks().forEach(track => {
+        track.stop();
+        if (videoRef.current) {
+          videoRef.current.srcObject = null;
+        }
+      });
       setStream(null);
-      console.log("Camera stopped successfully");
-    } catch (err) {
-      console.error("Error stopping camera:", err);
     }
   };
 
   const startCamera = async () => {
-    console.log("Starting camera...");
     try {
-      await stopCamera(); // Ensure clean state
-
       if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error("getUserMedia not supported");
+        throw new Error("getUserMedia no está soportado");
       }
 
-      const constraints: MediaStreamConstraints = {
-        video: {
-          facingMode: 'environment',
-          width: { ideal: 720 },
-          height: { ideal: 480 },
-          frameRate: { ideal: 30 }
-        }
+      const isAndroid = /android/i.test(navigator.userAgent);
+
+      // Configuración base de video
+      const baseVideoConstraints: MediaTrackConstraints = {
+        facingMode: 'environment',
+        width: { ideal: 720 },
+        height: { ideal: 480 }
       };
 
-      console.log("Requesting camera with constraints:", constraints);
+      // Agregar configuraciones específicas para Android
+      if (isAndroid) {
+        Object.assign(baseVideoConstraints, {
+          frameRate: { ideal: 25 },
+          resizeMode: 'crop-and-scale'
+        });
+      }
+
+      // Construir constraints finales
+      const constraints: MediaStreamConstraints = {
+        video: baseVideoConstraints
+      };
+
       const newStream = await navigator.mediaDevices.getUserMedia(constraints);
-      console.log("Camera stream obtained:", newStream.getVideoTracks()[0].label);
-      
-      // Store stream reference
-      streamRef.current = newStream;
-      
+      const videoTrack = newStream.getVideoTracks()[0];
+
+      if (videoTrack && isAndroid) {
+        try {
+          // Intentar aplicar configuraciones avanzadas de manera segura
+          const capabilities = videoTrack.getCapabilities();
+          const advancedConstraints: MediaTrackConstraintSet[] = [];
+          
+          // Solo agregar las restricciones si el dispositivo las soporta
+          if (capabilities.exposureMode) {
+            advancedConstraints.push({ exposureMode: 'continuous' });
+          }
+          if (capabilities.focusMode) {
+            advancedConstraints.push({ focusMode: 'continuous' });
+          }
+          if (capabilities.whiteBalanceMode) {
+            advancedConstraints.push({ whiteBalanceMode: 'continuous' });
+          }
+
+          if (advancedConstraints.length > 0) {
+            await videoTrack.applyConstraints({
+              advanced: advancedConstraints
+            });
+          }
+
+          // Optimizaciones de renderizado para Android
+          if (videoRef.current) {
+            videoRef.current.style.transform = 'translateZ(0)';
+            videoRef.current.style.backfaceVisibility = 'hidden';
+          }
+        } catch (err) {
+          console.log("No se pudieron aplicar algunas optimizaciones:", err);
+        }
+      }
+
       if (videoRef.current) {
         videoRef.current.srcObject = newStream;
-        await videoRef.current.play();
+        if (isAndroid) {
+          videoRef.current.style.willChange = 'transform';
+          videoRef.current.style.transform = 'translateZ(0)';
+        }
       }
 
       setStream(newStream);
-      processingRef.current = true;
       
       if (onStreamReady) {
         onStreamReady(newStream);
       }
-
-      console.log("Camera started successfully");
     } catch (err) {
-      console.error("Error starting camera:", err);
-      processingRef.current = false;
+      console.error("Error al iniciar la cámara:", err);
     }
   };
 
   useEffect(() => {
-    console.log("CameraView effect - isMonitoring changed:", isMonitoring);
-    
-    if (isMonitoring) {
+    if (isMonitoring && !stream) {
       startCamera();
-    } else {
+    } else if (!isMonitoring && stream) {
       stopCamera();
     }
-
     return () => {
-      console.log("CameraView cleanup");
       stopCamera();
     };
   }, [isMonitoring]);
@@ -114,6 +133,11 @@ const CameraView = ({
         playsInline
         muted
         className="absolute top-0 left-0 min-w-full min-h-full w-auto h-auto z-0 object-cover"
+        style={{
+          willChange: 'transform',
+          transform: 'translateZ(0)',
+          backfaceVisibility: 'hidden'
+        }}
       />
       {isMonitoring && buttonPosition && (
         <div className="absolute bottom-24 left-1/2 transform -translate-x-1/2 z-20 flex flex-col items-center">
