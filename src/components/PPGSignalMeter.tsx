@@ -17,7 +17,7 @@ const PPGSignalMeter = ({
   onDataReady 
 }: PPGSignalMeterProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const dataRef = useRef<{time: number, value: number, isPeak: boolean}[]>([]);
+  const dataRef = useRef<{time: number, value: number, isPeak: boolean, isArrhythmia?: boolean}[]>([]);
   const [startTime] = useState<number>(Date.now());
   const MAX_TIME = 30000; // 30 segundos
   const CANVAS_WIDTH = 400;
@@ -27,7 +27,27 @@ const PPGSignalMeter = ({
     high: '#00ff00',
     medium: '#ffff00',
     low: '#ff0000',
-    inactive: '#666666'
+    inactive: '#666666',
+    arrhythmia: '#ff00ff' // Color especial para arritmias
+  };
+
+  // Detectar posibles arritmias basado en intervalos entre picos
+  const detectArrhythmia = (currentTime: number, previousPeaks: {time: number}[]) => {
+    if (previousPeaks.length < 2) return false;
+    
+    const recentIntervals = previousPeaks.slice(-3).map((peak, i, arr) => {
+      if (i === 0) return null;
+      return arr[i].time - arr[i-1].time;
+    }).filter((interval): interval is number => interval !== null);
+
+    if (recentIntervals.length < 2) return false;
+
+    // Calcular variación en los intervalos
+    const avgInterval = recentIntervals.reduce((a, b) => a + b, 0) / recentIntervals.length;
+    const variation = Math.abs(recentIntervals[recentIntervals.length - 1] - avgInterval);
+    
+    // Si la variación es mayor al 30% del intervalo promedio, consideramos arritmia
+    return variation > (avgInterval * 0.3);
   };
 
   useEffect(() => {
@@ -42,10 +62,14 @@ const PPGSignalMeter = ({
 
     // Solo agregamos datos si no hemos superado los 30 segundos
     if (elapsedTime <= MAX_TIME) {
+      const previousPeaks = dataRef.current.filter(d => d.isPeak);
+      const isArrhythmia = quality > 75 && detectArrhythmia(elapsedTime, previousPeaks);
+      
       dataRef.current.push({
         time: elapsedTime,
         value: value,
-        isPeak: quality > 75
+        isPeak: quality > 75,
+        isArrhythmia
       });
     }
 
@@ -87,7 +111,7 @@ const PPGSignalMeter = ({
       const maxVal = Math.max(...fullData.map(d => d.value));
       const range = maxVal - minVal || 1;
 
-      // Dibujar señal histórica completa con gradiente
+      // Dibujar señal histórica completa
       ctx.beginPath();
       ctx.strokeStyle = SIGNAL_COLORS.high;
       ctx.lineWidth = 2;
@@ -105,17 +129,32 @@ const PPGSignalMeter = ({
       });
       ctx.stroke();
 
-      // Dibujar picos detectados
+      // Dibujar picos detectados y marcar arritmias
       fullData.forEach(point => {
         if (point.isPeak) {
           const x = (canvas.width * point.time) / MAX_TIME;
           const normalizedY = (point.value - minVal) / range;
           const y = normalizedY * canvas.height * 0.8 + canvas.height * 0.1;
           
-          ctx.beginPath();
-          ctx.arc(x, y, 3, 0, 2 * Math.PI);
-          ctx.fillStyle = '#ff0000';
-          ctx.fill();
+          // Dibujar círculo más grande para arritmias
+          if (point.isArrhythmia) {
+            ctx.beginPath();
+            ctx.arc(x, y, 6, 0, 2 * Math.PI);
+            ctx.fillStyle = SIGNAL_COLORS.arrhythmia;
+            ctx.fill();
+            
+            // Añadir marca distintiva
+            ctx.beginPath();
+            ctx.moveTo(x, y - 8);
+            ctx.lineTo(x, y + 8);
+            ctx.strokeStyle = SIGNAL_COLORS.arrhythmia;
+            ctx.stroke();
+          } else {
+            ctx.beginPath();
+            ctx.arc(x, y, 3, 0, 2 * Math.PI);
+            ctx.fillStyle = '#ff0000';
+            ctx.fill();
+          }
         }
       });
 
@@ -145,6 +184,29 @@ const PPGSignalMeter = ({
           ctx.moveTo(x, y);
         } else {
           ctx.lineTo(x, y);
+        }
+
+        // Marcar arritmias en tiempo real
+        if (point.isPeak && point.isArrhythmia) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(x, y, 6, 0, 2 * Math.PI);
+          ctx.fillStyle = SIGNAL_COLORS.arrhythmia;
+          ctx.fill();
+          
+          ctx.beginPath();
+          ctx.moveTo(x, y - 8);
+          ctx.lineTo(x, y + 8);
+          ctx.strokeStyle = SIGNAL_COLORS.arrhythmia;
+          ctx.stroke();
+          ctx.restore();
+        } else if (point.isPeak) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(x, y, 3, 0, 2 * Math.PI);
+          ctx.fillStyle = '#ff0000';
+          ctx.fill();
+          ctx.restore();
         }
       });
       ctx.stroke();
