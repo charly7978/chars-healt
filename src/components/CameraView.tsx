@@ -20,30 +20,40 @@ const CameraView = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const processingRef = useRef(false);
 
   const stopCamera = async () => {
+    console.log("Stopping camera...");
+    processingRef.current = false;
+    
     try {
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => {
+        const tracks = streamRef.current.getTracks();
+        tracks.forEach(track => {
+          console.log("Stopping track:", track.label);
           track.stop();
         });
       }
+      
       if (videoRef.current) {
         videoRef.current.srcObject = null;
       }
+      
       streamRef.current = null;
       setStream(null);
+      console.log("Camera stopped successfully");
     } catch (err) {
       console.error("Error stopping camera:", err);
     }
   };
 
   const startCamera = async () => {
+    console.log("Starting camera...");
     try {
-      await stopCamera(); // Asegurarnos de limpiar cualquier stream anterior
+      await stopCamera(); // Ensure clean state
 
       if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error("getUserMedia no está soportado");
+        throw new Error("getUserMedia not supported");
       }
 
       const constraints: MediaStreamConstraints = {
@@ -55,16 +65,20 @@ const CameraView = ({
         }
       };
 
+      console.log("Requesting camera with constraints:", constraints);
       const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+      console.log("Camera stream obtained:", newStream.getVideoTracks()[0].label);
       
-      // Guardar referencia del stream
+      // Store stream reference
       streamRef.current = newStream;
       
       if (videoRef.current) {
         videoRef.current.srcObject = newStream;
+        await videoRef.current.play();
       }
 
       setStream(newStream);
+      processingRef.current = true;
       
       if (onStreamReady) {
         onStreamReady(newStream);
@@ -73,22 +87,21 @@ const CameraView = ({
       console.log("Camera started successfully");
     } catch (err) {
       console.error("Error starting camera:", err);
+      processingRef.current = false;
     }
   };
 
   useEffect(() => {
-    let mounted = true;
-
-    const initCamera = async () => {
-      if (isMonitoring && mounted) {
-        await startCamera();
-      }
-    };
-
-    initCamera();
+    console.log("CameraView effect - isMonitoring changed:", isMonitoring);
+    
+    if (isMonitoring) {
+      startCamera();
+    } else {
+      stopCamera();
+    }
 
     return () => {
-      mounted = false;
+      console.log("CameraView cleanup");
       stopCamera();
     };
   }, [isMonitoring]);
