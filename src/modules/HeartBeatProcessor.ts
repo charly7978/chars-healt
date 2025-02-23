@@ -1,4 +1,3 @@
-
 /**
  * HeartBeatProcessor
  * 
@@ -12,19 +11,25 @@ export class HeartBeatProcessor {
   private readonly WINDOW_SIZE = 60;
   private readonly MIN_BPM = 40;
   private readonly MAX_BPM = 200;
-  private readonly SIGNAL_THRESHOLD = 0.75; // Aumentado para reducir falsos positivos
-  private readonly MIN_CONFIDENCE = 0.65; // Aumentado para ser más estricto
+  private readonly SIGNAL_THRESHOLD = 0.75;
+  private readonly MIN_CONFIDENCE = 0.65;
   private readonly DERIVATIVE_THRESHOLD = -0.03;
   private readonly MIN_PEAK_TIME_MS = 400;
   private readonly WARMUP_TIME_MS = 3000;
 
+  // Constantes faltantes
+  private readonly MEDIAN_FILTER_WINDOW = 5;
+  private readonly MOVING_AVERAGE_WINDOW = 3;
+  private readonly EMA_ALPHA = 0.3;
+  private readonly BASELINE_FACTOR = 0.95;
+
   // Parámetros de beep ajustados para sonido más profesional
-  private readonly BEEP_PRIMARY_FREQUENCY = 1000; // La4 (más agudo y claro)
-  private readonly BEEP_SECONDARY_FREQUENCY = 500; // La3 (armónico más profundo)
-  private readonly BEEP_DURATION = 120; // Duración más larga para más cuerpo
-  private readonly BEEP_VOLUME = 1.0; // Volumen máximo
-  private readonly BEEP_ATTACK_TIME = 0.02; // Suavizar inicio
-  private readonly BEEP_RELEASE_TIME = 0.08; // Suavizar final
+  private readonly BEEP_PRIMARY_FREQUENCY = 1000;
+  private readonly BEEP_SECONDARY_FREQUENCY = 500;
+  private readonly BEEP_DURATION = 120;
+  private readonly BEEP_VOLUME = 1.0;
+  private readonly BEEP_ATTACK_TIME = 0.02;
+  private readonly BEEP_RELEASE_TIME = 0.08;
   private readonly MIN_BEEP_INTERVAL_MS = 300;
 
   // ────────── AUTO-RESET SI LA SEÑAL ES MUY BAJA ──────────
