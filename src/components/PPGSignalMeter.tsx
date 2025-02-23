@@ -24,23 +24,36 @@ const PPGSignalMeter = ({
   
   const CANVAS_WIDTH = 320;
   const CANVAS_HEIGHT = 160;
-  const MAX_POINTS = 450; // 30 segundos a 15 muestras por segundo
-  const VISIBLE_POINTS = 150; // 10 segundos visibles
+  const MAX_POINTS = 450;
+  const VISIBLE_POINTS = 150;
 
   const render = () => {
-    if (!canvasRef.current || !isFingerDetected) return;
+    console.log("PPGSignalMeter render - Value:", value, "Quality:", quality, "IsFingerDetected:", isFingerDetected);
+    
+    if (!canvasRef.current) {
+      console.log("Canvas ref not ready");
+      return;
+    }
+    
+    if (!isFingerDetected) {
+      console.log("No finger detected");
+      return;
+    }
+
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (!ctx) {
+      console.log("Could not get canvas context");
+      return;
+    }
 
-    // Agregar el valor RAW directo del sensor
+    // Agregar punto
     dataRef.current.push({
       time: Date.now() - startTime,
       value: value,
       isPeak: quality > 75
     });
 
-    // Mantener 30 segundos de datos
     if (dataRef.current.length > MAX_POINTS) {
       if (onDataReady) {
         onDataReady(dataRef.current);
@@ -52,7 +65,7 @@ const PPGSignalMeter = ({
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    // Grid de fondo (estilo ECG)
+    // Grid
     ctx.strokeStyle = '#003300';
     ctx.lineWidth = 0.5;
     const gridSize = 20;
@@ -70,12 +83,13 @@ const PPGSignalMeter = ({
       ctx.stroke();
     }
 
-    // Dibujar señal PPG con desplazamiento
+    // Dibujar señal
     if (dataRef.current.length > 1) {
+      console.log("Drawing signal with", dataRef.current.length, "points");
+      
       const startIdx = Math.max(0, dataRef.current.length - VISIBLE_POINTS - Math.floor(scrollPosition));
       const visibleData = dataRef.current.slice(startIdx, startIdx + VISIBLE_POINTS);
 
-      // Dibujar la señal PPG
       ctx.beginPath();
       ctx.strokeStyle = '#00FF00';
       ctx.lineWidth = 2;
@@ -90,7 +104,6 @@ const PPGSignalMeter = ({
           ctx.lineTo(x, y);
         }
 
-        // Marcar picos con círculos blancos
         if (point.isPeak) {
           ctx.save();
           ctx.fillStyle = '#FFFFFF';
@@ -109,6 +122,8 @@ const PPGSignalMeter = ({
   };
 
   useEffect(() => {
+    console.log("PPGSignalMeter effect - IsFingerDetected:", isFingerDetected, "IsComplete:", isComplete);
+    
     if (isFingerDetected && !isComplete) {
       animationFrameRef.current = requestAnimationFrame(render);
     }
@@ -120,7 +135,6 @@ const PPGSignalMeter = ({
     };
   }, [isFingerDetected, isComplete]);
 
-  // Habilitar scroll horizontal cuando la medición está completa
   const handleScroll = (e: React.WheelEvent) => {
     if (isComplete && dataRef.current.length > VISIBLE_POINTS) {
       setScrollPosition(prev => {
