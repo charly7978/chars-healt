@@ -12,16 +12,16 @@ interface PPGSignalMeterProps {
 const PPGSignalMeter = ({ 
   value, 
   quality, 
-  isFingerDetected, 
-  isComplete,
-  onDataReady 
+  isFingerDetected
 }: PPGSignalMeterProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const dataRef = useRef<{time: number, value: number, isPeak: boolean}[]>([]);
+  const dataRef = useRef<{time: number, value: number}[]>([]);
   const [startTime] = useState<number>(Date.now());
-  const MAX_TIME = 30000; // 30 segundos en milisegundos
-  const CANVAS_WIDTH = 800; // Duplicado el ancho
-  const CANVAS_HEIGHT = 300; // Triplicado el alto
+  const MAX_TIME = 30000;
+  const CANVAS_WIDTH = 800;
+  const CANVAS_HEIGHT = 300;
+  const MIN_PEAK_INTERVAL = 300; // Mínimo tiempo entre picos (ms)
+  const lastPeakRef = useRef<number>(0);
 
   useEffect(() => {
     if (!canvasRef.current || !isFingerDetected) return;
@@ -33,12 +33,11 @@ const PPGSignalMeter = ({
     const currentTime = Date.now();
     const elapsedTime = currentTime - startTime;
 
-    // Solo agregamos datos si no hemos superado los 30 segundos
+    // Agregar nuevo punto de datos
     if (elapsedTime <= MAX_TIME) {
       dataRef.current.push({
         time: elapsedTime,
-        value: value,
-        isPeak: quality > 75 // Consideramos un pico cuando la calidad es alta
+        value: value
       });
     }
 
@@ -46,13 +45,13 @@ const PPGSignalMeter = ({
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Dibujar líneas de grid y números
+    // Dibujar cuadrícula y números
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
     ctx.lineWidth = 1;
-    ctx.fillStyle = '#8E9196'; // Color para números
+    ctx.fillStyle = '#8E9196';
     ctx.font = '12px monospace';
 
-    // Grid vertical con números (tiempo en segundos)
+    // Grid vertical (tiempo)
     for (let i = 0; i <= 10; i++) {
       const x = (canvas.width / 10) * i;
       ctx.beginPath();
@@ -62,7 +61,7 @@ const PPGSignalMeter = ({
       ctx.fillText(`${i * 3}s`, x, canvas.height - 5);
     }
 
-    // Grid horizontal con valores de amplitud
+    // Grid horizontal (amplitud)
     for (let i = 0; i <= 5; i++) {
       const y = (canvas.height / 5) * i;
       ctx.beginPath();
@@ -72,19 +71,19 @@ const PPGSignalMeter = ({
       ctx.fillText(`${100 - (i * 20)}`, 5, y + 15);
     }
 
-    // Si la medición está completa, mostramos todo el histórico
-    if (isComplete) {
-      const fullData = dataRef.current;
-      const minVal = Math.min(...fullData.map(d => d.value));
-      const maxVal = Math.max(...fullData.map(d => d.value));
+    // Procesar y dibujar señal PPG
+    const data = dataRef.current;
+    if (data.length > 1) {
+      const minVal = Math.min(...data.map(d => d.value));
+      const maxVal = Math.max(...data.map(d => d.value));
       const range = maxVal - minVal || 1;
 
-      // Dibujar señal histórica completa
+      // Dibujar onda PPG
       ctx.beginPath();
       ctx.strokeStyle = '#00ff00';
       ctx.lineWidth = 2;
 
-      fullData.forEach((point, index) => {
+      data.forEach((point, index) => {
         const x = (canvas.width * point.time) / MAX_TIME;
         const normalizedY = (point.value - minVal) / range;
         const y = normalizedY * canvas.height * 0.8 + canvas.height * 0.1;
@@ -95,70 +94,51 @@ const PPGSignalMeter = ({
           ctx.lineTo(x, y);
         }
 
-        // Marcar arritmias (cuando hay un cambio brusco en el ritmo)
-        if (index > 0) {
-          const prevPoint = fullData[index - 1];
-          const deltaValue = Math.abs(point.value - prevPoint.value);
-          const threshold = range * 0.3; // 30% del rango como umbral
+        // Detectar y marcar arritmias
+        if (index > 2 && index < data.length - 1) {
+          const prev2 = data[index - 2].value;
+          const prev1 = data[index - 1].value;
+          const current = point.value;
+          const next = data[index + 1].value;
 
-          if (deltaValue > threshold) {
-            ctx.save();
-            ctx.fillStyle = '#ea384c'; // Color distintivo para arritmias
-            ctx.beginPath();
-            ctx.arc(x, y, 5, 0, 2 * Math.PI);
-            ctx.fill();
-            ctx.restore();
-          }
-        }
-      });
-      ctx.stroke();
+          // Detectar picos anormales o intervalos irregulares
+          const isAbnormalPeak = 
+            (current > prev1 && current > next) && // Es un pico
+            (currentTime - lastPeakRef.current > MIN_PEAK_INTERVAL) && // Suficiente tiempo desde último pico
+            (Math.abs(current - prev1) > range * 0.4 || // Amplitud anormal
+             Math.abs(current - prev2) > range * 0.5); // O patrón irregular
 
-      if (onDataReady) {
-        onDataReady(dataRef.current);
-      }
-    } else {
-      // Mostrar señal en tiempo real
-      const recentData = dataRef.current.slice(-150);
-      const minVal = Math.min(...recentData.map(d => d.value));
-      const maxVal = Math.max(...recentData.map(d => d.value));
-      const range = maxVal - minVal || 1;
-
-      // Dibujar señal actual
-      ctx.beginPath();
-      ctx.strokeStyle = quality > 75 ? '#00ff00' : quality > 50 ? '#ffff00' : '#ff0000';
-      ctx.lineWidth = 2;
-
-      recentData.forEach((point, index) => {
-        const x = (canvas.width / 150) * index;
-        const normalizedY = (point.value - minVal) / range;
-        const y = normalizedY * canvas.height * 0.8 + canvas.height * 0.1;
-        
-        if (index === 0) {
-          ctx.moveTo(x, y);
-        } else {
-          ctx.lineTo(x, y);
-        }
-
-        // Marcar arritmias en tiempo real
-        if (index > 0) {
-          const prevPoint = recentData[index - 1];
-          const deltaValue = Math.abs(point.value - prevPoint.value);
-          const threshold = range * 0.3;
-
-          if (deltaValue > threshold) {
+          if (isAbnormalPeak) {
+            // Marcar arritmia
             ctx.save();
             ctx.fillStyle = '#ea384c';
+            ctx.strokeStyle = '#ea384c';
+            
+            // Círculo en el pico
             ctx.beginPath();
             ctx.arc(x, y, 5, 0, 2 * Math.PI);
             ctx.fill();
+            
+            // Línea vertical indicadora
+            ctx.beginPath();
+            ctx.setLineDash([5, 5]);
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, canvas.height);
+            ctx.stroke();
+            
+            // Texto "ARRITMIA"
+            ctx.fillStyle = '#ea384c';
+            ctx.fillText('ARRITMIA', x + 5, y - 10);
+            
             ctx.restore();
+            lastPeakRef.current = currentTime;
           }
         }
       });
       ctx.stroke();
     }
 
-  }, [value, quality, isFingerDetected, isComplete, startTime]);
+  }, [value, quality, isFingerDetected, startTime]);
 
   return (
     <div className="bg-black/40 backdrop-blur-sm rounded-lg p-4">
@@ -170,11 +150,7 @@ const PPGSignalMeter = ({
             color: quality > 75 ? '#00ff00' : quality > 50 ? '#ffff00' : '#ff0000' 
           }}
         >
-          {isFingerDetected ? (
-            isComplete ? 
-              'Medición Completa' : 
-              `Calidad: ${quality}%`
-          ) : 'Sin Señal'}
+          {isFingerDetected ? `Calidad: ${quality}%` : 'Sin Señal'}
         </span>
       </div>
       <canvas
