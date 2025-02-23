@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -125,50 +126,8 @@ const Index = () => {
     }
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
 
-  useEffect(() => {
-    const enforceResolution = () => {
-      const vh = window.innerHeight * 0.01;
-      document.documentElement.style.setProperty('--vh', `${vh}px`);
-      
-      document.body.style.display = 'none';
-      document.body.offsetHeight; // force reflow
-      document.body.style.display = '';
-
-      document.documentElement.style.zoom = '1';
-      
-      if (window.screen && window.screen.orientation) {
-        try {
-          window.screen.orientation.lock('portrait');
-        } catch (e) {
-          console.log('Orientation lock not supported');
-        }
-      }
-    };
-
-    enforceResolution();
-    window.addEventListener('resize', enforceResolution);
-    window.addEventListener('orientationchange', enforceResolution);
-
-    document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
-    document.addEventListener('gesturestart', (e) => e.preventDefault());
-    document.addEventListener('gesturechange', (e) => e.preventDefault());
-    document.addEventListener('gestureend', (e) => e.preventDefault());
-
-    return () => {
-      window.removeEventListener('resize', enforceResolution);
-      window.removeEventListener('orientationchange', enforceResolution);
-      document.removeEventListener('touchmove', (e) => e.preventDefault());
-      document.removeEventListener('gesturestart', (e) => e.preventDefault());
-      document.removeEventListener('gesturechange', (e) => e.preventDefault());
-      document.removeEventListener('gestureend', (e) => e.preventDefault());
-    };
-  }, []);
-
   return (
-    <div className="fixed inset-0 w-screen h-screen bg-black overflow-hidden touch-none select-none" style={{ 
-      height: 'calc(var(--vh, 1vh) * 100)',
-      WebkitTextSizeAdjust: '100%',
-    }}>
+    <div className="w-screen h-screen bg-black overflow-hidden">
       <div className="relative w-full h-full">
         <div className="absolute inset-0">
           <CameraView 
@@ -181,6 +140,20 @@ const Index = () => {
         </div>
 
         <div className="relative z-10 h-full">
+          {/* Top displays */}
+          <div className="absolute top-20 left-0 right-0 px-4 flex justify-between z-20">
+            <VitalSign 
+              label="Heart Rate"
+              value={heartRate || "--"}
+              unit="BPM"
+            />
+            <VitalSign 
+              label="SpO2"
+              value={vitalSigns.spo2 || "--"}
+              unit="%"
+            />
+          </div>
+
           <PPGSignalMeter 
             value={lastSignal?.filteredValue || 0}
             quality={lastSignal?.quality || 0}
@@ -189,32 +162,17 @@ const Index = () => {
             onReset={stopMonitoring}
           />
 
-          <div className="absolute bottom-[240px] left-0 right-0 px-4">
-            <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4 space-y-4">
-              <div className="flex justify-center gap-4">
-                <VitalSign 
-                  label="Heart Rate"
-                  value={heartRate || "--"}
-                  unit="BPM"
-                />
-                <VitalSign 
-                  label="SpO2"
-                  value={vitalSigns.spo2 || "--"}
-                  unit="%"
-                />
-              </div>
-              <div className="flex justify-center gap-4">
-                <VitalSign 
-                  label="Blood Pressure"
-                  value={vitalSigns.pressure}
-                  unit="mmHg"
-                />
-                <VitalSign 
-                  label="Arrhythmias"
-                  value={`${vitalSigns.arrhythmiaStatus}|${arrhythmiaCount}`}
-                />
-              </div>
-            </div>
+          {/* Bottom displays */}
+          <div className="absolute bottom-[100px] left-0 right-0 px-4 flex justify-between z-20">
+            <VitalSign 
+              label="Blood Pressure"
+              value={vitalSigns.pressure}
+              unit="mmHg"
+            />
+            <VitalSign 
+              label="Arrhythmias"
+              value={`${vitalSigns.arrhythmiaStatus}|${arrhythmiaCount}`}
+            />
           </div>
 
           {isMonitoring && (
