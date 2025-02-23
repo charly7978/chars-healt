@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
@@ -25,13 +24,13 @@ const Index = () => {
   const [isPaused, setIsPaused] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [signalQuality, setSignalQuality] = useState(0);
-  const [vitalSigns, setVitalSigns] = useState<VitalSigns>({ 
-    spo2: 0, 
+  const [vitalSigns, setVitalSigns] = useState<VitalSigns>({
+    spo2: 0,
     pressure: "--/--",
-    arrhythmiaStatus: "--" 
+    arrhythmiaStatus: "--"
   });
   const [heartRate, setHeartRate] = useState(0);
-  const [arrhythmiaCount, setArrhythmiaCount] = useState<string | number>("--");
+  const [arrhythmiaCount, setArrhythmiaCount] = useState<string>("--");
   const [showCalibrationDialog, setShowCalibrationDialog] = useState(false);
   const [showHistoryDialog, setShowHistoryDialog] = useState(false);
   const [measurements, setMeasurements] = useState<any[]>([]);
@@ -39,7 +38,7 @@ const Index = () => {
   const [elapsedTime, setElapsedTime] = useState(0);
   const measurementTimerRef = useRef<number | null>(null);
   const { toast } = useToast();
-  
+
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
@@ -85,40 +84,47 @@ const Index = () => {
     }
   };
 
+  const validateNumber = (value: number): boolean => {
+    return typeof value === 'number' && !isNaN(value) && isFinite(value);
+  };
+
+  const extractArrhythmiaCount = (value: string): number => {
+    if (value === '--') return 0;
+    const parts = value.split('|');
+    if (parts.length === 2) {
+      const count = parseInt(parts[1]);
+      return validateNumber(count) ? count : 0;
+    }
+    return 0;
+  };
+
   const saveMeasurement = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      // Asegurarnos de que vitalSigns.pressure es un string válido
-      const [systolic, diastolic] = (vitalSigns.pressure || "--/--").split('/').map(Number);
-      
-      if (isNaN(systolic) || isNaN(diastolic) || isNaN(heartRate) || isNaN(vitalSigns.spo2)) {
-        console.log("Valores inválidos para guardar:", {
-          systolic,
-          diastolic,
-          heartRate,
-          spo2: vitalSigns.spo2
-        });
-        toast({
-          title: "Error al guardar",
-          description: "Los valores de la medición no son válidos",
-          variant: "destructive"
-        });
-        return;
+      if (!session) {
+        throw new Error("No hay sesión activa");
       }
 
-      // Procesar arrhythmiaCount de manera segura
-      let arrhythmiaValue: number;
-      if (typeof arrhythmiaCount === 'string') {
-        if (arrhythmiaCount === '--') {
-          arrhythmiaValue = 0;
-        } else {
-          const parts = arrhythmiaCount.split('|');
-          arrhythmiaValue = parts[1] ? parseInt(parts[1]) : 0;
-        }
-      } else {
-        arrhythmiaValue = arrhythmiaCount;
+      const [systolicStr, diastolicStr] = vitalSigns.pressure.split('/');
+      const systolic = parseInt(systolicStr);
+      const diastolic = parseInt(diastolicStr);
+
+      if (!validateNumber(systolic) || !validateNumber(diastolic)) {
+        throw new Error("Presión arterial inválida");
+      }
+
+      if (!validateNumber(heartRate) || heartRate <= 0) {
+        throw new Error("Frecuencia cardíaca inválida");
+      }
+
+      if (!validateNumber(vitalSigns.spo2) || vitalSigns.spo2 <= 0) {
+        throw new Error("SpO2 inválido");
+      }
+
+      const arrhythmiaValue = extractArrhythmiaCount(arrhythmiaCount);
+
+      if (!validateNumber(signalQuality) || signalQuality < 0) {
+        throw new Error("Calidad de señal inválida");
       }
 
       const measurementData = {
@@ -131,14 +137,13 @@ const Index = () => {
         quality: Math.round(signalQuality)
       };
 
-      console.log("Guardando medición:", measurementData);
+      console.log("Guardando medición validada:", measurementData);
 
       const { error } = await supabase
         .from('measurements')
         .insert(measurementData);
 
       if (error) {
-        console.error("Error de Supabase al guardar:", error);
         throw error;
       }
 
@@ -149,10 +154,10 @@ const Index = () => {
 
       await loadMeasurements();
     } catch (error) {
-      console.error("Error al guardar medición:", error);
+      console.error("Error detallado al guardar medición:", error);
       toast({
-        title: "Error",
-        description: "No se pudo guardar la medición",
+        title: "Error al guardar",
+        description: error instanceof Error ? error.message : "No se pudo guardar la medición",
         variant: "destructive"
       });
     }
