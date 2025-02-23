@@ -110,7 +110,10 @@ const Index = () => {
       
       const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
       if (vitals) {
-        setVitalSigns(vitals);
+        setVitalSigns({
+          ...vitals,
+          bpm: heartBeatResult.bpm
+        });
         setArrhythmiaCount(vitals.arrhythmiaStatus);
       }
       
@@ -136,6 +139,12 @@ const Index = () => {
             value={lastSignal?.filteredValue || 0}
             quality={lastSignal?.quality || 0}
             isFingerDetected={lastSignal?.fingerDetected || false}
+            vitalSigns={{
+              bpm: heartRate,
+              spo2: vitalSigns.spo2,
+              pressure: vitalSigns.pressure,
+              arrhythmiaStatus: vitalSigns.arrhythmiaStatus
+            }}
             onStartMeasurement={startMonitoring}
             onReset={stopMonitoring}
           />
