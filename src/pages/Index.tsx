@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
@@ -83,8 +84,6 @@ const Index = () => {
 
   const stopCapture = () => {
     stopProcessing();
-    const finalBPM = heartBeatProcessor.getFinalBPM();
-    console.log("Final BPM:", finalBPM);
     setShowResults(true);
   };
 
@@ -93,10 +92,11 @@ const Index = () => {
 
     if (lastSignal) {
       const { bpm, isPeak, filteredValue } = heartBeatProcessor.processSignal(lastSignal.filteredValue);
-      setRRData(heartBeatProcessor.getRRIntervals());
+      const intervals = heartBeatProcessor.getRRIntervals();
+      setRRData(intervals);
 
       setResultData(prev => {
-        const time = Date.now() - (Date.now() % 33); // Ajuste para simular 30 FPS
+        const time = Date.now() - (Date.now() % 33);
         const last = prev[prev.length - 1];
         if (last && time - last.time < 33) {
           return prev;
@@ -128,7 +128,6 @@ const Index = () => {
     <div className="w-screen h-screen bg-gray-900 overflow-hidden">
       <div className="relative w-full h-full">
         <CameraView
-          ref={cameraViewRef}
           active={isCameraActive}
           onError={setCameraError}
           onFrameProcessed={onFrameProcessed}
@@ -137,7 +136,11 @@ const Index = () => {
         <div className="absolute top-4 left-4 z-10 text-white">
           <div className="flex items-center space-x-2">
             <SignalQualityIndicator quality={lastSignal?.quality || 0} />
-            <PPGSignalMeter value={lastSignal?.filteredValue || 0} />
+            <PPGSignalMeter
+              value={lastSignal?.filteredValue || 0}
+              quality={lastSignal?.quality || 0}
+              isFingerDetected={lastSignal?.fingerDetected || false}
+            />
           </div>
           {cameraError && (
             <div className="text-red-500 text-sm mt-2">
@@ -156,18 +159,10 @@ const Index = () => {
             {isCameraActive ? "Detener Cámara" : "Iniciar Cámara"}
           </Button>
           <div>
-            <Button
-              variant="secondary"
-              onClick={handleCalibrationStart}
-              disabled={isProcessing}
-            >
+            <Button onClick={handleCalibrationStart} disabled={isProcessing}>
               Calibrar
             </Button>
-            <Button
-              className="ml-2"
-              onClick={startCapture}
-              disabled={isProcessing}
-            >
+            <Button className="ml-2" onClick={startCapture} disabled={isProcessing}>
               <Play className="mr-2 h-4 w-4" />
               Capturar
             </Button>
@@ -206,7 +201,8 @@ const Index = () => {
         <CalibrationDialog
           isOpen={isCalibrating}
           onClose={handleCalibrationClose}
-          onCalibrate={handleCalibration}
+          onCalibrationStart={handleCalibrationStart}
+          onCalibrationEnd={handleCalibration}
         />
       </div>
     </div>

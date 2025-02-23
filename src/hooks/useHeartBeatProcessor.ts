@@ -8,10 +8,6 @@ interface HeartBeatResult {
   isPeak: boolean;
   filteredValue?: number;
   arrhythmiaCount: number;
-  rrData?: {
-    intervals: number[];
-    lastPeakTime: number | null;
-  };
 }
 
 export const useHeartBeatProcessor = () => {
@@ -19,7 +15,6 @@ export const useHeartBeatProcessor = () => {
   const [currentBPM, setCurrentBPM] = useState(0);
   const [confidence, setConfidence] = useState(0);
 
-  // Initialize processor in useEffect to ensure it runs in the correct context
   useEffect(() => {
     console.log('useHeartBeatProcessor: Creando nueva instancia de HeartBeatProcessor');
     processorRef.current = new HeartBeatProcessor();
@@ -47,10 +42,6 @@ export const useHeartBeatProcessor = () => {
         confidence: 0,
         isPeak: false,
         arrhythmiaCount: 0,
-        rrData: {
-          intervals: [],
-          lastPeakTime: null
-        }
       };
     }
 
@@ -61,26 +52,28 @@ export const useHeartBeatProcessor = () => {
     });
 
     const result = processorRef.current.processSignal(value);
-    const rrData = processorRef.current.getRRIntervals();
-
-    console.log('useHeartBeatProcessor - result:', {
-      bpm: result.bpm,
-      confidence: result.confidence,
-      isPeak: result.isPeak,
-      arrhythmiaCount: result.arrhythmiaCount,
-      rrIntervals: rrData.intervals,
-      timestamp: new Date().toISOString()
-    });
     
     if (result.bpm > 0) {
       setCurrentBPM(result.bpm);
       setConfidence(result.confidence);
     }
 
-    return {
-      ...result,
-      rrData
-    };
+    return result;
+  }, []);
+
+  const getFinalBPM = useCallback(() => {
+    if (!processorRef.current) return 0;
+    return processorRef.current.getFinalBPM();
+  }, []);
+
+  const getRRIntervals = useCallback(() => {
+    if (!processorRef.current) {
+      return {
+        intervals: [],
+        lastPeakTime: null
+      };
+    }
+    return processorRef.current.getRRIntervals();
   }, []);
 
   const reset = useCallback(() => {
@@ -96,6 +89,8 @@ export const useHeartBeatProcessor = () => {
     currentBPM,
     confidence,
     processSignal,
-    reset
+    reset,
+    getFinalBPM,
+    getRRIntervals
   };
 };
