@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
@@ -13,12 +14,18 @@ import { supabase } from "@/integrations/supabase/client";
 import { LogOut, Settings, Play, Square, History } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 
+interface VitalSigns {
+  spo2: number;
+  pressure: string;
+  arrhythmiaStatus: string;
+}
+
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [signalQuality, setSignalQuality] = useState(0);
-  const [vitalSigns, setVitalSigns] = useState({ 
+  const [vitalSigns, setVitalSigns] = useState<VitalSigns>({ 
     spo2: 0, 
     pressure: "--/--",
     arrhythmiaStatus: "--" 
@@ -83,7 +90,8 @@ const Index = () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const [systolic, diastolic] = vitalSigns.pressure.split('/').map(Number);
+      // Asegurarnos de que vitalSigns.pressure es un string válido
+      const [systolic, diastolic] = (vitalSigns.pressure || "--/--").split('/').map(Number);
       
       if (isNaN(systolic) || isNaN(diastolic) || isNaN(heartRate) || isNaN(vitalSigns.spo2)) {
         console.log("Valores inválidos para guardar:", {
@@ -100,9 +108,18 @@ const Index = () => {
         return;
       }
 
-      const arrhythmiaValue = typeof arrhythmiaCount === 'string' ? 0 : 
-                             typeof arrhythmiaCount === 'number' ? arrhythmiaCount : 
-                             arrhythmiaCount.split('|')[1] ? parseInt(arrhythmiaCount.split('|')[1]) : 0;
+      // Procesar arrhythmiaCount de manera segura
+      let arrhythmiaValue: number;
+      if (typeof arrhythmiaCount === 'string') {
+        if (arrhythmiaCount === '--') {
+          arrhythmiaValue = 0;
+        } else {
+          const parts = arrhythmiaCount.split('|');
+          arrhythmiaValue = parts[1] ? parseInt(parts[1]) : 0;
+        }
+      } else {
+        arrhythmiaValue = arrhythmiaCount;
+      }
 
       const measurementData = {
         user_id: session.user.id,
