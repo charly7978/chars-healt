@@ -10,7 +10,6 @@ export const useVitalSignsProcessor = () => {
   const processSignal = useCallback((value: number, rrData?: { intervals: number[], lastPeakTime: number | null }) => {
     const result = processor.processSignal(value, rrData);
     
-    // Si se detecta una arritmia, actualizamos el estado
     if (result.arrhythmiaStatus === "ARRITMIA DETECTADA") {
       if (!hasDetectedArrhythmia) {
         setArrhythmiaCounter(prev => prev + 1);
