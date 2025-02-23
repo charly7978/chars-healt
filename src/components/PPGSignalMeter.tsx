@@ -9,6 +9,12 @@ interface PPGSignalMeterProps {
   isComplete?: boolean;
   onStartMeasurement: () => void;
   onReset: () => void;
+  vitalSigns?: {
+    bpm: number;
+    spo2: number;
+    pressure: string;
+    arrhythmiaStatus: string;
+  };
 }
 
 const PPGSignalMeter = ({ 
@@ -16,7 +22,8 @@ const PPGSignalMeter = ({
   quality, 
   isFingerDetected,
   onStartMeasurement,
-  onReset
+  onReset,
+  vitalSigns
 }: PPGSignalMeterProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dataRef = useRef<{time: number, value: number}[]>([]);
@@ -172,19 +179,33 @@ const PPGSignalMeter = ({
       <div className="absolute bottom-[100px] left-0 right-0 h-[80px] grid grid-cols-4 bg-black/40">
         <div className="flex flex-col items-center justify-center border-r border-gray-800">
           <span className="text-gray-400 text-sm">BPM</span>
-          <span className="text-green-500 text-2xl font-bold">72</span>
+          <span className="text-green-500 text-2xl font-bold">
+            {vitalSigns?.bpm || '--'}
+          </span>
         </div>
         <div className="flex flex-col items-center justify-center border-r border-gray-800">
           <span className="text-gray-400 text-sm">SpO2</span>
-          <span className="text-green-500 text-2xl font-bold">98%</span>
+          <span className="text-green-500 text-2xl font-bold">
+            {vitalSigns?.spo2 ? `${vitalSigns.spo2}%` : '--'}
+          </span>
         </div>
         <div className="flex flex-col items-center justify-center border-r border-gray-800">
           <span className="text-gray-400 text-sm">PA</span>
-          <span className="text-green-500 text-2xl font-bold">120/80</span>
+          <span className="text-green-500 text-2xl font-bold">
+            {vitalSigns?.pressure || '--/--'}
+          </span>
         </div>
         <div className="flex flex-col items-center justify-center">
           <span className="text-gray-400 text-sm">ARRITMIA</span>
-          <span className="text-green-500 text-2xl font-bold">NO</span>
+          <span 
+            className={`text-2xl font-bold ${
+              vitalSigns?.arrhythmiaStatus?.includes('DETECTADA') 
+                ? 'text-red-500' 
+                : 'text-green-500'
+            }`}
+          >
+            {vitalSigns?.arrhythmiaStatus?.includes('DETECTADA') ? 'SI' : 'NO'}
+          </span>
         </div>
       </div>
 
