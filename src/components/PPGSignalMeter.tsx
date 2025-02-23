@@ -138,7 +138,7 @@ const PPGSignalMeter = ({
   }, [value, quality, isFingerDetected]);
 
   return (
-    <div className="fixed inset-0 bg-black">
+    <div className="fixed inset-0 w-screen h-screen bg-black" style={{ height: 'calc(var(--vh, 1vh) * 100)' }}>
       <canvas
         ref={canvasRef}
         width={CANVAS_WIDTH}

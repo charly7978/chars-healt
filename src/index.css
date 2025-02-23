@@ -95,6 +95,15 @@
     @apply border-border;
   }
 
+  html, body {
+    height: 100%;
+    height: calc(var(--vh, 1vh) * 100);
+    overflow: hidden;
+    position: fixed;
+    width: 100%;
+    touch-action: none;
+  }
+
   body {
     @apply bg-background text-foreground;
   }

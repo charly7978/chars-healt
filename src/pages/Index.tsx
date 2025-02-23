@@ -126,23 +126,41 @@ const Index = () => {
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
 
   useEffect(() => {
-    document.body.style.overflow = 'hidden';
-    document.documentElement.style.overflow = 'hidden';
-    document.body.style.position = 'fixed';
-    document.body.style.width = '100%';
+    const setVh = () => {
+      const vh = window.innerHeight * 0.01;
+      document.documentElement.style.setProperty('--vh', `${vh}px`);
+    };
+
+    setVh();
+    window.addEventListener('resize', setVh);
+
+    document.documentElement.style.height = '100%';
     document.body.style.height = '100%';
-    
+    document.documentElement.style.position = 'fixed';
+    document.documentElement.style.overflow = 'hidden';
+    document.documentElement.style.width = '100%';
+    document.body.style.position = 'fixed';
+    document.body.style.overflow = 'hidden';
+    document.body.style.width = '100%';
+    document.body.style.touchAction = 'none';
+
     return () => {
-      document.body.style.overflow = '';
-      document.documentElement.style.overflow = '';
-      document.body.style.position = '';
-      document.body.style.width = '';
+      window.removeEventListener('resize', setVh);
+      document.documentElement.style.removeProperty('--vh');
+      document.documentElement.style.height = '';
       document.body.style.height = '';
+      document.documentElement.style.position = '';
+      document.documentElement.style.overflow = '';
+      document.documentElement.style.width = '';
+      document.body.style.position = '';
+      document.body.style.overflow = '';
+      document.body.style.width = '';
+      document.body.style.touchAction = '';
     };
   }, []);
 
   return (
-    <div className="fixed inset-0 w-full h-full bg-black overflow-hidden">
+    <div className="fixed inset-0 w-screen h-screen bg-black overflow-hidden" style={{ height: 'calc(var(--vh, 1vh) * 100)' }}>
       <div className="relative w-full h-full">
         <div className="absolute inset-0">
           <CameraView 
