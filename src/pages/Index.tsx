@@ -140,20 +140,6 @@ const Index = () => {
         </div>
 
         <div className="relative z-10 h-full">
-          {/* Top displays */}
-          <div className="absolute top-20 left-0 right-0 px-4 flex justify-between z-20">
-            <VitalSign 
-              label="Heart Rate"
-              value={heartRate || "--"}
-              unit="BPM"
-            />
-            <VitalSign 
-              label="SpO2"
-              value={vitalSigns.spo2 || "--"}
-              unit="%"
-            />
-          </div>
-
           <PPGSignalMeter 
             value={lastSignal?.filteredValue || 0}
             quality={lastSignal?.quality || 0}
@@ -162,17 +148,33 @@ const Index = () => {
             onReset={stopMonitoring}
           />
 
-          {/* Bottom displays */}
-          <div className="absolute bottom-[100px] left-0 right-0 px-4 flex justify-between z-20">
-            <VitalSign 
-              label="Blood Pressure"
-              value={vitalSigns.pressure}
-              unit="mmHg"
-            />
-            <VitalSign 
-              label="Arrhythmias"
-              value={`${vitalSigns.arrhythmiaStatus}|${arrhythmiaCount}`}
-            />
+          {/* Displays agrupados arriba de los botones */}
+          <div className="absolute bottom-[120px] left-0 right-0 px-4 space-y-2">
+            {/* Primera fila: BPM y SpO2 */}
+            <div className="flex justify-between">
+              <VitalSign 
+                label="Heart Rate"
+                value={heartRate || "--"}
+                unit="BPM"
+              />
+              <VitalSign 
+                label="SpO2"
+                value={vitalSigns.spo2 || "--"}
+                unit="%"
+              />
+            </div>
+            {/* Segunda fila: Presión y Arritmias */}
+            <div className="flex justify-between">
+              <VitalSign 
+                label="Blood Pressure"
+                value={vitalSigns.pressure}
+                unit="mmHg"
+              />
+              <VitalSign 
+                label="Arrhythmias"
+                value={`${vitalSigns.arrhythmiaStatus}|${arrhythmiaCount}`}
+              />
+            </div>
           </div>
 
           {isMonitoring && (
