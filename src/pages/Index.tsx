@@ -1,5 +1,5 @@
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -31,14 +31,48 @@ const Index = () => {
   const [arrhythmiaCount, setArrhythmiaCount] = useState<string>("--");
   const [elapsedTime, setElapsedTime] = useState(0);
   const measurementTimerRef = useRef<number | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
-  const { startProcessing, stopProcessing, lastSignal } = useSignalProcessor();
+  const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns } = useVitalSignsProcessor();
+
+  const processVideoFrame = useCallback(() => {
+    if (!isMonitoring || !videoRef.current || !canvasRef.current) return;
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Configurar el tamaño del canvas según el video
+    canvas.width = 320;
+    canvas.height = 240;
+
+    // Dibujar el frame actual en el canvas
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    // Obtener los datos del pixel central
+    const centerX = Math.floor(canvas.width / 2);
+    const centerY = Math.floor(canvas.height / 2);
+    const imageData = ctx.getImageData(centerX - 10, centerY - 10, 20, 20);
+
+    // Procesar el frame
+    processFrame(imageData);
+
+    // Solicitar el siguiente frame
+    if (isMonitoring) {
+      requestAnimationFrame(processVideoFrame);
+    }
+  }, [isMonitoring, processFrame]);
 
   const handleStreamReady = (stream: MediaStream) => {
     try {
       console.log("Stream ready, initializing video processing");
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
       const videoTrack = stream.getVideoTracks()[0];
       if (videoTrack) {
         videoTrack.enabled = true;
@@ -47,6 +81,8 @@ const Index = () => {
           imageCapture.torch?.(true).catch(console.error);
         }
       }
+      // Iniciar el procesamiento de frames
+      requestAnimationFrame(processVideoFrame);
     } catch (error) {
       console.error("Error initializing video stream:", error);
     }
@@ -72,6 +108,9 @@ const Index = () => {
         return next;
       });
     }, 1000);
+
+    // Iniciar el procesamiento de frames
+    requestAnimationFrame(processVideoFrame);
   };
 
   const stopMonitoring = () => {
@@ -129,7 +168,9 @@ const Index = () => {
             isFingerDetected={lastSignal?.fingerDetected}
             signalQuality={signalQuality}
             buttonPosition={document.querySelector('.measure-button')?.getBoundingClientRect()}
+            videoRef={videoRef}
           />
+          <canvas ref={canvasRef} className="hidden" />
         </div>
 
         <div className="relative z-10 h-full flex flex-col justify-between p-4">

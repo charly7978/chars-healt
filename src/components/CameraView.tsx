@@ -8,6 +8,7 @@ interface CameraViewProps {
   isFingerDetected?: boolean;
   signalQuality?: number;
   buttonPosition?: DOMRect;
+  videoRef?: React.RefObject<HTMLVideoElement>;
 }
 
 const CameraView = ({ 
@@ -15,10 +16,12 @@ const CameraView = ({
   isMonitoring, 
   isFingerDetected = false, 
   signalQuality = 0,
-  buttonPosition 
+  buttonPosition,
+  videoRef: externalVideoRef
 }: CameraViewProps) => {
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const internalVideoRef = useRef<HTMLVideoElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
+  const videoRef = externalVideoRef || internalVideoRef;
 
   const stopCamera = async () => {
     if (stream) {
@@ -38,12 +41,11 @@ const CameraView = ({
 
       const isAndroid = /android/i.test(navigator.userAgent);
 
-      // Configuración más ligera para mejor rendimiento
       const initialConstraints: MediaStreamConstraints = {
         video: {
           facingMode: 'environment',
-          width: 720,
-          height: 480,
+          width: 320,
+          height: 240,
           frameRate: { ideal: 30 },
           advanced: [{ torch: true }]
         }
@@ -54,7 +56,6 @@ const CameraView = ({
 
       if (videoTrack && isAndroid) {
         try {
-          // Activamos la linterna si está disponible
           const capabilities = videoTrack.getCapabilities();
           if (capabilities?.torch) {
             await videoTrack.applyConstraints({
@@ -62,7 +63,6 @@ const CameraView = ({
             });
           }
 
-          // Optimizaciones para el track de video
           videoTrack.enabled = true;
           
           if (videoRef.current) {
@@ -78,7 +78,6 @@ const CameraView = ({
         }
       }
 
-      // Aplicamos el stream al video
       if (videoRef.current) {
         videoRef.current.srcObject = newStream;
         if (isAndroid) {
