@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
@@ -38,7 +37,6 @@ const Index = () => {
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
-  // Auth effect
   useEffect(() => {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -86,28 +84,53 @@ const Index = () => {
       if (!session) return;
 
       const [systolic, diastolic] = vitalSigns.pressure.split('/').map(Number);
-      const arrhythmiaValue = typeof arrhythmiaCount === 'string' ? 0 : arrhythmiaCount;
+      
+      if (isNaN(systolic) || isNaN(diastolic) || isNaN(heartRate) || isNaN(vitalSigns.spo2)) {
+        console.log("Valores inválidos para guardar:", {
+          systolic,
+          diastolic,
+          heartRate,
+          spo2: vitalSigns.spo2
+        });
+        toast({
+          title: "Error al guardar",
+          description: "Los valores de la medición no son válidos",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      const arrhythmiaValue = typeof arrhythmiaCount === 'string' ? 0 : 
+                             typeof arrhythmiaCount === 'number' ? arrhythmiaCount : 
+                             arrhythmiaCount.split('|')[1] ? parseInt(arrhythmiaCount.split('|')[1]) : 0;
+
+      const measurementData = {
+        user_id: session.user.id,
+        heart_rate: Math.round(heartRate),
+        spo2: Math.round(vitalSigns.spo2),
+        systolic: Math.round(systolic),
+        diastolic: Math.round(diastolic),
+        arrhythmia_count: arrhythmiaValue,
+        quality: Math.round(signalQuality)
+      };
+
+      console.log("Guardando medición:", measurementData);
 
       const { error } = await supabase
         .from('measurements')
-        .insert({
-          user_id: session.user.id,
-          heart_rate: heartRate,
-          spo2: vitalSigns.spo2,
-          systolic,
-          diastolic,
-          arrhythmia_count: arrhythmiaValue,
-          quality: signalQuality
-        });
+        .insert(measurementData);
 
-      if (error) throw error;
+      if (error) {
+        console.error("Error de Supabase al guardar:", error);
+        throw error;
+      }
 
       toast({
         title: "Medición guardada",
         description: "Los resultados han sido almacenados correctamente"
       });
 
-      loadMeasurements();
+      await loadMeasurements();
     } catch (error) {
       console.error("Error al guardar medición:", error);
       toast({
@@ -209,7 +232,6 @@ const Index = () => {
     }
   };
 
-  // Cleanup effect
   useEffect(() => {
     return () => {
       if (measurementTimerRef.current) {
@@ -219,7 +241,6 @@ const Index = () => {
     };
   }, []);
 
-  // Calibration handlers
   const handleCalibrationStart = () => {
     if (isMonitoring) {
       pauseMonitoring();
@@ -232,7 +253,6 @@ const Index = () => {
     }
   };
 
-  // Visibility change effect
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden) {
@@ -252,7 +272,6 @@ const Index = () => {
     };
   }, [isMonitoring, isPaused, showCalibrationDialog]);
 
-  // Stream handler
   const handleStreamReady = (stream: MediaStream) => {
     if (!isMonitoring) return;
     
@@ -301,7 +320,6 @@ const Index = () => {
     processImage();
   };
 
-  // Signal processing effect
   useEffect(() => {
     if (lastSignal && lastSignal.fingerDetected && isMonitoring) {
       const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
