@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -113,7 +114,9 @@ const Index = () => {
   useEffect(() => {
     const lockOrientation = async () => {
       try {
-        await window.screen?.orientation?.lock('portrait');
+        if (window.screen?.orientation) {
+          await window.screen.orientation.lock('portrait');
+        }
       } catch (error) {
         console.log('No se pudo bloquear la orientación:', error);
       }
