@@ -126,33 +126,30 @@ const Index = () => {
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
 
   useEffect(() => {
-    const enforceResolution = () => {
-      const vh = window.innerHeight * 0.01;
-      document.documentElement.style.setProperty('--vh', `${vh}px`);
+    const lockOrientation = async () => {
+      try {
+        if (screen.orientation && screen.orientation.lock) {
+          await screen.orientation.lock('portrait');
+        }
+      } catch (error) {
+        console.log('No se pudo bloquear la orientación');
+      }
     };
 
-    enforceResolution();
-    window.addEventListener('resize', enforceResolution);
-    window.addEventListener('orientationchange', enforceResolution);
+    lockOrientation();
 
-    const preventDefault = (e: Event) => e.preventDefault();
-    document.addEventListener('touchmove', preventDefault, { passive: false });
-    document.addEventListener('gesturestart', preventDefault);
-    document.addEventListener('gesturechange', preventDefault);
-    document.addEventListener('gestureend', preventDefault);
+    const preventScroll = (e: Event) => e.preventDefault();
+    document.body.addEventListener('touchmove', preventScroll, { passive: false });
+    document.body.addEventListener('scroll', preventScroll, { passive: false });
 
     return () => {
-      window.removeEventListener('resize', enforceResolution);
-      window.removeEventListener('orientationchange', enforceResolution);
-      document.removeEventListener('touchmove', preventDefault);
-      document.removeEventListener('gesturestart', preventDefault);
-      document.removeEventListener('gesturechange', preventDefault);
-      document.removeEventListener('gestureend', preventDefault);
+      document.body.removeEventListener('touchmove', preventScroll);
+      document.body.removeEventListener('scroll', preventScroll);
     };
   }, []);
 
   return (
-    <div className="fixed inset-0 w-full h-full bg-black flex flex-col">
+    <div className="fixed inset-0 flex flex-col bg-black min-h-screen">
       <div className="flex-1 relative">
         <div className="absolute inset-0">
           <CameraView 
@@ -164,37 +161,39 @@ const Index = () => {
           />
         </div>
 
-        <div className="relative z-10 h-full">
-          <PPGSignalMeter 
-            value={lastSignal?.filteredValue || 0}
-            quality={lastSignal?.quality || 0}
-            isFingerDetected={lastSignal?.fingerDetected || false}
-            onStartMeasurement={startMonitoring}
-            onReset={stopMonitoring}
-          />
+        <div className="relative z-10 h-full flex flex-col">
+          <div className="flex-1">
+            <PPGSignalMeter 
+              value={lastSignal?.filteredValue || 0}
+              quality={lastSignal?.quality || 0}
+              isFingerDetected={lastSignal?.fingerDetected || false}
+              onStartMeasurement={startMonitoring}
+              onReset={stopMonitoring}
+            />
+          </div>
 
-          <div className="absolute bottom-[240px] left-0 right-0 px-4">
+          <div className="absolute bottom-[120px] left-0 right-0 px-4">
             <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4 space-y-4">
               <div className="flex justify-center gap-4">
                 <VitalSign 
-                  label="Heart Rate"
+                  label="FRECUENCIA CARDÍACA"
                   value={heartRate || "--"}
                   unit="BPM"
                 />
                 <VitalSign 
-                  label="SpO2"
+                  label="SPO2"
                   value={vitalSigns.spo2 || "--"}
                   unit="%"
                 />
               </div>
               <div className="flex justify-center gap-4">
                 <VitalSign 
-                  label="Blood Pressure"
+                  label="PRESIÓN ARTERIAL"
                   value={vitalSigns.pressure}
                   unit="mmHg"
                 />
                 <VitalSign 
-                  label="Arrhythmias"
+                  label="ARRITMIAS"
                   value={`${vitalSigns.arrhythmiaStatus}|${arrhythmiaCount}`}
                 />
               </div>
@@ -202,10 +201,25 @@ const Index = () => {
           </div>
 
           {isMonitoring && (
-            <div className="absolute bottom-20 left-0 right-0 text-center">
+            <div className="absolute bottom-28 left-0 right-0 text-center">
               <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 30s</span>
             </div>
           )}
+
+          <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 mt-auto">
+            <button 
+              onClick={startMonitoring}
+              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
+            >
+              INICIAR
+            </button>
+            <button 
+              onClick={stopMonitoring}
+              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
+            >
+              RESET
+            </button>
+          </div>
         </div>
       </div>
     </div>
