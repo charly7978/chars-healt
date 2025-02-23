@@ -106,9 +106,11 @@ const PPGSignalMeter = ({ value, quality, isFingerDetected, isComplete, onDataRe
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Dibujar señal PPG
-    ctx.strokeStyle = quality > 75 ? '#00ff00' : quality > 50 ? '#ffff00' : '#ff0000';
+    // Dibujar señal PPG con estilo más profesional
+    ctx.strokeStyle = '#ff0000'; // Color rojo para la señal principal
     ctx.lineWidth = 2;
+    ctx.shadowColor = '#ff0000';
+    ctx.shadowBlur = 4;
     ctx.beginPath();
 
     dataRef.current.forEach((val, i) => {
@@ -121,33 +123,43 @@ const PPGSignalMeter = ({ value, quality, isFingerDetected, isComplete, onDataRe
         ctx.lineTo(x, y);
       }
 
-      // Marcar picos
+      // Marcar picos con círculos más sutiles
       if (peaksRef.current[i]) {
         ctx.save();
-        ctx.fillStyle = '#ff0000';
+        ctx.fillStyle = '#ff6b6b';
+        ctx.shadowBlur = 8;
         ctx.beginPath();
-        ctx.arc(x, y, 3, 0, Math.PI * 2);
+        ctx.arc(x, y, 2, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
       }
     });
 
     ctx.stroke();
+    ctx.shadowBlur = 0;
 
-    // Dibujar tiempo
-    ctx.fillStyle = '#1a4721';
+    // Dibujar escala de tiempo
+    ctx.fillStyle = '#2a5a31';
     ctx.font = '10px monospace';
     for (let x = 0; x < canvas.width; x += 80) {
       const seconds = (x / canvas.width * 4).toFixed(1);
       ctx.fillText(`${seconds}s`, x, canvas.height - 5);
     }
+
+    // Dibujar indicador de calidad
+    if (isFingerDetected) {
+      const qualityColor = quality > 75 ? '#00ff00' : quality > 50 ? '#ffff00' : '#ff0000';
+      ctx.fillStyle = qualityColor;
+      ctx.font = '12px monospace';
+      ctx.fillText(`${quality}%`, 5, 15);
+    }
   };
 
   const drawGrid = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
+    // Grid grande (cuadrados de 1 segundo)
     ctx.strokeStyle = '#1a4721';
     ctx.lineWidth = 0.5;
 
-    // Grid grande
     for (let x = 0; x < width; x += 80) {
       ctx.beginPath();
       ctx.moveTo(x, 0);
@@ -162,7 +174,7 @@ const PPGSignalMeter = ({ value, quality, isFingerDetected, isComplete, onDataRe
       ctx.stroke();
     }
 
-    // Grid pequeño
+    // Grid pequeño (divisiones de 0.2 segundos)
     ctx.strokeStyle = '#0a2711';
     for (let x = 0; x < width; x += 20) {
       ctx.beginPath();
