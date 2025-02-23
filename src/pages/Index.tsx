@@ -113,18 +113,15 @@ const Index = () => {
   useEffect(() => {
     const lockOrientation = async () => {
       try {
-        const screenOrientation = window.screen?.orientation;
-        if (screenOrientation && typeof screenOrientation.lock === 'function') {
-          await screenOrientation.lock('portrait');
-        }
+        await window.screen?.orientation?.lock('portrait');
       } catch (error) {
         console.log('No se pudo bloquear la orientación:', error);
       }
     };
 
-    lockOrientation();
-
     const preventScroll = (e: Event) => e.preventDefault();
+    
+    lockOrientation();
     document.body.addEventListener('touchmove', preventScroll, { passive: false });
     document.body.addEventListener('scroll', preventScroll, { passive: false });
 
