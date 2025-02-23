@@ -1,5 +1,4 @@
-
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 interface PPGSignalMeterProps {
   value: number;
@@ -9,102 +8,146 @@ interface PPGSignalMeterProps {
   onDataReady?: (data: Array<{time: number, value: number, isPeak: boolean}>) => void;
 }
 
-const PPGSignalMeter = ({ value, quality, isFingerDetected, isComplete, onDataReady }: PPGSignalMeterProps) => {
+const PPGSignalMeter = ({ 
+  value, 
+  quality, 
+  isFingerDetected, 
+  isComplete,
+  onDataReady 
+}: PPGSignalMeterProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const dataRef = useRef<number[]>([]);
-  const peaksRef = useRef<boolean[]>([]);
-  const BUFFER_SIZE = 400;
+  const dataRef = useRef<{time: number, value: number, isPeak: boolean}[]>([]);
+  const [startTime] = useState<number>(Date.now());
+  const MAX_TIME = 30000; // 30 segundos en milisegundos
+  const CANVAS_WIDTH = 400;
+  const CANVAS_HEIGHT = 100;
 
   useEffect(() => {
-    if (!isFingerDetected) {
-      dataRef.current = [];
-      peaksRef.current = [];
-      return;
-    }
+    if (!canvasRef.current || !isFingerDetected) return;
 
-    // Actualizar buffer de datos
-    dataRef.current.push(value);
-    if (dataRef.current.length > BUFFER_SIZE) {
-      dataRef.current.shift();
-    }
-
-    // Renderizar señal
-    renderSignal();
-
-    // Si completó la medición, enviar datos
-    if (isComplete && onDataReady && dataRef.current.length > 0) {
-      const resultData = dataRef.current.map((val, i) => ({
-        time: i,
-        value: val,
-        isPeak: false
-      }));
-      onDataReady(resultData);
-    }
-  }, [value, isFingerDetected, isComplete, onDataReady]);
-
-  const renderSignal = () => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
-
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+
+    const currentTime = Date.now();
+    const elapsedTime = currentTime - startTime;
+
+    // Solo agregamos datos si no hemos superado los 30 segundos
+    if (elapsedTime <= MAX_TIME) {
+      dataRef.current.push({
+        time: elapsedTime,
+        value: value,
+        isPeak: quality > 75 // Consideramos un pico cuando la calidad es alta
+      });
+    }
 
     // Limpiar canvas
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Dibujar cuadrícula base
-    const cellSize = 20;
-    ctx.strokeStyle = '#1a4721';
-    ctx.lineWidth = 0.5;
-
-    // Cuadrícula vertical
-    for (let x = 0; x <= canvas.width; x += cellSize) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, canvas.height);
-      ctx.stroke();
-    }
-
-    // Cuadrícula horizontal
-    for (let y = 0; y <= canvas.height; y += cellSize) {
+    // Dibujar líneas de grid
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 5; i++) {
+      const y = (canvas.height / 4) * i;
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(canvas.width, y);
       ctx.stroke();
     }
 
-    // Mostrar datos PPG como bloques de colores
-    if (dataRef.current.length > 0) {
-      const values = dataRef.current;
-      const maxVal = Math.max(...values);
-      const minVal = Math.min(...values);
+    // Si la medición está completa, mostramos todo el histórico
+    if (isComplete) {
+      const fullData = dataRef.current;
+      const minVal = Math.min(...fullData.map(d => d.value));
+      const maxVal = Math.max(...fullData.map(d => d.value));
       const range = maxVal - minVal || 1;
 
-      values.forEach((val, i) => {
-        const x = Math.floor((canvas.width * i) / BUFFER_SIZE);
-        const normalizedValue = (val - minVal) / range;
-        const y = Math.floor(canvas.height * (1 - normalizedValue));
+      // Dibujar señal histórica completa
+      ctx.beginPath();
+      ctx.strokeStyle = '#00ff00';
+      ctx.lineWidth = 2;
+
+      fullData.forEach((point, index) => {
+        const x = (canvas.width * point.time) / MAX_TIME;
+        const normalizedY = (point.value - minVal) / range;
+        const y = normalizedY * canvas.height * 0.8 + canvas.height * 0.1;
         
-        // Dibujar bloque de color
-        ctx.fillStyle = quality > 75 ? '#4ade80' : quality > 50 ? '#fbbf24' : '#ef4444';
-        ctx.fillRect(x, y, 2, 2);
+        if (index === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
       });
+      ctx.stroke();
+
+      // Dibujar picos detectados
+      fullData.forEach(point => {
+        if (point.isPeak) {
+          const x = (canvas.width * point.time) / MAX_TIME;
+          const normalizedY = (point.value - minVal) / range;
+          const y = normalizedY * canvas.height * 0.8 + canvas.height * 0.1;
+          
+          ctx.beginPath();
+          ctx.arc(x, y, 3, 0, 2 * Math.PI);
+          ctx.fillStyle = '#ff0000';
+          ctx.fill();
+        }
+      });
+
+      if (onDataReady) {
+        onDataReady(dataRef.current);
+      }
+    } else {
+      // Mostrar señal en tiempo real
+      const recentData = dataRef.current.slice(-150); // Últimos 150 puntos
+      const minVal = Math.min(...recentData.map(d => d.value));
+      const maxVal = Math.max(...recentData.map(d => d.value));
+      const range = maxVal - minVal || 1;
+
+      // Dibujar señal actual
+      ctx.beginPath();
+      ctx.strokeStyle = quality > 75 ? '#00ff00' : quality > 50 ? '#ffff00' : '#ff0000';
+      ctx.lineWidth = 2;
+
+      recentData.forEach((point, index) => {
+        const x = (canvas.width / 150) * index;
+        const normalizedY = (point.value - minVal) / range;
+        const y = normalizedY * canvas.height * 0.8 + canvas.height * 0.1;
+        
+        if (index === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      });
+      ctx.stroke();
     }
 
-    // Indicador de estado
-    ctx.fillStyle = isFingerDetected ? '#22c55e' : '#ef4444';
-    ctx.font = '12px monospace';
-    ctx.fillText(isFingerDetected ? 'Señal OK' : 'Sin Señal', 10, 20);
-  };
+  }, [value, quality, isFingerDetected, isComplete, startTime]);
 
   return (
-    <div className="bg-black rounded-lg p-4 border border-green-900">
+    <div className="bg-black/40 backdrop-blur-sm rounded-lg p-2">
+      <div className="flex justify-between items-center mb-2">
+        <span className="text-xs font-semibold text-white/90">PPG Signal</span>
+        <span 
+          className="text-xs font-medium"
+          style={{ 
+            color: quality > 75 ? '#00ff00' : quality > 50 ? '#ffff00' : '#ff0000' 
+          }}
+        >
+          {isFingerDetected ? (
+            isComplete ? 
+              'Medición Completa' : 
+              `Quality: ${quality}%`
+          ) : 'No Signal'}
+        </span>
+      </div>
       <canvas
         ref={canvasRef}
-        width={400}
-        height={200}
-        className="w-full bg-black rounded"
+        width={CANVAS_WIDTH}
+        height={CANVAS_HEIGHT}
+        className="w-full h-20 rounded bg-black/60"
       />
     </div>
   );
