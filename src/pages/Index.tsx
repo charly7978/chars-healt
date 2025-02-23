@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -24,14 +25,25 @@ const Index = () => {
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
+  const enterFullScreen = () => {
+    const elem = document.documentElement;
+    if (elem.requestFullscreen) {
+      elem.requestFullscreen().catch(err => console.log('Error al entrar en pantalla completa:', err));
+    } else if (elem.webkitRequestFullscreen) {
+      elem.webkitRequestFullscreen().catch(err => console.log('Error al entrar en pantalla completa:', err));
+    } else if (elem.mozRequestFullScreen) {
+      elem.mozRequestFullScreen().catch(err => console.log('Error al entrar en pantalla completa:', err));
+    } else if (elem.msRequestFullscreen) {
+      elem.msRequestFullscreen().catch(err => console.log('Error al entrar en pantalla completa:', err));
+    }
+  };
+
   useEffect(() => {
     const preventScroll = (e: Event) => e.preventDefault();
     
     const lockOrientation = async () => {
       try {
-        if (screen.orientation) {
-          await screen.orientation.lock('portrait');
-        }
+        await screen.orientation.lock('portrait');
       } catch (error) {
         console.log('No se pudo bloquear la orientación:', error);
       }
@@ -49,6 +61,7 @@ const Index = () => {
   }, []);
 
   const startMonitoring = () => {
+    enterFullScreen();
     setIsMonitoring(true);
     setIsCameraOn(true);
     startProcessing();
@@ -150,11 +163,14 @@ const Index = () => {
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
 
   return (
-    <div className="fixed inset-0 flex flex-col bg-black" style={{ 
-      height: 'calc(100vh + env(safe-area-inset-bottom))',
-      paddingTop: 'env(safe-area-inset-top)',
-      paddingBottom: 'env(safe-area-inset-bottom)'
-    }}>
+    <div 
+      className="fixed inset-0 flex flex-col bg-black" 
+      style={{ 
+        height: 'calc(100vh + env(safe-area-inset-bottom))',
+        paddingTop: 'env(safe-area-inset-top)',
+        paddingBottom: 'env(safe-area-inset-bottom)'
+      }}
+    >
       <div className="flex-1 relative">
         <div className="absolute inset-0">
           <CameraView 
