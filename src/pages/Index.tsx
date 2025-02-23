@@ -43,7 +43,22 @@ const Index = () => {
   const { processSignal: processVitalSigns } = useVitalSignsProcessor();
 
   const handleStreamReady = (stream: MediaStream) => {
-    console.log("Stream listo para procesar");
+    try {
+      console.log("Stream ready, initializing video processing");
+      
+      const videoTrack = stream.getVideoTracks()[0];
+      
+      if (videoTrack) {
+        videoTrack.enabled = true;
+        
+        if ('ImageCapture' in window) {
+          const imageCapture = new (window as any).ImageCapture(videoTrack);
+          imageCapture.torch?.(true).catch(console.error);
+        }
+      }
+    } catch (error) {
+      console.error("Error initializing video stream:", error);
+    }
   };
 
   const saveMeasurement = async () => {
