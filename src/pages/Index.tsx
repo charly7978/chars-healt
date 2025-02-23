@@ -6,15 +6,12 @@ import CameraView from "@/components/CameraView";
 import { useSignalProcessor } from "@/hooks/useSignalProcessor";
 import SignalQualityIndicator from "@/components/SignalQualityIndicator";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
-import PPGResultDialog from "@/components/PPGResultDialog";
 import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
-import CalibrationDialog from "@/components/CalibrationDialog";
 import { Play, Square } from "lucide-react";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [signalQuality, setSignalQuality] = useState(0);
   const [vitalSigns, setVitalSigns] = useState({ 
@@ -24,37 +21,17 @@ const Index = () => {
   });
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState<string | number>("--");
-  const [showCalibrationDialog, setShowCalibrationDialog] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
-  const [showResults, setShowResults] = useState(false);
-  const [resultData, setResultData] = useState<Array<{time: number, value: number, isPeak: boolean}>>([]);
   const measurementTimerRef = useRef<number | null>(null);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
-  const handleCalibrationClick = () => {
-    if (isMonitoring) {
-      setShowCalibrationDialog(true);
-    }
-  };
-
-  const handleCalibrationStart = async () => {
-    console.log("Iniciando calibración...");
-    // Aquí iría la lógica de calibración real
-  };
-
-  const handleCalibrationEnd = () => {
-    console.log("Calibración finalizada");
-    setShowCalibrationDialog(false);
-  };
-
   const startMonitoring = () => {
     console.log("Iniciando monitoreo...");
     setIsMonitoring(true);
     setIsCameraOn(true);
-    setIsPaused(false);
     startProcessing();
     setElapsedTime(0);
     
@@ -77,7 +54,6 @@ const Index = () => {
     console.log("Deteniendo monitoreo...");
     setIsMonitoring(false);
     setIsCameraOn(false);
-    setIsPaused(false);
     stopProcessing();
     resetVitalSigns();
     setElapsedTime(0);
@@ -95,7 +71,6 @@ const Index = () => {
     const videoTrack = stream.getVideoTracks()[0];
     const imageCapture = new ImageCapture(videoTrack);
     
-    // Activar linterna si está disponible
     if (videoTrack.getCapabilities()?.torch) {
       videoTrack.applyConstraints({
         advanced: [{ torch: true }]
@@ -122,7 +97,6 @@ const Index = () => {
         tempCtx.drawImage(frame, 0, 0);
         const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
         
-        // Procesar frame y actualizar señal
         processFrame(imageData);
         
         if (isMonitoring) {
@@ -155,11 +129,6 @@ const Index = () => {
     }
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
 
-  const handlePPGDataReady = (data: Array<{time: number, value: number, isPeak: boolean}>) => {
-    setResultData(data);
-    setShowResults(true);
-  };
-
   return (
     <div className="w-screen h-screen bg-gray-900 overflow-hidden">
       <div className="relative w-full h-full">
@@ -175,24 +144,18 @@ const Index = () => {
 
         <div className="relative z-10 h-full flex flex-col justify-between p-4">
           <div className="flex justify-between items-start w-full">
-            <h1 className="text-lg font-bold text-white bg-black/30 px-3 py-1 rounded">PPG Monitor</h1>
+            <h1 className="text-lg font-bold text-white bg-black/30 px-3 py-1 rounded">Monitor PPG</h1>
           </div>
 
-          <div className="flex-1 flex flex-col justify-center gap-2 max-w-md mx-auto w-full mt-[-12rem]">
+          <div className="flex-1 flex flex-col justify-center gap-2 max-w-md mx-auto w-full">
             <div className="relative">
               <PPGSignalMeter 
                 value={lastSignal?.filteredValue || 0}
                 quality={lastSignal?.quality || 0}
                 isFingerDetected={lastSignal?.fingerDetected || false}
                 isComplete={elapsedTime >= 30}
-                onDataReady={handlePPGDataReady}
               />
             </div>
-
-            <SignalQualityIndicator 
-              quality={signalQuality} 
-              isMonitoring={isMonitoring}
-            />
 
             <div className="grid grid-cols-2 gap-2">
               <VitalSign label="Heart Rate" value={heartRate} unit="BPM" />
@@ -202,7 +165,7 @@ const Index = () => {
             </div>
           </div>
 
-          <div className="flex flex-col items-center gap-2 w-full max-w-md mx-auto mt-[-8rem]">
+          <div className="flex flex-col items-center gap-2 w-full max-w-md mx-auto">
             {isMonitoring && (
               <div className="text-xs font-medium text-gray-300 mb-1">
                 Tiempo: {elapsedTime}s / 30s
@@ -231,19 +194,6 @@ const Index = () => {
           </div>
         </div>
       </div>
-
-      <PPGResultDialog
-        isOpen={showResults}
-        onClose={() => setShowResults(false)}
-        signalData={resultData}
-      />
-
-      <CalibrationDialog
-        isOpen={showCalibrationDialog}
-        onClose={() => setShowCalibrationDialog(false)}
-        onCalibrationStart={handleCalibrationStart}
-        onCalibrationEnd={handleCalibrationEnd}
-      />
     </div>
   );
 };
