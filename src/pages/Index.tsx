@@ -148,11 +148,11 @@ const Index = () => {
             onReset={stopMonitoring}
           />
 
-          {/* Panel de displays con diseño mejorado */}
-          <div className="absolute bottom-[160px] left-0 right-0 px-4">
-            <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-3 space-y-3">
+          {/* Panel de displays con diseño y animaciones mejoradas */}
+          <div className="absolute bottom-[200px] left-0 right-0 px-4">
+            <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4 space-y-4">
               {/* Primera fila: BPM y SpO2 */}
-              <div className="flex justify-center gap-3">
+              <div className="flex justify-center gap-4">
                 <VitalSign 
                   label="Heart Rate"
                   value={heartRate || "--"}
@@ -165,7 +165,7 @@ const Index = () => {
                 />
               </div>
               {/* Segunda fila: Presión y Arritmias */}
-              <div className="flex justify-center gap-3">
+              <div className="flex justify-center gap-4">
                 <VitalSign 
                   label="Blood Pressure"
                   value={vitalSigns.pressure}
