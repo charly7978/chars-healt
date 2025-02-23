@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from 'react';
 
 interface PPGSignalMeterProps {
@@ -18,9 +19,16 @@ const PPGSignalMeter = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dataRef = useRef<{time: number, value: number, isPeak: boolean}[]>([]);
   const [startTime] = useState<number>(Date.now());
-  const MAX_TIME = 30000; // 30 segundos en milisegundos
+  const MAX_TIME = 30000; // 30 segundos
   const CANVAS_WIDTH = 400;
   const CANVAS_HEIGHT = 100;
+  const GRID_COLOR = 'rgba(255, 255, 255, 0.1)';
+  const SIGNAL_COLORS = {
+    high: '#00ff00',
+    medium: '#ffff00',
+    low: '#ff0000',
+    inactive: '#666666'
+  };
 
   useEffect(() => {
     if (!canvasRef.current || !isFingerDetected) return;
@@ -37,7 +45,7 @@ const PPGSignalMeter = ({
       dataRef.current.push({
         time: elapsedTime,
         value: value,
-        isPeak: quality > 75 // Consideramos un pico cuando la calidad es alta
+        isPeak: quality > 75
       });
     }
 
@@ -45,9 +53,25 @@ const PPGSignalMeter = ({
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Dibujar líneas de grid
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+    // Dibujar grid vertical (líneas de tiempo)
+    ctx.strokeStyle = GRID_COLOR;
     ctx.lineWidth = 1;
+    const timeIntervals = 6; // Una línea cada 5 segundos
+    for (let i = 0; i <= timeIntervals; i++) {
+      const x = (canvas.width / timeIntervals) * i;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, canvas.height);
+      ctx.stroke();
+
+      // Añadir etiquetas de tiempo
+      const seconds = (i * 5).toString();
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+      ctx.font = '10px Arial';
+      ctx.fillText(`${seconds}s`, x, canvas.height - 2);
+    }
+
+    // Dibujar grid horizontal (amplitud)
     for (let i = 0; i < 5; i++) {
       const y = (canvas.height / 4) * i;
       ctx.beginPath();
@@ -63,9 +87,9 @@ const PPGSignalMeter = ({
       const maxVal = Math.max(...fullData.map(d => d.value));
       const range = maxVal - minVal || 1;
 
-      // Dibujar señal histórica completa
+      // Dibujar señal histórica completa con gradiente
       ctx.beginPath();
-      ctx.strokeStyle = '#00ff00';
+      ctx.strokeStyle = SIGNAL_COLORS.high;
       ctx.lineWidth = 2;
 
       fullData.forEach((point, index) => {
@@ -99,15 +123,17 @@ const PPGSignalMeter = ({
         onDataReady(dataRef.current);
       }
     } else {
-      // Mostrar señal en tiempo real
+      // Mostrar señal en tiempo real con desplazamiento
       const recentData = dataRef.current.slice(-150); // Últimos 150 puntos
       const minVal = Math.min(...recentData.map(d => d.value));
       const maxVal = Math.max(...recentData.map(d => d.value));
       const range = maxVal - minVal || 1;
 
-      // Dibujar señal actual
+      // Dibujar señal actual con color basado en calidad
       ctx.beginPath();
-      ctx.strokeStyle = quality > 75 ? '#00ff00' : quality > 50 ? '#ffff00' : '#ff0000';
+      ctx.strokeStyle = quality > 75 ? SIGNAL_COLORS.high : 
+                       quality > 50 ? SIGNAL_COLORS.medium : 
+                       SIGNAL_COLORS.low;
       ctx.lineWidth = 2;
 
       recentData.forEach((point, index) => {
@@ -122,6 +148,16 @@ const PPGSignalMeter = ({
         }
       });
       ctx.stroke();
+
+      // Añadir línea de tiempo actual
+      const timeProgress = (elapsedTime / MAX_TIME) * canvas.width;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.moveTo(timeProgress, 0);
+      ctx.lineTo(timeProgress, canvas.height);
+      ctx.stroke();
+      ctx.setLineDash([]);
     }
 
   }, [value, quality, isFingerDetected, isComplete, startTime]);
@@ -133,7 +169,9 @@ const PPGSignalMeter = ({
         <span 
           className="text-xs font-medium"
           style={{ 
-            color: quality > 75 ? '#00ff00' : quality > 50 ? '#ffff00' : '#ff0000' 
+            color: quality > 75 ? SIGNAL_COLORS.high : 
+                   quality > 50 ? SIGNAL_COLORS.medium : 
+                   SIGNAL_COLORS.low 
           }}
         >
           {isFingerDetected ? (
