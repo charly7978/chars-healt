@@ -40,56 +40,67 @@ const CameraView = ({
 
       const isAndroid = /android/i.test(navigator.userAgent);
 
-      // Configuración específica para Android
+      // Configuración base para todos los dispositivos
       const constraints: MediaStreamConstraints = {
         video: {
           facingMode: 'environment',
           width: { ideal: 720 },
           height: { ideal: 480 },
-          // Optimizaciones específicas para Android
-          ...(isAndroid && {
-            frameRate: { ideal: 25 }, // Reducido de 30 a 25 para Android
-            resizeMode: 'crop-and-scale' // Modo eficiente de redimensionamiento
-          })
         }
       };
+
+      // Agregar configuraciones específicas para Android
+      if (isAndroid) {
+        const androidConstraints = {
+          ...constraints,
+          video: {
+            ...constraints.video,
+            frameRate: { ideal: 25 },
+            resizeMode: 'crop-and-scale'
+          }
+        };
+        Object.assign(constraints, androidConstraints);
+      }
 
       const newStream = await navigator.mediaDevices.getUserMedia(constraints);
       const videoTrack = newStream.getVideoTracks()[0];
 
-      if (videoTrack) {
-        if (isAndroid) {
-          // Optimizaciones específicas para Android
-          await videoTrack.applyConstraints({
-            advanced: [
-              { exposureMode: "continuous" },
-              { focusMode: "continuous" },
-              { whiteBalanceMode: "continuous" }
-            ]
-          }).catch(err => console.log("No se pudieron aplicar optimizaciones:", err));
+      if (videoTrack && isAndroid) {
+        try {
+          // Intentar aplicar configuraciones avanzadas de manera segura
+          const capabilities = videoTrack.getCapabilities();
+          const advancedConstraints: MediaTrackConstraintSet[] = [];
+          
+          // Solo agregar las restricciones si el dispositivo las soporta
+          if (capabilities.exposureMode) {
+            advancedConstraints.push({ exposureMode: 'continuous' });
+          }
+          if (capabilities.focusMode) {
+            advancedConstraints.push({ focusMode: 'continuous' });
+          }
+          if (capabilities.whiteBalanceMode) {
+            advancedConstraints.push({ whiteBalanceMode: 'continuous' });
+          }
 
-          // Reducir la sobrecarga del pipeline de video
+          if (advancedConstraints.length > 0) {
+            await videoTrack.applyConstraints({
+              advanced: advancedConstraints
+            });
+          }
+
+          // Optimizaciones de renderizado para Android
           if (videoRef.current) {
             videoRef.current.style.transform = 'translateZ(0)';
             videoRef.current.style.backfaceVisibility = 'hidden';
           }
-        }
-
-        const capabilities = videoTrack.getCapabilities();
-        console.log('Camera capabilities:', capabilities);
-
-        try {
-          const settings = videoTrack.getSettings();
-          console.log('Current camera settings:', settings);
         } catch (err) {
-          console.log("No se pudo obtener la configuración actual:", err);
+          console.log("No se pudieron aplicar algunas optimizaciones:", err);
         }
       }
 
       if (videoRef.current) {
         videoRef.current.srcObject = newStream;
         if (isAndroid) {
-          // Optimizaciones de rendering para Android
           videoRef.current.style.willChange = 'transform';
           videoRef.current.style.transform = 'translateZ(0)';
         }
