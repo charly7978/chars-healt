@@ -126,41 +126,49 @@ const Index = () => {
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
 
   useEffect(() => {
-    const setVh = () => {
+    const enforceResolution = () => {
       const vh = window.innerHeight * 0.01;
       document.documentElement.style.setProperty('--vh', `${vh}px`);
+      
+      document.body.style.display = 'none';
+      document.body.offsetHeight; // force reflow
+      document.body.style.display = '';
+
+      document.documentElement.style.zoom = '1';
+      
+      if (window.screen && window.screen.orientation) {
+        try {
+          window.screen.orientation.lock('portrait');
+        } catch (e) {
+          console.log('Orientation lock not supported');
+        }
+      }
     };
 
-    setVh();
-    window.addEventListener('resize', setVh);
+    enforceResolution();
+    window.addEventListener('resize', enforceResolution);
+    window.addEventListener('orientationchange', enforceResolution);
 
-    document.documentElement.style.height = '100%';
-    document.body.style.height = '100%';
-    document.documentElement.style.position = 'fixed';
-    document.documentElement.style.overflow = 'hidden';
-    document.documentElement.style.width = '100%';
-    document.body.style.position = 'fixed';
-    document.body.style.overflow = 'hidden';
-    document.body.style.width = '100%';
-    document.body.style.touchAction = 'none';
+    document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+    document.addEventListener('gesturestart', (e) => e.preventDefault());
+    document.addEventListener('gesturechange', (e) => e.preventDefault());
+    document.addEventListener('gestureend', (e) => e.preventDefault());
 
     return () => {
-      window.removeEventListener('resize', setVh);
-      document.documentElement.style.removeProperty('--vh');
-      document.documentElement.style.height = '';
-      document.body.style.height = '';
-      document.documentElement.style.position = '';
-      document.documentElement.style.overflow = '';
-      document.documentElement.style.width = '';
-      document.body.style.position = '';
-      document.body.style.overflow = '';
-      document.body.style.width = '';
-      document.body.style.touchAction = '';
+      window.removeEventListener('resize', enforceResolution);
+      window.removeEventListener('orientationchange', enforceResolution);
+      document.removeEventListener('touchmove', (e) => e.preventDefault());
+      document.removeEventListener('gesturestart', (e) => e.preventDefault());
+      document.removeEventListener('gesturechange', (e) => e.preventDefault());
+      document.removeEventListener('gestureend', (e) => e.preventDefault());
     };
   }, []);
 
   return (
-    <div className="fixed inset-0 w-screen h-screen bg-black overflow-hidden" style={{ height: 'calc(var(--vh, 1vh) * 100)' }}>
+    <div className="fixed inset-0 w-screen h-screen bg-black overflow-hidden touch-none select-none" style={{ 
+      height: 'calc(var(--vh, 1vh) * 100)',
+      WebkitTextSizeAdjust: '100%',
+    }}>
       <div className="relative w-full h-full">
         <div className="absolute inset-0">
           <CameraView 

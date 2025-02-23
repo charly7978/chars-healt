@@ -95,17 +95,51 @@
     @apply border-border;
   }
 
-  html, body {
+  html {
     height: 100%;
-    height: calc(var(--vh, 1vh) * 100);
-    overflow: hidden;
-    position: fixed;
     width: 100%;
-    touch-action: none;
+    position: fixed;
+    overflow: hidden;
   }
 
   body {
+    height: 100%;
+    width: 100%;
+    position: fixed;
+    overflow: hidden;
+    overscroll-behavior: none;
+    -webkit-text-size-adjust: 100%;
+    touch-action: none;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
     @apply bg-background text-foreground;
+  }
+
+  #root {
+    height: 100%;
+    width: 100%;
+    position: fixed;
+    overflow: hidden;
+  }
+
+  @supports (height: 100dvh) {
+    html, body, #root {
+      height: 100dvh;
+    }
+  }
+
+  @supports (height: -webkit-fill-available) {
+    html, body, #root {
+      height: -webkit-fill-available;
+    }
+  }
+
+  @supports (-webkit-touch-callout: none) {
+    html, body {
+      height: -webkit-fill-available;
+    }
   }
 }
 
