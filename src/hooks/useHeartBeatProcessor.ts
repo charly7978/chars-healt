@@ -14,22 +14,15 @@ export const useHeartBeatProcessor = () => {
   const processorRef = useRef<HeartBeatProcessor | null>(null);
   const [currentBPM, setCurrentBPM] = useState(0);
   const [confidence, setConfidence] = useState(0);
+  const [finalBPM, setFinalBPM] = useState(0);
 
   useEffect(() => {
     console.log('useHeartBeatProcessor: Creando nueva instancia de HeartBeatProcessor');
     processorRef.current = new HeartBeatProcessor();
-    
-    if (typeof window !== 'undefined') {
-      window.heartBeatProcessor = processorRef.current;
-    }
-
     return () => {
       console.log('useHeartBeatProcessor: Limpiando processor');
       if (processorRef.current) {
         processorRef.current = null;
-      }
-      if (typeof window !== 'undefined') {
-        window.heartBeatProcessor = undefined;
       }
     };
   }, []);
@@ -45,26 +38,25 @@ export const useHeartBeatProcessor = () => {
       };
     }
 
-    console.log('useHeartBeatProcessor - processSignal:', {
-      inputValue: value,
-      currentProcessor: !!processorRef.current,
-      timestamp: new Date().toISOString()
-    });
-
     const result = processorRef.current.processSignal(value);
     
     if (result.bpm > 0) {
       setCurrentBPM(result.bpm);
       setConfidence(result.confidence);
+      
+      // Actualizar BPM final cuando procesamos una señal
+      const finalBPMValue = processorRef.current.getFinalBPM();
+      setFinalBPM(finalBPMValue);
     }
 
     return result;
   }, []);
 
-  const getFinalBPM = useCallback(() => {
+  const getFinalBPM = useCallback((): number => {
     if (!processorRef.current) return 0;
-    return processorRef.current.getFinalBPM();
-  }, []);
+    const value = processorRef.current.getFinalBPM();
+    return value || finalBPM;
+  }, [finalBPM]);
 
   const getRRIntervals = useCallback(() => {
     if (!processorRef.current) {
@@ -83,6 +75,7 @@ export const useHeartBeatProcessor = () => {
     }
     setCurrentBPM(0);
     setConfidence(0);
+    setFinalBPM(0);
   }, []);
 
   return {

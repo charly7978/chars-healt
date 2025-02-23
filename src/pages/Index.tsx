@@ -35,6 +35,7 @@ const Index = () => {
   const vitalSignsProcessor = useVitalSignsProcessor();
 
   const [arrhythmiaStatus, setArrhythmiaStatus] = useState<string>("SIN ARRITMIAS|0");
+  const [currentBPM, setCurrentBPM] = useState(0);
 
   useEffect(() => {
     if (lastSignal && rrData) {
@@ -45,6 +46,14 @@ const Index = () => {
       setArrhythmiaStatus(result.arrhythmiaStatus);
     }
   }, [lastSignal, rrData, vitalSignsProcessor]);
+
+  // Actualizar BPM cada vez que cambie
+  useEffect(() => {
+    const bpm = heartBeatProcessor.getFinalBPM();
+    if (bpm > 0) {
+      setCurrentBPM(bpm);
+    }
+  }, [heartBeatProcessor]);
 
   const toggleCamera = async () => {
     if (!cameraViewRef.current) return;
@@ -77,6 +86,7 @@ const Index = () => {
 
     heartBeatProcessor.reset();
     vitalSignsProcessor.reset();
+    setCurrentBPM(0);
 
     startProcessing();
     setResultData([]);
@@ -128,9 +138,11 @@ const Index = () => {
     <div className="w-screen h-screen bg-gray-900 overflow-hidden">
       <div className="relative w-full h-full">
         <CameraView
-          active={isCameraActive}
+          isMonitoring={isCameraActive}
           onError={setCameraError}
           onFrameProcessed={onFrameProcessed}
+          isFingerDetected={lastSignal?.fingerDetected || false}
+          signalQuality={lastSignal?.quality || 0}
         />
 
         <div className="absolute top-4 left-4 z-10 text-white">
@@ -176,7 +188,7 @@ const Index = () => {
         <div className="absolute top-4 right-4 z-10 text-white">
           <VitalSign
             label="BPM"
-            value={heartBeatProcessor.getFinalBPM()}
+            value={currentBPM}
             unit="lpm"
           />
           <VitalSign
