@@ -1,10 +1,9 @@
 
-interface ScreenOrientation {
-  lock(orientation: OrientationLockType): Promise<void>;
-  unlock(): void;
-  type: OrientationType;
-  angle: number;
-  onchange: ((this: ScreenOrientation, ev: Event) => any) | null;
+interface ScreenOrientationType {
+  lock?(orientation: OrientationLockType): Promise<void>;
+  unlock?(): void;
+  type?: string;
+  angle?: number;
 }
 
 type OrientationLockType = 
@@ -17,15 +16,9 @@ type OrientationLockType =
   | 'landscape-primary'
   | 'landscape-secondary';
 
-type OrientationType =
-  | 'portrait-primary'
-  | 'portrait-secondary'
-  | 'landscape-primary'
-  | 'landscape-secondary';
-
 declare global {
   interface Screen {
-    orientation: ScreenOrientation;
+    orientation?: ScreenOrientationType;
   }
 }
 

@@ -35,7 +35,7 @@ const Index = () => {
     // Bloqueo de orientación (opcional, solo si está disponible)
     const lockOrientation = async () => {
       try {
-        if ('orientation' in screen) {
+        if (screen?.orientation?.lock) {
           await screen.orientation.lock('portrait');
         }
       } catch (error) {
