@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -24,6 +23,29 @@ const Index = () => {
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
+
+  useEffect(() => {
+    const lockOrientation = async () => {
+      try {
+        if (screen?.orientation?.lock) {
+          await screen.orientation.lock('portrait');
+        }
+      } catch (error) {
+        console.log('No se pudo bloquear la orientación:', error);
+      }
+    };
+
+    const preventScroll = (e: Event) => e.preventDefault();
+    
+    lockOrientation();
+    document.body.addEventListener('touchmove', preventScroll, { passive: false });
+    document.body.addEventListener('scroll', preventScroll, { passive: false });
+
+    return () => {
+      document.body.removeEventListener('touchmove', preventScroll);
+      document.body.removeEventListener('scroll', preventScroll);
+    };
+  }, []);
 
   const startMonitoring = () => {
     setIsMonitoring(true);
@@ -110,29 +132,6 @@ const Index = () => {
 
     processImage();
   };
-
-  useEffect(() => {
-    const lockOrientation = async () => {
-      try {
-        if (window.screen?.orientation) {
-          await window.screen.orientation.lock('portrait');
-        }
-      } catch (error) {
-        console.log('No se pudo bloquear la orientación:', error);
-      }
-    };
-
-    const preventScroll = (e: Event) => e.preventDefault();
-    
-    lockOrientation();
-    document.body.addEventListener('touchmove', preventScroll, { passive: false });
-    document.body.addEventListener('scroll', preventScroll, { passive: false });
-
-    return () => {
-      document.body.removeEventListener('touchmove', preventScroll);
-      document.body.removeEventListener('scroll', preventScroll);
-    };
-  }, []);
 
   useEffect(() => {
     if (lastSignal && lastSignal.fingerDetected && isMonitoring) {
