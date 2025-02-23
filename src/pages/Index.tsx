@@ -123,10 +123,6 @@ const Index = () => {
         throw new Error("No hay sesión activa");
       }
 
-      if (elapsedTime < 15) {
-        throw new Error("La medición debe durar al menos 15 segundos");
-      }
-
       const hr = Math.round(heartRate);
       const sp = Math.round(vitalSigns.spo2);
       const [systolicStr, diastolicStr] = vitalSigns.pressure.split('/');
@@ -135,20 +131,14 @@ const Index = () => {
       const qual = Math.round(signalQuality);
       const arr = extractArrhythmiaCount(arrhythmiaCount);
 
-      if (!hr || hr < 40 || hr > 200) {
-        throw new Error("Frecuencia cardíaca fuera de rango (40-200)");
-      }
+      const errors = [];
+      if (!hr || hr < 40 || hr > 200) errors.push("Frecuencia cardíaca");
+      if (!sp || sp < 80 || sp > 100) errors.push("SpO2");
+      if (!sys || sys < 90 || sys > 180 || !dia || dia < 50 || dia > 120) errors.push("Presión arterial");
+      if (!qual || qual < 0 || qual > 100) errors.push("Calidad de señal");
 
-      if (!sp || sp < 80 || sp > 100) {
-        throw new Error("SpO2 fuera de rango (80-100)");
-      }
-
-      if (!sys || sys < 90 || sys > 180 || !dia || dia < 50 || dia > 120) {
-        throw new Error("Presión arterial fuera de rango (90-180/50-120)");
-      }
-
-      if (!qual || qual < 0 || qual > 100) {
-        throw new Error("Calidad de señal inválida (0-100)");
+      if (errors.length > 0) {
+        throw new Error(`Valores incorrectos: ${errors.join(", ")}`);
       }
 
       const measurementData = {
@@ -162,7 +152,7 @@ const Index = () => {
         measured_at: new Date().toISOString()
       };
 
-      console.log("Guardando medición validada:", measurementData);
+      console.log("Guardando medición:", measurementData);
 
       const { error } = await supabase
         .from('measurements')
@@ -180,7 +170,7 @@ const Index = () => {
       await loadMeasurements();
       resetMeasurement();
     } catch (error) {
-      console.error("Error detallado al guardar medición:", error);
+      console.error("Error al guardar medición:", error);
       toast({
         title: "Error al guardar",
         description: error instanceof Error ? error.message : "No se pudo guardar la medición",
@@ -243,12 +233,19 @@ const Index = () => {
     setIsCameraOn(false);
     setIsPaused(false);
     stopProcessing();
-    resetVitalSigns();
-    setElapsedTime(0);
-    
     if (measurementTimerRef.current) {
       clearInterval(measurementTimerRef.current);
       measurementTimerRef.current = null;
+    }
+    
+    if (elapsedTime >= 15) {
+      saveMeasurement();
+    } else {
+      toast({
+        title: "Medición incompleta",
+        description: "La medición debe durar al menos 15 segundos",
+        variant: "destructive"
+      });
     }
   };
 
