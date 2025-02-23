@@ -148,8 +148,8 @@ const Index = () => {
             onReset={stopMonitoring}
           />
 
-          {/* Displays agrupados arriba de los botones */}
-          <div className="absolute bottom-[120px] left-0 right-0 px-4 space-y-2">
+          {/* Displays agrupados con más espacio desde abajo */}
+          <div className="absolute bottom-[160px] left-0 right-0 px-4 space-y-2">
             {/* Primera fila: BPM y SpO2 */}
             <div className="flex justify-between">
               <VitalSign 
