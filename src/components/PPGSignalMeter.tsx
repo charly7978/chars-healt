@@ -138,61 +138,62 @@ const PPGSignalMeter = ({
   }, [value, quality, isFingerDetected]);
 
   return (
-    <div className="fixed inset-0 w-screen h-screen bg-black" style={{ height: 'calc(var(--vh, 1vh) * 100)' }}>
-      <canvas
-        ref={canvasRef}
-        width={CANVAS_WIDTH}
-        height={CANVAS_HEIGHT}
-        className="w-full h-[calc(100%-120px)]"
-      />
-
-      <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center bg-black/40">
-        <div className="flex items-center gap-4">
-          <span className="text-2xl font-bold text-white">PPG</span>
-          {/* Indicador de calidad de señal */}
-          <div className="flex items-center gap-2">
-            <div className="w-20 h-1.5 bg-gray-700 rounded-full overflow-hidden">
-              <div 
-                className="h-full transition-all duration-300 rounded-full"
-                style={{ 
-                  width: `${quality}%`,
-                  backgroundColor: quality > 75 ? '#00ff00' : quality > 50 ? '#ffff00' : '#ff0000'
-                }}
-              />
+    <div className="fixed inset-0 w-full h-full bg-black flex flex-col">
+      <div className="flex-1 relative">
+        <canvas
+          ref={canvasRef}
+          width={CANVAS_WIDTH}
+          height={CANVAS_HEIGHT}
+          className="w-full h-full"
+        />
+        
+        <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center bg-black/40">
+          <div className="flex items-center gap-4">
+            <span className="text-2xl font-bold text-white">PPG</span>
+            <div className="flex items-center gap-2">
+              <div className="w-20 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                <div 
+                  className="h-full transition-all duration-300 rounded-full"
+                  style={{ 
+                    width: `${quality}%`,
+                    backgroundColor: quality > 75 ? '#00ff00' : quality > 50 ? '#ffff00' : '#ff0000'
+                  }}
+                />
+              </div>
+              <span className="text-xs font-medium" style={{ 
+                color: quality > 75 ? '#00ff00' : quality > 50 ? '#ffff00' : '#ff0000' 
+              }}>
+                {quality}%
+              </span>
             </div>
-            <span className="text-xs font-medium" style={{ 
-              color: quality > 75 ? '#00ff00' : quality > 50 ? '#ffff00' : '#ff0000' 
-            }}>
-              {quality}%
+          </div>
+          <div className="flex items-center gap-2">
+            <Fingerprint 
+              size={36}
+              className={`transition-colors duration-300 ${
+                !isFingerDetected ? 'text-gray-600' : 
+                quality > 75 ? 'text-green-500' : 
+                quality > 50 ? 'text-yellow-500' : 
+                'text-red-500'
+              }`}
+            />
+            <span className={`text-sm font-medium ${isFingerDetected ? 'text-green-500' : 'text-gray-500'}`}>
+              {isFingerDetected ? 'OK' : 'NO FINGER'}
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Fingerprint 
-            size={36} // Aumentado ligeramente
-            className={`transition-colors duration-300 ${
-              !isFingerDetected ? 'text-gray-600' : 
-              quality > 75 ? 'text-green-500' : 
-              quality > 50 ? 'text-yellow-500' : 
-              'text-red-500'
-            }`}
-          />
-          <span className={`text-sm font-medium ${isFingerDetected ? 'text-green-500' : 'text-gray-500'}`}>
-            {isFingerDetected ? 'OK' : 'NO FINGER'}
-          </span>
-        </div>
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 h-[80px] grid grid-cols-2">
+      <div className="h-20 grid grid-cols-2 gap-px bg-gray-800">
         <button 
           onClick={onStartMeasurement}
-          className="w-full h-full bg-black hover:bg-black/80 text-2xl font-bold text-white border-t border-r border-gray-800 transition-colors"
+          className="w-full h-full bg-black hover:bg-black/80 text-2xl font-bold text-white transition-colors active:bg-gray-900"
         >
           INICIAR
         </button>
         <button 
           onClick={handleReset}
-          className="w-full h-full bg-black hover:bg-black/80 text-2xl font-bold text-white border-t border-gray-800 transition-colors"
+          className="w-full h-full bg-black hover:bg-black/80 text-2xl font-bold text-white transition-colors active:bg-gray-900"
         >
           RESET
         </button>

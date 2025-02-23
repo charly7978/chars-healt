@@ -127,33 +127,14 @@ const Index = () => {
 
   useEffect(() => {
     const enforceResolution = () => {
-      const width = window.innerWidth;
-      const height = window.innerHeight;
-      
-      document.documentElement.style.setProperty('--app-width', `${width}px`);
-      document.documentElement.style.setProperty('--app-height', `${height}px`);
-      
-      document.body.style.display = 'none';
-      document.body.offsetHeight;
-      document.body.style.display = '';
-      
-      document.documentElement.style.zoom = '1';
-      
-      if (window.screen?.orientation) {
-        try {
-          if (window.matchMedia("(orientation: landscape)").matches) {
-            console.log('Please rotate your device to portrait mode');
-          }
-        } catch (e) {
-          console.log('Orientation detection not supported');
-        }
-      }
+      const vh = window.innerHeight * 0.01;
+      document.documentElement.style.setProperty('--vh', `${vh}px`);
     };
 
     enforceResolution();
     window.addEventListener('resize', enforceResolution);
     window.addEventListener('orientationchange', enforceResolution);
-    
+
     const preventDefault = (e: Event) => e.preventDefault();
     document.addEventListener('touchmove', preventDefault, { passive: false });
     document.addEventListener('gesturestart', preventDefault);
@@ -171,19 +152,8 @@ const Index = () => {
   }, []);
 
   return (
-    <div 
-      className="fixed inset-0 bg-black overflow-hidden touch-none select-none w-screen h-screen"
-      style={{
-        height: '100%',
-        width: '100%',
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0
-      }}
-    >
-      <div className="relative w-full h-full">
+    <div className="fixed inset-0 w-full h-full bg-black flex flex-col">
+      <div className="flex-1 relative">
         <div className="absolute inset-0">
           <CameraView 
             onStreamReady={handleStreamReady}
