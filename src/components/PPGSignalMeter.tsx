@@ -23,7 +23,7 @@ const PPGSignalMeter = ({
   
   const CANVAS_WIDTH = 320;
   const CANVAS_HEIGHT = 160;
-  const MAX_DATA_POINTS = 100;
+  const MAX_POINTS = 100;
 
   const render = () => {
     if (!canvasRef.current || !isFingerDetected) return;
@@ -31,51 +31,36 @@ const PPGSignalMeter = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Agregar el dato real sin modificar
+    // Agregar el valor RAW directo del sensor
     dataRef.current.push({
       time: Date.now() - startTime,
-      value,
+      value: value, // Valor directo sin modificar
       isPeak: quality > 75
     });
 
-    if (dataRef.current.length > MAX_DATA_POINTS) {
+    if (dataRef.current.length > MAX_POINTS) {
       dataRef.current.shift();
     }
 
-    // Fondo negro limpio
+    // Limpiar canvas
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    // Dibujar la señal PPG real
+    // Dibujar SOLO la señal RAW
     if (dataRef.current.length > 1) {
-      const recentData = dataRef.current.slice(-MAX_DATA_POINTS);
-      const values = recentData.map(d => d.value);
-      const min = Math.min(...values);
-      const max = Math.max(...values);
-      const range = max - min || 1;
-
       ctx.beginPath();
       ctx.strokeStyle = '#00FF00';
       ctx.lineWidth = 2;
 
-      recentData.forEach((point, index) => {
-        const x = (index / MAX_DATA_POINTS) * CANVAS_WIDTH;
-        const y = CANVAS_HEIGHT - ((point.value - min) / range * (CANVAS_HEIGHT * 0.8) + CANVAS_HEIGHT * 0.1);
-
+      dataRef.current.forEach((point, index) => {
+        const x = (index / MAX_POINTS) * CANVAS_WIDTH;
+        // Usamos el valor directo del sensor, solo ajustado a la altura del canvas
+        const y = CANVAS_HEIGHT - (point.value * CANVAS_HEIGHT);
+        
         if (index === 0) {
           ctx.moveTo(x, y);
         } else {
           ctx.lineTo(x, y);
-        }
-
-        // Marcar picos reales
-        if (point.isPeak) {
-          ctx.save();
-          ctx.fillStyle = '#FFFFFF';
-          ctx.beginPath();
-          ctx.arc(x, y, 2, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
         }
       });
       ctx.stroke();
@@ -102,7 +87,7 @@ const PPGSignalMeter = ({
         <div className="flex items-center gap-2">
           <div className={`w-2 h-2 rounded-full ${isFingerDetected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
           <span className="text-xs font-medium text-green-400">
-            {isFingerDetected ? `${quality}% - Señal Real` : 'Sin Señal'}
+            {isFingerDetected ? 'Señal PPG RAW' : 'Sin Señal'}
           </span>
         </div>
       </div>
