@@ -26,9 +26,16 @@ const Index = () => {
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
   useEffect(() => {
+    // Configurar la altura de la vista en dispositivos móviles
+    const setViewportHeight = () => {
+      const vh = window.innerHeight * 0.01;
+      document.documentElement.style.setProperty('--vh', `${vh}px`);
+    };
+
+    // Bloqueo de orientación (opcional, solo si está disponible)
     const lockOrientation = async () => {
       try {
-        if (typeof screen !== 'undefined' && screen.orientation) {
+        if (screen?.orientation?.lock) {
           await screen.orientation.lock('portrait');
         }
       } catch (error) {
@@ -38,11 +45,15 @@ const Index = () => {
 
     const preventScroll = (e: Event) => e.preventDefault();
     
+    setViewportHeight();
     lockOrientation();
+    
+    window.addEventListener('resize', setViewportHeight);
     document.body.addEventListener('touchmove', preventScroll, { passive: false });
     document.body.addEventListener('scroll', preventScroll, { passive: false });
 
     return () => {
+      window.removeEventListener('resize', setViewportHeight);
       document.body.removeEventListener('touchmove', preventScroll);
       document.body.removeEventListener('scroll', preventScroll);
     };
@@ -150,7 +161,7 @@ const Index = () => {
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
 
   return (
-    <div className="fixed inset-0 flex flex-col bg-black min-h-screen">
+    <div className="fixed inset-0 flex flex-col bg-black min-h-[100vh] min-h-[calc(var(--vh)*100)] max-h-[100vh] max-h-[calc(var(--vh)*100)]">
       <div className="flex-1 relative">
         <div className="absolute inset-0">
           <CameraView 
@@ -175,7 +186,7 @@ const Index = () => {
 
           <div className="absolute bottom-[120px] left-0 right-0 px-4">
             <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4 space-y-4">
-              <div className="flex justify-center gap-4">
+              <div className="flex flex-wrap justify-center gap-4">
                 <VitalSign 
                   label="FRECUENCIA CARDÍACA"
                   value={heartRate || "--"}
@@ -187,7 +198,7 @@ const Index = () => {
                   unit="%"
                 />
               </div>
-              <div className="flex justify-center gap-4">
+              <div className="flex flex-wrap justify-center gap-4">
                 <VitalSign 
                   label="PRESIÓN ARTERIAL"
                   value={vitalSigns.pressure}

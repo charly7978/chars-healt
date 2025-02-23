@@ -1,6 +1,9 @@
 
-interface ScreenOrientationLockType {
-  lock(orientation: OrientationLockType): Promise<void>;
+interface ScreenOrientationType {
+  lock?(orientation: OrientationLockType): Promise<void>;
+  unlock?(): void;
+  type?: string;
+  angle?: number;
 }
 
 type OrientationLockType = 
@@ -15,7 +18,7 @@ type OrientationLockType =
 
 declare global {
   interface Screen {
-    orientation: ScreenOrientationLockType;
+    orientation?: ScreenOrientationType;
   }
 }
 

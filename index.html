@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.ico" />
-    <meta name="viewport" content="viewport-fit=cover, width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#000000" />
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -15,19 +15,24 @@
         margin: 0;
         padding: 0;
         box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
       }
       
       :root {
         --safe-area-inset-top: env(safe-area-inset-top);
         --safe-area-inset-bottom: env(safe-area-inset-bottom);
+        --vh: 1vh;
       }
       
-      body {
+      html, body {
         width: 100%;
         height: 100%;
+        height: calc(var(--vh) * 100);
         position: fixed;
         overflow: hidden;
         background: #000;
+        -webkit-text-size-adjust: 100%;
+        -webkit-font-smoothing: antialiased;
       }
       
       #root {
@@ -42,6 +47,14 @@
         background: #000;
         padding-top: var(--safe-area-inset-top);
         padding-bottom: var(--safe-area-inset-bottom);
+        height: 100%;
+        height: calc(var(--vh) * 100);
+      }
+
+      @supports (-webkit-touch-callout: none) {
+        html, body, #root {
+          height: -webkit-fill-available;
+        }
       }
     </style>
   </head>
