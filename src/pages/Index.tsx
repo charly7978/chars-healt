@@ -20,12 +20,11 @@ const Index = () => {
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [lastErrorMessage, setLastErrorMessage] = useState<string | null>(null);
   const [rrData, setRRData] = useState<{ intervals: number[]; lastPeakTime: number | null } | null>(null);
+  const [currentBPM, setCurrentBPM] = useState(0);
 
-  const cameraViewRef = useRef<any>(null);
   const {
     isProcessing,
     lastSignal,
-    error,
     startProcessing,
     stopProcessing,
     calibrate,
@@ -35,7 +34,6 @@ const Index = () => {
   const vitalSignsProcessor = useVitalSignsProcessor();
 
   const [arrhythmiaStatus, setArrhythmiaStatus] = useState<string>("SIN ARRITMIAS|0");
-  const [currentBPM, setCurrentBPM] = useState(0);
 
   useEffect(() => {
     if (lastSignal && rrData) {
@@ -47,37 +45,12 @@ const Index = () => {
     }
   }, [lastSignal, rrData, vitalSignsProcessor]);
 
-  // Actualizar BPM cada vez que cambie
   useEffect(() => {
-    const updateBPM = () => {
-      if (heartBeatProcessor) {
-        const bpm = heartBeatProcessor.getFinalBPM();
-        if (bpm > 0) {
-          setCurrentBPM(bpm);
-        }
-      }
-    };
-    updateBPM();
-  }, [heartBeatProcessor]);
-
-  const toggleCamera = async () => {
-    if (!cameraViewRef.current) return;
-
-    if (!isCameraActive) {
-      try {
-        await cameraViewRef.current.startCamera();
-        setIsCameraActive(true);
-        setCameraError(null);
-      } catch (err: any) {
-        console.error("Error starting camera:", err);
-        setCameraError(err.message || "Failed to start camera.");
-        setLastErrorMessage(err.message || "Failed to start camera.");
-      }
-    } else {
-      cameraViewRef.current.stopCamera();
-      setIsCameraActive(false);
+    const bpm = heartBeatProcessor.getFinalBPM();
+    if (bpm > 0) {
+      setCurrentBPM(bpm);
     }
-  };
+  }, [heartBeatProcessor]);
 
   const startCapture = async () => {
     if (!isCameraActive) {
@@ -121,76 +94,34 @@ const Index = () => {
     }
   };
 
-  const handleCalibrationStart = () => {
-    setIsCalibrating(true);
-  };
-
-  const handleCalibrationClose = () => {
-    setIsCalibrating(false);
-  };
-
-  const handleCalibration = async () => {
-    const success = await calibrate();
-    setIsCalibrating(false);
-    if (success) {
-      alert("Calibración exitosa!");
-    } else {
-      alert("Error en la calibración. Intenta de nuevo.");
-    }
-  };
-
   return (
-    <div className="w-screen h-screen bg-gray-900 overflow-hidden">
-      <div className="relative w-full h-full">
+    <div className="flex flex-col w-screen h-screen bg-gray-900 overflow-hidden">
+      <div className="relative flex-1">
         <CameraView
           isMonitoring={isCameraActive}
-          onError={err => setCameraError(err)}
+          onError={setCameraError}
           onFrameProcessed={onFrameProcessed}
           isFingerDetected={lastSignal?.fingerDetected || false}
           signalQuality={lastSignal?.quality || 0}
         />
 
-        <div className="absolute top-4 left-4 z-10 text-white">
-          <div className="flex items-center space-x-2">
+        <div className="absolute top-4 left-4 z-10">
+          <div className="space-y-4">
             <SignalQualityIndicator quality={lastSignal?.quality || 0} />
             <PPGSignalMeter
               value={lastSignal?.filteredValue || 0}
               quality={lastSignal?.quality || 0}
               isFingerDetected={lastSignal?.fingerDetected || false}
             />
-          </div>
-          {cameraError && (
-            <div className="text-red-500 text-sm mt-2">
-              Error de cámara: {cameraError}
-            </div>
-          )}
-          {lastErrorMessage && (
-            <div className="text-red-500 text-sm mt-2">
-              Último error: {lastErrorMessage}
-            </div>
-          )}
-        </div>
-
-        <div className="absolute bottom-4 left-4 right-4 z-10 flex justify-between">
-          <Button onClick={toggleCamera} disabled={isProcessing}>
-            {isCameraActive ? "Detener Cámara" : "Iniciar Cámara"}
-          </Button>
-          <div>
-            <Button onClick={handleCalibrationStart} disabled={isProcessing}>
-              Calibrar
-            </Button>
-            <Button className="ml-2" onClick={startCapture} disabled={isProcessing}>
-              <Play className="mr-2 h-4 w-4" />
-              Capturar
-            </Button>
-            <Button onClick={stopCapture} disabled={!isProcessing}>
-              <Square className="mr-2 h-4 w-4" />
-              Detener
-            </Button>
+            {cameraError && (
+              <div className="text-red-500 text-sm mt-2 bg-black/50 p-2 rounded">
+                Error: {cameraError}
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="absolute top-4 right-4 z-10 text-white">
+        <div className="absolute top-4 right-4 z-10 space-y-2">
           <VitalSign
             label="BPM"
             value={currentBPM}
@@ -207,21 +138,67 @@ const Index = () => {
             unit="mmHg"
           />
         </div>
-
-        <PPGResultDialog
-          isOpen={showResults}
-          onClose={() => setShowResults(false)}
-          signalData={resultData}
-          arrhythmias={arrhythmiaStatus}
-        />
-
-        <CalibrationDialog
-          isOpen={isCalibrating}
-          onClose={handleCalibrationClose}
-          onCalibrationStart={handleCalibrationStart}
-          onCalibrationEnd={handleCalibration}
-        />
       </div>
+
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-gray-900/80 backdrop-blur-sm z-20">
+        <div className="flex justify-between items-center max-w-4xl mx-auto">
+          <Button 
+            onClick={() => setIsCameraActive(!isCameraActive)} 
+            disabled={isProcessing}
+            variant="outline"
+          >
+            {isCameraActive ? "Detener Cámara" : "Iniciar Cámara"}
+          </Button>
+          
+          <div className="flex gap-2">
+            <Button 
+              onClick={() => setIsCalibrating(true)} 
+              disabled={isProcessing}
+              variant="outline"
+            >
+              Calibrar
+            </Button>
+            <Button 
+              onClick={startCapture} 
+              disabled={!isCameraActive || isProcessing}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              <Play className="w-4 h-4 mr-2" />
+              Capturar
+            </Button>
+            <Button 
+              onClick={stopCapture} 
+              disabled={!isProcessing}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              <Square className="w-4 h-4 mr-2" />
+              Detener
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <PPGResultDialog
+        isOpen={showResults}
+        onClose={() => setShowResults(false)}
+        signalData={resultData}
+        arrhythmias={arrhythmiaStatus}
+      />
+
+      <CalibrationDialog
+        isOpen={isCalibrating}
+        onClose={() => setIsCalibrating(false)}
+        onCalibrationStart={() => setIsCalibrating(true)}
+        onCalibrationEnd={async () => {
+          const success = await calibrate();
+          setIsCalibrating(false);
+          if (success) {
+            alert("Calibración exitosa!");
+          } else {
+            alert("Error en la calibración. Intenta de nuevo.");
+          }
+        }}
+      />
     </div>
   );
 };
