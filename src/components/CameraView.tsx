@@ -8,8 +8,6 @@ interface CameraViewProps {
   isFingerDetected?: boolean;
   signalQuality?: number;
   buttonPosition?: DOMRect;
-  onError?: (error: string) => void;
-  onFrameProcessed?: (imageData: ImageData) => void;
 }
 
 const CameraView = ({ 
@@ -17,24 +15,20 @@ const CameraView = ({
   isMonitoring, 
   isFingerDetected = false, 
   signalQuality = 0,
-  buttonPosition,
-  onError,
-  onFrameProcessed 
+  buttonPosition 
 }: CameraViewProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
-  const [isVideoReady, setIsVideoReady] = useState(false);
 
   const stopCamera = async () => {
     if (stream) {
       stream.getTracks().forEach(track => {
         track.stop();
+        if (videoRef.current) {
+          videoRef.current.srcObject = null;
+        }
       });
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-      }
       setStream(null);
-      setIsVideoReady(false);
     }
   };
 
@@ -44,35 +38,70 @@ const CameraView = ({
         throw new Error("getUserMedia no está soportado");
       }
 
+      const isAndroid = /android/i.test(navigator.userAgent);
+
+      // Configuración base de video
+      const baseVideoConstraints: MediaTrackConstraints = {
+        facingMode: 'environment',
+        width: { ideal: 720 },
+        height: { ideal: 480 }
+      };
+
+      // Agregar configuraciones específicas para Android
+      if (isAndroid) {
+        Object.assign(baseVideoConstraints, {
+          frameRate: { ideal: 25 },
+          resizeMode: 'crop-and-scale'
+        });
+      }
+
+      // Construir constraints finales
       const constraints: MediaStreamConstraints = {
-        video: {
-          facingMode: 'environment',
-          width: { ideal: 720 },
-          height: { ideal: 480 }
-        }
+        video: baseVideoConstraints
       };
 
       const newStream = await navigator.mediaDevices.getUserMedia(constraints);
-      
+      const videoTrack = newStream.getVideoTracks()[0];
+
+      if (videoTrack && isAndroid) {
+        try {
+          // Intentar aplicar configuraciones avanzadas de manera segura
+          const capabilities = videoTrack.getCapabilities();
+          const advancedConstraints: MediaTrackConstraintSet[] = [];
+          
+          // Solo agregar las restricciones si el dispositivo las soporta
+          if (capabilities.exposureMode) {
+            advancedConstraints.push({ exposureMode: 'continuous' });
+          }
+          if (capabilities.focusMode) {
+            advancedConstraints.push({ focusMode: 'continuous' });
+          }
+          if (capabilities.whiteBalanceMode) {
+            advancedConstraints.push({ whiteBalanceMode: 'continuous' });
+          }
+
+          if (advancedConstraints.length > 0) {
+            await videoTrack.applyConstraints({
+              advanced: advancedConstraints
+            });
+          }
+
+          // Optimizaciones de renderizado para Android
+          if (videoRef.current) {
+            videoRef.current.style.transform = 'translateZ(0)';
+            videoRef.current.style.backfaceVisibility = 'hidden';
+          }
+        } catch (err) {
+          console.log("No se pudieron aplicar algunas optimizaciones:", err);
+        }
+      }
+
       if (videoRef.current) {
         videoRef.current.srcObject = newStream;
-        
-        // Wait for video metadata to load
-        await new Promise<void>((resolve) => {
-          if (!videoRef.current) return;
-          
-          const handleLoaded = () => {
-            setIsVideoReady(true);
-            resolve();
-          };
-          
-          videoRef.current.onloadedmetadata = handleLoaded;
-          
-          // If the video is already loaded, resolve immediately
-          if (videoRef.current.readyState >= 2) {
-            handleLoaded();
-          }
-        });
+        if (isAndroid) {
+          videoRef.current.style.willChange = 'transform';
+          videoRef.current.style.transform = 'translateZ(0)';
+        }
       }
 
       setStream(newStream);
@@ -82,9 +111,6 @@ const CameraView = ({
       }
     } catch (err) {
       console.error("Error al iniciar la cámara:", err);
-      if (onError) {
-        onError(err instanceof Error ? err.message : "Error desconocido al iniciar la cámara");
-      }
     }
   };
 
@@ -99,63 +125,21 @@ const CameraView = ({
     };
   }, [isMonitoring]);
 
-  useEffect(() => {
-    const processVideoFrame = () => {
-      if (!videoRef.current || !onFrameProcessed || !stream || !isVideoReady) return;
-
-      const video = videoRef.current;
-      
-      // Check if video has valid dimensions
-      if (video.videoWidth === 0 || video.videoHeight === 0) {
-        console.warn('Video dimensions not ready yet');
-        return;
-      }
-
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
-      if (!context) return;
-
-      // Set canvas size to match video dimensions
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-
-      try {
-        context.drawImage(video, 0, 0);
-        const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-        onFrameProcessed(imageData);
-      } catch (error) {
-        console.error('Error processing video frame:', error);
-      }
-    };
-
-    let frameId: number;
-    const animate = () => {
-      processVideoFrame();
-      frameId = requestAnimationFrame(animate);
-    };
-
-    if (isMonitoring && stream && isVideoReady) {
-      animate();
-    }
-
-    return () => {
-      if (frameId) {
-        cancelAnimationFrame(frameId);
-      }
-    };
-  }, [isMonitoring, stream, onFrameProcessed, isVideoReady]);
-
   return (
-    <div className="relative w-full h-full bg-black">
+    <>
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted
-        className="absolute inset-0 w-full h-full object-cover"
+        className="absolute top-0 left-0 min-w-full min-h-full w-auto h-auto z-0 object-cover"
+        style={{
+          willChange: 'transform',
+          transform: 'translateZ(0)',
+          backfaceVisibility: 'hidden'
+        }}
       />
-      <div className="absolute inset-0 bg-black/20" />
-      {isMonitoring && (
+      {isMonitoring && buttonPosition && (
         <div className="absolute bottom-24 left-1/2 transform -translate-x-1/2 z-20 flex flex-col items-center">
           <Fingerprint
             size={48}
@@ -169,11 +153,11 @@ const CameraView = ({
           <span className={`text-xs mt-2 transition-colors duration-300 ${
             isFingerDetected ? 'text-green-500' : 'text-gray-400'
           }`}>
-            {isFingerDetected ? "Dedo detectado" : "Ubique su dedo en el lente"}
+            {isFingerDetected ? "dedo detectado" : "ubique su dedo en el lente"}
           </span>
         </div>
       )}
-    </div>
+    </>
   );
 };
 
