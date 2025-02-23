@@ -22,10 +22,12 @@ const CameraView = ({
 
   const stopCamera = async () => {
     if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-      }
+      stream.getTracks().forEach(track => {
+        track.stop();
+        if (videoRef.current) {
+          videoRef.current.srcObject = null;
+        }
+      });
       setStream(null);
     }
   };
@@ -38,50 +40,44 @@ const CameraView = ({
 
       const isAndroid = /android/i.test(navigator.userAgent);
 
-      // Inicialmente pedimos configuración mínima para abrir rápido
-      const initialConstraints: MediaStreamConstraints = {
+      // Configuración específica para Android
+      const constraints: MediaStreamConstraints = {
         video: {
           facingMode: 'environment',
-          width: 720,
-          height: 480
+          width: { ideal: 720 },
+          height: { ideal: 480 },
+          // Optimizaciones específicas para Android
+          ...(isAndroid && {
+            frameRate: { ideal: 25 }, // Reducido de 30 a 25 para Android
+            resizeMode: 'crop-and-scale' // Modo eficiente de redimensionamiento
+          })
         }
       };
 
-      const newStream = await navigator.mediaDevices.getUserMedia(initialConstraints);
-      
+      const newStream = await navigator.mediaDevices.getUserMedia(constraints);
       const videoTrack = newStream.getVideoTracks()[0];
+
       if (videoTrack) {
         if (isAndroid) {
-          try {
-            // Una vez que la cámara está abierta, ajustamos la calidad
-            setTimeout(async () => {
-              try {
-                await videoTrack.applyConstraints({
-                  width: { max: 1280 },
-                  height: { max: 720 },
-                  frameRate: { min: 25, ideal: 30 },
-                  aspectRatio: { ideal: 16/9 }
-                });
-              } catch (err) {
-                console.log("No se pudieron aplicar configuraciones optimizadas:", err);
-              }
-            }, 500);
+          // Optimizaciones específicas para Android
+          await videoTrack.applyConstraints({
+            advanced: [
+              { exposureMode: "continuous" },
+              { focusMode: "continuous" },
+              { whiteBalanceMode: "continuous" }
+            ]
+          }).catch(err => console.log("No se pudieron aplicar optimizaciones:", err));
 
-            videoTrack.enabled = true;
-            videoRef.current?.addEventListener('pause', () => {
-              videoTrack.enabled = false;
-            });
-            videoRef.current?.addEventListener('play', () => {
-              videoTrack.enabled = true;
-            });
-          } catch (err) {
-            console.log("No se pudieron aplicar optimizaciones para Android:", err);
+          // Reducir la sobrecarga del pipeline de video
+          if (videoRef.current) {
+            videoRef.current.style.transform = 'translateZ(0)';
+            videoRef.current.style.backfaceVisibility = 'hidden';
           }
         }
 
         const capabilities = videoTrack.getCapabilities();
         console.log('Camera capabilities:', capabilities);
-        
+
         try {
           const settings = videoTrack.getSettings();
           console.log('Current camera settings:', settings);
@@ -93,8 +89,9 @@ const CameraView = ({
       if (videoRef.current) {
         videoRef.current.srcObject = newStream;
         if (isAndroid) {
+          // Optimizaciones de rendering para Android
+          videoRef.current.style.willChange = 'transform';
           videoRef.current.style.transform = 'translateZ(0)';
-          videoRef.current.style.backfaceVisibility = 'hidden';
         }
       }
 
@@ -119,13 +116,6 @@ const CameraView = ({
     };
   }, [isMonitoring]);
 
-  const getFingerColor = () => {
-    if (!isFingerDetected) return 'text-gray-400';
-    if (signalQuality > 75) return 'text-green-500';
-    if (signalQuality > 50) return 'text-yellow-500';
-    return 'text-red-500';
-  };
-
   return (
     <>
       <video
@@ -136,14 +126,20 @@ const CameraView = ({
         className="absolute top-0 left-0 min-w-full min-h-full w-auto h-auto z-0 object-cover"
         style={{
           willChange: 'transform',
-          transform: 'translateZ(0)'
+          transform: 'translateZ(0)',
+          backfaceVisibility: 'hidden'
         }}
       />
       {isMonitoring && buttonPosition && (
         <div className="absolute bottom-24 left-1/2 transform -translate-x-1/2 z-20 flex flex-col items-center">
           <Fingerprint
             size={48}
-            className={`transition-colors duration-300 ${getFingerColor()}`}
+            className={`transition-colors duration-300 ${
+              !isFingerDetected ? 'text-gray-400' :
+              signalQuality > 75 ? 'text-green-500' :
+              signalQuality > 50 ? 'text-yellow-500' :
+              'text-red-500'
+            }`}
           />
           <span className={`text-xs mt-2 transition-colors duration-300 ${
             isFingerDetected ? 'text-green-500' : 'text-gray-400'
