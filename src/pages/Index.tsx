@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
@@ -6,6 +5,7 @@ import CameraView from "@/components/CameraView";
 import { useSignalProcessor } from "@/hooks/useSignalProcessor";
 import SignalQualityIndicator from "@/components/SignalQualityIndicator";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
+import PPGResultDialog from "@/components/PPGResultDialog";
 import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import CalibrationDialog from "@/components/CalibrationDialog";
@@ -25,6 +25,8 @@ const Index = () => {
   const [arrhythmiaCount, setArrhythmiaCount] = useState<string | number>("--");
   const [showCalibrationDialog, setShowCalibrationDialog] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
+  const [showResults, setShowResults] = useState(false);
+  const [resultData, setResultData] = useState<Array<{time: number, value: number, isPeak: boolean}>>([]);
   const measurementTimerRef = useRef<number | null>(null);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
@@ -208,6 +210,11 @@ const Index = () => {
     }
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
 
+  const handlePPGDataReady = (data: Array<{time: number, value: number, isPeak: boolean}>) => {
+    setResultData(data);
+    setShowResults(true);
+  };
+
   return (
     <div className="w-screen h-screen bg-gray-900 overflow-hidden">
       <div className="relative w-full h-full">
@@ -232,6 +239,8 @@ const Index = () => {
                 value={lastSignal?.filteredValue || 0}
                 quality={lastSignal?.quality || 0}
                 isFingerDetected={lastSignal?.fingerDetected || false}
+                isComplete={elapsedTime >= 30}
+                onDataReady={handlePPGDataReady}
               />
             </div>
 
@@ -277,6 +286,12 @@ const Index = () => {
           </div>
         </div>
       </div>
+
+      <PPGResultDialog
+        isOpen={showResults}
+        onClose={() => setShowResults(false)}
+        signalData={resultData}
+      />
 
       <CalibrationDialog
         isOpen={showCalibrationDialog}

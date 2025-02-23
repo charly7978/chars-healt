@@ -1,14 +1,20 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 
 interface PPGSignalMeterProps {
   value: number;
   quality: number;
   isFingerDetected: boolean;
-  isComplete?: boolean; // Nueva prop para saber si la medición terminó
+  isComplete?: boolean;
+  onDataReady?: (data: Array<{time: number, value: number, isPeak: boolean}>) => void;
 }
 
-const PPGSignalMeter = ({ value, quality, isFingerDetected, isComplete }: PPGSignalMeterProps) => {
+const PPGSignalMeter = ({ 
+  value, 
+  quality, 
+  isFingerDetected, 
+  isComplete,
+  onDataReady 
+}: PPGSignalMeterProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dataRef = useRef<{time: number, value: number, isPeak: boolean}[]>([]);
   const [startTime] = useState<number>(Date.now());
@@ -89,6 +95,9 @@ const PPGSignalMeter = ({ value, quality, isFingerDetected, isComplete }: PPGSig
         }
       });
 
+      if (onDataReady) {
+        onDataReady(dataRef.current);
+      }
     } else {
       // Mostrar señal en tiempo real
       const recentData = dataRef.current.slice(-150); // Últimos 150 puntos
