@@ -8,6 +8,8 @@ interface CameraViewProps {
   isFingerDetected?: boolean;
   signalQuality?: number;
   buttonPosition?: DOMRect;
+  onError?: (error: string) => void;
+  onFrameProcessed?: (imageData: ImageData) => void;
 }
 
 const CameraView = ({ 
@@ -15,7 +17,9 @@ const CameraView = ({
   isMonitoring, 
   isFingerDetected = false, 
   signalQuality = 0,
-  buttonPosition 
+  buttonPosition,
+  onError,
+  onFrameProcessed 
 }: CameraViewProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
@@ -111,6 +115,9 @@ const CameraView = ({
       }
     } catch (err) {
       console.error("Error al iniciar la cámara:", err);
+      if (onError) {
+        onError(err instanceof Error ? err.message : "Error desconocido al iniciar la cámara");
+      }
     }
   };
 
@@ -124,6 +131,40 @@ const CameraView = ({
       stopCamera();
     };
   }, [isMonitoring]);
+
+  useEffect(() => {
+    const processVideoFrame = () => {
+      if (!videoRef.current || !onFrameProcessed) return;
+
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      if (!context) return;
+
+      const { videoWidth, videoHeight } = videoRef.current;
+      canvas.width = videoWidth;
+      canvas.height = videoHeight;
+
+      context.drawImage(videoRef.current, 0, 0);
+      const imageData = context.getImageData(0, 0, videoWidth, videoHeight);
+      onFrameProcessed(imageData);
+    };
+
+    let frameId: number;
+    const animate = () => {
+      processVideoFrame();
+      frameId = requestAnimationFrame(animate);
+    };
+
+    if (isMonitoring && stream) {
+      animate();
+    }
+
+    return () => {
+      if (frameId) {
+        cancelAnimationFrame(frameId);
+      }
+    };
+  }, [isMonitoring, stream, onFrameProcessed]);
 
   return (
     <>

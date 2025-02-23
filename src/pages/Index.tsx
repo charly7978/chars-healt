@@ -49,10 +49,15 @@ const Index = () => {
 
   // Actualizar BPM cada vez que cambie
   useEffect(() => {
-    const bpm = heartBeatProcessor.getFinalBPM();
-    if (bpm > 0) {
-      setCurrentBPM(bpm);
-    }
+    const updateBPM = () => {
+      if (heartBeatProcessor) {
+        const bpm = heartBeatProcessor.getFinalBPM();
+        if (bpm > 0) {
+          setCurrentBPM(bpm);
+        }
+      }
+    };
+    updateBPM();
   }, [heartBeatProcessor]);
 
   const toggleCamera = async () => {
@@ -139,7 +144,7 @@ const Index = () => {
       <div className="relative w-full h-full">
         <CameraView
           isMonitoring={isCameraActive}
-          onError={setCameraError}
+          onError={err => setCameraError(err)}
           onFrameProcessed={onFrameProcessed}
           isFingerDetected={lastSignal?.fingerDetected || false}
           signalQuality={lastSignal?.quality || 0}
