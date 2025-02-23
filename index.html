@@ -3,13 +3,49 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>healthpulse-captain</title>
-    <meta name="description" content="Lovable Generated Project" />
-    <meta name="author" content="Lovable" />
-    <meta property="og:image" content="/og-image.png" />
-  </head>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
+      }
+      
+      html, body {
+        width: 100%;
+        height: 100%;
+        height: 100dvh;
+        position: fixed;
+        overflow: hidden;
+        background: #000;
+        -webkit-text-size-adjust: 100%;
+      }
+      
+      #root {
+        width: 100%;
+        height: 100%;
+        height: 100dvh;
+        position: fixed;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        background: #000;
+        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+      }
 
+      @supports (-webkit-touch-callout: none) {
+        html, body, #root {
+          height: -webkit-fill-available;
+        }
+      }
+    </style>
+  </head>
   <body>
     <div id="root"></div>
     <script src="https://cdn.gpteng.co/gptengineer.js" type="module"></script>

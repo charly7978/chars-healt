@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -24,6 +23,31 @@ const Index = () => {
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
+
+  useEffect(() => {
+    const preventScroll = (e: Event) => e.preventDefault();
+    
+    // Intento de bloqueo de orientación
+    const lockOrientation = async () => {
+      try {
+        if (screen?.orientation) {
+          await screen.orientation.lock?.('portrait');
+        }
+      } catch (error) {
+        console.log('No se pudo bloquear la orientación:', error);
+      }
+    };
+    
+    lockOrientation();
+    
+    document.body.addEventListener('touchmove', preventScroll, { passive: false });
+    document.body.addEventListener('scroll', preventScroll, { passive: false });
+
+    return () => {
+      document.body.removeEventListener('touchmove', preventScroll);
+      document.body.removeEventListener('scroll', preventScroll);
+    };
+  }, []);
 
   const startMonitoring = () => {
     setIsMonitoring(true);
@@ -127,8 +151,8 @@ const Index = () => {
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
 
   return (
-    <div className="w-screen h-screen bg-black overflow-hidden">
-      <div className="relative w-full h-full">
+    <div className="fixed inset-0 flex flex-col bg-black h-[100dvh] w-screen overflow-hidden">
+      <div className="flex-1 relative">
         <div className="absolute inset-0">
           <CameraView 
             onStreamReady={handleStreamReady}
@@ -139,47 +163,65 @@ const Index = () => {
           />
         </div>
 
-        <div className="relative z-10 h-full">
-          {/* Top displays */}
-          <div className="absolute top-20 left-0 right-0 px-4 flex justify-between z-20">
-            <VitalSign 
-              label="Heart Rate"
-              value={heartRate || "--"}
-              unit="BPM"
-            />
-            <VitalSign 
-              label="SpO2"
-              value={vitalSigns.spo2 || "--"}
-              unit="%"
+        <div className="relative z-10 h-full flex flex-col">
+          <div className="flex-1">
+            <PPGSignalMeter 
+              value={lastSignal?.filteredValue || 0}
+              quality={lastSignal?.quality || 0}
+              isFingerDetected={lastSignal?.fingerDetected || false}
+              onStartMeasurement={startMonitoring}
+              onReset={stopMonitoring}
             />
           </div>
 
-          <PPGSignalMeter 
-            value={lastSignal?.filteredValue || 0}
-            quality={lastSignal?.quality || 0}
-            isFingerDetected={lastSignal?.fingerDetected || false}
-            onStartMeasurement={startMonitoring}
-            onReset={stopMonitoring}
-          />
-
-          {/* Bottom displays */}
-          <div className="absolute bottom-[100px] left-0 right-0 px-4 flex justify-between z-20">
-            <VitalSign 
-              label="Blood Pressure"
-              value={vitalSigns.pressure}
-              unit="mmHg"
-            />
-            <VitalSign 
-              label="Arrhythmias"
-              value={`${vitalSigns.arrhythmiaStatus}|${arrhythmiaCount}`}
-            />
+          <div className="absolute bottom-[120px] left-0 right-0 px-4">
+            <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4 space-y-4">
+              <div className="flex flex-wrap justify-center gap-4">
+                <VitalSign 
+                  label="FRECUENCIA CARDÍACA"
+                  value={heartRate || "--"}
+                  unit="BPM"
+                />
+                <VitalSign 
+                  label="SPO2"
+                  value={vitalSigns.spo2 || "--"}
+                  unit="%"
+                />
+              </div>
+              <div className="flex flex-wrap justify-center gap-4">
+                <VitalSign 
+                  label="PRESIÓN ARTERIAL"
+                  value={vitalSigns.pressure}
+                  unit="mmHg"
+                />
+                <VitalSign 
+                  label="ARRITMIAS"
+                  value={`${vitalSigns.arrhythmiaStatus}|${arrhythmiaCount}`}
+                />
+              </div>
+            </div>
           </div>
 
           {isMonitoring && (
-            <div className="absolute bottom-20 left-0 right-0 text-center">
+            <div className="absolute bottom-28 left-0 right-0 text-center">
               <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 30s</span>
             </div>
           )}
+
+          <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 mt-auto">
+            <button 
+              onClick={startMonitoring}
+              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
+            >
+              INICIAR
+            </button>
+            <button 
+              onClick={stopMonitoring}
+              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
+            >
+              RESET
+            </button>
+          </div>
         </div>
       </div>
     </div>
