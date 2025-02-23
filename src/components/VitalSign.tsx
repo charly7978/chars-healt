@@ -11,22 +11,17 @@ const VitalSign = ({ label, value, unit }: VitalSignProps) => {
   const getArrhythmiaDisplay = () => {
     if (!isArrhythmiaDisplay) return { text: value, color: "" };
     
-    if (value === "SIN ARRITMIAS") {
-      return {
-        text: "SIN ARRITMIAS",
-        color: "text-[#0FA0CE]"
-      };
-    }
+    const [status, count] = value.toString().split('|');
     
-    if (value === "ARRITMIA DETECTADA") {
+    if (status === "ARRITMIA DETECTADA") {
       return {
-        text: "ARRITMIA DETECTADA",
+        text: `ARRITMIA DETECTADA (${count})`,
         color: "text-medical-red"
       };
     }
     
     return {
-      text: value.toString(),
+      text: "SIN ARRITMIAS (0)",
       color: "text-[#0FA0CE]"
     };
   };

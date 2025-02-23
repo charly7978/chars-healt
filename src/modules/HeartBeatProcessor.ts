@@ -10,18 +10,18 @@ export class HeartBeatProcessor {
   private readonly SAMPLE_RATE = 30;
   private readonly WINDOW_SIZE = 60;
   private readonly MIN_BPM = 40;
-  private readonly MAX_BPM = 180;
-  private readonly SIGNAL_THRESHOLD = 0.80;
-  private readonly MIN_CONFIDENCE = 0.70;
-  private readonly DERIVATIVE_THRESHOLD = -0.05;
-  private readonly MIN_PEAK_TIME_MS = 600;
-  private readonly WARMUP_TIME_MS = 5000;
+  private readonly MAX_BPM = 200; // Aumentado para permitir más latidos
+  private readonly SIGNAL_THRESHOLD = 0.60; // Reducido para ser más sensible
+  private readonly MIN_CONFIDENCE = 0.50; // Reducido para ser más permisivo
+  private readonly DERIVATIVE_THRESHOLD = -0.03; // Menos restrictivo
+  private readonly MIN_PEAK_TIME_MS = 400; // Reducido para permitir latidos más cercanos
+  private readonly WARMUP_TIME_MS = 3000; // Reducido para empezar antes
 
-  // Parámetros de filtrado.
-  private readonly MEDIAN_FILTER_WINDOW = 5;
-  private readonly MOVING_AVERAGE_WINDOW = 7;
-  private readonly EMA_ALPHA = 0.2;
-  private readonly BASELINE_FACTOR = 0.998;
+  // Parámetros de filtrado ajustados
+  private readonly MEDIAN_FILTER_WINDOW = 3; // Reducido para mayor sensibilidad
+  private readonly MOVING_AVERAGE_WINDOW = 5; // Reducido para mayor sensibilidad
+  private readonly EMA_ALPHA = 0.3; // Aumentado para respuesta más rápida
+  private readonly BASELINE_FACTOR = 0.995; // Ajustado para adaptación más rápida
 
   // Parámetros de beep ajustados para sonido más realista
   private readonly BEEP_PRIMARY_FREQUENCY = 880; // Frecuencia principal (La4)
@@ -276,14 +276,14 @@ export class HeartBeatProcessor {
     const isPeak =
       derivative < this.DERIVATIVE_THRESHOLD &&
       normalizedValue > this.SIGNAL_THRESHOLD &&
-      this.lastValue > this.baseline;
+      this.lastValue > this.baseline * 0.98;
 
     const amplitudeConfidence = Math.min(
-      Math.max(Math.abs(normalizedValue) / (this.SIGNAL_THRESHOLD * 2), 0),
+      Math.max(Math.abs(normalizedValue) / (this.SIGNAL_THRESHOLD * 1.8), 0),
       1
     );
     const derivativeConfidence = Math.min(
-      Math.max(Math.abs(derivative) / Math.abs(this.DERIVATIVE_THRESHOLD), 0),
+      Math.max(Math.abs(derivative) / Math.abs(this.DERIVATIVE_THRESHOLD * 0.8), 0),
       1
     );
 

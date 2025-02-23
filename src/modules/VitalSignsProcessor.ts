@@ -57,7 +57,7 @@ export class VitalSignsProcessor {
   private readonly RR_WINDOW_SIZE = 5;
   
   /** Umbral RMSSD (en ms) para considerar arritmia */
-  private readonly RMSSD_THRESHOLD = 20;
+  private readonly RMSSD_THRESHOLD = 25; // Aumentado de 20 a 25 para ser más selectivo
   
   /** Ventana corta de aprendizaje */
   private readonly ARRHYTHMIA_LEARNING_PERIOD = 3000;
@@ -119,10 +119,10 @@ export class VitalSignsProcessor {
     // Calcular RMSSD
     const rmssd = Math.sqrt(sumSquaredDiff / (recentRR.length - 1));
     
-    // También detectar latidos prematuros
+    // También detectar latidos prematuros con umbral más estricto
     const avgRR = recentRR.reduce((a, b) => a + b, 0) / recentRR.length;
     const lastRR = recentRR[recentRR.length - 1];
-    const prematureBeat = Math.abs(lastRR - avgRR) > (avgRR * 0.2); // 20% de variación
+    const prematureBeat = Math.abs(lastRR - avgRR) > (avgRR * 0.25); // Aumentado a 25% de variación
     
     console.log("VitalSignsProcessor: Análisis RMSSD", {
       timestamp: new Date().toISOString(),
@@ -134,8 +134,8 @@ export class VitalSignsProcessor {
       prematureBeat
     });
 
-    // Nueva condición de arritmia
-    const newArrhythmiaState = rmssd > this.RMSSD_THRESHOLD || prematureBeat;
+    // Nueva condición de arritmia más estricta
+    const newArrhythmiaState = rmssd > this.RMSSD_THRESHOLD && prematureBeat;
 
     if (newArrhythmiaState !== this.arrhythmiaDetected) {
       this.arrhythmiaDetected = newArrhythmiaState;
@@ -255,6 +255,15 @@ export class VitalSignsProcessor {
   private readonly SPO2_BUFFER_SIZE = 10;
 
   /**
+   * Buffer para presión arterial
+   * Guarda últimas 10 mediciones para promedio exponencial
+   */
+  private systolicBuffer: number[] = [];
+  private diastolicBuffer: number[] = [];
+  private readonly BP_BUFFER_SIZE = 10;
+  private readonly BP_ALPHA = 0.7;
+
+  /**
    * calculateSpO2
    * Calcula la saturación de oxígeno con transiciones suaves
    * y mediciones reales.
@@ -338,58 +347,101 @@ export class VitalSignsProcessor {
 
   /**
    * calculateBloodPressure
-   * @param values
-   * @returns {{systolic: number, diastolic: number}}
+   * Calcula presión arterial basada en PTT y amplitud PPG
+   * con ajustes más finos para mejor precisión y memoria
    */
   private calculateBloodPressure(values: number[]): {
     systolic: number;
     diastolic: number;
   } {
-    // Mínimo ~30 para tener algo de info
     if (values.length < 30) {
       return { systolic: 0, diastolic: 0 };
     }
 
-    // Buscar picos/ valles en este chunk
     const { peakIndices, valleyIndices } = this.localFindPeaksAndValleys(values);
     if (peakIndices.length < 2) {
       return { systolic: 120, diastolic: 80 };
     }
 
-    // Asumamos ~30 FPS => ~33ms / muestra
     const fps = 30;
     const msPerSample = 1000 / fps;
 
-    // PTT (tiempo en ms entre picos consecutivos)
     const pttValues: number[] = [];
     for (let i = 1; i < peakIndices.length; i++) {
       const dt = (peakIndices[i] - peakIndices[i - 1]) * msPerSample;
       pttValues.push(dt);
     }
-    let avgPTT = pttValues.reduce((acc, val) => acc + val, 0) / pttValues.length;
+    
+    const weightedPTT = pttValues.reduce((acc, val, idx) => {
+      const weight = (idx + 1) / pttValues.length;
+      return acc + val * weight;
+    }, 0) / pttValues.reduce((acc, _, idx) => acc + (idx + 1) / pttValues.length, 0);
 
-    // Evitar extremos
-    if (avgPTT < 300) avgPTT = 300;   // ~300ms => FC ~200 BPM, extremo
-    if (avgPTT > 1500) avgPTT = 1500; // ~1.5s => FC ~40 BPM, extremo
-
-    // Calcular amplitud pico-valle promedio
+    const normalizedPTT = Math.max(300, Math.min(1200, weightedPTT));
     const amplitude = this.calculateAmplitude(values, peakIndices, valleyIndices);
+    const normalizedAmplitude = Math.min(100, Math.max(0, amplitude * 5));
 
-    /**
-     * Heurísticas:
-     *   sistólica ~ 115 - 0.04*(avgPTT - 500) + 0.25*(amplitude)
-     *   diastólica ~ 0.65 * sistólica
-     * Clamps en [95–180]/[60–115]
-     */
-    const alphaPTT = 0.04;  // sensibilidad al PTT
-    const alphaAmp = 0.25;  // sensibilidad a la amplitud
-    let estimatedSystolic = 115 - alphaPTT * (avgPTT - 500) + alphaAmp * amplitude;
-    let estimatedDiastolic = estimatedSystolic * 0.65;
+    const pttFactor = (600 - normalizedPTT) * 0.08;
+    const ampFactor = normalizedAmplitude * 0.3;
+    
+    // Cálculo instantáneo
+    let instantSystolic = 120 + pttFactor + ampFactor;
+    let instantDiastolic = 80 + (pttFactor * 0.5) + (ampFactor * 0.2);
 
-    const systolic = Math.round(Math.max(95, Math.min(180, estimatedSystolic)));
-    const diastolic = Math.round(Math.max(60, Math.min(115, estimatedDiastolic)));
+    // Aplicar límites fisiológicos
+    instantSystolic = Math.max(90, Math.min(180, instantSystolic));
+    instantDiastolic = Math.max(60, Math.min(110, instantDiastolic));
+    
+    // Mantener diferencial realista
+    const differential = instantSystolic - instantDiastolic;
+    if (differential < 20) {
+      instantDiastolic = instantSystolic - 20;
+    } else if (differential > 80) {
+      instantDiastolic = instantSystolic - 80;
+    }
 
-    return { systolic, diastolic };
+    // Actualizar buffers
+    this.systolicBuffer.push(instantSystolic);
+    this.diastolicBuffer.push(instantDiastolic);
+    
+    if (this.systolicBuffer.length > this.BP_BUFFER_SIZE) {
+      this.systolicBuffer.shift();
+      this.diastolicBuffer.shift();
+    }
+
+    // Calcular promedio exponencial ponderado
+    let finalSystolic = 0;
+    let finalDiastolic = 0;
+    let weightSum = 0;
+
+    for (let i = 0; i < this.systolicBuffer.length; i++) {
+      const weight = Math.pow(this.BP_ALPHA, this.systolicBuffer.length - 1 - i);
+      finalSystolic += this.systolicBuffer[i] * weight;
+      finalDiastolic += this.diastolicBuffer[i] * weight;
+      weightSum += weight;
+    }
+
+    finalSystolic = finalSystolic / weightSum;
+    finalDiastolic = finalDiastolic / weightSum;
+
+    console.log("VitalSignsProcessor: Cálculo de presión arterial", {
+      instant: {
+        systolic: Math.round(instantSystolic),
+        diastolic: Math.round(instantDiastolic)
+      },
+      buffered: {
+        systolic: Math.round(finalSystolic),
+        diastolic: Math.round(finalDiastolic)
+      },
+      bufferSize: this.systolicBuffer.length,
+      ptt: normalizedPTT,
+      amplitude: normalizedAmplitude
+    });
+
+    return {
+      systolic: Math.round(finalSystolic),
+      diastolic: Math.round(finalDiastolic)
+    };
   }
 
   /**
@@ -534,6 +586,8 @@ export class VitalSignsProcessor {
     this.isLearningPhase = true;
     this.arrhythmiaDetected = false;
     this.measurementStartTime = Date.now();
+    this.systolicBuffer = [];
+    this.diastolicBuffer = [];
     console.log("VitalSignsProcessor: Reset completo");
   }
 }
