@@ -11,56 +11,19 @@
     <meta name="mobile-web-app-capable" content="yes">
     <title>Biocharts AI</title>
     <style>
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-        -webkit-tap-highlight-color: transparent;
-      }
-      
-      :root {
-        --safe-area-inset-top: env(safe-area-inset-top);
-        --safe-area-inset-bottom: env(safe-area-inset-bottom);
-        --vh: 1vh;
-      }
-      
+      /* Forzar dimensiones consistentes */
       html, body {
-        width: 100%;
-        height: 100%;
-        height: calc(var(--vh) * 100);
-        position: fixed;
-        overflow: hidden;
-        background: #000;
-        -webkit-text-size-adjust: 100%;
-        -webkit-font-smoothing: antialiased;
-      }
-      
-      #root {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        overflow: hidden;
-        display: flex;
-        flex-direction: column;
-        background: #000;
-        padding-top: var(--safe-area-inset-top);
-        padding-bottom: var(--safe-area-inset-bottom);
-        height: 100%;
-        height: calc(var(--vh) * 100);
-      }
-
-      @supports (-webkit-touch-callout: none) {
-        html, body, #root {
-          height: -webkit-fill-available;
-        }
+        width: 100vw !important;
+        height: 100vh !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+        position: fixed !important;
       }
     </style>
   </head>
   <body>
     <div id="root"></div>
-    <script src="https://cdn.gpteng.co/gptengineer.js" type="module"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
