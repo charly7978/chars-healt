@@ -127,16 +127,11 @@ const Index = () => {
 
   useEffect(() => {
     const enforceResolution = () => {
-      const width = 412; // Ancho típico de un dispositivo móvil en Chrome
-      const height = 915; // Alto típico de un dispositivo móvil en Chrome
-      
-      const windowWidth = window.innerWidth;
-      const windowHeight = window.innerHeight;
-      const scale = Math.min(windowWidth / width, windowHeight / height);
+      const width = window.innerWidth;
+      const height = window.innerHeight;
       
       document.documentElement.style.setProperty('--app-width', `${width}px`);
       document.documentElement.style.setProperty('--app-height', `${height}px`);
-      document.documentElement.style.setProperty('--app-scale', scale.toString());
       
       document.body.style.display = 'none';
       document.body.offsetHeight;
@@ -153,19 +148,12 @@ const Index = () => {
           console.log('Orientation detection not supported');
         }
       }
-      
-      const pixelRatio = window.devicePixelRatio || 1;
-      const canvas = document.createElement('canvas');
-      canvas.width = width * pixelRatio;
-      canvas.height = height * pixelRatio;
-      canvas.style.width = width + 'px';
-      canvas.style.height = height + 'px';
     };
 
     enforceResolution();
     window.addEventListener('resize', enforceResolution);
     window.addEventListener('orientationchange', enforceResolution);
-
+    
     const preventDefault = (e: Event) => e.preventDefault();
     document.addEventListener('touchmove', preventDefault, { passive: false });
     document.addEventListener('gesturestart', preventDefault);
@@ -184,15 +172,15 @@ const Index = () => {
 
   return (
     <div 
-      className="fixed inset-0 bg-black overflow-hidden touch-none select-none"
+      className="fixed inset-0 bg-black overflow-hidden touch-none select-none w-screen h-screen"
       style={{
-        width: 'var(--app-width)',
-        height: 'var(--app-height)',
-        transform: `scale(var(--app-scale))`,
-        transformOrigin: 'top left',
+        height: '100%',
+        width: '100%',
         position: 'fixed',
         top: 0,
-        left: 0
+        left: 0,
+        right: 0,
+        bottom: 0
       }}
     >
       <div className="relative w-full h-full">
