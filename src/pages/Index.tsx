@@ -24,16 +24,20 @@ const Index = () => {
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
-  const enterFullScreen = () => {
+  const enterFullScreen = async () => {
     const elem = document.documentElement;
-    if (elem.requestFullscreen) {
-      elem.requestFullscreen().catch(err => console.log('Error al entrar en pantalla completa:', err));
-    } else if (elem.webkitRequestFullscreen) {
-      elem.webkitRequestFullscreen().catch(err => console.log('Error al entrar en pantalla completa:', err));
-    } else if (elem.mozRequestFullScreen) {
-      elem.mozRequestFullScreen().catch(err => console.log('Error al entrar en pantalla completa:', err));
-    } else if (elem.msRequestFullscreen) {
-      elem.msRequestFullscreen().catch(err => console.log('Error al entrar en pantalla completa:', err));
+    try {
+      if (elem.requestFullscreen) {
+        await elem.requestFullscreen();
+      } else if (elem.webkitRequestFullscreen) {
+        await elem.webkitRequestFullscreen();
+      } else if (elem.mozRequestFullScreen) {
+        await elem.mozRequestFullScreen();
+      } else if (elem.msRequestFullscreen) {
+        await elem.msRequestFullscreen();
+      }
+    } catch (err) {
+      console.log('Error al entrar en pantalla completa:', err);
     }
   };
 
@@ -42,7 +46,9 @@ const Index = () => {
     
     const lockOrientation = async () => {
       try {
-        await screen.orientation.lock('portrait');
+        if (screen.orientation && screen.orientation.lock) {
+          await screen.orientation.lock('portrait');
+        }
       } catch (error) {
         console.log('No se pudo bloquear la orientación:', error);
       }
