@@ -9,12 +9,6 @@ interface PPGSignalMeterProps {
   isComplete?: boolean;
   onStartMeasurement: () => void;
   onReset: () => void;
-  vitalSigns?: {
-    bpm: number;
-    spo2: number;
-    pressure: string;
-    arrhythmiaStatus: string;
-  };
 }
 
 const PPGSignalMeter = ({ 
@@ -22,8 +16,7 @@ const PPGSignalMeter = ({
   quality, 
   isFingerDetected,
   onStartMeasurement,
-  onReset,
-  vitalSigns
+  onReset
 }: PPGSignalMeterProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dataRef = useRef<{time: number, value: number}[]>([]);
@@ -34,10 +27,14 @@ const PPGSignalMeter = ({
   const MIN_PEAK_INTERVAL = 1500;
   const lastPeakRef = useRef<number>(0);
   const animationFrameRef = useRef<number>();
-  const smoothingFactor = 0.2;
+  const smoothingFactor = 0.1; // Reducido para suavizar menos la señal
+  const verticalScale = 2.0; // Aumentado para amplificar la señal verticalmente
 
   useEffect(() => {
-    if (!canvasRef.current || !isFingerDetected) return;
+    if (!canvasRef.current || !isFingerDetected) {
+      dataRef.current = []; // Limpia los datos cuando no hay dedo detectado
+      return;
+    }
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
@@ -49,7 +46,7 @@ const PPGSignalMeter = ({
     if (lastPoint) {
       const timeDiff = currentTime - lastPoint.time;
       const valueDiff = value - lastPoint.value;
-      const steps = Math.min(Math.floor(timeDiff / 8), 12);
+      const steps = Math.min(Math.floor(timeDiff / 16), 8); // Reducido para más detalle
 
       for (let i = 1; i <= steps; i++) {
         const interpolatedTime = lastPoint.time + (timeDiff * (i / steps));
@@ -59,13 +56,13 @@ const PPGSignalMeter = ({
         
         dataRef.current.push({
           time: interpolatedTime,
-          value: interpolatedValue
+          value: interpolatedValue * verticalScale // Amplifica la señal
         });
       }
     } else {
       dataRef.current.push({
         time: currentTime,
-        value: value
+        value: value * verticalScale
       });
     }
 
@@ -89,8 +86,9 @@ const PPGSignalMeter = ({
     }
 
     // Draw amplitude grid
-    for (let i = 0; i <= 10; i++) {
-      const y = (canvas.height / 10) * i;
+    const gridLines = 20; // Aumentado para más detalle vertical
+    for (let i = 0; i <= gridLines; i++) {
+      const y = (canvas.height / gridLines) * i;
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(canvas.width, y);
@@ -104,10 +102,10 @@ const PPGSignalMeter = ({
       const range = maxVal - minVal || 1;
 
       ctx.shadowColor = '#00ff00';
-      ctx.shadowBlur = 5;
+      ctx.shadowBlur = 3; // Reducido para líneas más nítidas
       ctx.beginPath();
       ctx.strokeStyle = '#00ff00';
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 2; // Línea más fina para ver mejor los detalles
 
       let firstPoint = true;
       data.forEach((point, index) => {
@@ -119,11 +117,7 @@ const PPGSignalMeter = ({
           ctx.moveTo(x, y);
           firstPoint = false;
         } else {
-          const prevPoint = data[index - 1];
-          const prevX = canvas.width - ((currentTime - prevPoint.time) * canvas.width / WINDOW_WIDTH_MS);
-          const xc = (prevX + x) / 2;
-          const yc = (y + canvas.height - (((prevPoint.value - minVal) / range) * canvas.height * 0.8 + canvas.height * 0.1)) / 2;
-          ctx.quadraticCurveTo(prevX, y, xc, yc);
+          ctx.lineTo(x, y); // Cambiado a lineTo para ver mejor los picos
         }
       });
       ctx.stroke();
@@ -171,40 +165,6 @@ const PPGSignalMeter = ({
           />
           <span className={`text-sm font-medium ${isFingerDetected ? 'text-green-500' : 'text-gray-500'}`}>
             {isFingerDetected ? 'OK' : 'NO FINGER'}
-          </span>
-        </div>
-      </div>
-
-      {/* Panel de mediciones */}
-      <div className="absolute bottom-[100px] left-0 right-0 h-[80px] grid grid-cols-4 bg-black/40">
-        <div className="flex flex-col items-center justify-center border-r border-gray-800">
-          <span className="text-gray-400 text-sm">BPM</span>
-          <span className="text-green-500 text-2xl font-bold">
-            {vitalSigns?.bpm || '--'}
-          </span>
-        </div>
-        <div className="flex flex-col items-center justify-center border-r border-gray-800">
-          <span className="text-gray-400 text-sm">SpO2</span>
-          <span className="text-green-500 text-2xl font-bold">
-            {vitalSigns?.spo2 ? `${vitalSigns.spo2}%` : '--'}
-          </span>
-        </div>
-        <div className="flex flex-col items-center justify-center border-r border-gray-800">
-          <span className="text-gray-400 text-sm">PA</span>
-          <span className="text-green-500 text-2xl font-bold">
-            {vitalSigns?.pressure || '--/--'}
-          </span>
-        </div>
-        <div className="flex flex-col items-center justify-center">
-          <span className="text-gray-400 text-sm">ARRITMIA</span>
-          <span 
-            className={`text-2xl font-bold ${
-              vitalSigns?.arrhythmiaStatus?.includes('DETECTADA') 
-                ? 'text-red-500' 
-                : 'text-green-500'
-            }`}
-          >
-            {vitalSigns?.arrhythmiaStatus?.includes('DETECTADA') ? 'SI' : 'NO'}
           </span>
         </div>
       </div>

@@ -52,6 +52,14 @@ const Index = () => {
     stopProcessing();
     resetVitalSigns();
     setElapsedTime(0);
+    setHeartRate(0);
+    setVitalSigns({ 
+      spo2: 0, 
+      pressure: "--/--",
+      arrhythmiaStatus: "--" 
+    });
+    setArrhythmiaCount("--");
+    setSignalQuality(0);
     
     if (measurementTimerRef.current) {
       clearInterval(measurementTimerRef.current);
@@ -110,10 +118,7 @@ const Index = () => {
       
       const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
       if (vitals) {
-        setVitalSigns({
-          ...vitals,
-          bpm: heartBeatResult.bpm
-        });
+        setVitalSigns(vitals);
         setArrhythmiaCount(vitals.arrhythmiaStatus);
       }
       
@@ -139,12 +144,6 @@ const Index = () => {
             value={lastSignal?.filteredValue || 0}
             quality={lastSignal?.quality || 0}
             isFingerDetected={lastSignal?.fingerDetected || false}
-            vitalSigns={{
-              bpm: heartRate,
-              spo2: vitalSigns.spo2,
-              pressure: vitalSigns.pressure,
-              arrhythmiaStatus: vitalSigns.arrhythmiaStatus
-            }}
             onStartMeasurement={startMonitoring}
             onReset={stopMonitoring}
           />
