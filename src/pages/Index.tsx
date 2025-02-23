@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
@@ -9,8 +8,7 @@ import PPGSignalMeter from "@/components/PPGSignalMeter";
 import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import CalibrationDialog from "@/components/CalibrationDialog";
-import { supabase } from "@/integrations/supabase/client";
-import { LogOut, Settings, Play, Square } from "lucide-react";
+import { Play, Square } from "lucide-react";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -33,7 +31,6 @@ const Index = () => {
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
-  // Auth effect
   useEffect(() => {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -139,7 +136,6 @@ const Index = () => {
     }
   };
 
-  // Cleanup effect
   useEffect(() => {
     return () => {
       if (measurementTimerRef.current) {
@@ -149,7 +145,6 @@ const Index = () => {
     };
   }, []);
 
-  // Calibration handlers
   const handleCalibrationStart = () => {
     if (isMonitoring) {
       pauseMonitoring();
@@ -162,7 +157,6 @@ const Index = () => {
     }
   };
 
-  // Visibility change effect
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden) {
@@ -182,7 +176,6 @@ const Index = () => {
     };
   }, [isMonitoring, isPaused, showCalibrationDialog]);
 
-  // Stream handler
   const handleStreamReady = (stream: MediaStream) => {
     if (!isMonitoring) return;
     
@@ -231,7 +224,6 @@ const Index = () => {
     processImage();
   };
 
-  // Signal processing effect
   useEffect(() => {
     if (lastSignal && lastSignal.fingerDetected && isMonitoring) {
       const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
@@ -263,25 +255,6 @@ const Index = () => {
         <div className="relative z-10 h-full flex flex-col justify-between p-4">
           <div className="flex justify-between items-start w-full">
             <h1 className="text-lg font-bold text-white bg-black/30 px-3 py-1 rounded">PPG Monitor</h1>
-            <div className="flex gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="bg-black/30 text-gray-300 hover:text-white h-8 w-8"
-                onClick={handleCalibrationClick}
-                disabled={!isMonitoring}
-              >
-                <Settings className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="bg-black/30 text-gray-300 hover:text-white h-8 w-8"
-                onClick={handleLogout}
-              >
-                <LogOut className="h-4 w-4" />
-              </Button>
-            </div>
           </div>
 
           <div className="flex-1 flex flex-col justify-center gap-2 max-w-md mx-auto w-full mt-[-12rem]">
@@ -306,28 +279,28 @@ const Index = () => {
             </div>
           </div>
 
-          <div className="flex flex-col items-center gap-1 w-full max-w-md mx-auto mt-[-8rem]">
+          <div className="flex flex-col items-center gap-2 w-full max-w-md mx-auto mt-[-8rem]">
             {isMonitoring && (
               <div className="text-xs font-medium text-gray-300 mb-1">
-                Tiempo de medición: {elapsedTime}s / 30s
+                Tiempo: {elapsedTime}s / 30s
               </div>
             )}
             <Button
               onClick={isMonitoring ? stopMonitoring : startMonitoring}
-              className={`flex-1 w-full measure-button ${
+              className={`w-full measure-button ${
                 isMonitoring 
                   ? 'bg-red-600/80 hover:bg-red-600' 
                   : 'bg-green-600/80 hover:bg-green-600'
-              } text-white gap-2`}
+              } text-white`}
             >
               {isMonitoring ? (
                 <>
-                  <Square className="h-4 w-4" />
+                  <Square className="h-4 w-4 mr-2" />
                   Detener Medición
                 </>
               ) : (
                 <>
-                  <Play className="h-4 w-4" />
+                  <Play className="h-4 w-4 mr-2" />
                   Iniciar Medición
                 </>
               )}

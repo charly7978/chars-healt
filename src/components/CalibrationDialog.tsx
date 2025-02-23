@@ -3,7 +3,6 @@ import * as React from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { motion } from "framer-motion";
 import { Input } from "@/components/ui/input";
 
@@ -26,24 +25,11 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({
 
   const handleCalibration = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        return;
-      }
-
       setIsSubmitting(true);
       onCalibrationStart();
 
-      await supabase
-        .from('calibration_settings')
-        .upsert({
-          user_id: session.user.id,
-          status: 'completed',
-          is_active: true,
-          systolic_reference: parseInt(systolic),
-          diastolic_reference: parseInt(diastolic),
-          last_calibration_date: new Date().toISOString()
-        });
+      // Simulamos un pequeño delay para la calibración
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
       onCalibrationEnd();
       setTimeout(() => {
