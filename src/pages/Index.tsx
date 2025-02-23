@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -128,19 +127,25 @@ const Index = () => {
 
   useEffect(() => {
     const enforceResolution = () => {
-      const vh = window.innerHeight * 0.01;
-      document.documentElement.style.setProperty('--vh', `${vh}px`);
+      const width = 412; // Ancho típico de un dispositivo móvil en Chrome
+      const height = 915; // Alto típico de un dispositivo móvil en Chrome
+      
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
+      const scale = Math.min(windowWidth / width, windowHeight / height);
+      
+      document.documentElement.style.setProperty('--app-width', `${width}px`);
+      document.documentElement.style.setProperty('--app-height', `${height}px`);
+      document.documentElement.style.setProperty('--app-scale', scale.toString());
       
       document.body.style.display = 'none';
-      document.body.offsetHeight; // force reflow
+      document.body.offsetHeight;
       document.body.style.display = '';
-
+      
       document.documentElement.style.zoom = '1';
       
-      // En lugar de modificar el ángulo, escuchamos cambios de orientación
       if (window.screen?.orientation) {
         try {
-          // Solo notificamos si está en landscape
           if (window.matchMedia("(orientation: landscape)").matches) {
             console.log('Please rotate your device to portrait mode');
           }
@@ -148,15 +153,11 @@ const Index = () => {
           console.log('Orientation detection not supported');
         }
       }
-
-      // Establecer resolución máxima
-      const pixelRatio = window.devicePixelRatio || 1;
-      const width = window.innerWidth * pixelRatio;
-      const height = window.innerHeight * pixelRatio;
       
+      const pixelRatio = window.devicePixelRatio || 1;
       const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
+      canvas.width = width * pixelRatio;
+      canvas.height = height * pixelRatio;
       canvas.style.width = width + 'px';
       canvas.style.height = height + 'px';
     };
@@ -165,33 +166,33 @@ const Index = () => {
     window.addEventListener('resize', enforceResolution);
     window.addEventListener('orientationchange', enforceResolution);
 
-    document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
-    document.addEventListener('gesturestart', (e) => e.preventDefault());
-    document.addEventListener('gesturechange', (e) => e.preventDefault());
-    document.addEventListener('gestureend', (e) => e.preventDefault());
+    const preventDefault = (e: Event) => e.preventDefault();
+    document.addEventListener('touchmove', preventDefault, { passive: false });
+    document.addEventListener('gesturestart', preventDefault);
+    document.addEventListener('gesturechange', preventDefault);
+    document.addEventListener('gestureend', preventDefault);
 
     return () => {
       window.removeEventListener('resize', enforceResolution);
       window.removeEventListener('orientationchange', enforceResolution);
-      document.removeEventListener('touchmove', (e) => e.preventDefault());
-      document.removeEventListener('gesturestart', (e) => e.preventDefault());
-      document.removeEventListener('gesturechange', (e) => e.preventDefault());
-      document.removeEventListener('gestureend', (e) => e.preventDefault());
+      document.removeEventListener('touchmove', preventDefault);
+      document.removeEventListener('gesturestart', preventDefault);
+      document.removeEventListener('gesturechange', preventDefault);
+      document.removeEventListener('gestureend', preventDefault);
     };
   }, []);
 
   return (
     <div 
-      className="fixed inset-0 w-screen h-screen bg-black overflow-hidden touch-none select-none" 
-      style={{ 
-        height: 'calc(var(--vh, 1vh) * 100)',
-        WebkitTextSizeAdjust: '100%',
-        transform: 'translateZ(0)',
-        backfaceVisibility: 'hidden',
-        perspective: '1000',
-        width: '100vw',
-        maxWidth: '100vw',
-        minWidth: '100vw'
+      className="fixed inset-0 bg-black overflow-hidden touch-none select-none"
+      style={{
+        width: 'var(--app-width)',
+        height: 'var(--app-height)',
+        transform: `scale(var(--app-scale))`,
+        transformOrigin: 'top left',
+        position: 'fixed',
+        top: 0,
+        left: 0
       }}
     >
       <div className="relative w-full h-full">
