@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
@@ -207,11 +206,6 @@ const Index = () => {
       setSignalQuality(lastSignal.quality);
     }
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
-
-  const handlePPGDataReady = (data: Array<{time: number, value: number, isPeak: boolean}>) => {
-    setResultData(data);
-    setShowResults(true);
-  };
 
   return (
     <div className="w-screen h-screen bg-gray-900 overflow-hidden">

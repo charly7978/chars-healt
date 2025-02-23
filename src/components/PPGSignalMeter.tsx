@@ -6,7 +6,6 @@ interface PPGSignalMeterProps {
   quality: number;
   isFingerDetected: boolean;
   isComplete?: boolean;
-  onDataReady?: (data: Array<{time: number, value: number, isPeak: boolean}>) => void;
 }
 
 const PPGSignalMeter = ({ 
@@ -17,10 +16,10 @@ const PPGSignalMeter = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dataRef = useRef<{time: number, value: number}[]>([]);
   const [startTime] = useState<number>(Date.now());
-  const MAX_TIME = 30000;
+  const WINDOW_WIDTH_MS = 6000; // Ventana de 6 segundos visible
   const CANVAS_WIDTH = 800;
   const CANVAS_HEIGHT = 300;
-  const MIN_PEAK_INTERVAL = 300; // Mínimo tiempo entre picos (ms)
+  const MIN_PEAK_INTERVAL = 300;
   const lastPeakRef = useRef<number>(0);
 
   useEffect(() => {
@@ -31,44 +30,42 @@ const PPGSignalMeter = ({
     if (!ctx) return;
 
     const currentTime = Date.now();
-    const elapsedTime = currentTime - startTime;
-
+    
     // Agregar nuevo punto de datos
-    if (elapsedTime <= MAX_TIME) {
-      dataRef.current.push({
-        time: elapsedTime,
-        value: value
-      });
-    }
+    dataRef.current.push({
+      time: currentTime,
+      value: value
+    });
+
+    // Mantener solo los últimos 6 segundos de datos
+    const cutoffTime = currentTime - WINDOW_WIDTH_MS;
+    dataRef.current = dataRef.current.filter(point => point.time >= cutoffTime);
 
     // Limpiar canvas
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Dibujar cuadrícula y números
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+    // Dibujar cuadrícula
+    ctx.strokeStyle = 'rgba(0, 255, 0, 0.1)';
     ctx.lineWidth = 1;
-    ctx.fillStyle = '#8E9196';
-    ctx.font = '12px monospace';
 
-    // Grid vertical (tiempo)
-    for (let i = 0; i <= 10; i++) {
-      const x = (canvas.width / 10) * i;
+    // Grid vertical (tiempo) - cada línea representa 0.2 segundos
+    const timeInterval = WINDOW_WIDTH_MS / 30; // 30 divisiones
+    for (let i = 0; i <= 30; i++) {
+      const x = canvas.width - (canvas.width * (i * timeInterval) / WINDOW_WIDTH_MS);
       ctx.beginPath();
       ctx.moveTo(x, 0);
       ctx.lineTo(x, canvas.height);
       ctx.stroke();
-      ctx.fillText(`${i * 3}s`, x, canvas.height - 5);
     }
 
     // Grid horizontal (amplitud)
-    for (let i = 0; i <= 5; i++) {
-      const y = (canvas.height / 5) * i;
+    for (let i = 0; i <= 8; i++) {
+      const y = (canvas.height / 8) * i;
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(canvas.width, y);
       ctx.stroke();
-      ctx.fillText(`${100 - (i * 20)}`, 5, y + 15);
     }
 
     // Procesar y dibujar señal PPG
@@ -84,9 +81,9 @@ const PPGSignalMeter = ({
       ctx.lineWidth = 2;
 
       data.forEach((point, index) => {
-        const x = (canvas.width * point.time) / MAX_TIME;
+        const x = canvas.width - ((currentTime - point.time) * canvas.width / WINDOW_WIDTH_MS);
         const normalizedY = (point.value - minVal) / range;
-        const y = normalizedY * canvas.height * 0.8 + canvas.height * 0.1;
+        const y = canvas.height - (normalizedY * canvas.height * 0.8 + canvas.height * 0.1);
         
         if (index === 0) {
           ctx.moveTo(x, y);
@@ -99,46 +96,47 @@ const PPGSignalMeter = ({
           const prev2 = data[index - 2].value;
           const prev1 = data[index - 1].value;
           const current = point.value;
-          const next = data[index + 1].value;
+          const next = data[index + 1]?.value;
 
-          // Detectar picos anormales o intervalos irregulares
-          const isAbnormalPeak = 
-            (current > prev1 && current > next) && // Es un pico
-            (currentTime - lastPeakRef.current > MIN_PEAK_INTERVAL) && // Suficiente tiempo desde último pico
-            (Math.abs(current - prev1) > range * 0.4 || // Amplitud anormal
-             Math.abs(current - prev2) > range * 0.5); // O patrón irregular
+          if (next !== undefined) {
+            const isAbnormalPeak = 
+              (current > prev1 && current > next) && 
+              (currentTime - lastPeakRef.current > MIN_PEAK_INTERVAL) &&
+              (Math.abs(current - prev1) > range * 0.4 || 
+               Math.abs(current - prev2) > range * 0.5);
 
-          if (isAbnormalPeak) {
-            // Marcar arritmia
-            ctx.save();
-            ctx.fillStyle = '#ea384c';
-            ctx.strokeStyle = '#ea384c';
-            
-            // Círculo en el pico
-            ctx.beginPath();
-            ctx.arc(x, y, 5, 0, 2 * Math.PI);
-            ctx.fill();
-            
-            // Línea vertical indicadora
-            ctx.beginPath();
-            ctx.setLineDash([5, 5]);
-            ctx.moveTo(x, 0);
-            ctx.lineTo(x, canvas.height);
-            ctx.stroke();
-            
-            // Texto "ARRITMIA"
-            ctx.fillStyle = '#ea384c';
-            ctx.fillText('ARRITMIA', x + 5, y - 10);
-            
-            ctx.restore();
-            lastPeakRef.current = currentTime;
+            if (isAbnormalPeak) {
+              // Marcar arritmia
+              ctx.save();
+              ctx.fillStyle = '#ff0000';
+              ctx.strokeStyle = '#ff0000';
+              
+              // Círculo rojo en el pico
+              ctx.beginPath();
+              ctx.arc(x, y, 4, 0, 2 * Math.PI);
+              ctx.fill();
+              
+              // Línea vertical roja punteada
+              ctx.beginPath();
+              ctx.setLineDash([5, 5]);
+              ctx.moveTo(x, 0);
+              ctx.lineTo(x, canvas.height);
+              ctx.stroke();
+              
+              // Texto "ARRITMIA"
+              ctx.font = '12px monospace';
+              ctx.fillText('ARRITMIA', x + 5, y - 10);
+              
+              ctx.restore();
+              lastPeakRef.current = currentTime;
+            }
           }
         }
       });
       ctx.stroke();
     }
 
-  }, [value, quality, isFingerDetected, startTime]);
+  }, [value, quality, isFingerDetected]);
 
   return (
     <div className="bg-black/40 backdrop-blur-sm rounded-lg p-4">
@@ -160,7 +158,7 @@ const PPGSignalMeter = ({
         className="w-full rounded bg-black/60"
       />
       <div className="mt-2 text-xs text-red-500 flex items-center gap-2">
-        <div className="w-3 h-3 rounded-full bg-[#ea384c]"></div>
+        <div className="w-3 h-3 rounded-full bg-red-500"></div>
         <span>Indicador de Arritmia</span>
       </div>
     </div>
