@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from 'react';
 import { Fingerprint } from 'lucide-react';
 
@@ -22,7 +23,7 @@ const PPGSignalMeter = ({
   const [startTime, setStartTime] = useState<number>(Date.now());
   const WINDOW_WIDTH_MS = 3000;
   const CANVAS_WIDTH = 2000;
-  const CANVAS_HEIGHT = 800;
+  const CANVAS_HEIGHT = 600; // Reducido para subir más el gráfico
   const verticalScale = 15.0;
   const baselineRef = useRef<number | null>(null);
   const maxAmplitudeRef = useRef<number>(0);
@@ -148,20 +149,27 @@ const PPGSignalMeter = ({
       <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center bg-black/40">
         <div className="flex items-center gap-4">
           <span className="text-2xl font-bold text-white">PPG</span>
-          <span 
-            className="text-xl font-bold"
-            style={{ 
-              color: isFingerDetected ? 
-                (quality > 75 ? '#00ff00' : quality > 50 ? '#ffff00' : '#ff0000') : 
-                '#ff0000'
-            }}
-          >
-            {isFingerDetected ? `${quality}%` : 'NO SIGNAL'}
-          </span>
+          {/* Indicador de calidad de señal */}
+          <div className="flex items-center gap-2">
+            <div className="w-20 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+              <div 
+                className="h-full transition-all duration-300 rounded-full"
+                style={{ 
+                  width: `${quality}%`,
+                  backgroundColor: quality > 75 ? '#00ff00' : quality > 50 ? '#ffff00' : '#ff0000'
+                }}
+              />
+            </div>
+            <span className="text-xs font-medium" style={{ 
+              color: quality > 75 ? '#00ff00' : quality > 50 ? '#ffff00' : '#ff0000' 
+            }}>
+              {quality}%
+            </span>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Fingerprint 
-            size={32}
+            size={36} // Aumentado ligeramente
             className={`transition-colors duration-300 ${
               !isFingerDetected ? 'text-gray-600' : 
               quality > 75 ? 'text-green-500' : 

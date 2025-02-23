@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -126,8 +125,24 @@ const Index = () => {
     }
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
 
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.width = '100%';
+    document.body.style.height = '100%';
+    
+    return () => {
+      document.body.style.overflow = '';
+      document.documentElement.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+      document.body.style.height = '';
+    };
+  }, []);
+
   return (
-    <div className="w-screen h-screen bg-black overflow-hidden">
+    <div className="fixed inset-0 w-full h-full bg-black overflow-hidden">
       <div className="relative w-full h-full">
         <div className="absolute inset-0">
           <CameraView 
@@ -148,10 +163,8 @@ const Index = () => {
             onReset={stopMonitoring}
           />
 
-          {/* Panel de displays con diseño y animaciones mejoradas */}
-          <div className="absolute bottom-[200px] left-0 right-0 px-4">
+          <div className="absolute bottom-[240px] left-0 right-0 px-4">
             <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4 space-y-4">
-              {/* Primera fila: BPM y SpO2 */}
               <div className="flex justify-center gap-4">
                 <VitalSign 
                   label="Heart Rate"
@@ -164,7 +177,6 @@ const Index = () => {
                   unit="%"
                 />
               </div>
-              {/* Segunda fila: Presión y Arritmias */}
               <div className="flex justify-center gap-4">
                 <VitalSign 
                   label="Blood Pressure"
