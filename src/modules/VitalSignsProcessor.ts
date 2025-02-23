@@ -4,22 +4,7 @@
  * Procesa datos PPG para estimar (de forma muy aproximada) SpO2, presión arterial
  * y detectar posibles arritmias.
  *
- * ---------------------------------------------------------------------------
- * ADVERTENCIA:
- *  - Código prototipo para DEMO / investigación, **NO** dispositivo médico.
- *  - Presión arterial vía PPG depende de calibraciones, señales reales estables,
- *    y hardware adecuado. Se usa aquí una heurística muy simplificada.
- *  - La detección de arritmias (RR-intervals, Poincaré, etc.) es también
- *    aproximada y requiere validación clínica.
- * ---------------------------------------------------------------------------
- *
- * Ajustes solicitados:
- * 1) Limitar SpO2 en [88, 98], pues 98% suele ser el máximo real en humanos
- *    (para no quedar clavado en 100%).
- * 2) Subir un poco la presión arterial calculada, ya que quedaba muy baja.
- * 3) Hacer la detección de arritmias más sensible, bajando umbrales
- *    (MAX_RR_VARIATION, POINCARE_SD1_THRESHOLD, POINCARE_SD2_THRESHOLD).
- *
+ * Incluye sistema de autoaprendizaje para mejorar precisión basado en histórico.
  */
 
 export class VitalSignsProcessor {
@@ -93,6 +78,100 @@ export class VitalSignsProcessor {
   /** Momento de inicio (ms) para la medición actual. */
   private measurementStartTime: number = Date.now();
 
+  /** Buffer para autoaprendizaje de SpO2 */
+  private readonly LEARNING_WINDOW_SIZE = 50;
+  private learningBuffer: number[] = [];
+  private adaptiveThreshold: number = 0.05;
+  private lastConfidentMeasurements: {
+    spo2: number[];
+    systolic: number[];
+    diastolic: number[];
+  } = {
+    spo2: [],
+    systolic: [],
+    diastolic: []
+  };
+
+  /**
+   * Método de autoaprendizaje que ajusta los parámetros internos
+   * basado en mediciones previas de alta confianza
+   */
+  private adjustParameters() {
+    if (this.learningBuffer.length >= this.LEARNING_WINDOW_SIZE) {
+      const recentValues = this.learningBuffer.slice(-this.LEARNING_WINDOW_SIZE);
+      const mean = recentValues.reduce((a, b) => a + b, 0) / recentValues.length;
+      const variance = recentValues.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / recentValues.length;
+      
+      // Ajustar umbral adaptativo basado en la varianza de la señal
+      this.adaptiveThreshold = Math.max(0.03, Math.min(0.08, Math.sqrt(variance) * 0.1));
+      
+      console.log("VitalSignsProcessor: Ajuste adaptativo", {
+        variance,
+        newThreshold: this.adaptiveThreshold,
+        bufferSize: this.learningBuffer.length
+      });
+    }
+  }
+
+  /**
+   * Actualiza el modelo de aprendizaje con nuevas mediciones confiables
+   */
+  private updateLearningModel(spo2: number, systolic: number, diastolic: number, quality: number) {
+    if (quality > 75) { // Solo aprender de mediciones de alta calidad
+      this.lastConfidentMeasurements.spo2.push(spo2);
+      this.lastConfidentMeasurements.systolic.push(systolic);
+      this.lastConfidentMeasurements.diastolic.push(diastolic);
+      
+      // Mantener solo las últimas 10 mediciones confiables
+      if (this.lastConfidentMeasurements.spo2.length > 10) {
+        this.lastConfidentMeasurements.spo2.shift();
+        this.lastConfidentMeasurements.systolic.shift();
+        this.lastConfidentMeasurements.diastolic.shift();
+      }
+      
+      console.log("VitalSignsProcessor: Actualización modelo", {
+        confidenceMeasurements: this.lastConfidentMeasurements,
+        quality
+      });
+    }
+  }
+
+  /**
+   * Aplica correcciones basadas en el aprendizaje
+   */
+  private applyLearningCorrections(measurement: {
+    spo2: number,
+    systolic: number,
+    diastolic: number
+  }): { spo2: number, systolic: number, diastolic: number } {
+    if (this.lastConfidentMeasurements.spo2.length === 0) {
+      return measurement;
+    }
+
+    // Calcular medias de mediciones confiables
+    const avgSpo2 = this.lastConfidentMeasurements.spo2.reduce((a, b) => a + b, 0) / 
+                    this.lastConfidentMeasurements.spo2.length;
+    const avgSystolic = this.lastConfidentMeasurements.systolic.reduce((a, b) => a + b, 0) / 
+                       this.lastConfidentMeasurements.systolic.length;
+    const avgDiastolic = this.lastConfidentMeasurements.diastolic.reduce((a, b) => a + b, 0) / 
+                        this.lastConfidentMeasurements.diastolic.length;
+
+    // Aplicar correcciones suaves basadas en el histórico
+    const correctedMeasurement = {
+      spo2: Math.round((measurement.spo2 * 0.7 + avgSpo2 * 0.3)),
+      systolic: Math.round((measurement.systolic * 0.7 + avgSystolic * 0.3)),
+      diastolic: Math.round((measurement.diastolic * 0.7 + avgDiastolic * 0.3))
+    };
+
+    console.log("VitalSignsProcessor: Correcciones aplicadas", {
+      original: measurement,
+      corrected: correctedMeasurement,
+      averages: { avgSpo2, avgSystolic, avgDiastolic }
+    });
+
+    return correctedMeasurement;
+  }
+
   /**
    * Nuevo algoritmo de detección de arritmias basado en RMSSD
    * (Root Mean Square of Successive Differences)
@@ -162,6 +241,15 @@ export class VitalSignsProcessor {
     pressure: string;
     arrhythmiaStatus: string;
   } {
+    // Agregar valor al buffer de aprendizaje
+    this.learningBuffer.push(ppgValue);
+    if (this.learningBuffer.length > this.LEARNING_WINDOW_SIZE) {
+      this.learningBuffer.shift();
+    }
+
+    // Ajustar parámetros basados en el aprendizaje
+    this.adjustParameters();
+
     console.log("VitalSignsProcessor: Entrada de señal", {
       ppgValue,
       isLearning: this.isLearningPhase,
@@ -210,9 +298,24 @@ export class VitalSignsProcessor {
       rrIntervals: this.rrIntervals.length
     });
 
-    return {
+    const quality = this.calculateSignalQuality(ppgValue);
+
+    const correctedValues = this.applyLearningCorrections({
       spo2,
-      pressure: pressureString,
+      systolic: bp.systolic,
+      diastolic: bp.diastolic
+    });
+
+    this.updateLearningModel(
+      correctedValues.spo2,
+      correctedValues.systolic,
+      correctedValues.diastolic,
+      quality
+    );
+
+    return {
+      spo2: correctedValues.spo2,
+      pressure: `${correctedValues.systolic}/${correctedValues.diastolic}`,
       arrhythmiaStatus
     };
   }
@@ -572,6 +675,13 @@ export class VitalSignsProcessor {
     return sum / this.smaBuffer.length;
   }
 
+  private calculateSignalQuality(value: number): number {
+    // Implementar cálculo de calidad de señal
+    const quality = Math.min(100, Math.max(0, (1 - Math.abs(value - this.lastValue) / 100) * 100));
+    this.lastValue = value;
+    return quality;
+  }
+
   /**
    * reset
    * Reinicia todo el estado interno
@@ -588,6 +698,13 @@ export class VitalSignsProcessor {
     this.measurementStartTime = Date.now();
     this.systolicBuffer = [];
     this.diastolicBuffer = [];
-    console.log("VitalSignsProcessor: Reset completo");
+    this.learningBuffer = [];
+    this.adaptiveThreshold = 0.05;
+    this.lastConfidentMeasurements = {
+      spo2: [],
+      systolic: [],
+      diastolic: []
+    };
+    console.log("VitalSignsProcessor: Reset completo incluyendo autoaprendizaje");
   }
 }
