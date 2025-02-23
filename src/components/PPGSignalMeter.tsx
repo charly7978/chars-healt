@@ -19,19 +19,27 @@ const PPGSignalMeter = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dataRef = useRef<{time: number, value: number, isPeak: boolean, isArrhythmia?: boolean}[]>([]);
   const [startTime] = useState<number>(Date.now());
+  const [scrollPosition, setScrollPosition] = useState(0);
+  
+  // Constantes del monitor
   const MAX_TIME = 30000; // 30 segundos
-  const CANVAS_WIDTH = 400;
-  const CANVAS_HEIGHT = 100;
-  const GRID_COLOR = 'rgba(255, 255, 255, 0.1)';
-  const SIGNAL_COLORS = {
-    high: '#00ff00',
-    medium: '#ffff00',
-    low: '#ff0000',
-    inactive: '#666666',
-    arrhythmia: '#ff00ff' // Color especial para arritmias
+  const CANVAS_WIDTH = 600; // Aumentado para mejor visualización
+  const CANVAS_HEIGHT = 200; // Aumentado para mejor visualización
+  const PIXELS_PER_SECOND = CANVAS_WIDTH / 6; // 5 segundos visibles en tiempo real
+  const GRID_MAJOR = 25; // 25 pixels = 1 segundo (estándar médico)
+  const GRID_MINOR = 5;  // 5 pixels = 0.2 segundos
+  
+  const COLORS = {
+    background: '#000000',
+    gridMajor: 'rgba(0, 127, 0, 0.5)',
+    gridMinor: 'rgba(0, 127, 0, 0.2)',
+    signal: '#00ff00',
+    peaks: '#ffffff',
+    arrhythmia: '#ff00ff',
+    text: '#00ff00'
   };
 
-  // Detectar posibles arritmias basado en intervalos entre picos
+  // Detectar arritmias (mantenemos la lógica existente)
   const detectArrhythmia = (currentTime: number, previousPeaks: {time: number}[]) => {
     if (previousPeaks.length < 2) return false;
     
@@ -42,14 +50,50 @@ const PPGSignalMeter = ({
 
     if (recentIntervals.length < 2) return false;
 
-    // Calcular variación en los intervalos
     const avgInterval = recentIntervals.reduce((a, b) => a + b, 0) / recentIntervals.length;
     const variation = Math.abs(recentIntervals[recentIntervals.length - 1] - avgInterval);
     
-    // Si la variación es mayor al 30% del intervalo promedio, consideramos arritmia
     return variation > (avgInterval * 0.3);
   };
 
+  // Dibujar la cuadrícula del monitor
+  const drawGrid = (ctx: CanvasRenderingContext2D) => {
+    ctx.save();
+    
+    // Cuadrícula menor
+    ctx.beginPath();
+    ctx.strokeStyle = COLORS.gridMinor;
+    ctx.lineWidth = 0.5;
+    
+    for (let x = 0; x < CANVAS_WIDTH; x += GRID_MINOR) {
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, CANVAS_HEIGHT);
+    }
+    for (let y = 0; y < CANVAS_HEIGHT; y += GRID_MINOR) {
+      ctx.moveTo(0, y);
+      ctx.lineTo(CANVAS_WIDTH, y);
+    }
+    ctx.stroke();
+    
+    // Cuadrícula mayor
+    ctx.beginPath();
+    ctx.strokeStyle = COLORS.gridMajor;
+    ctx.lineWidth = 1;
+    
+    for (let x = 0; x < CANVAS_WIDTH; x += GRID_MAJOR) {
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, CANVAS_HEIGHT);
+    }
+    for (let y = 0; y < CANVAS_HEIGHT; y += GRID_MAJOR) {
+      ctx.moveTo(0, y);
+      ctx.lineTo(CANVAS_WIDTH, y);
+    }
+    ctx.stroke();
+    
+    ctx.restore();
+  };
+
+  // Efecto principal de renderizado
   useEffect(() => {
     if (!canvasRef.current || !isFingerDetected) return;
 
@@ -60,7 +104,7 @@ const PPGSignalMeter = ({
     const currentTime = Date.now();
     const elapsedTime = currentTime - startTime;
 
-    // Solo agregamos datos si no hemos superado los 30 segundos
+    // Agregar nuevo dato si estamos dentro de los 30 segundos
     if (elapsedTime <= MAX_TIME) {
       const previousPeaks = dataRef.current.filter(d => d.isPeak);
       const isArrhythmia = quality > 75 && detectArrhythmia(elapsedTime, previousPeaks);
@@ -74,52 +118,32 @@ const PPGSignalMeter = ({
     }
 
     // Limpiar canvas
-    ctx.fillStyle = '#000000';
+    ctx.fillStyle = COLORS.background;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Dibujar grid vertical (líneas de tiempo)
-    ctx.strokeStyle = GRID_COLOR;
-    ctx.lineWidth = 1;
-    const timeIntervals = 6; // Una línea cada 5 segundos
-    for (let i = 0; i <= timeIntervals; i++) {
-      const x = (canvas.width / timeIntervals) * i;
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, canvas.height);
-      ctx.stroke();
+    // Dibujar cuadrícula
+    drawGrid(ctx);
 
-      // Añadir etiquetas de tiempo
-      const seconds = (i * 5).toString();
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-      ctx.font = '10px Arial';
-      ctx.fillText(`${seconds}s`, x, canvas.height - 2);
-    }
-
-    // Dibujar grid horizontal (amplitud)
-    for (let i = 0; i < 5; i++) {
-      const y = (canvas.height / 4) * i;
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(canvas.width, y);
-      ctx.stroke();
-    }
-
-    // Si la medición está completa, mostramos todo el histórico
     if (isComplete) {
+      // Modo revisión: mostrar toda la señal con scroll
       const fullData = dataRef.current;
       const minVal = Math.min(...fullData.map(d => d.value));
       const maxVal = Math.max(...fullData.map(d => d.value));
       const range = maxVal - minVal || 1;
 
-      // Dibujar señal histórica completa
+      // Ajustar desplazamiento para visualización
+      const timeScale = CANVAS_WIDTH / (MAX_TIME / 1000); // pixels por segundo
+      const offset = -scrollPosition * timeScale;
+
+      // Dibujar señal
       ctx.beginPath();
-      ctx.strokeStyle = SIGNAL_COLORS.high;
+      ctx.strokeStyle = COLORS.signal;
       ctx.lineWidth = 2;
 
       fullData.forEach((point, index) => {
-        const x = (canvas.width * point.time) / MAX_TIME;
+        const x = (point.time / 1000) * timeScale + offset;
         const normalizedY = (point.value - minVal) / range;
-        const y = normalizedY * canvas.height * 0.8 + canvas.height * 0.1;
+        const y = CANVAS_HEIGHT - (normalizedY * CANVAS_HEIGHT * 0.8 + CANVAS_HEIGHT * 0.1);
         
         if (index === 0) {
           ctx.moveTo(x, y);
@@ -129,56 +153,64 @@ const PPGSignalMeter = ({
       });
       ctx.stroke();
 
-      // Dibujar picos detectados y marcar arritmias
+      // Dibujar marcadores
       fullData.forEach(point => {
         if (point.isPeak) {
-          const x = (canvas.width * point.time) / MAX_TIME;
+          const x = (point.time / 1000) * timeScale + offset;
           const normalizedY = (point.value - minVal) / range;
-          const y = normalizedY * canvas.height * 0.8 + canvas.height * 0.1;
+          const y = CANVAS_HEIGHT - (normalizedY * CANVAS_HEIGHT * 0.8 + CANVAS_HEIGHT * 0.1);
           
-          // Dibujar círculo más grande para arritmias
           if (point.isArrhythmia) {
+            // Marcador de arritmia
             ctx.beginPath();
-            ctx.arc(x, y, 6, 0, 2 * Math.PI);
-            ctx.fillStyle = SIGNAL_COLORS.arrhythmia;
+            ctx.arc(x, y, 4, 0, 2 * Math.PI);
+            ctx.fillStyle = COLORS.arrhythmia;
             ctx.fill();
             
-            // Añadir marca distintiva
             ctx.beginPath();
-            ctx.moveTo(x, y - 8);
-            ctx.lineTo(x, y + 8);
-            ctx.strokeStyle = SIGNAL_COLORS.arrhythmia;
+            ctx.moveTo(x, y - 10);
+            ctx.lineTo(x, y + 10);
+            ctx.strokeStyle = COLORS.arrhythmia;
             ctx.stroke();
           } else {
+            // Marcador de pico normal
             ctx.beginPath();
-            ctx.arc(x, y, 3, 0, 2 * Math.PI);
-            ctx.fillStyle = '#ff0000';
+            ctx.arc(x, y, 2, 0, 2 * Math.PI);
+            ctx.fillStyle = COLORS.peaks;
             ctx.fill();
           }
         }
       });
 
+      // Dibujar tiempo
+      ctx.font = '12px monospace';
+      ctx.fillStyle = COLORS.text;
+      for (let i = 0; i <= 30; i += 5) {
+        const x = (i * timeScale) + offset;
+        if (x >= 0 && x <= CANVAS_WIDTH) {
+          ctx.fillText(`${i}s`, x, CANVAS_HEIGHT - 5);
+        }
+      }
+
       if (onDataReady) {
         onDataReady(dataRef.current);
       }
     } else {
-      // Mostrar señal en tiempo real con desplazamiento
-      const recentData = dataRef.current.slice(-150); // Últimos 150 puntos
+      // Modo tiempo real: mostrar últimos 5 segundos
+      const recentData = dataRef.current.slice(-150);
       const minVal = Math.min(...recentData.map(d => d.value));
       const maxVal = Math.max(...recentData.map(d => d.value));
       const range = maxVal - minVal || 1;
 
-      // Dibujar señal actual con color basado en calidad
+      // Dibujar señal en tiempo real
       ctx.beginPath();
-      ctx.strokeStyle = quality > 75 ? SIGNAL_COLORS.high : 
-                       quality > 50 ? SIGNAL_COLORS.medium : 
-                       SIGNAL_COLORS.low;
+      ctx.strokeStyle = COLORS.signal;
       ctx.lineWidth = 2;
 
       recentData.forEach((point, index) => {
-        const x = (canvas.width / 150) * index;
+        const x = (index / 150) * CANVAS_WIDTH;
         const normalizedY = (point.value - minVal) / range;
-        const y = normalizedY * canvas.height * 0.8 + canvas.height * 0.1;
+        const y = CANVAS_HEIGHT - (normalizedY * CANVAS_HEIGHT * 0.8 + CANVAS_HEIGHT * 0.1);
         
         if (index === 0) {
           ctx.moveTo(x, y);
@@ -186,69 +218,82 @@ const PPGSignalMeter = ({
           ctx.lineTo(x, y);
         }
 
-        // Marcar arritmias en tiempo real
-        if (point.isPeak && point.isArrhythmia) {
-          ctx.save();
-          ctx.beginPath();
-          ctx.arc(x, y, 6, 0, 2 * Math.PI);
-          ctx.fillStyle = SIGNAL_COLORS.arrhythmia;
-          ctx.fill();
-          
-          ctx.beginPath();
-          ctx.moveTo(x, y - 8);
-          ctx.lineTo(x, y + 8);
-          ctx.strokeStyle = SIGNAL_COLORS.arrhythmia;
-          ctx.stroke();
-          ctx.restore();
-        } else if (point.isPeak) {
-          ctx.save();
-          ctx.beginPath();
-          ctx.arc(x, y, 3, 0, 2 * Math.PI);
-          ctx.fillStyle = '#ff0000';
-          ctx.fill();
-          ctx.restore();
+        // Dibujar marcadores en tiempo real
+        if (point.isPeak) {
+          if (point.isArrhythmia) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(x, y, 4, 0, 2 * Math.PI);
+            ctx.fillStyle = COLORS.arrhythmia;
+            ctx.fill();
+            
+            ctx.beginPath();
+            ctx.moveTo(x, y - 10);
+            ctx.lineTo(x, y + 10);
+            ctx.strokeStyle = COLORS.arrhythmia;
+            ctx.stroke();
+            ctx.restore();
+          } else {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(x, y, 2, 0, 2 * Math.PI);
+            ctx.fillStyle = COLORS.peaks;
+            ctx.fill();
+            ctx.restore();
+          }
         }
       });
       ctx.stroke();
 
-      // Añadir línea de tiempo actual
-      const timeProgress = (elapsedTime / MAX_TIME) * canvas.width;
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+      // Dibujar línea de tiempo
+      const timeProgress = (elapsedTime / MAX_TIME) * CANVAS_WIDTH;
+      ctx.strokeStyle = COLORS.text;
       ctx.setLineDash([5, 5]);
       ctx.beginPath();
       ctx.moveTo(timeProgress, 0);
-      ctx.lineTo(timeProgress, canvas.height);
+      ctx.lineTo(timeProgress, CANVAS_HEIGHT);
       ctx.stroke();
       ctx.setLineDash([]);
     }
 
-  }, [value, quality, isFingerDetected, isComplete, startTime]);
+  }, [value, quality, isFingerDetected, isComplete, startTime, scrollPosition]);
+
+  // Manejar scroll horizontal en modo revisión
+  const handleScroll = (e: React.WheelEvent) => {
+    if (isComplete) {
+      e.preventDefault();
+      setScrollPosition(prev => 
+        Math.max(0, Math.min(30, prev + e.deltaY / 100))
+      );
+    }
+  };
 
   return (
-    <div className="bg-black/40 backdrop-blur-sm rounded-lg p-2">
+    <div className="bg-black/40 backdrop-blur-sm rounded-lg p-4">
       <div className="flex justify-between items-center mb-2">
-        <span className="text-xs font-semibold text-white/90">PPG Signal</span>
+        <span className="text-sm font-semibold text-green-400">PPG Monitor</span>
         <span 
-          className="text-xs font-medium"
-          style={{ 
-            color: quality > 75 ? SIGNAL_COLORS.high : 
-                   quality > 50 ? SIGNAL_COLORS.medium : 
-                   SIGNAL_COLORS.low 
-          }}
+          className="text-sm font-medium"
+          style={{ color: COLORS.text }}
         >
           {isFingerDetected ? (
             isComplete ? 
-              'Medición Completa' : 
+              'Review Mode - Use scroll to navigate' : 
               `Quality: ${quality}%`
           ) : 'No Signal'}
         </span>
       </div>
-      <canvas
-        ref={canvasRef}
-        width={CANVAS_WIDTH}
-        height={CANVAS_HEIGHT}
-        className="w-full h-20 rounded bg-black/60"
-      />
+      <div 
+        className="relative overflow-hidden"
+        onWheel={handleScroll}
+      >
+        <canvas
+          ref={canvasRef}
+          width={CANVAS_WIDTH}
+          height={CANVAS_HEIGHT}
+          className="w-full h-[200px] rounded bg-black"
+        />
+      </div>
     </div>
   );
 };
