@@ -88,58 +88,40 @@
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
+}
 
+@layer base {
   * {
     @apply border-border;
   }
 
   html {
-    height: 100vh !important;
-    width: 100vw !important;
+    height: 100%;
+    width: 100%;
     position: fixed;
     overflow: hidden;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    transform: translateZ(0);
-    -webkit-transform: translateZ(0);
-    backface-visibility: hidden;
-    -webkit-backface-visibility: hidden;
-    perspective: 1000;
-    -webkit-perspective: 1000;
   }
 
   body {
-    height: 100vh !important;
-    width: 100vw !important;
+    height: 100%;
+    width: 100%;
     position: fixed;
     overflow: hidden;
     overscroll-behavior: none;
-    -webkit-text-size-adjust: none;
+    -webkit-text-size-adjust: 100%;
     touch-action: none;
     -webkit-touch-callout: none;
     -webkit-user-select: none;
     user-select: none;
     -webkit-tap-highlight-color: transparent;
-    transform: translateZ(0);
-    -webkit-transform: translateZ(0);
-    backface-visibility: hidden;
-    -webkit-backface-visibility: hidden;
-    perspective: 1000;
-    -webkit-perspective: 1000;
     @apply bg-background text-foreground;
   }
 
   #root {
-    height: 100vh !important;
-    width: 100vw !important;
+    height: 100%;
+    width: 100%;
     position: fixed;
     overflow: hidden;
-    transform: translateZ(0);
-    -webkit-transform: translateZ(0);
-    backface-visibility: hidden;
-    -webkit-backface-visibility: hidden;
-    perspective: 1000;
-    -webkit-perspective: 1000;
   }
 
   @supports (height: 100dvh) {
