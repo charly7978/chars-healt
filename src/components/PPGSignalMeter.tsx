@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from 'react';
 
 interface PPGSignalMeterProps {
@@ -173,6 +174,7 @@ const PPGSignalMeter = ({
 
   return (
     <div className="fixed inset-0 bg-black">
+      {/* Canvas a pantalla completa */}
       <canvas
         ref={canvasRef}
         width={CANVAS_WIDTH}
@@ -180,7 +182,9 @@ const PPGSignalMeter = ({
         className="w-full h-full"
       />
 
+      {/* Overlay con los indicadores */}
       <div className="absolute inset-0 pointer-events-none">
+        {/* Header con título y calidad */}
         <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center bg-gradient-to-b from-black/70 to-transparent">
           <span className="text-2xl font-bold text-white/90">Monitor PPG</span>
           <span 
@@ -193,7 +197,8 @@ const PPGSignalMeter = ({
           </span>
         </div>
 
-        <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/70 to-transparent">
+        {/* Indicador de arritmia en la parte inferior */}
+        <div className="absolute bottom-20 left-0 right-0 p-4 bg-gradient-to-t from-black/70 to-transparent">
           <div className="flex items-center gap-3 justify-center">
             <div className="w-5 h-5 rounded-full bg-red-500 animate-pulse"></div>
             <span className="text-xl font-medium text-red-500">
@@ -202,6 +207,31 @@ const PPGSignalMeter = ({
           </div>
         </div>
 
+        {/* Botones en la parte inferior */}
+        <div className="absolute bottom-0 left-0 right-0 p-4 bg-black/40 backdrop-blur-sm pointer-events-auto">
+          <div className="container mx-auto flex justify-center gap-4">
+            <button 
+              className="measure-button bg-green-600/80 hover:bg-green-600 text-white px-8 py-3 rounded-full text-lg font-medium flex items-center gap-2"
+            >
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Iniciar Medición
+            </button>
+
+            <button 
+              className="bg-blue-600/80 hover:bg-blue-600 text-white px-8 py-3 rounded-full text-lg font-medium flex items-center gap-2"
+            >
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Reiniciar
+            </button>
+          </div>
+        </div>
+
+        {/* Gradiente sutil en los bordes para mejorar la visibilidad */}
         <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-black/20 via-transparent to-black/20"></div>
       </div>
     </div>
