@@ -10,7 +10,7 @@ import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import CalibrationDialog from "@/components/CalibrationDialog";
 import MeasurementsHistory from "@/components/MeasurementsHistory";
 import { supabase } from "@/integrations/supabase/client";
-import { LogOut, Settings, Play, Square, History } from "lucide-react";
+import { LogOut, Settings, Play, Square, History, RotateCcw } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 
 interface VitalSigns {
@@ -19,16 +19,18 @@ interface VitalSigns {
   arrhythmiaStatus: string;
 }
 
+const INITIAL_VITAL_SIGNS: VitalSigns = {
+  spo2: 0,
+  pressure: "--/--",
+  arrhythmiaStatus: "--"
+};
+
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [signalQuality, setSignalQuality] = useState(0);
-  const [vitalSigns, setVitalSigns] = useState<VitalSigns>({
-    spo2: 0,
-    pressure: "--/--",
-    arrhythmiaStatus: "--"
-  });
+  const [vitalSigns, setVitalSigns] = useState<VitalSigns>(INITIAL_VITAL_SIGNS);
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState<string>("--");
   const [showCalibrationDialog, setShowCalibrationDialog] = useState(false);
@@ -40,7 +42,7 @@ const Index = () => {
   const { toast } = useToast();
 
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
-  const { processSignal: processHeartBeat } = useHeartBeatProcessor();
+  const { processSignal: processHeartBeat, reset: resetHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
   useEffect(() => {
@@ -84,8 +86,24 @@ const Index = () => {
     }
   };
 
+  const resetMeasurement = () => {
+    if (isMonitoring) {
+      stopMonitoring();
+    }
+    setVitalSigns(INITIAL_VITAL_SIGNS);
+    setHeartRate(0);
+    setArrhythmiaCount("--");
+    setSignalQuality(0);
+    resetHeartBeat();
+    resetVitalSigns();
+    toast({
+      title: "Medición reiniciada",
+      description: "Todos los valores han sido reiniciados"
+    });
+  };
+
   const validateNumber = (value: number): boolean => {
-    return typeof value === 'number' && !isNaN(value) && isFinite(value);
+    return typeof value === 'number' && !isNaN(value) && isFinite(value) && value > 0;
   };
 
   const extractArrhythmiaCount = (value: string): number => {
@@ -105,26 +123,28 @@ const Index = () => {
         throw new Error("No hay sesión activa");
       }
 
+      if (elapsedTime < 15) {
+        throw new Error("La medición debe durar al menos 15 segundos");
+      }
+
+      if (!validateNumber(heartRate)) {
+        throw new Error("La frecuencia cardíaca no es válida");
+      }
+
+      if (!validateNumber(vitalSigns.spo2)) {
+        throw new Error("El SpO2 no es válido");
+      }
+
       const [systolicStr, diastolicStr] = vitalSigns.pressure.split('/');
       const systolic = parseInt(systolicStr);
       const diastolic = parseInt(diastolicStr);
 
       if (!validateNumber(systolic) || !validateNumber(diastolic)) {
-        throw new Error("Presión arterial inválida");
+        throw new Error("La presión arterial no es válida");
       }
 
-      if (!validateNumber(heartRate) || heartRate <= 0) {
-        throw new Error("Frecuencia cardíaca inválida");
-      }
-
-      if (!validateNumber(vitalSigns.spo2) || vitalSigns.spo2 <= 0) {
-        throw new Error("SpO2 inválido");
-      }
-
-      const arrhythmiaValue = extractArrhythmiaCount(arrhythmiaCount);
-
-      if (!validateNumber(signalQuality) || signalQuality < 0) {
-        throw new Error("Calidad de señal inválida");
+      if (!validateNumber(signalQuality)) {
+        throw new Error("La calidad de la señal no es válida");
       }
 
       const measurementData = {
@@ -133,17 +153,19 @@ const Index = () => {
         spo2: Math.round(vitalSigns.spo2),
         systolic: Math.round(systolic),
         diastolic: Math.round(diastolic),
-        arrhythmia_count: arrhythmiaValue,
-        quality: Math.round(signalQuality)
+        arrhythmia_count: extractArrhythmiaCount(arrhythmiaCount),
+        quality: Math.round(signalQuality),
+        measured_at: new Date().toISOString()
       };
 
-      console.log("Guardando medición validada:", measurementData);
+      console.log("Guardando medición:", measurementData);
 
       const { error } = await supabase
         .from('measurements')
         .insert(measurementData);
 
       if (error) {
+        console.error("Error de Supabase:", error);
         throw error;
       }
 
@@ -153,8 +175,9 @@ const Index = () => {
       });
 
       await loadMeasurements();
+      resetMeasurement();
     } catch (error) {
-      console.error("Error detallado al guardar medición:", error);
+      console.error("Error al guardar medición:", error);
       toast({
         title: "Error al guardar",
         description: error instanceof Error ? error.message : "No se pudo guardar la medición",
@@ -167,9 +190,13 @@ const Index = () => {
     try {
       stopMonitoring();
       await supabase.auth.signOut();
-      window.location.href = "/auth";
     } catch (error) {
       console.error("Error al cerrar sesión:", error);
+      toast({
+        title: "Error",
+        description: "No se pudo cerrar la sesión",
+        variant: "destructive"
+      });
     }
   };
 
@@ -423,32 +450,42 @@ const Index = () => {
             </div>
           </div>
 
-          <div className="flex flex-col items-center gap-1 w-full max-w-md mx-auto mt-[-8rem]">
+          <div className="flex flex-col items-center gap-2 w-full max-w-md mx-auto mt-[-8rem]">
             {isMonitoring && (
               <div className="text-xs font-medium text-gray-300 mb-1">
                 Tiempo de medición: {elapsedTime}s / 30s
               </div>
             )}
-            <Button
-              onClick={isMonitoring ? stopMonitoring : startMonitoring}
-              className={`flex-1 w-full measure-button ${
-                isMonitoring 
-                  ? 'bg-red-600/80 hover:bg-red-600' 
-                  : 'bg-green-600/80 hover:bg-green-600'
-              } text-white gap-2`}
-            >
-              {isMonitoring ? (
-                <>
-                  <Square className="h-4 w-4" />
-                  Detener Medición
-                </>
-              ) : (
-                <>
-                  <Play className="h-4 w-4" />
-                  Iniciar Medición
-                </>
-              )}
-            </Button>
+            <div className="flex gap-2 w-full">
+              <Button
+                onClick={resetMeasurement}
+                className="bg-gray-600/80 hover:bg-gray-600 text-white"
+                disabled={!isMonitoring && heartRate === 0}
+              >
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Reiniciar
+              </Button>
+              <Button
+                onClick={isMonitoring ? stopMonitoring : startMonitoring}
+                className={`flex-1 measure-button ${
+                  isMonitoring 
+                    ? 'bg-red-600/80 hover:bg-red-600' 
+                    : 'bg-green-600/80 hover:bg-green-600'
+                } text-white`}
+              >
+                {isMonitoring ? (
+                  <>
+                    <Square className="h-4 w-4 mr-2" />
+                    Detener Medición
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-4 w-4 mr-2" />
+                    Iniciar Medición
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </div>
       </div>
