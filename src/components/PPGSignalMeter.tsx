@@ -137,11 +137,11 @@ const PPGSignalMeter = ({
         className="w-full h-[calc(100%-100px)]"
       />
 
-      <div className="absolute top-0 left-0 right-0 p-4">
+      <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center bg-black/40">
         <div className="flex items-center gap-4">
-          <span className="text-3xl font-bold text-white">PPG</span>
+          <span className="text-2xl font-bold text-white">PPG</span>
           <span 
-            className="text-2xl font-bold"
+            className="text-xl font-bold"
             style={{ 
               color: isFingerDetected ? 
                 (quality > 75 ? '#00ff00' : quality > 50 ? '#ffff00' : '#ff0000') : 
@@ -151,22 +151,20 @@ const PPGSignalMeter = ({
             {isFingerDetected ? `${quality}%` : 'NO SIGNAL'}
           </span>
         </div>
-      </div>
-
-      {/* Huella dactilar en el centro */}
-      <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-4">
-        <Fingerprint 
-          size={120}
-          className={`transition-colors duration-300 ${
-            !isFingerDetected ? 'text-gray-600' : 
-            quality > 75 ? 'text-green-500' : 
-            quality > 50 ? 'text-yellow-500' : 
-            'text-red-500'
-          }`}
-        />
-        <span className={`text-xl font-medium ${isFingerDetected ? 'text-green-500' : 'text-gray-500'}`}>
-          {isFingerDetected ? 'FINGER DETECTED' : 'PLACE FINGER ON LENS'}
-        </span>
+        <div className="flex items-center gap-2">
+          <Fingerprint 
+            size={32}
+            className={`transition-colors duration-300 ${
+              !isFingerDetected ? 'text-gray-600' : 
+              quality > 75 ? 'text-green-500' : 
+              quality > 50 ? 'text-yellow-500' : 
+              'text-red-500'
+            }`}
+          />
+          <span className={`text-sm font-medium ${isFingerDetected ? 'text-green-500' : 'text-gray-500'}`}>
+            {isFingerDetected ? 'OK' : 'NO FINGER'}
+          </span>
+        </div>
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 h-[100px] grid grid-cols-2">
