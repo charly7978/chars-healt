@@ -40,6 +40,16 @@ const Index = () => {
     }
   };
 
+  const handleCalibrationStart = async () => {
+    console.log("Iniciando calibración...");
+    // Aquí iría la lógica de calibración real
+  };
+
+  const handleCalibrationEnd = () => {
+    console.log("Calibración finalizada");
+    setShowCalibrationDialog(false);
+  };
+
   const startMonitoring = () => {
     console.log("Iniciando monitoreo...");
     setIsMonitoring(true);
