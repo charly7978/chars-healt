@@ -111,28 +111,14 @@ const Index = () => {
   };
 
   useEffect(() => {
-    if (lastSignal && lastSignal.fingerDetected && isMonitoring) {
-      const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
-      setHeartRate(heartBeatResult.bpm);
-      
-      const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
-      if (vitals) {
-        setVitalSigns(vitals);
-        setArrhythmiaCount(vitals.arrhythmiaStatus);
-      }
-      
-      setSignalQuality(lastSignal.quality);
-    }
-  }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
-
-  useEffect(() => {
     const lockOrientation = async () => {
       try {
-        if (screen.orientation && screen.orientation.lock) {
-          await screen.orientation.lock('portrait');
+        const screenOrientation = window.screen?.orientation;
+        if (screenOrientation && typeof screenOrientation.lock === 'function') {
+          await screenOrientation.lock('portrait');
         }
       } catch (error) {
-        console.log('No se pudo bloquear la orientación');
+        console.log('No se pudo bloquear la orientación:', error);
       }
     };
 
@@ -147,6 +133,21 @@ const Index = () => {
       document.body.removeEventListener('scroll', preventScroll);
     };
   }, []);
+
+  useEffect(() => {
+    if (lastSignal && lastSignal.fingerDetected && isMonitoring) {
+      const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
+      setHeartRate(heartBeatResult.bpm);
+      
+      const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
+      if (vitals) {
+        setVitalSigns(vitals);
+        setArrhythmiaCount(vitals.arrhythmiaStatus);
+      }
+      
+      setSignalQuality(lastSignal.quality);
+    }
+  }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
 
   return (
     <div className="fixed inset-0 flex flex-col bg-black min-h-screen">
