@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
@@ -23,44 +24,12 @@ const Index = () => {
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState<string | number>("--");
   const [showCalibrationDialog, setShowCalibrationDialog] = useState(false);
-  const [email, setEmail] = useState<string>("");
   const [elapsedTime, setElapsedTime] = useState(0);
   const measurementTimerRef = useRef<number | null>(null);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
-
-  useEffect(() => {
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        window.location.href = "/auth";
-      } else {
-        setEmail(session.user.email || "");
-      }
-    };
-
-    checkSession();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) {
-        window.location.href = "/auth";
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const handleLogout = async () => {
-    try {
-      stopMonitoring();
-      await supabase.auth.signOut();
-      window.location.href = "/auth";
-    } catch (error) {
-      console.error("Error al cerrar sesión:", error);
-    }
-  };
 
   const handleCalibrationClick = () => {
     if (isMonitoring) {
@@ -244,7 +213,7 @@ const Index = () => {
       <div className="relative w-full h-full">
         <div className="absolute inset-0">
           <CameraView 
-            onStreamReady={handleStreamReady} 
+            onStreamReady={handleStreamReady}
             isMonitoring={isCameraOn}
             isFingerDetected={lastSignal?.fingerDetected}
             signalQuality={signalQuality}
