@@ -16,13 +16,13 @@ const PPGSignalMeter = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dataRef = useRef<{time: number, value: number}[]>([]);
   const [startTime] = useState<number>(Date.now());
-  const WINDOW_WIDTH_MS = 6000; // Ventana de 6 segundos
-  const CANVAS_WIDTH = 1500; // SIGNIFICATIVAMENTE más grande
-  const CANVAS_HEIGHT = 600; // SIGNIFICATIVAMENTE más grande
-  const MIN_PEAK_INTERVAL = 1200; // Mucho más lento para mejor visualización
+  const WINDOW_WIDTH_MS = 6000;
+  const CANVAS_WIDTH = 2000; // Significativamente más grande
+  const CANVAS_HEIGHT = 1000; // Significativamente más grande
+  const MIN_PEAK_INTERVAL = 1500; // Más lento para mejor visualización
   const lastPeakRef = useRef<number>(0);
   const animationFrameRef = useRef<number>();
-  const smoothingFactor = 0.15; // Factor de suavizado para el barrido
+  const smoothingFactor = 0.2; // Aumentado para un barrido más suave
 
   useEffect(() => {
     if (!canvasRef.current || !isFingerDetected) return;
@@ -38,7 +38,7 @@ const PPGSignalMeter = ({
     if (lastPoint) {
       const timeDiff = currentTime - lastPoint.time;
       const valueDiff = value - lastPoint.value;
-      const steps = Math.min(Math.floor(timeDiff / 8), 10); // Más puntos de interpolación
+      const steps = Math.min(Math.floor(timeDiff / 8), 12); // Más puntos de interpolación
       
       for (let i = 1; i <= steps; i++) {
         const interpolatedTime = lastPoint.time + (timeDiff * (i / steps));
@@ -65,13 +65,13 @@ const PPGSignalMeter = ({
       ctx.fillStyle = '#000000';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Cuadrícula mejorada con efecto de profundidad
-      ctx.strokeStyle = 'rgba(0, 255, 0, 0.08)';
-      ctx.lineWidth = 1;
+      // Cuadrícula mejorada
+      ctx.strokeStyle = 'rgba(0, 255, 0, 0.1)';
+      ctx.lineWidth = 2; // Líneas de cuadrícula más visibles
 
       // Grid vertical más denso
-      const timeInterval = WINDOW_WIDTH_MS / 60; // 60 divisiones
-      for (let i = 0; i <= 60; i++) {
+      const timeInterval = WINDOW_WIDTH_MS / 30;
+      for (let i = 0; i <= 30; i++) {
         const x = canvas.width - (canvas.width * (i * timeInterval) / WINDOW_WIDTH_MS);
         ctx.beginPath();
         ctx.moveTo(x, 0);
@@ -80,8 +80,8 @@ const PPGSignalMeter = ({
       }
 
       // Grid horizontal más denso
-      for (let i = 0; i <= 12; i++) {
-        const y = (canvas.height / 12) * i;
+      for (let i = 0; i <= 10; i++) {
+        const y = (canvas.height / 10) * i;
         ctx.beginPath();
         ctx.moveTo(0, y);
         ctx.lineTo(canvas.width, y);
@@ -96,10 +96,10 @@ const PPGSignalMeter = ({
 
         // Efecto de resplandor mejorado
         ctx.shadowColor = '#00ff00';
-        ctx.shadowBlur = 20;
+        ctx.shadowBlur = 15;
         ctx.beginPath();
         ctx.strokeStyle = '#00ff00';
-        ctx.lineWidth = 4; // Línea más gruesa
+        ctx.lineWidth = 6; // Línea principal más gruesa
 
         // Dibujar línea principal con curvas suaves
         let firstPoint = true;
@@ -120,7 +120,7 @@ const PPGSignalMeter = ({
             ctx.quadraticCurveTo(prevX, y, xc, yc);
           }
 
-          // Sistema mejorado de detección de arritmias
+          // Detección de arritmias mejorada
           if (index > 2 && index < data.length - 1) {
             const prev2 = data[index - 2].value;
             const prev1 = data[index - 1].value;
@@ -135,7 +135,7 @@ const PPGSignalMeter = ({
                  Math.abs(current - prev2) > range * 0.5);
 
               if (isAbnormalPeak) {
-                const opacity = Math.max(0.3, Math.min(1, (currentTime - lastPeakRef.current) / MIN_PEAK_INTERVAL));
+                const opacity = Math.max(0.4, Math.min(1, (currentTime - lastPeakRef.current) / MIN_PEAK_INTERVAL));
                 
                 ctx.save();
                 ctx.fillStyle = `rgba(255, 0, 0, ${opacity})`;
@@ -143,25 +143,25 @@ const PPGSignalMeter = ({
                 
                 // Marcador de arritmia mejorado
                 ctx.shadowColor = '#ff0000';
-                ctx.shadowBlur = 30;
+                ctx.shadowBlur = 25;
                 
                 // Círculo más grande
                 ctx.beginPath();
-                ctx.arc(x, y, 12, 0, 2 * Math.PI);
+                ctx.arc(x, y, 15, 0, 2 * Math.PI);
                 ctx.fill();
                 
-                // Línea vertical con patrón mejorado
+                // Línea vertical más visible
                 ctx.beginPath();
-                ctx.setLineDash([10, 10]);
-                ctx.lineWidth = 3;
+                ctx.setLineDash([15, 15]);
+                ctx.lineWidth = 4;
                 ctx.moveTo(x, 0);
                 ctx.lineTo(x, canvas.height);
                 ctx.stroke();
                 
                 // Texto de arritmia más visible
-                ctx.shadowBlur = 5;
-                ctx.font = 'bold 20px monospace';
-                ctx.fillText('ARRITMIA', x + 15, y - 20);
+                ctx.shadowBlur = 8;
+                ctx.font = 'bold 28px monospace';
+                ctx.fillText('ARRITMIA', x + 20, y - 25);
                 
                 ctx.restore();
                 lastPeakRef.current = currentTime;
@@ -185,11 +185,11 @@ const PPGSignalMeter = ({
   }, [value, quality, isFingerDetected]);
 
   return (
-    <div className="bg-black/40 backdrop-blur-sm rounded-lg p-4 w-full h-[80vh] max-h-[800px]">
-      <div className="flex justify-between items-center mb-2">
-        <span className="text-lg font-semibold text-white/90">Monitor PPG</span>
+    <div className="bg-black/40 backdrop-blur-sm rounded-lg p-4 w-full h-[90vh]">
+      <div className="flex justify-between items-center mb-4">
+        <span className="text-2xl font-semibold text-white/90">Monitor PPG</span>
         <span 
-          className="text-lg font-medium"
+          className="text-xl font-medium"
           style={{ 
             color: quality > 75 ? '#00ff00' : quality > 50 ? '#ffff00' : '#ff0000' 
           }}
@@ -201,10 +201,10 @@ const PPGSignalMeter = ({
         ref={canvasRef}
         width={CANVAS_WIDTH}
         height={CANVAS_HEIGHT}
-        className="w-full h-full rounded bg-black/60"
+        className="w-full h-[calc(90vh-120px)] rounded bg-black/60"
       />
-      <div className="mt-4 text-lg text-red-500 flex items-center gap-3">
-        <div className="w-4 h-4 rounded-full bg-red-500 animate-pulse"></div>
+      <div className="mt-6 text-xl text-red-500 flex items-center gap-4">
+        <div className="w-5 h-5 rounded-full bg-red-500 animate-pulse"></div>
         <span>Indicador de Arritmia</span>
       </div>
     </div>
