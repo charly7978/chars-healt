@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
@@ -7,10 +8,9 @@ import SignalQualityIndicator from "@/components/SignalQualityIndicator";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
-import CalibrationDialog from "@/components/CalibrationDialog";
 import MeasurementsHistory from "@/components/MeasurementsHistory";
 import { supabase } from "@/integrations/supabase/client";
-import { LogOut, Settings, Play, Square, History, RotateCcw } from "lucide-react";
+import { LogOut, Play, Square, History } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 
 interface VitalSigns {
@@ -27,13 +27,11 @@ const INITIAL_VITAL_SIGNS: VitalSigns = {
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [signalQuality, setSignalQuality] = useState(0);
   const [vitalSigns, setVitalSigns] = useState<VitalSigns>(INITIAL_VITAL_SIGNS);
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState<string>("--");
-  const [showCalibrationDialog, setShowCalibrationDialog] = useState(false);
   const [showHistoryDialog, setShowHistoryDialog] = useState(false);
   const [measurements, setMeasurements] = useState<any[]>([]);
   const [email, setEmail] = useState<string>("");
@@ -42,156 +40,42 @@ const Index = () => {
   const { toast } = useToast();
 
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
-  const { processSignal: processHeartBeat, reset: resetHeartBeat } = useHeartBeatProcessor();
-  const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
-
-  useEffect(() => {
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        window.location.href = "/auth";
-      } else {
-        setEmail(session.user.email || "");
-        loadMeasurements();
-      }
-    };
-
-    checkSession();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) {
-        window.location.href = "/auth";
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const loadMeasurements = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('measurements')
-        .select('*')
-        .order('measured_at', { ascending: false });
-
-      if (error) throw error;
-      setMeasurements(data || []);
-    } catch (error) {
-      console.error("Error al cargar mediciones:", error);
-      toast({
-        title: "Error",
-        description: "No se pudieron cargar las mediciones anteriores",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const resetMeasurement = () => {
-    if (isMonitoring) {
-      stopMonitoring();
-    }
-    setVitalSigns(INITIAL_VITAL_SIGNS);
-    setHeartRate(0);
-    setArrhythmiaCount("--");
-    setSignalQuality(0);
-    resetHeartBeat();
-    resetVitalSigns();
-    toast({
-      title: "Medición reiniciada",
-      description: "Todos los valores han sido reiniciados"
-    });
-  };
-
-  const validateNumber = (value: number): boolean => {
-    return typeof value === 'number' && !isNaN(value) && isFinite(value) && value > 0;
-  };
-
-  const extractArrhythmiaCount = (value: string): number => {
-    if (value === '--') return 0;
-    const parts = value.split('|');
-    if (parts.length === 2) {
-      const count = parseInt(parts[1]);
-      return validateNumber(count) ? count : 0;
-    }
-    return 0;
-  };
+  const { processSignal: processHeartBeat } = useHeartBeatProcessor();
+  const { processSignal: processVitalSigns } = useVitalSignsProcessor();
 
   const saveMeasurement = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        throw new Error("No hay sesión activa");
-      }
+      if (!session) return;
 
+      // Simplemente guardar los valores tal como están
       const measurementData = {
         user_id: session.user.id,
-        heart_rate: Math.round(heartRate) || 0,
-        spo2: Math.round(vitalSigns.spo2) || 0,
-        systolic: parseInt(vitalSigns.pressure.split('/')[0]) || 0,
-        diastolic: parseInt(vitalSigns.pressure.split('/')[1]) || 0,
-        arrhythmia_count: extractArrhythmiaCount(arrhythmiaCount),
-        quality: Math.round(signalQuality) || 0,
+        heart_rate: Math.round(heartRate),
+        spo2: Math.round(vitalSigns.spo2),
+        systolic: parseInt(vitalSigns.pressure.split('/')[0]) || 120,
+        diastolic: parseInt(vitalSigns.pressure.split('/')[1]) || 80,
+        arrhythmia_count: parseInt(arrhythmiaCount.split('|')[1]) || 0,
+        quality: Math.round(signalQuality),
         measured_at: new Date().toISOString()
       };
 
-      console.log("Intentando guardar medición:", measurementData);
-
-      const { error } = await supabase
-        .from('measurements')
-        .insert(measurementData);
-
-      if (error) {
-        console.error("Error de Supabase:", error);
-        throw error;
-      }
-
-      toast({
-        title: "Medición guardada",
-        description: "Los resultados han sido almacenados correctamente"
-      });
-
+      await supabase.from('measurements').insert(measurementData);
       await loadMeasurements();
       resetMeasurement();
+      
+      toast({
+        title: "Medición guardada",
+        description: "Los resultados han sido almacenados"
+      });
     } catch (error) {
-      console.error("Error al guardar medición:", error);
-      toast({
-        title: "Error al guardar",
-        description: "No se pudo guardar la medición. Por favor intente nuevamente.",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      stopMonitoring();
-      await supabase.auth.signOut();
-    } catch (error) {
-      console.error("Error al cerrar sesión:", error);
-      toast({
-        title: "Error",
-        description: "No se pudo cerrar la sesión",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const handleCalibrationClick = () => {
-    if (isMonitoring) {
-      setShowCalibrationDialog(true);
-    } else {
-      toast({
-        title: "Medición requerida",
-        description: "Inicie una medición antes de calibrar",
-        variant: "destructive"
-      });
+      console.error("Error al guardar:", error);
     }
   };
 
   const startMonitoring = () => {
     setIsMonitoring(true);
     setIsCameraOn(true);
-    setIsPaused(false);
     startProcessing();
     setElapsedTime(0);
     
@@ -212,139 +96,37 @@ const Index = () => {
   };
 
   const stopMonitoring = () => {
-    if (isMonitoring) {
-      setIsMonitoring(false);
-      setIsCameraOn(false);
-      setIsPaused(false);
-      stopProcessing();
-      
-      if (measurementTimerRef.current) {
-        clearInterval(measurementTimerRef.current);
-        measurementTimerRef.current = null;
-      }
-      
-      saveMeasurement();
-    }
-  };
-
-  const pauseMonitoring = () => {
-    if (isMonitoring) {
-      setIsPaused(true);
-      stopProcessing();
-      if (measurementTimerRef.current) {
-        clearInterval(measurementTimerRef.current);
-        measurementTimerRef.current = null;
-      }
-    }
-  };
-
-  const resumeMonitoring = () => {
-    if (isMonitoring) {
-      setIsPaused(false);
-      startProcessing();
-      if (elapsedTime < 30 && !measurementTimerRef.current) {
-        measurementTimerRef.current = window.setInterval(() => {
-          setElapsedTime(prev => {
-            if (prev >= 30) {
-              if (measurementTimerRef.current) {
-                clearInterval(measurementTimerRef.current);
-                measurementTimerRef.current = null;
-              }
-              return 30;
-            }
-            return prev + 1;
-          });
-        }, 1000);
-      }
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      if (measurementTimerRef.current) {
-        clearInterval(measurementTimerRef.current);
-        measurementTimerRef.current = null;
-      }
-    };
-  }, []);
-
-  const handleCalibrationStart = () => {
-    if (isMonitoring) {
-      pauseMonitoring();
-    }
-  };
-
-  const handleCalibrationEnd = () => {
-    if (isMonitoring) {
-      resumeMonitoring();
-    }
-  };
-
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        if (isMonitoring && !isPaused) {
-          pauseMonitoring();
-        }
-      } else {
-        if (isMonitoring && isPaused && !showCalibrationDialog) {
-          resumeMonitoring();
-        }
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [isMonitoring, isPaused, showCalibrationDialog]);
-
-  const handleStreamReady = (stream: MediaStream) => {
     if (!isMonitoring) return;
     
-    console.log("Index: Camera stream ready", stream.getVideoTracks()[0].getSettings());
-    const videoTrack = stream.getVideoTracks()[0];
-    const imageCapture = new ImageCapture(videoTrack);
+    setIsMonitoring(false);
+    setIsCameraOn(false);
+    stopProcessing();
     
-    if (videoTrack.getCapabilities()?.torch) {
-      videoTrack.applyConstraints({
-        advanced: [{ torch: true }]
-      }).catch(err => console.error("Error activando linterna:", err));
+    if (measurementTimerRef.current) {
+      clearInterval(measurementTimerRef.current);
+      measurementTimerRef.current = null;
     }
     
-    const tempCanvas = document.createElement('canvas');
-    const tempCtx = tempCanvas.getContext('2d');
-    if (!tempCtx) {
-      console.error("Index: No se pudo obtener el contexto 2D del canvas temporal");
-      return;
-    }
-    
-    const processImage = async () => {
-      if (!isMonitoring) {
-        console.log("Index: Monitoreo detenido, no se procesan más frames");
-        return;
-      }
-      
-      try {
-        const frame = await imageCapture.grabFrame();
-        tempCanvas.width = frame.width;
-        tempCanvas.height = frame.height;
-        tempCtx.drawImage(frame, 0, 0);
-        const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
-        processFrame(imageData);
-        
-        if (isMonitoring) {
-          requestAnimationFrame(processImage);
-        }
-      } catch (error) {
-        console.error("Index: Error capturando frame:", error);
-        if (isMonitoring) {
-          requestAnimationFrame(processImage);
-        }
-      }
-    };
+    saveMeasurement();
+  };
 
-    processImage();
+  const resetMeasurement = () => {
+    setVitalSigns(INITIAL_VITAL_SIGNS);
+    setHeartRate(0);
+    setArrhythmiaCount("--");
+    setSignalQuality(0);
+  };
+
+  const loadMeasurements = async () => {
+    try {
+      const { data } = await supabase
+        .from('measurements')
+        .select('*')
+        .order('measured_at', { ascending: false });
+      setMeasurements(data || []);
+    } catch (error) {
+      console.error("Error cargando mediciones:", error);
+    }
   };
 
   useEffect(() => {
@@ -361,6 +143,15 @@ const Index = () => {
       setSignalQuality(lastSignal.quality);
     }
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
+
+  const handleLogout = async () => {
+    try {
+      stopMonitoring();
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error("Error al cerrar sesión:", error);
+    }
+  };
 
   return (
     <div className="w-screen h-screen bg-gray-900 overflow-hidden">
@@ -386,14 +177,6 @@ const Index = () => {
                 onClick={() => setShowHistoryDialog(true)}
               >
                 <History className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="bg-black/30 text-gray-300 hover:text-white h-8 w-8"
-                onClick={handleCalibrationClick}
-              >
-                <Settings className="h-4 w-4" />
               </Button>
               <Button
                 variant="ghost"
@@ -431,49 +214,32 @@ const Index = () => {
           <div className="flex flex-col items-center gap-2 w-full max-w-md mx-auto mt-[-8rem]">
             {isMonitoring && (
               <div className="text-xs font-medium text-gray-300 mb-1">
-                Tiempo de medición: {elapsedTime}s / 30s
+                Tiempo: {elapsedTime}s / 30s
               </div>
             )}
-            <div className="flex gap-2 w-full">
-              <Button
-                onClick={resetMeasurement}
-                className="bg-gray-600/80 hover:bg-gray-600 text-white"
-                disabled={!isMonitoring && heartRate === 0}
-              >
-                <RotateCcw className="h-4 w-4 mr-2" />
-                Reiniciar
-              </Button>
-              <Button
-                onClick={isMonitoring ? stopMonitoring : startMonitoring}
-                className={`flex-1 measure-button ${
-                  isMonitoring 
-                    ? 'bg-red-600/80 hover:bg-red-600' 
-                    : 'bg-green-600/80 hover:bg-green-600'
-                } text-white`}
-              >
-                {isMonitoring ? (
-                  <>
-                    <Square className="h-4 w-4 mr-2" />
-                    Detener Medición
-                  </>
-                ) : (
-                  <>
-                    <Play className="h-4 w-4 mr-2" />
-                    Iniciar Medición
-                  </>
-                )}
-              </Button>
-            </div>
+            <Button
+              onClick={isMonitoring ? stopMonitoring : startMonitoring}
+              className={`w-full measure-button ${
+                isMonitoring 
+                  ? 'bg-red-600/80 hover:bg-red-600' 
+                  : 'bg-green-600/80 hover:bg-green-600'
+              } text-white`}
+            >
+              {isMonitoring ? (
+                <>
+                  <Square className="h-4 w-4 mr-2" />
+                  Detener Medición
+                </>
+              ) : (
+                <>
+                  <Play className="h-4 w-4 mr-2" />
+                  Iniciar Medición
+                </>
+              )}
+            </Button>
           </div>
         </div>
       </div>
-
-      <CalibrationDialog
-        isOpen={showCalibrationDialog}
-        onClose={() => setShowCalibrationDialog(false)}
-        onCalibrationStart={handleCalibrationStart}
-        onCalibrationEnd={handleCalibrationEnd}
-      />
 
       <MeasurementsHistory
         isOpen={showHistoryDialog}
