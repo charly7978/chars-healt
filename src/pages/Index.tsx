@@ -151,7 +151,12 @@ const Index = () => {
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
 
   return (
-    <div className="fixed inset-0 flex flex-col bg-black h-screen w-screen overflow-hidden" style={{ height: '100dvh' }}>
+    <div className="fixed inset-0 flex flex-col bg-black" style={{ 
+      height: '100vh',
+      height: '-webkit-fill-available',
+      paddingTop: 'env(safe-area-inset-top)',
+      paddingBottom: 'env(safe-area-inset-bottom)'
+    }}>
       <div className="flex-1 relative">
         <div className="absolute inset-0">
           <CameraView 
@@ -196,7 +201,7 @@ const Index = () => {
                 />
                 <VitalSign 
                   label="ARRITMIAS"
-                  value={`${vitalSigns.arrhythmiaStatus}`}
+                  value={vitalSigns.arrhythmiaStatus}
                 />
               </div>
             </div>
@@ -208,7 +213,7 @@ const Index = () => {
             </div>
           )}
 
-          <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 mt-auto safe-bottom">
+          <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 mt-auto">
             <button 
               onClick={startMonitoring}
               className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
