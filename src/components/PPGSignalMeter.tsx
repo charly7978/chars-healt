@@ -20,21 +20,41 @@ const PPGSignalMeter = ({
 }: PPGSignalMeterProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dataRef = useRef<{time: number, value: number}[]>([]);
-  const [startTime] = useState<number>(Date.now());
-  const WINDOW_WIDTH_MS = 4000; // Reducido para ver mejor los detalles
+  const [startTime, setStartTime] = useState<number>(Date.now());
+  const WINDOW_WIDTH_MS = 3000; // Ventana más corta para ver mejor los pulsos
   const CANVAS_WIDTH = 2000;
   const CANVAS_HEIGHT = 1000;
-  const MIN_PEAK_INTERVAL = 500; // Ajustado para detección de picos
-  const lastPeakRef = useRef<number>(0);
-  const animationFrameRef = useRef<number>();
-  const smoothingFactor = 0.05; // Reducido significativamente para ver cambios más rápidos
-  const verticalScale = 5.0; // Aumentado significativamente para ver mejor la amplitud
+  const verticalScale = 15.0; // Amplificación mucho mayor
   const baselineRef = useRef<number | null>(null);
+  const maxAmplitudeRef = useRef<number>(0);
+
+  const handleReset = () => {
+    // Limpiar datos y referencias
+    dataRef.current = [];
+    baselineRef.current = null;
+    maxAmplitudeRef.current = 0;
+    setStartTime(Date.now());
+
+    // Limpiar el canvas
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+    }
+
+    // Llamar al reset del padre
+    onReset();
+  };
 
   useEffect(() => {
-    if (!canvasRef.current || !isFingerDetected) {
+    if (!canvasRef.current) return;
+    if (!isFingerDetected) {
       dataRef.current = [];
       baselineRef.current = null;
+      maxAmplitudeRef.current = 0;
       return;
     }
 
@@ -44,39 +64,26 @@ const PPGSignalMeter = ({
 
     const currentTime = Date.now();
     
-    // Establecer línea base
+    // Establecer y actualizar línea base
     if (baselineRef.current === null) {
       baselineRef.current = value;
-    }
-
-    // Normalizar valor respecto a la línea base
-    const normalizedValue = value - (baselineRef.current || 0);
-    
-    const lastPoint = dataRef.current[dataRef.current.length - 1];
-    if (lastPoint) {
-      const timeDiff = currentTime - lastPoint.time;
-      const valueDiff = normalizedValue - lastPoint.value;
-      const steps = Math.min(Math.floor(timeDiff / 16), 4); // Menos pasos para más detalle
-
-      for (let i = 1; i <= steps; i++) {
-        const interpolatedTime = lastPoint.time + (timeDiff * (i / steps));
-        const interpolatedValue = lastPoint.value + 
-          (valueDiff * (i / steps)) * (1 - smoothingFactor) + 
-          lastPoint.value * smoothingFactor;
-        
-        dataRef.current.push({
-          time: interpolatedTime,
-          value: interpolatedValue * verticalScale
-        });
-      }
     } else {
-      dataRef.current.push({
-        time: currentTime,
-        value: normalizedValue * verticalScale
-      });
+      baselineRef.current = baselineRef.current * 0.95 + value * 0.05;
     }
 
-    // Limitar ventana de tiempo
+    // Normalizar y escalar el valor
+    const normalizedValue = (value - (baselineRef.current || 0)) * verticalScale;
+    
+    // Actualizar amplitud máxima
+    maxAmplitudeRef.current = Math.max(maxAmplitudeRef.current, Math.abs(normalizedValue));
+
+    // Agregar nuevo punto
+    dataRef.current.push({
+      time: currentTime,
+      value: normalizedValue
+    });
+
+    // Mantener solo los datos dentro de la ventana de tiempo
     const cutoffTime = currentTime - WINDOW_WIDTH_MS;
     dataRef.current = dataRef.current.filter(point => point.time >= cutoffTime);
 
@@ -85,52 +92,52 @@ const PPGSignalMeter = ({
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // Dibujar grilla
-    ctx.strokeStyle = 'rgba(0, 255, 0, 0.05)';
+    ctx.strokeStyle = 'rgba(0, 255, 0, 0.1)';
     ctx.lineWidth = 1;
 
-    // Grilla temporal (vertical)
-    for (let i = 0; i <= 20; i++) {
-      const x = canvas.width - (canvas.width * (i / 20));
+    // Líneas de tiempo (verticales)
+    for (let i = 0; i < 6; i++) {
+      const x = canvas.width - (canvas.width * (i / 6));
       ctx.beginPath();
       ctx.moveTo(x, 0);
       ctx.lineTo(x, canvas.height);
       ctx.stroke();
+      
+      // Agregar marca de tiempo
+      ctx.fillStyle = 'rgba(0, 255, 0, 0.5)';
+      ctx.font = '14px monospace';
+      ctx.fillText(`${i * 500}ms`, x - 30, canvas.height - 10);
     }
 
-    // Grilla de amplitud (horizontal)
-    for (let i = 0; i <= 10; i++) {
-      const y = (canvas.height / 10) * i;
+    // Líneas de amplitud (horizontales)
+    const amplitudeLines = 8;
+    for (let i = 0; i <= amplitudeLines; i++) {
+      const y = (canvas.height / amplitudeLines) * i;
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(canvas.width, y);
       ctx.stroke();
     }
 
-    // Dibujar línea central
-    ctx.strokeStyle = 'rgba(0, 255, 0, 0.2)';
+    // Línea central más visible
+    ctx.strokeStyle = 'rgba(0, 255, 0, 0.3)';
+    ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(0, canvas.height / 2);
     ctx.lineTo(canvas.width, canvas.height / 2);
     ctx.stroke();
 
-    // Dibujar señal
-    const data = dataRef.current;
-    if (data.length > 1) {
-      // Calcular rango dinámico
-      const values = data.map(d => d.value);
-      const meanValue = values.reduce((a, b) => a + b, 0) / values.length;
-      const maxDeviation = Math.max(...values.map(v => Math.abs(v - meanValue))) || 1;
-      const scaleFactor = (canvas.height * 0.4) / maxDeviation;
-
+    // Dibujar señal PPG
+    if (dataRef.current.length > 1) {
       ctx.strokeStyle = '#00ff00';
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 4;
       ctx.shadowColor = '#00ff00';
-      ctx.shadowBlur = 5;
+      ctx.shadowBlur = 10;
       ctx.beginPath();
 
-      data.forEach((point, index) => {
+      dataRef.current.forEach((point, index) => {
         const x = canvas.width - ((currentTime - point.time) * canvas.width / WINDOW_WIDTH_MS);
-        const y = canvas.height / 2 - ((point.value - meanValue) * scaleFactor);
+        const y = canvas.height / 2 - point.value;
         
         if (index === 0) {
           ctx.moveTo(x, y);
@@ -142,11 +149,7 @@ const PPGSignalMeter = ({
       ctx.stroke();
     }
 
-    return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-    };
+    return () => {};
   }, [value, quality, isFingerDetected]);
 
   return (
@@ -196,7 +199,7 @@ const PPGSignalMeter = ({
           INICIAR
         </button>
         <button 
-          onClick={onReset}
+          onClick={handleReset}
           className="w-full h-full bg-black hover:bg-black/80 text-3xl font-bold text-white border-t border-gray-800 transition-colors"
         >
           RESET
