@@ -40,27 +40,25 @@ const CameraView = ({
 
       const isAndroid = /android/i.test(navigator.userAgent);
 
-      // Configuración base para todos los dispositivos
-      const constraints: MediaStreamConstraints = {
-        video: {
-          facingMode: 'environment',
-          width: { ideal: 720 },
-          height: { ideal: 480 },
-        }
+      // Configuración base de video
+      const baseVideoConstraints: MediaTrackConstraints = {
+        facingMode: 'environment',
+        width: { ideal: 720 },
+        height: { ideal: 480 }
       };
 
       // Agregar configuraciones específicas para Android
       if (isAndroid) {
-        const androidConstraints = {
-          ...constraints,
-          video: {
-            ...constraints.video,
-            frameRate: { ideal: 25 },
-            resizeMode: 'crop-and-scale'
-          }
-        };
-        Object.assign(constraints, androidConstraints);
+        Object.assign(baseVideoConstraints, {
+          frameRate: { ideal: 25 },
+          resizeMode: 'crop-and-scale'
+        });
       }
+
+      // Construir constraints finales
+      const constraints: MediaStreamConstraints = {
+        video: baseVideoConstraints
+      };
 
       const newStream = await navigator.mediaDevices.getUserMedia(constraints);
       const videoTrack = newStream.getVideoTracks()[0];
