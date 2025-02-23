@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -136,13 +137,27 @@ const Index = () => {
 
       document.documentElement.style.zoom = '1';
       
-      if (window.screen && window.screen.orientation) {
+      // Forzar orientación portrait sin usar lock()
+      if (window.screen?.orientation) {
         try {
-          window.screen.orientation.lock('portrait');
+          if (window.matchMedia("(orientation: landscape)").matches) {
+            window.screen.orientation.angle = 0;
+          }
         } catch (e) {
-          console.log('Orientation lock not supported');
+          console.log('Orientation adjustment not supported');
         }
       }
+
+      // Establecer resolución máxima
+      const pixelRatio = window.devicePixelRatio || 1;
+      const width = window.innerWidth * pixelRatio;
+      const height = window.innerHeight * pixelRatio;
+      
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      canvas.style.width = width + 'px';
+      canvas.style.height = height + 'px';
     };
 
     enforceResolution();
@@ -165,10 +180,19 @@ const Index = () => {
   }, []);
 
   return (
-    <div className="fixed inset-0 w-screen h-screen bg-black overflow-hidden touch-none select-none" style={{ 
-      height: 'calc(var(--vh, 1vh) * 100)',
-      WebkitTextSizeAdjust: '100%',
-    }}>
+    <div 
+      className="fixed inset-0 w-screen h-screen bg-black overflow-hidden touch-none select-none" 
+      style={{ 
+        height: 'calc(var(--vh, 1vh) * 100)',
+        WebkitTextSizeAdjust: '100%',
+        transform: 'translateZ(0)',
+        backfaceVisibility: 'hidden',
+        perspective: '1000',
+        width: '100vw',
+        maxWidth: '100vw',
+        minWidth: '100vw'
+      }}
+    >
       <div className="relative w-full h-full">
         <div className="absolute inset-0">
           <CameraView 
