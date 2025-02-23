@@ -8,7 +8,6 @@ interface CameraViewProps {
   isFingerDetected?: boolean;
   signalQuality?: number;
   buttonPosition?: DOMRect;
-  videoRef?: React.RefObject<HTMLVideoElement>;
 }
 
 const CameraView = ({ 
@@ -16,16 +15,23 @@ const CameraView = ({
   isMonitoring, 
   isFingerDetected = false, 
   signalQuality = 0,
-  buttonPosition,
-  videoRef: externalVideoRef
+  buttonPosition 
 }: CameraViewProps) => {
-  const internalVideoRef = useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
-  const videoRef = externalVideoRef || internalVideoRef;
 
   const stopCamera = async () => {
     if (stream) {
-      stream.getTracks().forEach(track => track.stop());
+      const tracks = stream.getTracks();
+      tracks.forEach(track => {
+        if (track.getCapabilities()?.torch) {
+          track.applyConstraints({
+            advanced: [{ torch: false }]
+          }).catch(err => console.error("Error desactivando linterna:", err));
+        }
+        track.stop();
+      });
       if (videoRef.current) {
         videoRef.current.srcObject = null;
       }
@@ -39,51 +45,45 @@ const CameraView = ({
         throw new Error("getUserMedia no está soportado");
       }
 
-      const isAndroid = /android/i.test(navigator.userAgent);
-
-      const initialConstraints: MediaStreamConstraints = {
-        video: {
-          facingMode: 'environment',
-          width: 320,
-          height: 240,
-          frameRate: { ideal: 30 },
-          advanced: [{ torch: true }]
-        }
+      const isAndroid = /Android/i.test(navigator.userAgent);
+      
+      const constraints: MediaTrackConstraints = {
+        facingMode: 'environment',
+        width: { ideal: 1280, min: 640 },
+        height: { ideal: 720, min: 480 },
+        frameRate: { ideal: 30, min: 15 },
+        ...(isAndroid && {
+          resizeMode: 'crop-and-scale',
+          brightness: { ideal: 100 },
+          whiteBalanceMode: 'continuous'
+        })
       };
 
-      const newStream = await navigator.mediaDevices.getUserMedia(initialConstraints);
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        video: constraints
+      });
+      
       const videoTrack = newStream.getVideoTracks()[0];
 
-      if (videoTrack && isAndroid) {
+      if (isAndroid) {
         try {
           const capabilities = videoTrack.getCapabilities();
-          if (capabilities?.torch) {
-            await videoTrack.applyConstraints({
-              advanced: [{ torch: true }]
-            });
-          }
-
-          videoTrack.enabled = true;
-          
-          if (videoRef.current) {
-            videoRef.current.addEventListener('pause', () => {
-              videoTrack.enabled = false;
-            });
-            videoRef.current.addEventListener('play', () => {
-              videoTrack.enabled = true;
-            });
-          }
+          await videoTrack.applyConstraints({
+            advanced: [{
+              torch: true
+            }]
+          });
         } catch (err) {
-          console.log("Error en optimizaciones Android:", err);
+          console.log("No se pudieron aplicar configuraciones avanzadas:", err);
         }
+      } else if (videoTrack.getCapabilities()?.torch) {
+        await videoTrack.applyConstraints({
+          advanced: [{ torch: true }]
+        });
       }
 
       if (videoRef.current) {
         videoRef.current.srcObject = newStream;
-        if (isAndroid) {
-          videoRef.current.style.transform = 'translateZ(0)';
-          videoRef.current.style.backfaceVisibility = 'hidden';
-        }
       }
 
       setStream(newStream);
@@ -121,20 +121,22 @@ const CameraView = ({
         autoPlay
         playsInline
         muted
-        className="absolute top-0 left-0 min-w-full min-h-full w-auto h-auto z-0 object-cover"
-        style={{
-          willChange: 'transform',
-          transform: 'translateZ(0)',
-          backfaceVisibility: 'hidden'
-        }}
+        style={{ objectFit: 'cover' }}
+        className="absolute top-0 left-0 min-w-full min-h-full w-auto h-auto z-0"
+      />
+      <canvas
+        ref={canvasRef}
+        width={320}
+        height={240}
+        className="hidden"
       />
       {isMonitoring && buttonPosition && (
         <div className="absolute bottom-24 left-1/2 transform -translate-x-1/2 z-20 flex flex-col items-center">
           <Fingerprint
-            size={48}
+            size={32}
             className={`transition-colors duration-300 ${getFingerColor()}`}
           />
-          <span className={`text-xs mt-2 transition-colors duration-300 ${
+          <span className={`text-xs mt-1 transition-colors duration-300 ${
             isFingerDetected ? 'text-green-500' : 'text-gray-400'
           }`}>
             {isFingerDetected ? "dedo detectado" : "ubique su dedo en el lente"}

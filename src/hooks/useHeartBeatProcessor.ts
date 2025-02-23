@@ -1,5 +1,5 @@
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { HeartBeatProcessor } from '../modules/HeartBeatProcessor';
 
 interface HeartBeatResult {
@@ -15,53 +15,39 @@ interface HeartBeatResult {
 }
 
 export const useHeartBeatProcessor = () => {
-  const processorRef = useRef<HeartBeatProcessor | null>(null);
+  const [processor] = useState(() => {
+    console.log('useHeartBeatProcessor: Creando nueva instancia de HeartBeatProcessor');
+    const newProcessor = new HeartBeatProcessor();
+    if (typeof window !== 'undefined') {
+      window.heartBeatProcessor = newProcessor;
+    }
+    return newProcessor;
+  });
+  
   const [currentBPM, setCurrentBPM] = useState(0);
   const [confidence, setConfidence] = useState(0);
 
-  // Initialize processor in useEffect to ensure it runs in the correct context
   useEffect(() => {
-    console.log('useHeartBeatProcessor: Creando nueva instancia de HeartBeatProcessor');
-    processorRef.current = new HeartBeatProcessor();
-    
     if (typeof window !== 'undefined') {
-      window.heartBeatProcessor = processorRef.current;
-    }
-
-    return () => {
-      console.log('useHeartBeatProcessor: Limpiando processor');
-      if (processorRef.current) {
-        processorRef.current = null;
-      }
-      if (typeof window !== 'undefined') {
+      console.log('useHeartBeatProcessor: Asignando processor a window.heartBeatProcessor');
+      window.heartBeatProcessor = processor;
+      
+      return () => {
+        console.log('useHeartBeatProcessor: Limpiando processor de window');
         window.heartBeatProcessor = undefined;
-      }
-    };
-  }, []);
-
-  const processSignal = useCallback((value: number): HeartBeatResult => {
-    if (!processorRef.current) {
-      console.warn('useHeartBeatProcessor: Processor no inicializado');
-      return {
-        bpm: 0,
-        confidence: 0,
-        isPeak: false,
-        arrhythmiaCount: 0,
-        rrData: {
-          intervals: [],
-          lastPeakTime: null
-        }
       };
     }
+  }, [processor]);
 
+  const processSignal = useCallback((value: number): HeartBeatResult => {
     console.log('useHeartBeatProcessor - processSignal:', {
       inputValue: value,
-      currentProcessor: !!processorRef.current,
+      currentProcessor: !!processor,
       timestamp: new Date().toISOString()
     });
 
-    const result = processorRef.current.processSignal(value);
-    const rrData = processorRef.current.getRRIntervals();
+    const result = processor.processSignal(value);
+    const rrData = processor.getRRIntervals(); // Obtenemos los datos RR
 
     console.log('useHeartBeatProcessor - result:', {
       bpm: result.bpm,
@@ -79,18 +65,16 @@ export const useHeartBeatProcessor = () => {
 
     return {
       ...result,
-      rrData
+      rrData // Incluimos los datos RR en el resultado
     };
-  }, []);
+  }, [processor]);
 
   const reset = useCallback(() => {
     console.log('useHeartBeatProcessor: Reseteando processor');
-    if (processorRef.current) {
-      processorRef.current.reset();
-    }
+    processor.reset();
     setCurrentBPM(0);
     setConfidence(0);
-  }, []);
+  }, [processor]);
 
   return {
     currentBPM,

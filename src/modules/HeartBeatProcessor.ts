@@ -10,26 +10,24 @@ export class HeartBeatProcessor {
   private readonly SAMPLE_RATE = 30;
   private readonly WINDOW_SIZE = 60;
   private readonly MIN_BPM = 40;
-  private readonly MAX_BPM = 200;
-  private readonly SIGNAL_THRESHOLD = 0.75;
-  private readonly MIN_CONFIDENCE = 0.65;
-  private readonly DERIVATIVE_THRESHOLD = -0.03;
-  private readonly MIN_PEAK_TIME_MS = 400;
-  private readonly WARMUP_TIME_MS = 3000;
+  private readonly MAX_BPM = 180;
+  private readonly SIGNAL_THRESHOLD = 0.80;
+  private readonly MIN_CONFIDENCE = 0.70;
+  private readonly DERIVATIVE_THRESHOLD = -0.05;
+  private readonly MIN_PEAK_TIME_MS = 600;
+  private readonly WARMUP_TIME_MS = 5000;
 
-  // Constantes para el procesamiento de señal
+  // Parámetros de filtrado.
   private readonly MEDIAN_FILTER_WINDOW = 5;
-  private readonly MOVING_AVERAGE_WINDOW = 3;
-  private readonly EMA_ALPHA = 0.3;
-  private readonly BASELINE_FACTOR = 0.95;
+  private readonly MOVING_AVERAGE_WINDOW = 7;
+  private readonly EMA_ALPHA = 0.2;
+  private readonly BASELINE_FACTOR = 0.998;
 
-  // Parámetros de beep ajustados
-  private readonly BEEP_PRIMARY_FREQUENCY = 1200; // Aumentado para un tono más agudo
-  private readonly BEEP_SECONDARY_FREQUENCY = 500;
-  private readonly BEEP_DURATION = 80;           // Reducido para un beep más corto
-  private readonly BEEP_VOLUME = 0.25;          // Aumentado el volumen base
-  private readonly BEEP_ATTACK_TIME = 0.01;     // Reducido para inicio más inmediato
-  private readonly BEEP_RELEASE_TIME = 0.05;    // Reducido para final más rápido
+  // Parámetros de beep ajustados para sonido más realista
+  private readonly BEEP_PRIMARY_FREQUENCY = 880; // Frecuencia principal (La4)
+  private readonly BEEP_SECONDARY_FREQUENCY = 440; // Armónico (La3)
+  private readonly BEEP_DURATION = 100; // Duración más larga
+  private readonly BEEP_VOLUME = 0.7; // Volumen aumentado
   private readonly MIN_BEEP_INTERVAL_MS = 300;
 
   // ────────── AUTO-RESET SI LA SEÑAL ES MUY BAJA ──────────
@@ -81,35 +79,61 @@ export class HeartBeatProcessor {
     if (now - this.lastBeepTime < this.MIN_BEEP_INTERVAL_MS) return;
 
     try {
-      const oscillator = this.audioContext.createOscillator();
-      const gainNode = this.audioContext.createGain();
+      // Oscilador principal
+      const primaryOscillator = this.audioContext.createOscillator();
+      const primaryGain = this.audioContext.createGain();
+      
+      // Oscilador secundario para armónicos
+      const secondaryOscillator = this.audioContext.createOscillator();
+      const secondaryGain = this.audioContext.createGain();
 
-      oscillator.type = "sine";
-      oscillator.frequency.setValueAtTime(
+      // Configurar oscilador principal
+      primaryOscillator.type = "sine";
+      primaryOscillator.frequency.setValueAtTime(
         this.BEEP_PRIMARY_FREQUENCY,
         this.audioContext.currentTime
       );
 
-      // Envelope más corto y preciso
-      gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
-      gainNode.gain.linearRampToValueAtTime(
-        volume,
-        this.audioContext.currentTime + this.BEEP_ATTACK_TIME
+      // Configurar oscilador secundario
+      secondaryOscillator.type = "sine";
+      secondaryOscillator.frequency.setValueAtTime(
+        this.BEEP_SECONDARY_FREQUENCY,
+        this.audioContext.currentTime
       );
-      gainNode.gain.setValueAtTime(
+
+      // Envelope del sonido principal
+      primaryGain.gain.setValueAtTime(0, this.audioContext.currentTime);
+      primaryGain.gain.linearRampToValueAtTime(
         volume,
-        this.audioContext.currentTime + this.BEEP_DURATION / 1000 - this.BEEP_RELEASE_TIME
+        this.audioContext.currentTime + 0.01
       );
-      gainNode.gain.exponentialRampToValueAtTime(
+      primaryGain.gain.exponentialRampToValueAtTime(
         0.01,
         this.audioContext.currentTime + this.BEEP_DURATION / 1000
       );
 
-      oscillator.connect(gainNode);
-      gainNode.connect(this.audioContext.destination);
+      // Envelope del sonido secundario (más suave)
+      secondaryGain.gain.setValueAtTime(0, this.audioContext.currentTime);
+      secondaryGain.gain.linearRampToValueAtTime(
+        volume * 0.3, // Armónico más suave
+        this.audioContext.currentTime + 0.01
+      );
+      secondaryGain.gain.exponentialRampToValueAtTime(
+        0.01,
+        this.audioContext.currentTime + this.BEEP_DURATION / 1000
+      );
 
-      oscillator.start();
-      oscillator.stop(this.audioContext.currentTime + this.BEEP_DURATION / 1000 + 0.1);
+      // Conectar nodos de audio
+      primaryOscillator.connect(primaryGain);
+      secondaryOscillator.connect(secondaryGain);
+      primaryGain.connect(this.audioContext.destination);
+      secondaryGain.connect(this.audioContext.destination);
+
+      // Iniciar y detener osciladores
+      primaryOscillator.start();
+      secondaryOscillator.start();
+      primaryOscillator.stop(this.audioContext.currentTime + this.BEEP_DURATION / 1000 + 0.05);
+      secondaryOscillator.stop(this.audioContext.currentTime + this.BEEP_DURATION / 1000 + 0.05);
 
       this.lastBeepTime = now;
     } catch (err) {
@@ -252,14 +276,14 @@ export class HeartBeatProcessor {
     const isPeak =
       derivative < this.DERIVATIVE_THRESHOLD &&
       normalizedValue > this.SIGNAL_THRESHOLD &&
-      this.lastValue > this.baseline * 0.98;
+      this.lastValue > this.baseline;
 
     const amplitudeConfidence = Math.min(
-      Math.max(Math.abs(normalizedValue) / (this.SIGNAL_THRESHOLD * 1.8), 0),
+      Math.max(Math.abs(normalizedValue) / (this.SIGNAL_THRESHOLD * 2), 0),
       1
     );
     const derivativeConfidence = Math.min(
-      Math.max(Math.abs(derivative) / Math.abs(this.DERIVATIVE_THRESHOLD * 0.8), 0),
+      Math.max(Math.abs(derivative) / Math.abs(this.DERIVATIVE_THRESHOLD), 0),
       1
     );
 

@@ -27,16 +27,16 @@ export class PPGSignalProcessor implements SignalProcessor {
   private lastValues: number[] = [];
   private readonly DEFAULT_CONFIG = {
     BUFFER_SIZE: 10,
-    MIN_RED_THRESHOLD: 80,  // Reducido de 85 a 80 para mayor sensibilidad
-    MAX_RED_THRESHOLD: 245,
-    STABILITY_WINDOW: 4,    // Reducido de 5 a 4 para detección más rápida
-    MIN_STABILITY_COUNT: 3  // Mantenido en 3 para evitar falsos positivos
+    MIN_RED_THRESHOLD: 95,
+    MAX_RED_THRESHOLD: 240,
+    STABILITY_WINDOW: 6,
+    MIN_STABILITY_COUNT: 3
   };
   private currentConfig: typeof this.DEFAULT_CONFIG;
   private readonly BUFFER_SIZE = 10;
-  private readonly MIN_RED_THRESHOLD = 80;
-  private readonly MAX_RED_THRESHOLD = 245;
-  private readonly STABILITY_WINDOW = 4;
+  private readonly MIN_RED_THRESHOLD = 95;
+  private readonly MAX_RED_THRESHOLD = 240;
+  private readonly STABILITY_WINDOW = 6;
   private readonly MIN_STABILITY_COUNT = 3;
   private stableFrameCount: number = 0;
   private lastStableValue: number = 0;
@@ -181,43 +181,38 @@ export class PPGSignalProcessor implements SignalProcessor {
     
     if (!isInRange) {
       this.stableFrameCount = 0;
-      this.lastStableValue = 0;
       return { isFingerDetected: false, quality: 0 };
     }
 
+    // Calcular estabilidad
     if (this.lastValues.length < this.STABILITY_WINDOW) {
       return { isFingerDetected: false, quality: 0 };
     }
 
-    // Cálculo de estabilidad mejorado
     const recentValues = this.lastValues.slice(-this.STABILITY_WINDOW);
-    const avgValue = recentValues.reduce((sum, val) => sum + val, 0) / recentValues.length;
     const avgVariation = recentValues.reduce((sum, val, i, arr) => {
       if (i === 0) return 0;
       return sum + Math.abs(val - arr[i-1]);
     }, 0) / (recentValues.length - 1);
 
-    // Umbral de variación adaptativo más sensible
-    const variationThreshold = Math.max(2.0, avgValue * 0.035); // Reducido a 3.5% del valor promedio
-    const isStable = avgVariation < variationThreshold;
+    const isStable = avgVariation < 5; // Umbral de variación para considerar señal estable
 
     if (isStable) {
       this.stableFrameCount++;
       this.lastStableValue = filtered;
     } else {
-      this.stableFrameCount = Math.max(0, this.stableFrameCount - 0.5); // Reducida la penalización
+      this.stableFrameCount = Math.max(0, this.stableFrameCount - 1);
     }
 
     const isFingerDetected = this.stableFrameCount >= this.MIN_STABILITY_COUNT;
     
+    // Calcular calidad solo si el dedo está detectado
     let quality = 0;
     if (isFingerDetected) {
-      const stabilityScore = Math.min(this.stableFrameCount / (this.MIN_STABILITY_COUNT * 2), 1);
+      const stabilityScore = Math.min(this.stableFrameCount / 10, 1);
       const intensityScore = Math.min((rawValue - this.MIN_RED_THRESHOLD) / 
                                     (this.MAX_RED_THRESHOLD - this.MIN_RED_THRESHOLD), 1);
-      const variationScore = Math.max(0, 1 - (avgVariation / variationThreshold));
-      
-      quality = Math.round((stabilityScore * 0.4 + intensityScore * 0.3 + variationScore * 0.3) * 100);
+      quality = Math.round((stabilityScore * 0.7 + intensityScore * 0.3) * 100);
     }
 
     return { isFingerDetected, quality };

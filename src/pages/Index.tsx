@@ -1,5 +1,4 @@
-
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -8,131 +7,217 @@ import SignalQualityIndicator from "@/components/SignalQualityIndicator";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
-import { Play, Square } from "lucide-react";
-
-interface VitalSigns {
-  spo2: number;
-  pressure: string;
-  arrhythmiaStatus: string;
-}
-
-const INITIAL_VITAL_SIGNS: VitalSigns = {
-  spo2: 0,
-  pressure: "--/--",
-  arrhythmiaStatus: "--"
-};
+import CalibrationDialog from "@/components/CalibrationDialog";
+import { supabase } from "@/integrations/supabase/client";
+import { LogOut, Settings, Play, Square } from "lucide-react";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [signalQuality, setSignalQuality] = useState(0);
-  const [vitalSigns, setVitalSigns] = useState<VitalSigns>(INITIAL_VITAL_SIGNS);
+  const [vitalSigns, setVitalSigns] = useState({ 
+    spo2: 0, 
+    pressure: "--/--",
+    arrhythmiaStatus: "--" 
+  });
   const [heartRate, setHeartRate] = useState(0);
-  const [arrhythmiaCount, setArrhythmiaCount] = useState<string>("--");
+  const [arrhythmiaCount, setArrhythmiaCount] = useState<string | number>("--");
+  const [showCalibrationDialog, setShowCalibrationDialog] = useState(false);
+  const [email, setEmail] = useState<string>("");
   const [elapsedTime, setElapsedTime] = useState(0);
   const measurementTimerRef = useRef<number | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-
+  
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
-  const { processSignal: processVitalSigns } = useVitalSignsProcessor();
+  const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
-  const processVideoFrame = useCallback(() => {
-    if (!isMonitoring || !videoRef.current || !canvasRef.current) return;
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        window.location.href = "/auth";
+      } else {
+        setEmail(session.user.email || "");
+      }
+    };
 
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    checkSession();
 
-    // Configurar el tamaño del canvas según el video
-    canvas.width = 320;
-    canvas.height = 240;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) {
+        window.location.href = "/auth";
+      }
+    });
 
-    // Dibujar el frame actual en el canvas
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
 
-    // Obtener los datos del pixel central
-    const centerX = Math.floor(canvas.width / 2);
-    const centerY = Math.floor(canvas.height / 2);
-    const imageData = ctx.getImageData(centerX - 10, centerY - 10, 20, 20);
-
-    // Procesar el frame
-    processFrame(imageData);
-
-    // Solicitar el siguiente frame
-    if (isMonitoring) {
-      requestAnimationFrame(processVideoFrame);
-    }
-  }, [isMonitoring, processFrame]);
-
-  const handleStreamReady = (stream: MediaStream) => {
+  const handleLogout = async () => {
     try {
-      console.log("Stream ready, initializing video processing");
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
-      const videoTrack = stream.getVideoTracks()[0];
-      if (videoTrack) {
-        videoTrack.enabled = true;
-        if ('ImageCapture' in window) {
-          const imageCapture = new (window as any).ImageCapture(videoTrack);
-          imageCapture.torch?.(true).catch(console.error);
-        }
-      }
-      // Iniciar el procesamiento de frames
-      requestAnimationFrame(processVideoFrame);
+      stopMonitoring();
+      await supabase.auth.signOut();
+      window.location.href = "/auth";
     } catch (error) {
-      console.error("Error initializing video stream:", error);
+      console.error("Error al cerrar sesión:", error);
+    }
+  };
+
+  const handleCalibrationClick = () => {
+    if (isMonitoring) {
+      setShowCalibrationDialog(true);
     }
   };
 
   const startMonitoring = () => {
     setIsMonitoring(true);
     setIsCameraOn(true);
+    setIsPaused(false);
     startProcessing();
     setElapsedTime(0);
-    
     if (measurementTimerRef.current) {
       clearInterval(measurementTimerRef.current);
     }
-    
     measurementTimerRef.current = window.setInterval(() => {
       setElapsedTime(prev => {
-        const next = prev + 1;
-        if (next >= 30) {
+        if (prev >= 30) {
           stopMonitoring();
           return 30;
         }
-        return next;
+        return prev + 1;
       });
     }, 1000);
-
-    // Iniciar el procesamiento de frames
-    requestAnimationFrame(processVideoFrame);
   };
 
   const stopMonitoring = () => {
-    if (!isMonitoring) return;
-    
     setIsMonitoring(false);
     setIsCameraOn(false);
+    setIsPaused(false);
     stopProcessing();
-    
+    resetVitalSigns();
+    setElapsedTime(0);
     if (measurementTimerRef.current) {
       clearInterval(measurementTimerRef.current);
-      measurementTimerRef.current = null;
     }
-    
-    resetMeasurement();
   };
 
-  const resetMeasurement = () => {
-    setVitalSigns(INITIAL_VITAL_SIGNS);
-    setHeartRate(0);
-    setArrhythmiaCount("--");
-    setSignalQuality(0);
+  const pauseMonitoring = () => {
+    if (isMonitoring) {
+      setIsPaused(true);
+      stopProcessing();
+      if (measurementTimerRef.current) {
+        clearInterval(measurementTimerRef.current);
+      }
+    }
+  };
+
+  const resumeMonitoring = () => {
+    if (isMonitoring) {
+      setIsPaused(false);
+      startProcessing();
+      if (elapsedTime < 30) {
+        measurementTimerRef.current = window.setInterval(() => {
+          setElapsedTime(prev => {
+            if (prev >= 30) {
+              if (measurementTimerRef.current) {
+                clearInterval(measurementTimerRef.current);
+              }
+              return 30;
+            }
+            return prev + 1;
+          });
+        }, 1000);
+      }
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (measurementTimerRef.current) {
+        clearInterval(measurementTimerRef.current);
+      }
+    };
+  }, []);
+
+  const handleCalibrationStart = () => {
+    if (isMonitoring) {
+      pauseMonitoring();
+    }
+  };
+
+  const handleCalibrationEnd = () => {
+    if (isMonitoring) {
+      resumeMonitoring();
+    }
+  };
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        if (isMonitoring && !isPaused) {
+          pauseMonitoring();
+        }
+      } else {
+        if (isMonitoring && isPaused && !showCalibrationDialog) {
+          resumeMonitoring();
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [isMonitoring, isPaused, showCalibrationDialog]);
+
+  const handleStreamReady = (stream: MediaStream) => {
+    if (!isMonitoring) return;
+    
+    console.log("Index: Camera stream ready", stream.getVideoTracks()[0].getSettings());
+    const videoTrack = stream.getVideoTracks()[0];
+    const imageCapture = new ImageCapture(videoTrack);
+    
+    if (videoTrack.getCapabilities()?.torch) {
+      videoTrack.applyConstraints({
+        advanced: [{ torch: true }]
+      }).catch(err => console.error("Error activando linterna:", err));
+    }
+    
+    const tempCanvas = document.createElement('canvas');
+    const tempCtx = tempCanvas.getContext('2d');
+    if (!tempCtx) {
+      console.error("Index: No se pudo obtener el contexto 2D del canvas temporal");
+      return;
+    }
+    
+    const processImage = async () => {
+      if (!isMonitoring) {
+        console.log("Index: Monitoreo detenido, no se procesan más frames");
+        return;
+      }
+      
+      try {
+        const frame = await imageCapture.grabFrame();
+        tempCanvas.width = frame.width;
+        tempCanvas.height = frame.height;
+        tempCtx.drawImage(frame, 0, 0);
+        const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
+        processFrame(imageData);
+        
+        if (isMonitoring) {
+          requestAnimationFrame(processImage);
+        }
+      } catch (error) {
+        console.error("Index: Error capturando frame:", error);
+        if (isMonitoring) {
+          requestAnimationFrame(processImage);
+        }
+      }
+    };
+
+    processImage();
   };
 
   useEffect(() => {
@@ -148,37 +233,46 @@ const Index = () => {
       
       setSignalQuality(lastSignal.quality);
     }
-  }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
-
-  useEffect(() => {
-    return () => {
-      if (measurementTimerRef.current) {
-        clearInterval(measurementTimerRef.current);
-      }
-    };
-  }, []);
+  }, [lastSignal, isMonitoring]);
 
   return (
     <div className="w-screen h-screen bg-gray-900 overflow-hidden">
       <div className="relative w-full h-full">
         <div className="absolute inset-0">
           <CameraView 
-            onStreamReady={handleStreamReady}
+            onStreamReady={handleStreamReady} 
             isMonitoring={isCameraOn}
             isFingerDetected={lastSignal?.fingerDetected}
             signalQuality={signalQuality}
             buttonPosition={document.querySelector('.measure-button')?.getBoundingClientRect()}
-            videoRef={videoRef}
           />
-          <canvas ref={canvasRef} className="hidden" />
         </div>
 
         <div className="relative z-10 h-full flex flex-col justify-between p-4">
           <div className="flex justify-between items-start w-full">
             <h1 className="text-lg font-bold text-white bg-black/30 px-3 py-1 rounded">PPG Monitor</h1>
+            <div className="flex gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="bg-black/30 text-gray-300 hover:text-white h-8 w-8"
+                onClick={handleCalibrationClick}
+                disabled={!isMonitoring}
+              >
+                <Settings className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="bg-black/30 text-gray-300 hover:text-white h-8 w-8"
+                onClick={handleLogout}
+              >
+                <LogOut className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
 
-          <div className="flex-1 flex flex-col justify-center gap-2 max-w-md mx-auto w-full mt-[-12rem]">
+          <div className="flex-1 flex flex-col justify-center gap-2 max-w-md mx-auto w-full mt-[-2rem]">
             <div className="relative">
               <PPGSignalMeter 
                 value={lastSignal?.filteredValue || 0}
@@ -200,28 +294,28 @@ const Index = () => {
             </div>
           </div>
 
-          <div className="flex flex-col items-center gap-2 w-full max-w-md mx-auto mt-[-8rem]">
+          <div className="flex flex-col items-center gap-1 w-full max-w-md mx-auto">
             {isMonitoring && (
               <div className="text-xs font-medium text-gray-300 mb-1">
-                Tiempo: {elapsedTime}s / 30s
+                Tiempo de medición: {elapsedTime}s / 30s
               </div>
             )}
             <Button
               onClick={isMonitoring ? stopMonitoring : startMonitoring}
-              className={`w-full measure-button ${
+              className={`flex-1 w-full measure-button ${
                 isMonitoring 
                   ? 'bg-red-600/80 hover:bg-red-600' 
                   : 'bg-green-600/80 hover:bg-green-600'
-              } text-white`}
+              } text-white gap-2`}
             >
               {isMonitoring ? (
                 <>
-                  <Square className="h-4 w-4 mr-2" />
+                  <Square className="h-4 w-4" />
                   Detener Medición
                 </>
               ) : (
                 <>
-                  <Play className="h-4 w-4 mr-2" />
+                  <Play className="h-4 w-4" />
                   Iniciar Medición
                 </>
               )}
@@ -229,6 +323,13 @@ const Index = () => {
           </div>
         </div>
       </div>
+
+      <CalibrationDialog
+        isOpen={showCalibrationDialog}
+        onClose={() => setShowCalibrationDialog(false)}
+        onCalibrationStart={handleCalibrationStart}
+        onCalibrationEnd={handleCalibrationEnd}
+      />
     </div>
   );
 };
