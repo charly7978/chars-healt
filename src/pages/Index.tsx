@@ -137,14 +137,15 @@ const Index = () => {
 
       document.documentElement.style.zoom = '1';
       
-      // Forzar orientación portrait sin usar lock()
+      // En lugar de modificar el ángulo, escuchamos cambios de orientación
       if (window.screen?.orientation) {
         try {
+          // Solo notificamos si está en landscape
           if (window.matchMedia("(orientation: landscape)").matches) {
-            window.screen.orientation.angle = 0;
+            console.log('Please rotate your device to portrait mode');
           }
         } catch (e) {
-          console.log('Orientation adjustment not supported');
+          console.log('Orientation detection not supported');
         }
       }
 
