@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 
 interface PPGSignalMeterProps {
@@ -20,6 +19,7 @@ const PPGSignalMeter = ({
   const dataRef = useRef<{time: number, value: number, isPeak: boolean, isArrhythmia?: boolean}[]>([]);
   const [startTime] = useState<number>(Date.now());
   const [scrollPosition, setScrollPosition] = useState(0);
+  const touchStartRef = useRef<{x: number, scrollPos: number} | null>(null);
   
   // Constantes del monitor
   const MAX_TIME = 30000; // 30 segundos
@@ -196,19 +196,26 @@ const PPGSignalMeter = ({
         onDataReady(dataRef.current);
       }
     } else {
-      // Modo tiempo real: mostrar últimos 5 segundos
+      // Modo tiempo real: mostrar últimos 5 segundos con auto-scroll
       const recentData = dataRef.current.slice(-150);
       const minVal = Math.min(...recentData.map(d => d.value));
       const maxVal = Math.max(...recentData.map(d => d.value));
       const range = maxVal - minVal || 1;
 
-      // Dibujar señal en tiempo real
+      // Calcular desplazamiento automático
+      const timeOffset = (elapsedTime % 5000) / 5000; // 5 segundos por ciclo
+      const scrollOffset = timeOffset * CANVAS_WIDTH;
+
+      // Dibujar señal en tiempo real con desplazamiento
       ctx.beginPath();
       ctx.strokeStyle = COLORS.signal;
       ctx.lineWidth = 2;
 
       recentData.forEach((point, index) => {
-        const x = (index / 150) * CANVAS_WIDTH;
+        // Calcular posición con desplazamiento automático
+        const baseX = (index / 150) * CANVAS_WIDTH;
+        const x = (baseX - scrollOffset + CANVAS_WIDTH) % CANVAS_WIDTH;
+        
         const normalizedY = (point.value - minVal) / range;
         const y = CANVAS_HEIGHT - (normalizedY * CANVAS_HEIGHT * 0.8 + CANVAS_HEIGHT * 0.1);
         
@@ -218,7 +225,7 @@ const PPGSignalMeter = ({
           ctx.lineTo(x, y);
         }
 
-        // Dibujar marcadores en tiempo real
+        // Dibujar marcadores
         if (point.isPeak) {
           if (point.isArrhythmia) {
             ctx.save();
@@ -245,27 +252,47 @@ const PPGSignalMeter = ({
       });
       ctx.stroke();
 
-      // Dibujar línea de tiempo
-      const timeProgress = (elapsedTime / MAX_TIME) * CANVAS_WIDTH;
+      // Línea vertical de referencia
       ctx.strokeStyle = COLORS.text;
       ctx.setLineDash([5, 5]);
       ctx.beginPath();
-      ctx.moveTo(timeProgress, 0);
-      ctx.lineTo(timeProgress, CANVAS_HEIGHT);
+      ctx.moveTo(CANVAS_WIDTH - 50, 0);
+      ctx.lineTo(CANVAS_WIDTH - 50, CANVAS_HEIGHT);
       ctx.stroke();
       ctx.setLineDash([]);
     }
 
   }, [value, quality, isFingerDetected, isComplete, startTime, scrollPosition]);
 
-  // Manejar scroll horizontal en modo revisión
-  const handleScroll = (e: React.WheelEvent) => {
-    if (isComplete) {
-      e.preventDefault();
-      setScrollPosition(prev => 
-        Math.max(0, Math.min(30, prev + e.deltaY / 100))
-      );
-    }
+  // Manejo de eventos táctiles y mouse para scroll
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (!isComplete) return;
+    const touch = e.touches[0];
+    touchStartRef.current = {
+      x: touch.clientX,
+      scrollPos: scrollPosition
+    };
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isComplete || !touchStartRef.current) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    const diff = (touchStartRef.current.x - touch.clientX) / 100;
+    const newPos = touchStartRef.current.scrollPos + diff;
+    setScrollPosition(Math.max(0, Math.min(30, newPos)));
+  };
+
+  const handleTouchEnd = () => {
+    touchStartRef.current = null;
+  };
+
+  // Manejo de scroll con rueda del mouse
+  const handleWheel = (e: React.WheelEvent) => {
+    if (!isComplete) return;
+    e.preventDefault();
+    const delta = e.deltaY / 100;
+    setScrollPosition(prev => Math.max(0, Math.min(30, prev + delta)));
   };
 
   return (
@@ -278,14 +305,17 @@ const PPGSignalMeter = ({
         >
           {isFingerDetected ? (
             isComplete ? 
-              'Review Mode - Use scroll to navigate' : 
+              'Review Mode - Slide to navigate' : 
               `Quality: ${quality}%`
           ) : 'No Signal'}
         </span>
       </div>
       <div 
-        className="relative overflow-hidden"
-        onWheel={handleScroll}
+        className="relative overflow-hidden touch-none"
+        onWheel={handleWheel}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       >
         <canvas
           ref={canvasRef}
