@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from 'react';
 import { Fingerprint } from 'lucide-react';
 
@@ -68,7 +69,7 @@ const PPGSignalMeter = ({
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     ctx.strokeStyle = 'rgba(0, 255, 0, 0.1)';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 1;
 
     // Draw time grid
     const timeInterval = WINDOW_WIDTH_MS / 30;
@@ -96,10 +97,10 @@ const PPGSignalMeter = ({
       const range = maxVal - minVal || 1;
 
       ctx.shadowColor = '#00ff00';
-      ctx.shadowBlur = 15;
+      ctx.shadowBlur = 5;
       ctx.beginPath();
       ctx.strokeStyle = '#00ff00';
-      ctx.lineWidth = 6;
+      ctx.lineWidth = 3;
 
       let firstPoint = true;
       data.forEach((point, index) => {
@@ -134,7 +135,7 @@ const PPGSignalMeter = ({
         ref={canvasRef}
         width={CANVAS_WIDTH}
         height={CANVAS_HEIGHT}
-        className="w-full h-[calc(100%-100px)]"
+        className="w-full h-[calc(100%-180px)]"
       />
 
       <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center bg-black/40">
@@ -167,16 +168,36 @@ const PPGSignalMeter = ({
         </div>
       </div>
 
+      {/* Panel de mediciones */}
+      <div className="absolute bottom-[100px] left-0 right-0 h-[80px] grid grid-cols-4 bg-black/40">
+        <div className="flex flex-col items-center justify-center border-r border-gray-800">
+          <span className="text-gray-400 text-sm">BPM</span>
+          <span className="text-green-500 text-2xl font-bold">72</span>
+        </div>
+        <div className="flex flex-col items-center justify-center border-r border-gray-800">
+          <span className="text-gray-400 text-sm">SpO2</span>
+          <span className="text-green-500 text-2xl font-bold">98%</span>
+        </div>
+        <div className="flex flex-col items-center justify-center border-r border-gray-800">
+          <span className="text-gray-400 text-sm">PA</span>
+          <span className="text-green-500 text-2xl font-bold">120/80</span>
+        </div>
+        <div className="flex flex-col items-center justify-center">
+          <span className="text-gray-400 text-sm">ARRITMIA</span>
+          <span className="text-green-500 text-2xl font-bold">NO</span>
+        </div>
+      </div>
+
       <div className="fixed bottom-0 left-0 right-0 h-[100px] grid grid-cols-2">
         <button 
           onClick={onStartMeasurement}
-          className="w-full h-full bg-black hover:bg-black/80 text-2xl font-bold text-white border-t border-r border-gray-800 transition-colors"
+          className="w-full h-full bg-black hover:bg-black/80 text-3xl font-bold text-white border-t border-r border-gray-800 transition-colors"
         >
           INICIAR
         </button>
         <button 
           onClick={onReset}
-          className="w-full h-full bg-black hover:bg-black/80 text-2xl font-bold text-white border-t border-gray-800 transition-colors"
+          className="w-full h-full bg-black hover:bg-black/80 text-3xl font-bold text-white border-t border-gray-800 transition-colors"
         >
           RESET
         </button>
