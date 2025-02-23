@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
@@ -7,10 +8,7 @@ import SignalQualityIndicator from "@/components/SignalQualityIndicator";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
-import MeasurementsHistory from "@/components/MeasurementsHistory";
-import { supabase } from "@/integrations/supabase/client";
-import { LogOut, Play, Square, History } from "lucide-react";
-import { useToast } from "@/components/ui/use-toast";
+import { Play, Square } from "lucide-react";
 
 interface VitalSigns {
   spo2: number;
@@ -31,14 +29,10 @@ const Index = () => {
   const [vitalSigns, setVitalSigns] = useState<VitalSigns>(INITIAL_VITAL_SIGNS);
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState<string>("--");
-  const [showHistoryDialog, setShowHistoryDialog] = useState(false);
-  const [measurements, setMeasurements] = useState<any[]>([]);
-  const [email, setEmail] = useState<string>("");
   const [elapsedTime, setElapsedTime] = useState(0);
   const measurementTimerRef = useRef<number | null>(null);
-  const { toast } = useToast();
 
-  const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
+  const { startProcessing, stopProcessing, lastSignal } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns } = useVitalSignsProcessor();
 
@@ -58,35 +52,6 @@ const Index = () => {
       }
     } catch (error) {
       console.error("Error initializing video stream:", error);
-    }
-  };
-
-  const saveMeasurement = async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      const measurementData = {
-        user_id: session.user.id,
-        heart_rate: Math.round(heartRate),
-        spo2: Math.round(vitalSigns.spo2),
-        systolic: parseInt(vitalSigns.pressure.split('/')[0]) || 120,
-        diastolic: parseInt(vitalSigns.pressure.split('/')[1]) || 80,
-        arrhythmia_count: parseInt(arrhythmiaCount.split('|')[1]) || 0,
-        quality: Math.round(signalQuality),
-        measured_at: new Date().toISOString()
-      };
-
-      await supabase.from('measurements').insert(measurementData);
-      await loadMeasurements();
-      resetMeasurement();
-      
-      toast({
-        title: "Medición guardada",
-        description: "Los resultados han sido almacenados"
-      });
-    } catch (error) {
-      console.error("Error al guardar:", error);
     }
   };
 
@@ -124,7 +89,7 @@ const Index = () => {
       measurementTimerRef.current = null;
     }
     
-    saveMeasurement();
+    resetMeasurement();
   };
 
   const resetMeasurement = () => {
@@ -132,18 +97,6 @@ const Index = () => {
     setHeartRate(0);
     setArrhythmiaCount("--");
     setSignalQuality(0);
-  };
-
-  const loadMeasurements = async () => {
-    try {
-      const { data } = await supabase
-        .from('measurements')
-        .select('*')
-        .order('measured_at', { ascending: false });
-      setMeasurements(data || []);
-    } catch (error) {
-      console.error("Error cargando mediciones:", error);
-    }
   };
 
   useEffect(() => {
@@ -161,15 +114,6 @@ const Index = () => {
     }
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
 
-  const handleLogout = async () => {
-    try {
-      stopMonitoring();
-      await supabase.auth.signOut();
-    } catch (error) {
-      console.error("Error al cerrar sesión:", error);
-    }
-  };
-
   return (
     <div className="w-screen h-screen bg-gray-900 overflow-hidden">
       <div className="relative w-full h-full">
@@ -186,24 +130,6 @@ const Index = () => {
         <div className="relative z-10 h-full flex flex-col justify-between p-4">
           <div className="flex justify-between items-start w-full">
             <h1 className="text-lg font-bold text-white bg-black/30 px-3 py-1 rounded">PPG Monitor</h1>
-            <div className="flex gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="bg-black/30 text-gray-300 hover:text-white h-8 w-8"
-                onClick={() => setShowHistoryDialog(true)}
-              >
-                <History className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="bg-black/30 text-gray-300 hover:text-white h-8 w-8"
-                onClick={handleLogout}
-              >
-                <LogOut className="h-4 w-4" />
-              </Button>
-            </div>
           </div>
 
           <div className="flex-1 flex flex-col justify-center gap-2 max-w-md mx-auto w-full mt-[-12rem]">
@@ -257,12 +183,6 @@ const Index = () => {
           </div>
         </div>
       </div>
-
-      <MeasurementsHistory
-        isOpen={showHistoryDialog}
-        onClose={() => setShowHistoryDialog(false)}
-        measurements={measurements}
-      />
     </div>
   );
 };
