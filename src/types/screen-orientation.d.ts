@@ -1,9 +1,10 @@
 
 interface ScreenOrientation {
+  angle: number;
+  onchange: ((this: ScreenOrientation, ev: Event) => any) | null;
+  type: OrientationType;
   lock(orientation: OrientationType): Promise<void>;
   unlock(): void;
-  type: string;
-  angle: number;
 }
 
 type OrientationType = 
@@ -16,25 +17,9 @@ type OrientationType =
   | 'landscape-primary'
   | 'landscape-secondary';
 
-interface FullScreen {
-  requestFullscreen(): Promise<void>;
-  webkitRequestFullscreen(): Promise<void>;
-  mozRequestFullScreen(): Promise<void>;
-  msRequestFullscreen(): Promise<void>;
-}
-
 declare global {
   interface Screen {
     orientation: ScreenOrientation;
-  }
-  
-  interface HTMLElement extends FullScreen {}
-  interface Document {
-    documentElement: HTMLElement;
-    exitFullscreen: () => Promise<void>;
-    webkitExitFullscreen: () => Promise<void>;
-    mozCancelFullScreen: () => Promise<void>;
-    msExitFullscreen: () => Promise<void>;
   }
 }
 
