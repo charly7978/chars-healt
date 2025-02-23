@@ -3,8 +3,6 @@ interface ScreenOrientation {
   angle: number;
   onchange: ((this: ScreenOrientation, ev: Event) => any) | null;
   type: OrientationType;
-  lock(orientation: OrientationType): Promise<void>;
-  unlock(): void;
 }
 
 type OrientationType = 
@@ -17,33 +15,27 @@ type OrientationType =
   | 'landscape-primary'
   | 'landscape-secondary';
 
-interface FullscreenAPI {
-  requestFullscreen(): Promise<void>;
+interface Screen {
+  orientation?: {
+    angle: number;
+    type: string;
+    lock?(orientation: OrientationType): Promise<void>;
+    unlock?(): void;
+  };
 }
 
-interface WebKitFullscreenAPI {
-  webkitRequestFullscreen(): Promise<void>;
+interface DocumentWithFullscreen extends Document {
+  documentElement: HTMLElement & {
+    requestFullscreen?: () => Promise<void>;
+    webkitRequestFullscreen?: () => Promise<void>;
+    mozRequestFullScreen?: () => Promise<void>;
+    msRequestFullscreen?: () => Promise<void>;
+  };
 }
-
-interface MozFullScreenAPI {
-  mozRequestFullScreen(): Promise<void>;
-}
-
-interface MSFullscreenAPI {
-  msRequestFullscreen(): Promise<void>;
-}
-
-type FullscreenElement = FullscreenAPI & WebKitFullscreenAPI & MozFullScreenAPI & MSFullscreenAPI;
 
 declare global {
-  interface Screen {
-    orientation: ScreenOrientation;
-  }
-  
-  interface HTMLElement extends Partial<FullscreenElement> {}
-  
-  interface Document {
-    documentElement: HTMLElement;
+  interface Window {
+    document: DocumentWithFullscreen;
   }
 }
 
