@@ -19,7 +19,6 @@ export const useHeartBeatProcessor = () => {
   const [currentBPM, setCurrentBPM] = useState(0);
   const [confidence, setConfidence] = useState(0);
 
-  // Initialize processor in useEffect to ensure it runs in the correct context
   useEffect(() => {
     console.log('useHeartBeatProcessor: Creando nueva instancia de HeartBeatProcessor');
     processorRef.current = new HeartBeatProcessor();

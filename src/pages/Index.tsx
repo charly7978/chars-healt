@@ -1,8 +1,11 @@
+
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
 import { useSignalProcessor } from "@/hooks/useSignalProcessor";
+import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
+import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import SignalQualityIndicator from "@/components/SignalQualityIndicator";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import CalibrationDialog from "@/components/CalibrationDialog";
@@ -22,7 +25,6 @@ const Index = () => {
   const [arrhythmiaCount, setArrhythmiaCount] = useState<string | number>("--");
   const [showCalibrationDialog, setShowCalibrationDialog] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
-  const [resultData, setResultData] = useState<Array<{time: number, value: number, isPeak: boolean}>>([]);
   const measurementTimerRef = useRef<number | null>(null);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
