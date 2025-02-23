@@ -6,97 +6,69 @@ interface PPGSignalMeterProps {
   quality: number;
   isFingerDetected: boolean;
   isComplete?: boolean;
+  onDataReady?: (data: Array<{time: number, value: number, isPeak: boolean}>) => void;
 }
 
-const PPGSignalMeter = ({ value, quality, isFingerDetected, isComplete }: PPGSignalMeterProps) => {
+const PPGSignalMeter = ({ value, quality, isFingerDetected, isComplete, onDataReady }: PPGSignalMeterProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dataRef = useRef<number[]>([]);
   const peaksRef = useRef<boolean[]>([]);
-  const arrhythmiaRef = useRef<boolean[]>([]);
   const positionRef = useRef(0);
   const [gridVisible, setGridVisible] = useState(true);
-  const BUFFER_SIZE = 400; // Tamaño del buffer para datos históricos
-  const MIN_PEAK_DISTANCE = 20; // Distancia mínima entre picos
-  const PEAK_THRESHOLD = 0.6; // Umbral para detección de picos
+  const BUFFER_SIZE = 400;
+  const MIN_PEAK_DISTANCE = 20;
   const lastPeakRef = useRef(-MIN_PEAK_DISTANCE);
 
   useEffect(() => {
     if (!isFingerDetected) {
       dataRef.current = [];
       peaksRef.current = [];
-      arrhythmiaRef.current = [];
       positionRef.current = 0;
       return;
     }
 
-    // Añadir nuevo valor al buffer
+    // Actualizar datos
     dataRef.current.push(value);
     if (dataRef.current.length > BUFFER_SIZE) {
       dataRef.current.shift();
       peaksRef.current.shift();
-      arrhythmiaRef.current.shift();
     }
 
-    // Detección de picos y arritmias
-    const isPeak = detectPeak(dataRef.current, positionRef.current);
+    // Detectar picos
+    const isPeak = detectPeak(value);
     peaksRef.current.push(isPeak);
-    
-    // Detección de arritmias basada en intervalos RR
-    const isArrhythmia = detectArrhythmia(dataRef.current, peaksRef.current);
-    arrhythmiaRef.current.push(isArrhythmia);
 
-    // Renderizar señal
+    // Renderizar
     renderSignal();
 
     // Actualizar posición
     positionRef.current = (positionRef.current + 1) % BUFFER_SIZE;
-  }, [value, isFingerDetected]);
 
-  const detectPeak = (data: number[], currentPos: number): boolean => {
-    if (currentPos < 2 || currentPos >= data.length - 2) return false;
+    // Si está completo, enviar datos
+    if (isComplete && onDataReady) {
+      const resultData = dataRef.current.map((val, i) => ({
+        time: i,
+        value: val,
+        isPeak: peaksRef.current[i] || false
+      }));
+      onDataReady(resultData);
+    }
+  }, [value, isFingerDetected, isComplete, onDataReady]);
+
+  const detectPeak = (currentValue: number): boolean => {
+    const currentPos = dataRef.current.length - 1;
+    if (currentPos < 2) return false;
     if (currentPos - lastPeakRef.current < MIN_PEAK_DISTANCE) return false;
 
-    const current = data[currentPos];
-    const prev1 = data[currentPos - 1];
-    const prev2 = data[currentPos - 2];
-    const next1 = data[currentPos + 1];
-    const next2 = data[currentPos + 2];
-
-    const isPeak = current > prev1 && current > prev2 && 
-                  current > next1 && current > next2 && 
-                  current > PEAK_THRESHOLD;
+    const data = dataRef.current;
+    const isPeak = currentValue > data[currentPos - 1] && 
+                  data[currentPos - 1] > data[currentPos - 2];
 
     if (isPeak) {
       lastPeakRef.current = currentPos;
     }
 
     return isPeak;
-  };
-
-  const detectArrhythmia = (data: number[], peaks: boolean[]): boolean => {
-    if (peaks.length < 4) return false;
-
-    // Encontrar los últimos 4 picos
-    let lastPeaks: number[] = [];
-    for (let i = peaks.length - 1; i >= 0 && lastPeaks.length < 4; i--) {
-      if (peaks[i]) lastPeaks.unshift(i);
-    }
-
-    if (lastPeaks.length < 4) return false;
-
-    // Calcular intervalos RR
-    const intervals = [];
-    for (let i = 1; i < lastPeaks.length; i++) {
-      intervals.push(lastPeaks[i] - lastPeaks[i-1]);
-    }
-
-    // Detectar irregularidad en intervalos RR
-    const avgInterval = intervals.reduce((a, b) => a + b) / intervals.length;
-    const maxDeviation = avgInterval * 0.2; // 20% de desviación permitida
-
-    return intervals.some(interval => 
-      Math.abs(interval - avgInterval) > maxDeviation
-    );
   };
 
   const renderSignal = () => {
@@ -110,30 +82,31 @@ const PPGSignalMeter = ({ value, quality, isFingerDetected, isComplete }: PPGSig
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Dibujar grid si está activado
+    // Dibujar grid
     if (gridVisible) {
       drawGrid(ctx, canvas.width, canvas.height);
     }
 
-    // No dibujar si no hay suficientes datos
     if (dataRef.current.length < 2) return;
 
-    // Calcular escala y offset
+    // Preparar escala
     const maxVal = Math.max(...dataRef.current);
     const minVal = Math.min(...dataRef.current);
     const range = maxVal - minVal || 1;
     const scale = (canvas.height * 0.8) / range;
     const offset = canvas.height * 0.1;
 
-    // Dibujar línea base
+    // Dibujar líneas guía
     ctx.strokeStyle = '#1a4721';
     ctx.lineWidth = 1;
     ctx.beginPath();
+    ctx.setLineDash([5, 5]);
     ctx.moveTo(0, canvas.height / 2);
     ctx.lineTo(canvas.width, canvas.height / 2);
     ctx.stroke();
+    ctx.setLineDash([]);
 
-    // Dibujar señal principal
+    // Dibujar señal PPG
     ctx.strokeStyle = quality > 75 ? '#00ff00' : quality > 50 ? '#ffff00' : '#ff0000';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -157,37 +130,48 @@ const PPGSignalMeter = ({ value, quality, isFingerDetected, isComplete }: PPGSig
         ctx.fill();
         ctx.restore();
       }
-
-      // Marcar arritmias
-      if (arrhythmiaRef.current[i]) {
-        ctx.save();
-        ctx.strokeStyle = '#ff0000';
-        ctx.setLineDash([2, 2]);
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, canvas.height);
-        ctx.stroke();
-        ctx.restore();
-      }
     });
 
     ctx.stroke();
+
+    // Dibujar tiempo
+    ctx.fillStyle = '#1a4721';
+    ctx.font = '10px monospace';
+    for (let x = 0; x < canvas.width; x += 80) {
+      const seconds = (x / canvas.width * 4).toFixed(1);
+      ctx.fillText(`${seconds}s`, x, canvas.height - 5);
+    }
   };
 
   const drawGrid = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
     ctx.strokeStyle = '#1a4721';
     ctx.lineWidth = 0.5;
 
-    // Líneas verticales
-    for (let x = 0; x < width; x += 40) {
+    // Grid grande
+    for (let x = 0; x < width; x += 80) {
       ctx.beginPath();
       ctx.moveTo(x, 0);
       ctx.lineTo(x, height);
       ctx.stroke();
     }
 
-    // Líneas horizontales
     for (let y = 0; y < height; y += 40) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(width, y);
+      ctx.stroke();
+    }
+
+    // Grid pequeño
+    ctx.strokeStyle = '#0a2711';
+    for (let x = 0; x < width; x += 20) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, height);
+      ctx.stroke();
+    }
+
+    for (let y = 0; y < height; y += 20) {
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(width, y);
@@ -210,7 +194,7 @@ const PPGSignalMeter = ({ value, quality, isFingerDetected, isComplete }: PPGSig
           }`} />
           <span className="text-xs font-medium text-green-400">
             {isFingerDetected 
-              ? `Monitor PPG - ${quality}% Calidad${arrhythmiaRef.current?.some(a => a) ? ' - ¡Arritmia Detectada!' : ''}`
+              ? `Monitor PPG - ${quality}% Calidad` 
               : 'Coloque su dedo en la cámara'}
           </span>
         </div>
