@@ -1,3 +1,4 @@
+
 /**
  * HeartBeatProcessor
  * 
@@ -10,24 +11,20 @@ export class HeartBeatProcessor {
   private readonly SAMPLE_RATE = 30;
   private readonly WINDOW_SIZE = 60;
   private readonly MIN_BPM = 40;
-  private readonly MAX_BPM = 200; // Aumentado para permitir más latidos
-  private readonly SIGNAL_THRESHOLD = 0.60; // Reducido para ser más sensible
-  private readonly MIN_CONFIDENCE = 0.50; // Reducido para ser más permisivo
-  private readonly DERIVATIVE_THRESHOLD = -0.03; // Menos restrictivo
-  private readonly MIN_PEAK_TIME_MS = 400; // Reducido para permitir latidos más cercanos
-  private readonly WARMUP_TIME_MS = 3000; // Reducido para empezar antes
+  private readonly MAX_BPM = 200;
+  private readonly SIGNAL_THRESHOLD = 0.75; // Aumentado para reducir falsos positivos
+  private readonly MIN_CONFIDENCE = 0.65; // Aumentado para ser más estricto
+  private readonly DERIVATIVE_THRESHOLD = -0.03;
+  private readonly MIN_PEAK_TIME_MS = 400;
+  private readonly WARMUP_TIME_MS = 3000;
 
-  // Parámetros de filtrado ajustados
-  private readonly MEDIAN_FILTER_WINDOW = 3; // Reducido para mayor sensibilidad
-  private readonly MOVING_AVERAGE_WINDOW = 5; // Reducido para mayor sensibilidad
-  private readonly EMA_ALPHA = 0.3; // Aumentado para respuesta más rápida
-  private readonly BASELINE_FACTOR = 0.995; // Ajustado para adaptación más rápida
-
-  // Parámetros de beep ajustados para sonido más realista
-  private readonly BEEP_PRIMARY_FREQUENCY = 880; // Frecuencia principal (La4)
-  private readonly BEEP_SECONDARY_FREQUENCY = 440; // Armónico (La3)
-  private readonly BEEP_DURATION = 100; // Duración más larga
-  private readonly BEEP_VOLUME = 0.7; // Volumen aumentado
+  // Parámetros de beep ajustados para sonido más profesional
+  private readonly BEEP_PRIMARY_FREQUENCY = 1000; // La4 (más agudo y claro)
+  private readonly BEEP_SECONDARY_FREQUENCY = 500; // La3 (armónico más profundo)
+  private readonly BEEP_DURATION = 120; // Duración más larga para más cuerpo
+  private readonly BEEP_VOLUME = 1.0; // Volumen máximo
+  private readonly BEEP_ATTACK_TIME = 0.02; // Suavizar inicio
+  private readonly BEEP_RELEASE_TIME = 0.08; // Suavizar final
   private readonly MIN_BEEP_INTERVAL_MS = 300;
 
   // ────────── AUTO-RESET SI LA SEÑAL ES MUY BAJA ──────────
@@ -87,38 +84,59 @@ export class HeartBeatProcessor {
       const secondaryOscillator = this.audioContext.createOscillator();
       const secondaryGain = this.audioContext.createGain();
 
-      // Configurar oscilador principal
+      // Tercer oscilador para más cuerpo
+      const thirdOscillator = this.audioContext.createOscillator();
+      const thirdGain = this.audioContext.createGain();
+
+      // Configurar osciladores
       primaryOscillator.type = "sine";
       primaryOscillator.frequency.setValueAtTime(
         this.BEEP_PRIMARY_FREQUENCY,
         this.audioContext.currentTime
       );
 
-      // Configurar oscilador secundario
       secondaryOscillator.type = "sine";
       secondaryOscillator.frequency.setValueAtTime(
         this.BEEP_SECONDARY_FREQUENCY,
         this.audioContext.currentTime
       );
 
-      // Envelope del sonido principal
+      thirdOscillator.type = "triangle";
+      thirdOscillator.frequency.setValueAtTime(
+        this.BEEP_PRIMARY_FREQUENCY * 1.5,
+        this.audioContext.currentTime
+      );
+
+      // Envelope del sonido principal con ataque y release
       primaryGain.gain.setValueAtTime(0, this.audioContext.currentTime);
       primaryGain.gain.linearRampToValueAtTime(
         volume,
-        this.audioContext.currentTime + 0.01
+        this.audioContext.currentTime + this.BEEP_ATTACK_TIME
       );
+      primaryGain.gain.setValueAtTime(volume, this.audioContext.currentTime + this.BEEP_DURATION / 1000 - this.BEEP_RELEASE_TIME);
       primaryGain.gain.exponentialRampToValueAtTime(
         0.01,
         this.audioContext.currentTime + this.BEEP_DURATION / 1000
       );
 
-      // Envelope del sonido secundario (más suave)
+      // Envelope del sonido secundario
       secondaryGain.gain.setValueAtTime(0, this.audioContext.currentTime);
       secondaryGain.gain.linearRampToValueAtTime(
-        volume * 0.3, // Armónico más suave
-        this.audioContext.currentTime + 0.01
+        volume * 0.5,
+        this.audioContext.currentTime + this.BEEP_ATTACK_TIME
       );
       secondaryGain.gain.exponentialRampToValueAtTime(
+        0.01,
+        this.audioContext.currentTime + this.BEEP_DURATION / 1000
+      );
+
+      // Envelope del tercer oscilador
+      thirdGain.gain.setValueAtTime(0, this.audioContext.currentTime);
+      thirdGain.gain.linearRampToValueAtTime(
+        volume * 0.3,
+        this.audioContext.currentTime + this.BEEP_ATTACK_TIME
+      );
+      thirdGain.gain.exponentialRampToValueAtTime(
         0.01,
         this.audioContext.currentTime + this.BEEP_DURATION / 1000
       );
@@ -126,14 +144,20 @@ export class HeartBeatProcessor {
       // Conectar nodos de audio
       primaryOscillator.connect(primaryGain);
       secondaryOscillator.connect(secondaryGain);
+      thirdOscillator.connect(thirdGain);
       primaryGain.connect(this.audioContext.destination);
       secondaryGain.connect(this.audioContext.destination);
+      thirdGain.connect(this.audioContext.destination);
 
       // Iniciar y detener osciladores
       primaryOscillator.start();
       secondaryOscillator.start();
-      primaryOscillator.stop(this.audioContext.currentTime + this.BEEP_DURATION / 1000 + 0.05);
-      secondaryOscillator.stop(this.audioContext.currentTime + this.BEEP_DURATION / 1000 + 0.05);
+      thirdOscillator.start();
+      
+      const stopTime = this.audioContext.currentTime + this.BEEP_DURATION / 1000 + 0.1;
+      primaryOscillator.stop(stopTime);
+      secondaryOscillator.stop(stopTime);
+      thirdOscillator.stop(stopTime);
 
       this.lastBeepTime = now;
     } catch (err) {
