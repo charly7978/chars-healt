@@ -9,8 +9,10 @@ import PPGSignalMeter from "@/components/PPGSignalMeter";
 import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import CalibrationDialog from "@/components/CalibrationDialog";
+import MeasurementsHistory from "@/components/MeasurementsHistory";
 import { supabase } from "@/integrations/supabase/client";
-import { LogOut, Settings, Play, Square } from "lucide-react";
+import { LogOut, Settings, Play, Square, History } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -25,9 +27,12 @@ const Index = () => {
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState<string | number>("--");
   const [showCalibrationDialog, setShowCalibrationDialog] = useState(false);
+  const [showHistoryDialog, setShowHistoryDialog] = useState(false);
+  const [measurements, setMeasurements] = useState<any[]>([]);
   const [email, setEmail] = useState<string>("");
   const [elapsedTime, setElapsedTime] = useState(0);
   const measurementTimerRef = useRef<number | null>(null);
+  const { toast } = useToast();
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
@@ -41,6 +46,7 @@ const Index = () => {
         window.location.href = "/auth";
       } else {
         setEmail(session.user.email || "");
+        loadMeasurements();
       }
     };
 
@@ -55,6 +61,63 @@ const Index = () => {
     return () => subscription.unsubscribe();
   }, []);
 
+  const loadMeasurements = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('measurements')
+        .select('*')
+        .order('measured_at', { ascending: false });
+
+      if (error) throw error;
+      setMeasurements(data || []);
+    } catch (error) {
+      console.error("Error al cargar mediciones:", error);
+      toast({
+        title: "Error",
+        description: "No se pudieron cargar las mediciones anteriores",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const saveMeasurement = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const [systolic, diastolic] = vitalSigns.pressure.split('/').map(Number);
+      const arrhythmiaValue = typeof arrhythmiaCount === 'string' ? 0 : arrhythmiaCount;
+
+      const { error } = await supabase
+        .from('measurements')
+        .insert({
+          user_id: session.user.id,
+          heart_rate: heartRate,
+          spo2: vitalSigns.spo2,
+          systolic,
+          diastolic,
+          arrhythmia_count: arrhythmiaValue,
+          quality: signalQuality
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: "Medición guardada",
+        description: "Los resultados han sido almacenados correctamente"
+      });
+
+      loadMeasurements();
+    } catch (error) {
+      console.error("Error al guardar medición:", error);
+      toast({
+        title: "Error",
+        description: "No se pudo guardar la medición",
+        variant: "destructive"
+      });
+    }
+  };
+
   const handleLogout = async () => {
     try {
       stopMonitoring();
@@ -68,6 +131,12 @@ const Index = () => {
   const handleCalibrationClick = () => {
     if (isMonitoring) {
       setShowCalibrationDialog(true);
+    } else {
+      toast({
+        title: "Medición requerida",
+        description: "Inicie una medición antes de calibrar",
+        variant: "destructive"
+      });
     }
   };
 
@@ -86,6 +155,7 @@ const Index = () => {
       setElapsedTime(prev => {
         if (prev >= 30) {
           stopMonitoring();
+          saveMeasurement();
           return 30;
         }
         return prev + 1;
@@ -268,8 +338,15 @@ const Index = () => {
                 variant="ghost"
                 size="icon"
                 className="bg-black/30 text-gray-300 hover:text-white h-8 w-8"
+                onClick={() => setShowHistoryDialog(true)}
+              >
+                <History className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="bg-black/30 text-gray-300 hover:text-white h-8 w-8"
                 onClick={handleCalibrationClick}
-                disabled={!isMonitoring}
               >
                 <Settings className="h-4 w-4" />
               </Button>
@@ -341,6 +418,12 @@ const Index = () => {
         onClose={() => setShowCalibrationDialog(false)}
         onCalibrationStart={handleCalibrationStart}
         onCalibrationEnd={handleCalibrationEnd}
+      />
+
+      <MeasurementsHistory
+        isOpen={showHistoryDialog}
+        onClose={() => setShowHistoryDialog(false)}
+        measurements={measurements}
       />
     </div>
   );

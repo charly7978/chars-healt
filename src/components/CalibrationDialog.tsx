@@ -6,6 +6,7 @@ import { ArrowLeft } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { motion } from "framer-motion";
 import { Input } from "@/components/ui/input";
+import { useToast } from "@/components/ui/use-toast";
 
 interface CalibrationDialogProps {
   isOpen: boolean;
@@ -23,18 +24,24 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({
   const [systolic, setSystolic] = React.useState<string>("");
   const [diastolic, setDiastolic] = React.useState<string>("");
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const { toast } = useToast();
 
   const handleCalibration = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
+        toast({
+          title: "Error de sesión",
+          description: "Por favor, inicie sesión nuevamente",
+          variant: "destructive"
+        });
         return;
       }
 
       setIsSubmitting(true);
       onCalibrationStart();
 
-      await supabase
+      const { error } = await supabase
         .from('calibration_settings')
         .upsert({
           user_id: session.user.id,
@@ -45,6 +52,13 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({
           last_calibration_date: new Date().toISOString()
         });
 
+      if (error) throw error;
+
+      toast({
+        title: "Calibración exitosa",
+        description: "Los valores de referencia han sido actualizados"
+      });
+
       onCalibrationEnd();
       setTimeout(() => {
         onClose();
@@ -52,6 +66,11 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({
 
     } catch (error) {
       console.error("Error durante la calibración:", error);
+      toast({
+        title: "Error de calibración",
+        description: "No se pudo completar la calibración",
+        variant: "destructive"
+      });
       onCalibrationEnd();
       onClose();
     } finally {
