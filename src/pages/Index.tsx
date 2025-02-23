@@ -127,45 +127,48 @@ const Index = () => {
         throw new Error("La medición debe durar al menos 15 segundos");
       }
 
-      if (!validateNumber(heartRate)) {
-        throw new Error("La frecuencia cardíaca no es válida");
-      }
-
-      if (!validateNumber(vitalSigns.spo2)) {
-        throw new Error("El SpO2 no es válido");
-      }
-
+      const hr = Math.round(heartRate);
+      const sp = Math.round(vitalSigns.spo2);
       const [systolicStr, diastolicStr] = vitalSigns.pressure.split('/');
-      const systolic = parseInt(systolicStr);
-      const diastolic = parseInt(diastolicStr);
+      const sys = parseInt(systolicStr);
+      const dia = parseInt(diastolicStr);
+      const qual = Math.round(signalQuality);
+      const arr = extractArrhythmiaCount(arrhythmiaCount);
 
-      if (!validateNumber(systolic) || !validateNumber(diastolic)) {
-        throw new Error("La presión arterial no es válida");
+      if (!hr || hr < 40 || hr > 200) {
+        throw new Error("Frecuencia cardíaca fuera de rango (40-200)");
       }
 
-      if (!validateNumber(signalQuality)) {
-        throw new Error("La calidad de la señal no es válida");
+      if (!sp || sp < 80 || sp > 100) {
+        throw new Error("SpO2 fuera de rango (80-100)");
+      }
+
+      if (!sys || sys < 90 || sys > 180 || !dia || dia < 50 || dia > 120) {
+        throw new Error("Presión arterial fuera de rango (90-180/50-120)");
+      }
+
+      if (!qual || qual < 0 || qual > 100) {
+        throw new Error("Calidad de señal inválida (0-100)");
       }
 
       const measurementData = {
         user_id: session.user.id,
-        heart_rate: Math.round(heartRate),
-        spo2: Math.round(vitalSigns.spo2),
-        systolic: Math.round(systolic),
-        diastolic: Math.round(diastolic),
-        arrhythmia_count: extractArrhythmiaCount(arrhythmiaCount),
-        quality: Math.round(signalQuality),
+        heart_rate: hr,
+        spo2: sp,
+        systolic: sys,
+        diastolic: dia,
+        arrhythmia_count: arr,
+        quality: qual,
         measured_at: new Date().toISOString()
       };
 
-      console.log("Guardando medición:", measurementData);
+      console.log("Guardando medición validada:", measurementData);
 
       const { error } = await supabase
         .from('measurements')
         .insert(measurementData);
 
       if (error) {
-        console.error("Error de Supabase:", error);
         throw error;
       }
 
@@ -177,7 +180,7 @@ const Index = () => {
       await loadMeasurements();
       resetMeasurement();
     } catch (error) {
-      console.error("Error al guardar medición:", error);
+      console.error("Error detallado al guardar medición:", error);
       toast({
         title: "Error al guardar",
         description: error instanceof Error ? error.message : "No se pudo guardar la medición",

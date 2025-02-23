@@ -17,19 +17,19 @@ export class HeartBeatProcessor {
   private readonly MIN_PEAK_TIME_MS = 400;
   private readonly WARMUP_TIME_MS = 3000;
 
-  // Constantes faltantes
+  // Constantes para el procesamiento de señal
   private readonly MEDIAN_FILTER_WINDOW = 5;
   private readonly MOVING_AVERAGE_WINDOW = 3;
   private readonly EMA_ALPHA = 0.3;
   private readonly BASELINE_FACTOR = 0.95;
 
-  // Parámetros de beep ajustados para sonido más profesional
-  private readonly BEEP_PRIMARY_FREQUENCY = 1000;
+  // Parámetros de beep ajustados
+  private readonly BEEP_PRIMARY_FREQUENCY = 1200; // Aumentado para un tono más agudo
   private readonly BEEP_SECONDARY_FREQUENCY = 500;
-  private readonly BEEP_DURATION = 120;
-  private readonly BEEP_VOLUME = 1.0;
-  private readonly BEEP_ATTACK_TIME = 0.02;
-  private readonly BEEP_RELEASE_TIME = 0.08;
+  private readonly BEEP_DURATION = 80;           // Reducido para un beep más corto
+  private readonly BEEP_VOLUME = 0.25;          // Aumentado el volumen base
+  private readonly BEEP_ATTACK_TIME = 0.01;     // Reducido para inicio más inmediato
+  private readonly BEEP_RELEASE_TIME = 0.05;    // Reducido para final más rápido
   private readonly MIN_BEEP_INTERVAL_MS = 300;
 
   // ────────── AUTO-RESET SI LA SEÑAL ES MUY BAJA ──────────
@@ -81,88 +81,35 @@ export class HeartBeatProcessor {
     if (now - this.lastBeepTime < this.MIN_BEEP_INTERVAL_MS) return;
 
     try {
-      // Oscilador principal
-      const primaryOscillator = this.audioContext.createOscillator();
-      const primaryGain = this.audioContext.createGain();
-      
-      // Oscilador secundario para armónicos
-      const secondaryOscillator = this.audioContext.createOscillator();
-      const secondaryGain = this.audioContext.createGain();
+      const oscillator = this.audioContext.createOscillator();
+      const gainNode = this.audioContext.createGain();
 
-      // Tercer oscilador para más cuerpo
-      const thirdOscillator = this.audioContext.createOscillator();
-      const thirdGain = this.audioContext.createGain();
-
-      // Configurar osciladores
-      primaryOscillator.type = "sine";
-      primaryOscillator.frequency.setValueAtTime(
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(
         this.BEEP_PRIMARY_FREQUENCY,
         this.audioContext.currentTime
       );
 
-      secondaryOscillator.type = "sine";
-      secondaryOscillator.frequency.setValueAtTime(
-        this.BEEP_SECONDARY_FREQUENCY,
-        this.audioContext.currentTime
-      );
-
-      thirdOscillator.type = "triangle";
-      thirdOscillator.frequency.setValueAtTime(
-        this.BEEP_PRIMARY_FREQUENCY * 1.5,
-        this.audioContext.currentTime
-      );
-
-      // Envelope del sonido principal con ataque y release
-      primaryGain.gain.setValueAtTime(0, this.audioContext.currentTime);
-      primaryGain.gain.linearRampToValueAtTime(
+      // Envelope más corto y preciso
+      gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
+      gainNode.gain.linearRampToValueAtTime(
         volume,
         this.audioContext.currentTime + this.BEEP_ATTACK_TIME
       );
-      primaryGain.gain.setValueAtTime(volume, this.audioContext.currentTime + this.BEEP_DURATION / 1000 - this.BEEP_RELEASE_TIME);
-      primaryGain.gain.exponentialRampToValueAtTime(
+      gainNode.gain.setValueAtTime(
+        volume,
+        this.audioContext.currentTime + this.BEEP_DURATION / 1000 - this.BEEP_RELEASE_TIME
+      );
+      gainNode.gain.exponentialRampToValueAtTime(
         0.01,
         this.audioContext.currentTime + this.BEEP_DURATION / 1000
       );
 
-      // Envelope del sonido secundario
-      secondaryGain.gain.setValueAtTime(0, this.audioContext.currentTime);
-      secondaryGain.gain.linearRampToValueAtTime(
-        volume * 0.5,
-        this.audioContext.currentTime + this.BEEP_ATTACK_TIME
-      );
-      secondaryGain.gain.exponentialRampToValueAtTime(
-        0.01,
-        this.audioContext.currentTime + this.BEEP_DURATION / 1000
-      );
+      oscillator.connect(gainNode);
+      gainNode.connect(this.audioContext.destination);
 
-      // Envelope del tercer oscilador
-      thirdGain.gain.setValueAtTime(0, this.audioContext.currentTime);
-      thirdGain.gain.linearRampToValueAtTime(
-        volume * 0.3,
-        this.audioContext.currentTime + this.BEEP_ATTACK_TIME
-      );
-      thirdGain.gain.exponentialRampToValueAtTime(
-        0.01,
-        this.audioContext.currentTime + this.BEEP_DURATION / 1000
-      );
-
-      // Conectar nodos de audio
-      primaryOscillator.connect(primaryGain);
-      secondaryOscillator.connect(secondaryGain);
-      thirdOscillator.connect(thirdGain);
-      primaryGain.connect(this.audioContext.destination);
-      secondaryGain.connect(this.audioContext.destination);
-      thirdGain.connect(this.audioContext.destination);
-
-      // Iniciar y detener osciladores
-      primaryOscillator.start();
-      secondaryOscillator.start();
-      thirdOscillator.start();
-      
-      const stopTime = this.audioContext.currentTime + this.BEEP_DURATION / 1000 + 0.1;
-      primaryOscillator.stop(stopTime);
-      secondaryOscillator.stop(stopTime);
-      thirdOscillator.stop(stopTime);
+      oscillator.start();
+      oscillator.stop(this.audioContext.currentTime + this.BEEP_DURATION / 1000 + 0.1);
 
       this.lastBeepTime = now;
     } catch (err) {
