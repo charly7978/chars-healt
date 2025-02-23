@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 
 interface PPGSignalMeterProps {
@@ -6,12 +5,16 @@ interface PPGSignalMeterProps {
   quality: number;
   isFingerDetected: boolean;
   isComplete?: boolean;
+  onStartMeasurement: () => void;
+  onReset: () => void;
 }
 
 const PPGSignalMeter = ({ 
   value, 
   quality, 
-  isFingerDetected
+  isFingerDetected,
+  onStartMeasurement,
+  onReset
 }: PPGSignalMeterProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dataRef = useRef<{time: number, value: number}[]>([]);
@@ -182,56 +185,36 @@ const PPGSignalMeter = ({
       />
 
       <div className="absolute inset-0 pointer-events-none">
-        {/* Header profesional */}
-        <div className="absolute top-0 left-0 right-0 bg-gray-900/90 border-b border-gray-800">
+        <div className="absolute top-0 left-0 right-0 bg-black/40">
           <div className="flex justify-between items-center px-6 py-4">
             <div className="flex items-center gap-4">
-              <span className="text-2xl font-bold text-gray-100">Monitor PPG</span>
-              <div className="h-4 w-px bg-gray-700"></div>
+              <span className="text-2xl font-bold text-gray-100">PPG</span>
               <span 
-                className="text-lg font-medium px-4 py-1 rounded bg-gray-800/80"
+                className="text-lg font-medium"
                 style={{ 
                   color: quality > 75 ? '#00ff00' : quality > 50 ? '#ffff00' : '#ff0000' 
                 }}
               >
-                {isFingerDetected ? `Calidad de Señal: ${quality}%` : 'Sin Señal'}
+                {isFingerDetected ? `${quality}%` : 'NO SIGNAL'}
               </span>
             </div>
           </div>
         </div>
 
-        {/* Indicador de arritmia */}
-        <div className="absolute bottom-24 left-0 right-0">
-          <div className="bg-gray-900/90 border-t border-b border-gray-800 py-3">
-            <div className="flex items-center justify-center gap-4">
-              <div className="w-3 h-3 rounded-full bg-red-600 animate-pulse"></div>
-              <span className="text-lg font-medium text-red-600">
-                MONITOREO DE ARRITMIA
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Controles profesionales */}
-        <div className="absolute bottom-0 left-0 right-0 bg-gray-900/90 border-t border-gray-800">
-          <div className="grid grid-cols-2 divide-x divide-gray-800">
+        <div className="absolute bottom-0 left-0 right-0 bg-black/40">
+          <div className="grid grid-cols-2">
             <button 
-              className="measure-button flex items-center justify-center gap-3 px-6 py-4 text-gray-100 hover:bg-gray-800/60 transition-colors"
+              onClick={onStartMeasurement}
+              className="measure-button flex items-center justify-center gap-3 px-6 py-4 text-gray-100 hover:text-green-500 transition-colors"
             >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span className="text-lg font-medium">INICIAR MEDICIÓN</span>
+              <span className="text-lg font-medium">INICIAR</span>
             </button>
 
             <button 
-              className="flex items-center justify-center gap-3 px-6 py-4 text-gray-100 hover:bg-gray-800/60 transition-colors"
+              onClick={onReset}
+              className="flex items-center justify-center gap-3 px-6 py-4 text-gray-100 hover:text-red-500 transition-colors"
             >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              <span className="text-lg font-medium">REINICIAR</span>
+              <span className="text-lg font-medium">RESET</span>
             </button>
           </div>
         </div>

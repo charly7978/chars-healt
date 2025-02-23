@@ -208,7 +208,7 @@ const Index = () => {
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
 
   return (
-    <div className="w-screen h-screen bg-gray-900 overflow-hidden">
+    <div className="w-screen h-screen bg-black overflow-hidden">
       <div className="relative w-full h-full">
         <div className="absolute inset-0">
           <CameraView 
