@@ -1,4 +1,6 @@
+
 import React, { useEffect, useRef, useState } from 'react';
+import { Fingerprint } from 'lucide-react';
 
 interface PPGSignalMeterProps {
   value: number;
@@ -199,6 +201,22 @@ const PPGSignalMeter = ({
               </span>
             </div>
           </div>
+        </div>
+
+        {/* Huella dactilar en el centro */}
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-2">
+          <Fingerprint 
+            size={64}
+            className={`transition-colors duration-300 ${
+              !isFingerDetected ? 'text-gray-600' : 
+              quality > 75 ? 'text-green-500' : 
+              quality > 50 ? 'text-yellow-500' : 
+              'text-red-500'
+            }`}
+          />
+          <span className={`text-sm font-medium ${isFingerDetected ? 'text-green-500' : 'text-gray-600'}`}>
+            {isFingerDetected ? 'FINGER DETECTED' : 'PLACE FINGER ON LENS'}
+          </span>
         </div>
 
         <div className="absolute bottom-0 left-0 right-0 bg-black/40">
