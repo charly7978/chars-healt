@@ -96,11 +96,11 @@ const PPGSignalMeter = ({
     const normalizedValue = (baselineRef.current || 0) - smoothedValue;
     const scaledValue = normalizedValue * verticalScale;
     
-    // Detección de pico mejorada
+    // Detección de pico
     const isPeak = rawArrhythmiaData?.lastPeakTime !== lastKnownPeakTime.current && 
                   rawArrhythmiaData?.lastPeakTime != null;
     
-    // Solo actualizar si realmente hay un nuevo pico
+    // Actualizar último pico conocido
     if (isPeak) {
       lastKnownPeakTime.current = rawArrhythmiaData?.lastPeakTime || null;
       const isArrhythmic = isArrhythmicBeat();
@@ -162,6 +162,16 @@ const PPGSignalMeter = ({
           ctx.fillStyle = 'rgba(51, 65, 85, 0.8)';
           ctx.textAlign = 'left';
           ctx.fillText(`${displayValue}`, x + 8, y - 8);
+
+          // Debug: mostrar en consola los puntos que se están dibujando
+          console.log('Dibujando punto:', {
+            x,
+            y,
+            value: displayValue,
+            isPeak: point.isPeak,
+            isArrhythmia: point.isArrhythmia,
+            time: point.time
+          });
         }
 
         lastX = x;
