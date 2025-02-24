@@ -11,10 +11,13 @@ export class CircularBuffer {
 
   constructor(size: number) {
     this.buffer = [];
-    this.maxSize = size;
+    this.maxSize = size || 1000;
   }
 
   push(point: PPGDataPoint): void {
+    if (!this.buffer) {
+      this.buffer = [];
+    }
     this.buffer.push(point);
     if (this.buffer.length > this.maxSize) {
       this.buffer.shift();
@@ -22,6 +25,9 @@ export class CircularBuffer {
   }
 
   getPoints(): PPGDataPoint[] {
+    if (!this.buffer) {
+      this.buffer = [];
+    }
     return [...this.buffer];
   }
 
