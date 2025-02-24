@@ -91,7 +91,7 @@ const PPGSignalMeter = ({
     const scaledValue = normalizedValue * verticalScale;
     
     // Verificamos si este punto coincide con un latido real usando rawArrhythmiaData
-    const isArrhythmia = rawArrhythmiaData?.rrIntervals.length 
+    const isArrhythmia = rawArrhythmiaData?.rrIntervals?.length 
       ? rawArrhythmiaData.rrIntervals[rawArrhythmiaData.rrIntervals.length - 1] > 1000 
       : false;
 
@@ -117,7 +117,7 @@ const PPGSignalMeter = ({
 
       points.forEach((point, index) => {
         const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-        const y = canvas.height / 2 - point.value; // Restamos para que vaya hacia arriba
+        const y = canvas.height / 2 - point.value;
 
         if (firstPoint) {
           firstPoint = false;
