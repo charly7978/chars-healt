@@ -1,27 +1,3 @@
-/**
- * VitalSignsProcessor
- *
- * Procesa datos PPG para estimar (de forma muy aproximada) SpO2, presión arterial
- * y detectar posibles arritmias.
- *
- * ---------------------------------------------------------------------------
- * ADVERTENCIA:
- *  - Código prototipo para DEMO / investigación, **NO** dispositivo médico.
- *  - Presión arterial vía PPG depende de calibraciones, señales reales estables,
- *    y hardware adecuado. Se usa aquí una heurística muy simplificada.
- *  - La detección de arritmias (RR-intervals, Poincaré, etc.) es también
- *    aproximada y requiere validación clínica.
- * ---------------------------------------------------------------------------
- *
- * Ajustes solicitados:
- * 1) Limitar SpO2 en [88, 98], pues 98% suele ser el máximo real en humanos
- *    (para no quedar clavado en 100%).
- * 2) Subir un poco la presión arterial calculada, ya que quedaba muy baja.
- * 3) Hacer la detección de arritmias más sensible, bajando umbrales
- *    (MAX_RR_VARIATION, POINCARE_SD1_THRESHOLD, POINCARE_SD2_THRESHOLD).
- *
- */
-
 export class VitalSignsProcessor {
   //-----------------------------------------
   //        PARÁMETROS GLOBALES
