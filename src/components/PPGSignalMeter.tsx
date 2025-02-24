@@ -29,6 +29,8 @@ const PPGSignalMeter = ({
   const animationFrameRef = useRef<number>();
   const lastRenderTimeRef = useRef<number>(0);
   const lastArrhythmiaTime = useRef<number>(0);
+  const stableReadingsCountRef = useRef<number>(0);
+  const lastStableValueRef = useRef<number | null>(null);
   
   const WINDOW_WIDTH_MS = 5000;
   const CANVAS_WIDTH = 1000;
@@ -37,6 +39,10 @@ const PPGSignalMeter = ({
   const SMOOTHING_FACTOR = 0.85;
   const TARGET_FPS = 60;
   const FRAME_TIME = 1000 / TARGET_FPS;
+  const MIN_STABLE_READINGS = 15; // Aumentado para mayor estabilidad
+  const VALUE_STABILITY_THRESHOLD = 8.0; // Umbral más estricto
+  const MIN_RED_VALUE = 120; // Valor mínimo más alto para asegurar presencia del dedo
+  const MAX_RED_VALUE = 230; // Valor máximo ajustado
 
   useEffect(() => {
     if (!dataBufferRef.current) {
@@ -61,8 +67,37 @@ const PPGSignalMeter = ({
     return previousValue + SMOOTHING_FACTOR * (currentValue - previousValue);
   }, []);
 
+  const isStableReading = useCallback((currentValue: number): boolean => {
+    if (lastStableValueRef.current === null) {
+      lastStableValueRef.current = currentValue;
+      stableReadingsCountRef.current = 1;
+      return false;
+    }
+
+    const difference = Math.abs(currentValue - lastStableValueRef.current);
+    
+    // Verificación más estricta de estabilidad
+    if (difference <= VALUE_STABILITY_THRESHOLD) {
+      stableReadingsCountRef.current++;
+      lastStableValueRef.current = currentValue;
+      return stableReadingsCountRef.current >= MIN_STABLE_READINGS;
+    } else {
+      stableReadingsCountRef.current = Math.max(0, stableReadingsCountRef.current - 2);
+      lastStableValueRef.current = currentValue;
+      return false;
+    }
+  }, []);
+
   const renderSignal = useCallback(() => {
     if (!canvasRef.current || !isFingerDetected || !dataBufferRef.current) {
+      animationFrameRef.current = requestAnimationFrame(renderSignal);
+      return;
+    }
+
+    // Verificación adicional de la calidad de la señal
+    if (value < MIN_RED_VALUE || value > MAX_RED_VALUE || !isStableReading(value)) {
+      stableReadingsCountRef.current = 0;
+      lastStableValueRef.current = null;
       animationFrameRef.current = requestAnimationFrame(renderSignal);
       return;
     }
@@ -196,7 +231,7 @@ const PPGSignalMeter = ({
 
     lastRenderTimeRef.current = currentTime;
     animationFrameRef.current = requestAnimationFrame(renderSignal);
-  }, [value, quality, isFingerDetected, rawArrhythmiaData, smoothValue, arrhythmiaStatus]);
+  }, [value, quality, isFingerDetected, rawArrhythmiaData, smoothValue, arrhythmiaStatus, isStableReading]);
 
   useEffect(() => {
     renderSignal();
@@ -207,12 +242,21 @@ const PPGSignalMeter = ({
     };
   }, [renderSignal]);
 
+  const handleStartMeasurement = useCallback(() => {
+    // Solo permite iniciar la medición si hay una señal estable del dedo
+    if (value >= MIN_RED_VALUE && value <= MAX_RED_VALUE && stableReadingsCountRef.current >= MIN_STABLE_READINGS) {
+      onStartMeasurement();
+    }
+  }, [value, onStartMeasurement]);
+
   const handleReset = useCallback(() => {
     if (dataBufferRef.current) {
       dataBufferRef.current.clear();
     }
     baselineRef.current = null;
     lastValueRef.current = null;
+    stableReadingsCountRef.current = 0;
+    lastStableValueRef.current = null;
     onReset();
   }, [onReset]);
 
@@ -238,7 +282,7 @@ const PPGSignalMeter = ({
         <div className="flex flex-col items-center">
           <FingerPrintIcon
             className={`h-12 w-12 transition-colors duration-300 ${
-              !isFingerDetected ? 'text-gray-400' :
+              !isFingerDetected || stableReadingsCountRef.current < MIN_STABLE_READINGS ? 'text-gray-400' :
               quality > 75 ? 'text-green-500' :
               quality > 50 ? 'text-yellow-500' :
               'text-red-500'
@@ -246,7 +290,8 @@ const PPGSignalMeter = ({
             strokeWidth={1.5}
           />
           <span className="text-[10px] text-center mt-0.5 font-medium text-slate-600">
-            {isFingerDetected ? "Dedo detectado" : "Ubique su dedo"}
+            {isFingerDetected && stableReadingsCountRef.current >= MIN_STABLE_READINGS ? 
+              "Dedo detectado" : "Ubique su dedo correctamente"}
           </span>
         </div>
       </div>
@@ -260,8 +305,13 @@ const PPGSignalMeter = ({
 
       <div className="fixed bottom-0 left-0 right-0 h-[60px] grid grid-cols-2 gap-px bg-white/80 backdrop-blur-sm border-t border-slate-100">
         <button 
-          onClick={onStartMeasurement}
-          className="w-full h-full bg-white/90 hover:bg-slate-100/90 text-xl font-bold text-slate-700 transition-all duration-300 active:bg-slate-200/90 shadow-sm"
+          onClick={handleStartMeasurement}
+          disabled={!isFingerDetected || stableReadingsCountRef.current < MIN_STABLE_READINGS}
+          className={`w-full h-full ${
+            !isFingerDetected || stableReadingsCountRef.current < MIN_STABLE_READINGS 
+              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+              : 'bg-white/90 hover:bg-slate-100/90 text-slate-700 active:bg-slate-200/90'
+          } text-xl font-bold transition-all duration-300 shadow-sm`}
         >
           INICIAR
         </button>
