@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Progress } from "@/components/ui/progress";
 import VitalSign from '@/components/VitalSign';
@@ -195,7 +196,7 @@ const PPGSignalMeter = ({
         <div className="flex items-center gap-3">
           <span className="text-xl font-bold text-slate-700">PPG</span>
           <div className="flex flex-col flex-1">
-            <div className={`h-1.5 w-[80%] mx-auto rounded-full bg-gradient-to-r ${getQualityColor(quality)} transition-all duration-1000 ease-in-out`}>
+            <div className={`h-1.5 w-full mx-auto rounded-full bg-gradient-to-r ${getQualityColor(quality)} transition-all duration-1000 ease-in-out`}>
               <div
                 className="h-full rounded-full bg-white/20 animate-pulse transition-all duration-1000"
                 style={{ width: `${quality}%` }}
@@ -240,7 +241,7 @@ const PPGSignalMeter = ({
           INICIAR
         </button>
         <button 
-          onClick={handleReset}
+          onClick={onReset}
           className="w-full h-full bg-white/80 hover:bg-slate-50/80 text-xl font-bold text-slate-700 transition-all duration-300"
         >
           RESET

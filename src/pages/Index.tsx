@@ -77,7 +77,7 @@ const Index = () => {
     measurementTimerRef.current = window.setInterval(() => {
       setElapsedTime(prev => {
         if (prev >= 30) {
-          stopMonitoring();
+          stopMeasurement();
           return 30;
         }
         return prev + 1;
@@ -85,10 +85,19 @@ const Index = () => {
     }, 1000);
   };
 
-  const stopMonitoring = () => {
+  const stopMeasurement = () => {
     setIsMonitoring(false);
     setIsCameraOn(false);
     stopProcessing();
+    
+    if (measurementTimerRef.current) {
+      clearInterval(measurementTimerRef.current);
+      measurementTimerRef.current = null;
+    }
+  };
+
+  const handleReset = () => {
+    stopMeasurement();
     resetVitalSigns();
     setElapsedTime(0);
     setHeartRate(0);
@@ -99,11 +108,6 @@ const Index = () => {
     });
     setArrhythmiaCount("--");
     setSignalQuality(0);
-    
-    if (measurementTimerRef.current) {
-      clearInterval(measurementTimerRef.current);
-      measurementTimerRef.current = null;
-    }
   };
 
   const handleStreamReady = (stream: MediaStream) => {
@@ -181,7 +185,6 @@ const Index = () => {
             isMonitoring={isCameraOn}
             isFingerDetected={lastSignal?.fingerDetected}
             signalQuality={signalQuality}
-            buttonPosition={document.querySelector('.measure-button')?.getBoundingClientRect()}
           />
         </div>
 
@@ -192,7 +195,8 @@ const Index = () => {
               quality={lastSignal?.quality || 0}
               isFingerDetected={lastSignal?.fingerDetected || false}
               onStartMeasurement={startMonitoring}
-              onReset={stopMonitoring}
+              onReset={handleReset}
+              arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
             />
           </div>
 
@@ -236,7 +240,7 @@ const Index = () => {
               INICIAR
             </button>
             <button 
-              onClick={stopMonitoring}
+              onClick={handleReset}
               className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
             >
               RESET
