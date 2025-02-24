@@ -32,7 +32,7 @@ const PPGSignalMeter = ({
   const WINDOW_WIDTH_MS = 5000;
   const CANVAS_WIDTH = 1000;
   const CANVAS_HEIGHT = 200;
-  const verticalScale = 22.0;
+  const verticalScale = 35.0;
   const SMOOTHING_FACTOR = 0.85;
   const TARGET_FPS = 60;
   const FRAME_TIME = 1000 / TARGET_FPS;
@@ -116,6 +116,7 @@ const PPGSignalMeter = ({
     offscreenCtx.fillStyle = 'rgba(51, 65, 85, 0.6)';
     offscreenCtx.textAlign = 'right';
     
+    // Grilla vertical (amplitud)
     const amplitudeStep = 50;
     const maxAmplitude = 200;
     for (let y = 0; y <= maxAmplitude; y += amplitudeStep) {
@@ -130,11 +131,12 @@ const PPGSignalMeter = ({
       offscreenCtx.stroke();
       
       if (y > 0) {
-        offscreenCtx.fillText(`${y}`, 25, yPos + 4);
-        offscreenCtx.fillText(`-${y}`, 25, yNeg + 4);
+        offscreenCtx.fillText(`${y}`, 25, yNeg + 4); // Invertimos los números
+        offscreenCtx.fillText(`-${y}`, 25, yPos + 4);
       }
     }
 
+    // Grilla horizontal (tiempo)
     const timeStep = 1000;
     offscreenCtx.textAlign = 'center';
     for (let t = 0; t <= WINDOW_WIDTH_MS; t += timeStep) {
@@ -149,6 +151,7 @@ const PPGSignalMeter = ({
       offscreenCtx.fillText(`${seconds}s`, x, canvas.height - 5);
     }
 
+    // Línea central
     offscreenCtx.strokeStyle = 'rgba(51, 65, 85, 0.3)';
     offscreenCtx.lineWidth = 1;
     offscreenCtx.beginPath();
@@ -159,45 +162,50 @@ const PPGSignalMeter = ({
     const points = dataBufferRef.current.getPoints();
     
     if (points.length > 1) {
-      // Dibujar la línea de la señal
+      // Dibujar la señal PPG
       offscreenCtx.lineWidth = 2;
       offscreenCtx.lineJoin = 'round';
       offscreenCtx.lineCap = 'round';
       offscreenCtx.beginPath();
       
       let firstPoint = true;
-      points.forEach((point) => {
+      let lastX = 0;
+      let lastY = 0;
+      
+      points.forEach((point, index) => {
         const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-        const y = canvas.height / 2 - point.value; // Invertimos el valor para que los picos vayan hacia arriba
+        const y = canvas.height / 2 - point.value; // Valor negativo para que los picos vayan hacia arriba
         
         if (firstPoint) {
           offscreenCtx.moveTo(x, y);
           firstPoint = false;
         } else {
+          // Cambiar color de la línea según si es arrítmico o no
+          offscreenCtx.strokeStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
+          offscreenCtx.beginPath();
+          offscreenCtx.moveTo(lastX, lastY);
           offscreenCtx.lineTo(x, y);
+          offscreenCtx.stroke();
         }
-      });
-      
-      offscreenCtx.strokeStyle = '#0EA5E9';
-      offscreenCtx.stroke();
-      
-      // Marcar picos solo cuando coinciden con los beeps
-      points.forEach((point, i) => {
-        if (i > 0 && i < points.length - 1) {
-          const prevValue = points[i-1].value;
-          const nextValue = points[i+1].value;
+        
+        lastX = x;
+        lastY = y;
+
+        // Detectar y marcar picos
+        if (index > 0 && index < points.length - 1) {
+          const prevValue = points[index-1].value;
+          const nextValue = points[index+1].value;
           
           if (point.value > prevValue && point.value > nextValue) {
-            const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-            const y = canvas.height / 2 - point.value; // Invertimos el valor para que coincida con la señal
-            
-            // Solo dibujamos el punto si coincide con un tiempo de pico real
+            // Solo marcar si coincide con un latido real
             if (lastPeakTime && Math.abs(point.time - lastPeakTime) < 100) {
+              // Dibujar círculo en el pico
               offscreenCtx.beginPath();
               offscreenCtx.arc(x, y, 4, 0, Math.PI * 2);
               offscreenCtx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
               offscreenCtx.fill();
               
+              // Mostrar valor del pico
               offscreenCtx.font = '10px Inter';
               offscreenCtx.fillStyle = 'rgba(51, 65, 85, 0.8)';
               offscreenCtx.textAlign = 'left';
