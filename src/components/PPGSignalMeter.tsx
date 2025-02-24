@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -90,12 +89,23 @@ const PPGSignalMeter = ({
     const normalizedValue = (baselineRef.current || 0) - smoothedValue;
     const scaledValue = normalizedValue * verticalScale;
     
-    // Solo marcamos como arritmia si detectamos un latido anormal
+    // Mejorada la detección de arritmias
     let isArrhythmia = false;
-    if (rawArrhythmiaData?.rrIntervals && rawArrhythmiaData.rrIntervals.length > 0) {
+    const arrhythmiaDetected = arrhythmiaStatus?.includes("ARRITMIA DETECTADA");
+    
+    if (arrhythmiaDetected && rawArrhythmiaData?.rrIntervals && rawArrhythmiaData.rrIntervals.length > 0) {
       const lastRRInterval = rawArrhythmiaData.rrIntervals[rawArrhythmiaData.rrIntervals.length - 1];
-      // Solo marcamos como arritmia si el intervalo es muy largo o muy corto
-      isArrhythmia = lastRRInterval > 1200 || lastRRInterval < 600;
+      const now = Date.now();
+      
+      // Solo marcamos como arritmia si:
+      // 1. El intervalo RR está fuera del rango normal
+      // 2. Ha pasado suficiente tiempo desde la última arritmia (500ms)
+      if ((lastRRInterval > 1000 || lastRRInterval < 700) && 
+          (now - lastArrhythmiaTime.current > 500)) {
+        isArrhythmia = true;
+        lastArrhythmiaTime.current = now;
+        console.log('Arritmia detectada:', { lastRRInterval, time: now });
+      }
     }
 
     const dataPoint: PPGDataPoint = {
@@ -196,7 +206,7 @@ const PPGSignalMeter = ({
 
     lastRenderTimeRef.current = currentTime;
     animationFrameRef.current = requestAnimationFrame(renderSignal);
-  }, [value, quality, isFingerDetected, rawArrhythmiaData, smoothValue]);
+  }, [value, quality, isFingerDetected, rawArrhythmiaData, smoothValue, arrhythmiaStatus]);
 
   useEffect(() => {
     renderSignal();
