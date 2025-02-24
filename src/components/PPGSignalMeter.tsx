@@ -1,5 +1,6 @@
+
 import React, { useEffect, useRef, useCallback } from 'react';
-import { FingerPrintIcon } from '@heroicons/react/24/outline';
+import { FingerPrintIcon as FingerprintIcon } from '@heroicons/react/24/outline';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
 
 interface PPGSignalMeterProps {
@@ -34,18 +35,13 @@ const PPGSignalMeter = ({
   const CANVAS_HEIGHT = 200;
   const verticalScale = 28.0;
   const SMOOTHING_FACTOR = 0.85;
-  const TARGET_FPS = 60; // Restaurado a 60 FPS
+  const TARGET_FPS = 60;
   const FRAME_TIME = 1000 / TARGET_FPS;
 
   useEffect(() => {
     if (!dataBufferRef.current) {
-      dataBufferRef.current = new CircularBuffer(1000); // Restaurado a 1000
+      dataBufferRef.current = new CircularBuffer(1000);
     }
-    return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-    };
   }, []);
 
   const getQualityColor = useCallback((q: number) => {
@@ -66,7 +62,7 @@ const PPGSignalMeter = ({
   }, []);
 
   const renderSignal = useCallback(() => {
-    if (!canvasRef.current || !dataBufferRef.current) {
+    if (!canvasRef.current || !isFingerDetected || !dataBufferRef.current) {
       animationFrameRef.current = requestAnimationFrame(renderSignal);
       return;
     }
@@ -101,15 +97,15 @@ const PPGSignalMeter = ({
     const scaledValue = normalizedValue * verticalScale;
     
     let isArrhythmia = false;
-    if (arrhythmiaStatus?.includes("ARRITMIA DETECTADA") && rawArrhythmiaData?.rrIntervals?.length) {
+    const arrhythmiaDetected = arrhythmiaStatus?.includes("ARRITMIA DETECTADA");
+    if (arrhythmiaDetected && rawArrhythmiaData?.rrIntervals?.length) {
       const lastRRInterval = rawArrhythmiaData.rrIntervals[rawArrhythmiaData.rrIntervals.length - 1];
       const timeNow = Date.now();
-      // Solo marcamos arritmia si el intervalo RR está fuera del rango normal
       if ((lastRRInterval > 1000 || lastRRInterval < 700) &&
           (timeNow - lastArrhythmiaTime.current > 500)) {
         isArrhythmia = true;
         lastArrhythmiaTime.current = timeNow;
-        console.log("Arritmia detectada:", { lastRRInterval, time: timeNow });
+        console.log('Arritmia detectada en gráfico:', { lastRRInterval, timeNow });
       }
     }
 
@@ -121,14 +117,13 @@ const PPGSignalMeter = ({
     
     dataBufferRef.current.push(dataPoint);
 
-    // Limpiar el canvas
     ctx.fillStyle = '#F8FAFC';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Dibujar la señal
     const points = dataBufferRef.current.getPoints();
     if (points.length > 1) {
-      ctx.beginPath();
+      let lastX = 0;
+      let lastY = 0;
       let firstPoint = true;
 
       points.forEach((point, index) => {
@@ -136,76 +131,62 @@ const PPGSignalMeter = ({
         const y = canvas.height / 2 - point.value;
 
         if (firstPoint) {
-          ctx.moveTo(x, y);
           firstPoint = false;
         } else {
+          ctx.beginPath();
+          ctx.moveTo(lastX, lastY);
           ctx.lineTo(x, y);
+          ctx.strokeStyle = '#0EA5E9';
+          ctx.lineWidth = 2;
+          ctx.stroke();
         }
 
-        // Marcar picos y arritmias
         if (index > 0 && index < points.length - 1) {
           const prevPoint = points[index - 1];
           const nextPoint = points[index + 1];
           
           if (point.value > prevPoint.value && point.value > nextPoint.value) {
-            // Dibujar el punto del pico
-            ctx.stroke();
             ctx.beginPath();
             ctx.arc(x, y, 4, 0, Math.PI * 2);
             ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
             ctx.fill();
-            ctx.beginPath();
-            ctx.moveTo(x, y);
 
-            // Si es arritmia, marcarla visualmente
+            const displayValue = Math.abs(Math.round(point.value));
+            ctx.font = '12px Inter';
+            ctx.fillStyle = point.isArrhythmia ? 'rgba(220, 38, 38, 0.8)' : 'rgba(51, 65, 85, 0.8)';
+            ctx.textAlign = 'left';
+            ctx.fillText(`${displayValue}`, x + 8, y - 8);
+
             if (point.isArrhythmia) {
-              ctx.save();
-              // Línea vertical roja
-              ctx.beginPath();
-              ctx.moveTo(x, y - 15);
-              ctx.lineTo(x, y + 15);
-              ctx.strokeStyle = '#DC2626';
-              ctx.lineWidth = 1;
-              ctx.stroke();
-              
-              // Signo de exclamación
               ctx.font = '10px Inter';
               ctx.fillStyle = '#DC2626';
-              ctx.textAlign = 'center';
-              ctx.fillText('!', x, y - 20);
-              ctx.restore();
-              ctx.beginPath();
-              ctx.moveTo(x, y);
+              ctx.fillText('⚠️', x + 8, y - 20);
             }
           }
         }
-      });
 
-      // Dibujar la línea principal
-      ctx.strokeStyle = '#0EA5E9';
-      ctx.lineWidth = 2;
-      ctx.stroke();
+        lastX = x;
+        lastY = y;
+      });
     }
 
-    // Dibujar la cuadrícula
     ctx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
     ctx.lineWidth = 0.5;
 
-    ctx.beginPath();
     for (let i = 0; i <= CANVAS_HEIGHT; i += 50) {
+      ctx.beginPath();
       ctx.moveTo(0, i);
       ctx.lineTo(CANVAS_WIDTH, i);
+      ctx.stroke();
     }
-    ctx.stroke();
 
-    ctx.beginPath();
     for (let i = 0; i <= CANVAS_WIDTH; i += 100) {
+      ctx.beginPath();
       ctx.moveTo(i, 0);
       ctx.lineTo(i, CANVAS_HEIGHT);
+      ctx.stroke();
     }
-    ctx.stroke();
 
-    // Línea central
     ctx.strokeStyle = 'rgba(51, 65, 85, 0.3)';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -255,7 +236,7 @@ const PPGSignalMeter = ({
         </div>
 
         <div className="flex flex-col items-center">
-          <FingerPrintIcon
+          <FingerprintIcon
             className={`h-12 w-12 transition-colors duration-300 ${
               !isFingerDetected ? 'text-gray-400' :
               quality > 75 ? 'text-green-500' :
