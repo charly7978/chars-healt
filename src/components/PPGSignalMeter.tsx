@@ -150,7 +150,6 @@ const PPGSignalMeter = ({
             ctx.fill();
 
             if (point.isArrhythmia) {
-              // Dibujar marca de arritmia
               ctx.beginPath();
               ctx.moveTo(x, y - 15);
               ctx.lineTo(x, y + 15);
