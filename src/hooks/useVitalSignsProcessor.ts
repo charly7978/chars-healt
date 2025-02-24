@@ -3,31 +3,18 @@ import { useState, useCallback, useRef } from 'react';
 import { VitalSignsProcessor } from '../modules/VitalSignsProcessor';
 
 export const useVitalSignsProcessor = () => {
-  // Mover TODOS los hooks al principio
   const [processor] = useState(() => new VitalSignsProcessor());
   const [arrhythmiaCounter, setArrhythmiaCounter] = useState(0);
   const lastArrhythmiaTime = useRef<number>(0);
-  const hasDetectedArrhythmia = useRef<boolean>(false);
   
-  // Constantes fuera de los hooks
   const MIN_TIME_BETWEEN_ARRHYTHMIAS = 1000;
   const MAX_ARRHYTHMIAS_PER_SESSION = 15;
   
   const processSignal = useCallback((value: number, rrData?: { intervals: number[], lastPeakTime: number | null }) => {
     const result = processor.processSignal(value, rrData);
     const currentTime = Date.now();
-    
-    // Si ya detectamos una arritmia antes, mantenemos el estado
-    if (hasDetectedArrhythmia.current) {
-      return {
-        spo2: result.spo2,
-        pressure: result.pressure,
-        arrhythmiaStatus: `ARRITMIA DETECTADA|${arrhythmiaCounter}`,
-        lastArrhythmiaData: null
-      };
-    }
 
-    // Análisis de arritmias solo si no hemos detectado una antes
+    // Análisis de arritmias
     if (rrData?.intervals && rrData.intervals.length >= 3) {
       const lastThreeIntervals = rrData.intervals.slice(-3);
       const avgRR = lastThreeIntervals.reduce((a, b) => a + b, 0) / lastThreeIntervals.length;
@@ -46,11 +33,10 @@ export const useVitalSignsProcessor = () => {
           currentTime - lastArrhythmiaTime.current >= MIN_TIME_BETWEEN_ARRHYTHMIAS &&
           arrhythmiaCounter < MAX_ARRHYTHMIAS_PER_SESSION) {
         
-        hasDetectedArrhythmia.current = true;
         setArrhythmiaCounter(prev => prev + 1);
         lastArrhythmiaTime.current = currentTime;
         
-        console.log("Arritmia detectada:", {
+        console.log("Nueva arritmia detectada:", {
           rmssd,
           rrVariation,
           lastRR,
@@ -72,19 +58,21 @@ export const useVitalSignsProcessor = () => {
       }
     }
     
-    // Si no hay arritmias detectadas
+    // Si no hay nuevas arritmias, mantener el contador actual
     return {
       spo2: result.spo2,
       pressure: result.pressure,
-      arrhythmiaStatus: `SIN ARRITMIAS|${arrhythmiaCounter}`
+      arrhythmiaStatus: arrhythmiaCounter > 0 ? 
+        `ARRITMIA DETECTADA|${arrhythmiaCounter}` : 
+        `SIN ARRITMIAS|${arrhythmiaCounter}`,
+      lastArrhythmiaData: null
     };
-  }, [processor, arrhythmiaCounter]); // Mantener las dependencias mínimas necesarias
+  }, [processor, arrhythmiaCounter]);
 
   const reset = useCallback(() => {
     processor.reset();
     setArrhythmiaCounter(0);
     lastArrhythmiaTime.current = 0;
-    hasDetectedArrhythmia.current = false;
     console.log("Reseteo de detección de arritmias");
   }, [processor]);
 
