@@ -3,30 +3,41 @@ import { useState, useCallback, useRef } from 'react';
 import { VitalSignsProcessor } from '../modules/VitalSignsProcessor';
 
 export const useVitalSignsProcessor = () => {
+  // Mover TODOS los hooks al principio
   const [processor] = useState(() => new VitalSignsProcessor());
   const [arrhythmiaCounter, setArrhythmiaCounter] = useState(0);
   const lastArrhythmiaTime = useRef<number>(0);
   const hasDetectedArrhythmia = useRef<boolean>(false);
-  const MIN_TIME_BETWEEN_ARRHYTHMIAS = 1000; // Mínimo 1 segundo entre arritmias
-  const MAX_ARRHYTHMIAS_PER_SESSION = 15; // Máximo razonable para 30 segundos
+  
+  // Constantes fuera de los hooks
+  const MIN_TIME_BETWEEN_ARRHYTHMIAS = 1000;
+  const MAX_ARRHYTHMIAS_PER_SESSION = 15;
   
   const processSignal = useCallback((value: number, rrData?: { intervals: number[], lastPeakTime: number | null }) => {
     const result = processor.processSignal(value, rrData);
     const currentTime = Date.now();
     
-    // Análisis más riguroso de intervalos RR para arritmias
+    // Si ya detectamos una arritmia antes, mantenemos el estado
+    if (hasDetectedArrhythmia.current) {
+      return {
+        spo2: result.spo2,
+        pressure: result.pressure,
+        arrhythmiaStatus: `ARRITMIA DETECTADA|${arrhythmiaCounter}`,
+        lastArrhythmiaData: null
+      };
+    }
+
+    // Análisis de arritmias solo si no hemos detectado una antes
     if (rrData?.intervals && rrData.intervals.length >= 3) {
       const lastThreeIntervals = rrData.intervals.slice(-3);
       const avgRR = lastThreeIntervals.reduce((a, b) => a + b, 0) / lastThreeIntervals.length;
       
-      // Calculamos la variabilidad usando RMSSD
       let rmssd = 0;
       for (let i = 1; i < lastThreeIntervals.length; i++) {
         rmssd += Math.pow(lastThreeIntervals[i] - lastThreeIntervals[i-1], 2);
       }
       rmssd = Math.sqrt(rmssd / (lastThreeIntervals.length - 1));
       
-      // Criterios para arritmias
       const lastRR = lastThreeIntervals[lastThreeIntervals.length - 1];
       const rrVariation = Math.abs(lastRR - avgRR) / avgRR;
       
@@ -61,23 +72,13 @@ export const useVitalSignsProcessor = () => {
       }
     }
     
-    // Si ya detectamos una arritmia antes, mantenemos el estado
-    if (hasDetectedArrhythmia.current) {
-      return {
-        spo2: result.spo2,
-        pressure: result.pressure,
-        arrhythmiaStatus: `ARRITMIA DETECTADA|${arrhythmiaCounter}`,
-        lastArrhythmiaData: null
-      };
-    }
-    
-    // Si no hay arritmias detectadas aún
+    // Si no hay arritmias detectadas
     return {
       spo2: result.spo2,
       pressure: result.pressure,
       arrhythmiaStatus: `SIN ARRITMIAS|${arrhythmiaCounter}`
     };
-  }, [processor, arrhythmiaCounter]);
+  }, [processor, arrhythmiaCounter]); // Mantener las dependencias mínimas necesarias
 
   const reset = useCallback(() => {
     processor.reset();
