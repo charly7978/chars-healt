@@ -19,6 +19,7 @@ const CameraView = ({
   const [batteryLevel, setBatteryLevel] = useState<number>(100);
   const wakeLockRef = useRef<any>(null);
   const torchTimeoutRef = useRef<number | null>(null);
+  const videoTrackRef = useRef<MediaStreamTrack | null>(null);
 
   const getBatteryLevel = async () => {
     try {
@@ -31,6 +32,23 @@ const CameraView = ({
       }
     } catch (error) {
       console.log('Error al obtener nivel de batería:', error);
+    }
+  };
+
+  const updateTorch = async () => {
+    if (!videoTrackRef.current) return;
+    
+    try {
+      const capabilities = videoTrackRef.current.getCapabilities();
+      if (!capabilities.torch) return;
+
+      await videoTrackRef.current.applyConstraints({
+        advanced: [{ torch: isFingerDetected }]
+      });
+      
+      console.log('Estado de la linterna actualizado:', isFingerDetected);
+    } catch (err) {
+      console.error("Error al controlar la linterna:", err);
     }
   };
 
@@ -55,11 +73,12 @@ const CameraView = ({
     if (stream) {
       stream.getTracks().forEach(track => {
         track.stop();
-        if (videoRef.current) {
-          videoRef.current.srcObject = null;
-        }
       });
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
       setStream(null);
+      videoTrackRef.current = null;
     }
     if (torchTimeoutRef.current) {
       clearTimeout(torchTimeoutRef.current);
@@ -76,7 +95,6 @@ const CameraView = ({
 
       const isAndroid = /android/i.test(navigator.userAgent);
       
-      // Configuración base optimizada para batería baja
       const baseVideoConstraints: MediaTrackConstraints = {
         facingMode: 'environment',
         width: { ideal: batteryLevel < 20 ? 480 : 720 },
@@ -84,7 +102,6 @@ const CameraView = ({
       };
 
       if (isAndroid) {
-        // Ajustes específicos para Android
         Object.assign(baseVideoConstraints, {
           frameRate: { ideal: batteryLevel < 20 ? 20 : 25 },
           resizeMode: 'crop-and-scale'
@@ -97,13 +114,13 @@ const CameraView = ({
 
       const newStream = await navigator.mediaDevices.getUserMedia(constraints);
       const videoTrack = newStream.getVideoTracks()[0];
+      videoTrackRef.current = videoTrack;
 
       if (videoTrack && isAndroid) {
         try {
           const capabilities = videoTrack.getCapabilities();
           const advancedConstraints: MediaTrackConstraintSet[] = [];
           
-          // Optimizaciones de cámara basadas en el nivel de batería
           if (capabilities.exposureMode) {
             advancedConstraints.push({ 
               exposureMode: batteryLevel < 20 ? 'manual' : 'continuous'
@@ -126,25 +143,9 @@ const CameraView = ({
             });
           }
 
-          // Control automático de la linterna
-          if (videoTrack.getCapabilities()?.torch) {
-            const manageTorch = async () => {
-              if (!isFingerDetected) {
-                await videoTrack.applyConstraints({
-                  advanced: [{ torch: false }]
-                });
-              } else {
-                await videoTrack.applyConstraints({
-                  advanced: [{ torch: true }]
-                });
-              }
-            };
-
-            // Gestión eficiente de la linterna
-            if (torchTimeoutRef.current) {
-              clearTimeout(torchTimeoutRef.current);
-            }
-            torchTimeoutRef.current = window.setTimeout(manageTorch, 1000);
+          // Configuración inicial de la linterna
+          if (capabilities.torch) {
+            await updateTorch();
           }
 
           if (videoRef.current) {
@@ -174,6 +175,23 @@ const CameraView = ({
       console.error("Error al iniciar la cámara:", err);
     }
   };
+
+  // Efecto para controlar la linterna cuando cambia isFingerDetected
+  useEffect(() => {
+    if (torchTimeoutRef.current) {
+      clearTimeout(torchTimeoutRef.current);
+    }
+    
+    torchTimeoutRef.current = window.setTimeout(() => {
+      updateTorch();
+    }, 500);
+
+    return () => {
+      if (torchTimeoutRef.current) {
+        clearTimeout(torchTimeoutRef.current);
+      }
+    };
+  }, [isFingerDetected]);
 
   useEffect(() => {
     getBatteryLevel();
