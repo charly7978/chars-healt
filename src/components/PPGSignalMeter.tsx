@@ -32,8 +32,8 @@ const PPGSignalMeter = ({
   const CANVAS_WIDTH = 1000;
   const CANVAS_HEIGHT = 200;
   const verticalScale = 32.0;
-  const SMOOTHING_FACTOR_UP = 0.8; // Aumentado para mantener picos pronunciados
-  const SMOOTHING_FACTOR_DOWN = 0.08; // Reducido para descenso más suave
+  const SMOOTHING_FACTOR_UP = 1.8; // Aumentado para mantener picos pronunciados
+  const SMOOTHING_FACTOR_DOWN = 0.19; // Reducido para descenso más suave
   const SLOPE_THRESHOLD = 0.5; // Umbral para detectar cambios bruscos
 
   useEffect(() => {
