@@ -1,5 +1,6 @@
+
 import React, { useEffect, useRef, useCallback } from 'react';
-import { Fingerprint } from '@heroicons/react/24/outline';
+import { FingerPrintIcon } from '@heroicons/react/24/outline';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
 
 interface PPGSignalMeterProps {
@@ -233,10 +234,10 @@ const PPGSignalMeter = ({
             </span>
           </div>
         </div>
+
         <div className="flex flex-col items-center">
-          <Fingerprint
-            size={48}
-            className={`transition-colors duration-300 ${
+          <FingerPrintIcon
+            className={`h-12 w-12 transition-colors duration-300 ${
               !isFingerDetected ? 'text-gray-400' :
               quality > 75 ? 'text-green-500' :
               quality > 50 ? 'text-yellow-500' :
