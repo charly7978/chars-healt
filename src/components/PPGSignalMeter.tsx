@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Progress } from "@/components/ui/progress";
 import VitalSign from '@/components/VitalSign';
@@ -26,7 +25,7 @@ const PPGSignalMeter = ({
 }: PPGSignalMeterProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const baselineRef = useRef<number | null>(null);
-  const bufferRef = useRef<CircularBuffer>(new CircularBuffer(1000));
+  const dataBufferRef = useRef<CircularBuffer>(new CircularBuffer(1000));
   
   const WINDOW_WIDTH_MS = 5000;
   const CANVAS_WIDTH = 1000;
@@ -73,7 +72,7 @@ const PPGSignalMeter = ({
       isArrhythmia: isCurrentArrhythmia && isNearPeak
     };
     
-    bufferRef.current.push(dataPoint);
+    dataBufferRef.current.push(dataPoint);
 
     ctx.fillStyle = '#F8FAFC';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -89,7 +88,7 @@ const PPGSignalMeter = ({
       ctx.stroke();
     }
 
-    const points = bufferRef.current.getPoints();
+    const points = dataBufferRef.current.getPoints();
     
     if (points.length > 1) {
       ctx.lineWidth = 3;
@@ -117,7 +116,7 @@ const PPGSignalMeter = ({
   }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus]);
 
   const handleReset = useCallback(() => {
-    bufferRef.current.clear();
+    dataBufferRef.current.clear();
     baselineRef.current = null;
     onReset();
   }, [onReset]);
