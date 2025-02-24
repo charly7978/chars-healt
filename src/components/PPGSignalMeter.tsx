@@ -28,7 +28,7 @@ const PPGSignalMeter = ({
   const lastValueRef = useRef<number | null>(null);
   const lastSlopeRef = useRef<number>(0);
   
-  const WINDOW_WIDTH_MS = 9000;
+  const WINDOW_WIDTH_MS = 5000;
   const CANVAS_WIDTH = 1000;
   const CANVAS_HEIGHT = 200;
   const verticalScale = 20.0;
