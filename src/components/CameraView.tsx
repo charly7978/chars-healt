@@ -1,3 +1,4 @@
+
 import React, { useRef, useEffect, useState } from 'react';
 
 interface CameraViewProps {
@@ -38,14 +39,13 @@ const CameraView = ({
 
       const baseVideoConstraints: MediaTrackConstraints = {
         facingMode: 'environment',
-        width: { ideal: 720 },
-        height: { ideal: 480 }
+        width: { ideal: 480 }, // Reducida de 720 a 480
+        height: { ideal: 320 }  // Ajustada proporcionalmente
       };
 
       if (isAndroid) {
-        // Ajustes para mejorar la extracción de señal en Android
         Object.assign(baseVideoConstraints, {
-          frameRate: { ideal: 25 },
+          frameRate: { ideal: 25, max: 30 },
           resizeMode: 'crop-and-scale'
         });
       }
@@ -77,11 +77,6 @@ const CameraView = ({
               advanced: advancedConstraints
             });
           }
-
-          if (videoRef.current) {
-            videoRef.current.style.transform = 'translateZ(0)';
-            videoRef.current.style.backfaceVisibility = 'hidden';
-          }
         } catch (err) {
           console.log("No se pudieron aplicar algunas optimizaciones:", err);
         }
@@ -89,10 +84,7 @@ const CameraView = ({
 
       if (videoRef.current) {
         videoRef.current.srcObject = newStream;
-        if (isAndroid) {
-          videoRef.current.style.willChange = 'transform';
-          videoRef.current.style.transform = 'translateZ(0)';
-        }
+        videoRef.current.style.transform = 'translateZ(0)';
       }
 
       setStream(newStream);

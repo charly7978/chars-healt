@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useCallback } from 'react';
 import { FingerPrintIcon } from '@heroicons/react/24/outline';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -35,13 +34,21 @@ const PPGSignalMeter = ({
   const CANVAS_HEIGHT = 200;
   const verticalScale = 28.0;
   const SMOOTHING_FACTOR = 0.85;
-  const TARGET_FPS = 60;
+  const TARGET_FPS = 30;
   const FRAME_TIME = 1000 / TARGET_FPS;
 
   useEffect(() => {
     if (!dataBufferRef.current) {
-      dataBufferRef.current = new CircularBuffer(1000);
+      dataBufferRef.current = new CircularBuffer(500);
     }
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+      if (dataBufferRef.current) {
+        dataBufferRef.current.clear();
+      }
+    };
   }, []);
 
   const getQualityColor = useCallback((q: number) => {
@@ -76,7 +83,7 @@ const PPGSignalMeter = ({
     }
 
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) {
       animationFrameRef.current = requestAnimationFrame(renderSignal);
       return;
@@ -120,8 +127,7 @@ const PPGSignalMeter = ({
 
     const points = dataBufferRef.current.getPoints();
     if (points.length > 1) {
-      let lastX = 0;
-      let lastY = 0;
+      ctx.beginPath();
       let firstPoint = true;
 
       points.forEach((point, index) => {
@@ -129,14 +135,10 @@ const PPGSignalMeter = ({
         const y = canvas.height / 2 - point.value;
 
         if (firstPoint) {
+          ctx.moveTo(x, y);
           firstPoint = false;
         } else {
-          ctx.beginPath();
-          ctx.moveTo(lastX, lastY);
           ctx.lineTo(x, y);
-          ctx.strokeStyle = '#0EA5E9';
-          ctx.lineWidth = 2;
-          ctx.stroke();
         }
 
         if (index > 0 && index < points.length - 1) {
@@ -144,12 +146,15 @@ const PPGSignalMeter = ({
           const nextPoint = points[index + 1];
           
           if (point.value > prevPoint.value && point.value > nextPoint.value) {
+            ctx.stroke();
             ctx.beginPath();
             ctx.arc(x, y, 4, 0, Math.PI * 2);
             ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
             ctx.fill();
-
+            ctx.beginPath();
+            ctx.moveTo(x, y);
             if (point.isArrhythmia) {
+              ctx.save();
               ctx.beginPath();
               ctx.moveTo(x, y - 15);
               ctx.lineTo(x, y + 15);
@@ -161,31 +166,35 @@ const PPGSignalMeter = ({
               ctx.fillStyle = '#DC2626';
               ctx.textAlign = 'center';
               ctx.fillText('!', x, y - 20);
+              ctx.restore();
+              ctx.beginPath();
+              ctx.moveTo(x, y);
             }
           }
         }
-
-        lastX = x;
-        lastY = y;
       });
+
+      ctx.strokeStyle = '#0EA5E9';
+      ctx.lineWidth = 2;
+      ctx.stroke();
     }
 
     ctx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
     ctx.lineWidth = 0.5;
 
+    ctx.beginPath();
     for (let i = 0; i <= CANVAS_HEIGHT; i += 50) {
-      ctx.beginPath();
       ctx.moveTo(0, i);
       ctx.lineTo(CANVAS_WIDTH, i);
-      ctx.stroke();
     }
+    ctx.stroke();
 
+    ctx.beginPath();
     for (let i = 0; i <= CANVAS_WIDTH; i += 100) {
-      ctx.beginPath();
       ctx.moveTo(i, 0);
       ctx.lineTo(i, CANVAS_HEIGHT);
-      ctx.stroke();
     }
+    ctx.stroke();
 
     ctx.strokeStyle = 'rgba(51, 65, 85, 0.3)';
     ctx.lineWidth = 1;
@@ -197,15 +206,6 @@ const PPGSignalMeter = ({
     lastRenderTimeRef.current = currentTime;
     animationFrameRef.current = requestAnimationFrame(renderSignal);
   }, [value, quality, isFingerDetected, rawArrhythmiaData, smoothValue, arrhythmiaStatus]);
-
-  useEffect(() => {
-    renderSignal();
-    return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-    };
-  }, [renderSignal]);
 
   const handleReset = useCallback(() => {
     if (dataBufferRef.current) {
