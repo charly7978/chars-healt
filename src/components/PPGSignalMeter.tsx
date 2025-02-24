@@ -72,10 +72,10 @@ const PPGSignalMeter = ({
   const baselineRef = useRef<number | null>(null);
   const lastValueRef = useRef<number>(0);
   
-  const WINDOW_WIDTH_MS = 5000;
+  const WINDOW_WIDTH_MS = 6000;
   const CANVAS_WIDTH = 1000;
   const CANVAS_HEIGHT = 200;
-  const verticalScale = 32.0;
+  const verticalScale = 25.0;
 
   const getQualityColor = useCallback((quality: number) => {
     if (quality > 90) return 'from-emerald-500/80 to-emerald-400/80';
