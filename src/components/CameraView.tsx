@@ -39,13 +39,13 @@ const CameraView = ({
 
       const baseVideoConstraints: MediaTrackConstraints = {
         facingMode: 'environment',
-        width: { ideal: 480 }, // Reducida de 720 a 480
+        width: { ideal: 480 }, // Reducida de 720 a 480 para optimizar
         height: { ideal: 320 }  // Ajustada proporcionalmente
       };
 
       if (isAndroid) {
         Object.assign(baseVideoConstraints, {
-          frameRate: { ideal: 25, max: 30 },
+          frameRate: { ideal: 25, max: 30 }, // Limitado a 30fps para ahorrar recursos
           resizeMode: 'crop-and-scale'
         });
       }

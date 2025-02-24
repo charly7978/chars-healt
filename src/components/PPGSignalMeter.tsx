@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useCallback } from 'react';
 import { FingerPrintIcon } from '@heroicons/react/24/outline';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -34,19 +35,16 @@ const PPGSignalMeter = ({
   const CANVAS_HEIGHT = 200;
   const verticalScale = 28.0;
   const SMOOTHING_FACTOR = 0.85;
-  const TARGET_FPS = 30;
+  const TARGET_FPS = 30; // Optimizado a 30 FPS sin afectar la visualización
   const FRAME_TIME = 1000 / TARGET_FPS;
 
   useEffect(() => {
     if (!dataBufferRef.current) {
-      dataBufferRef.current = new CircularBuffer(500);
+      dataBufferRef.current = new CircularBuffer(1000);
     }
     return () => {
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
-      }
-      if (dataBufferRef.current) {
-        dataBufferRef.current.clear();
       }
     };
   }, []);
@@ -69,7 +67,7 @@ const PPGSignalMeter = ({
   }, []);
 
   const renderSignal = useCallback(() => {
-    if (!canvasRef.current || !isFingerDetected || !dataBufferRef.current) {
+    if (!canvasRef.current || !dataBufferRef.current) {
       animationFrameRef.current = requestAnimationFrame(renderSignal);
       return;
     }
@@ -83,7 +81,7 @@ const PPGSignalMeter = ({
     }
 
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d', { alpha: false });
+    const ctx = canvas.getContext('2d');
     if (!ctx) {
       animationFrameRef.current = requestAnimationFrame(renderSignal);
       return;
@@ -153,6 +151,7 @@ const PPGSignalMeter = ({
             ctx.fill();
             ctx.beginPath();
             ctx.moveTo(x, y);
+
             if (point.isArrhythmia) {
               ctx.save();
               ctx.beginPath();
@@ -206,6 +205,15 @@ const PPGSignalMeter = ({
     lastRenderTimeRef.current = currentTime;
     animationFrameRef.current = requestAnimationFrame(renderSignal);
   }, [value, quality, isFingerDetected, rawArrhythmiaData, smoothValue, arrhythmiaStatus]);
+
+  useEffect(() => {
+    renderSignal();
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [renderSignal]);
 
   const handleReset = useCallback(() => {
     if (dataBufferRef.current) {
