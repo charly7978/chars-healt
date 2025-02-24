@@ -42,7 +42,7 @@ const PPGSignalMeter = ({
   const verticalScale = 20.0;
   const SMOOTHING_FACTOR = 0.45; // Ajustado para menor latencia
   const TARGET_FPS = 25;
-  const FRAME_TIME = 1000 / TARGET_FPS;
+  const FRAME_TIME = 3000 / TARGET_FPS;
   const BUFFER_SIZE = 600; // Reducido para mejor rendimiento
 
   useEffect(() => {
