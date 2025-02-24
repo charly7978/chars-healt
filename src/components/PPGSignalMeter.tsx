@@ -29,14 +29,15 @@ const PPGSignalMeter = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dataRef = useRef<PPGDataPoint[]>([]);
   const [startTime, setStartTime] = useState<number>(Date.now());
-  const WINDOW_WIDTH_MS = 2000;
+  const WINDOW_WIDTH_MS = 4000;
   const CANVAS_WIDTH = 1000;
   const CANVAS_HEIGHT = 200;
-  const verticalScale = 32.0;
+  const verticalScale = 48.0;
   const baselineRef = useRef<number | null>(null);
   const maxAmplitudeRef = useRef<number>(0);
   const lastValueRef = useRef<number>(0);
   const lastArrhythmiaRef = useRef<boolean>(false);
+  const animationFrameRef = useRef<number>();
 
   const handleReset = () => {
     dataRef.current = [];
@@ -65,8 +66,7 @@ const PPGSignalMeter = ({
   };
 
   useEffect(() => {
-    if (!canvasRef.current) return;
-    if (!isFingerDetected) return;
+    if (!canvasRef.current || !isFingerDetected) return;
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
@@ -77,7 +77,7 @@ const PPGSignalMeter = ({
     if (baselineRef.current === null) {
       baselineRef.current = value;
     } else {
-      baselineRef.current = baselineRef.current * 0.95 + value * 0.05;
+      baselineRef.current = baselineRef.current * 0.99 + value * 0.01;
     }
 
     const normalizedValue = (value - (baselineRef.current || 0)) * verticalScale;
@@ -94,79 +94,78 @@ const PPGSignalMeter = ({
     const cutoffTime = currentTime - WINDOW_WIDTH_MS;
     dataRef.current = dataRef.current.filter(point => point.time >= cutoffTime);
 
-    ctx.fillStyle = '#F8FAFC';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const drawFrame = () => {
+      ctx.fillStyle = '#F8FAFC';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    ctx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
-    ctx.lineWidth = 0.5;
-    
-    for (let i = 0; i < 40; i++) {
-      const x = canvas.width - (canvas.width * (i / 40));
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, canvas.height);
-      ctx.stroke();
+      ctx.strokeStyle = 'rgba(51, 65, 85, 0.1)';
+      ctx.lineWidth = 0.5;
       
-      if (i % 4 === 0) {
-        ctx.fillStyle = 'rgba(51, 65, 85, 0.5)';
-        ctx.font = '12px Inter';
-        ctx.fillText(`${i * 50}ms`, x - 25, canvas.height - 5);
+      for (let i = 0; i < 40; i++) {
+        const x = canvas.width - (canvas.width * (i / 40));
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
       }
-    }
 
-    const amplitudeLines = 10;
-    for (let i = 0; i <= amplitudeLines; i++) {
-      const y = (canvas.height / amplitudeLines) * i;
+      const amplitudeLines = 8;
+      for (let i = 0; i <= amplitudeLines; i++) {
+        const y = (canvas.height / amplitudeLines) * i;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+      }
+
+      ctx.strokeStyle = 'rgba(51, 65, 85, 0.2)';
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(canvas.width, y);
+      ctx.moveTo(0, canvas.height / 2);
+      ctx.lineTo(canvas.width, canvas.height / 2);
       ctx.stroke();
-    }
 
-    ctx.strokeStyle = 'rgba(51, 65, 85, 0.2)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(0, canvas.height / 2);
-    ctx.lineTo(canvas.width, canvas.height / 2);
-    ctx.stroke();
+      if (dataRef.current.length > 1) {
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = '#0ea5e9';
+        ctx.beginPath();
+        
+        const firstPoint = dataRef.current[0];
+        ctx.moveTo(
+          canvas.width - ((currentTime - firstPoint.time) * canvas.width / WINDOW_WIDTH_MS),
+          canvas.height / 2 + firstPoint.value
+        );
 
-    if (dataRef.current.length > 1) {
-      ctx.lineWidth = 3;
-      
-      let waveStartIndex = 0;
-
-      dataRef.current.forEach((point, index) => {
-        if (point.isWaveStart || index === dataRef.current.length - 1) {
-          if (index > waveStartIndex) {
-            ctx.beginPath();
-            ctx.strokeStyle = '#0ea5e9';
-            
-            const startPoint = dataRef.current[waveStartIndex];
-            ctx.moveTo(
-              canvas.width - ((currentTime - startPoint.time) * canvas.width / WINDOW_WIDTH_MS),
-              canvas.height / 2 + startPoint.value
-            );
-
-            for (let i = waveStartIndex + 1; i <= index; i++) {
-              const p = dataRef.current[i];
-              ctx.lineTo(
-                canvas.width - ((currentTime - p.time) * canvas.width / WINDOW_WIDTH_MS),
-                canvas.height / 2 + p.value
-              );
-            }
-            
-            ctx.stroke();
-          }
-          waveStartIndex = index;
+        for (let i = 1; i < dataRef.current.length; i++) {
+          const point = dataRef.current[i];
+          const x = canvas.width - ((currentTime - point.time) * canvas.width / WINDOW_WIDTH_MS);
+          const y = canvas.height / 2 + point.value;
+          
+          const prevPoint = dataRef.current[i - 1];
+          const prevX = canvas.width - ((currentTime - prevPoint.time) * canvas.width / WINDOW_WIDTH_MS);
+          const prevY = canvas.height / 2 + prevPoint.value;
+          
+          const cpx = (prevX + x) / 2;
+          ctx.quadraticCurveTo(prevX, prevY, cpx, (prevY + y) / 2);
         }
-      });
-    }
+        
+        ctx.stroke();
+      }
 
+      animationFrameRef.current = requestAnimationFrame(drawFrame);
+    };
+
+    drawFrame();
+
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
   }, [value, quality, isFingerDetected, arrhythmiaStatus]);
 
   return (
     <div className="h-full flex flex-col">
-      {/* Header */}
       <div className="p-4 flex justify-between items-center bg-white/60 backdrop-blur-sm border-b border-slate-100 shadow-sm">
         <span className="text-xl font-bold text-slate-700">PPG</span>
         <div className="flex flex-col items-center flex-1 mx-4">
@@ -196,7 +195,6 @@ const PPGSignalMeter = ({
         </div>
       </div>
 
-      {/* Gráfica PPG */}
       <canvas
         ref={canvasRef}
         width={CANVAS_WIDTH}
@@ -204,7 +202,6 @@ const PPGSignalMeter = ({
         className="w-full h-[35vh] mt-4"
       />
 
-      {/* Indicadores Vitales */}
       <div className="mt-auto">
         <div className="bg-gray-900/30 backdrop-blur-sm p-2 mb-[80px]">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -230,7 +227,6 @@ const PPGSignalMeter = ({
           </div>
         </div>
 
-        {/* Botones */}
         <div className="fixed bottom-0 left-0 right-0 h-[80px] grid grid-cols-2 gap-px bg-gray-900">
           <button 
             onClick={onStartMeasurement}
