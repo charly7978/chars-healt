@@ -21,6 +21,7 @@ export class VitalSignsProcessor {
   private rrIntervals: number[] = [];
   private baselineRhythm = 0;
   private isLearningPhase = true;
+  private hasDetectedFirstArrhythmia = false;
   private arrhythmiaDetected = false;
   private measurementStartTime: number = Date.now();
   private arrhythmiaCount = 0;
@@ -61,7 +62,8 @@ export class VitalSignsProcessor {
     let arrhythmiaStatus;
     if (this.isLearningPhase) {
       arrhythmiaStatus = "CALIBRANDO...";
-    } else if (this.arrhythmiaDetected) {
+    } else if (this.hasDetectedFirstArrhythmia) {
+      // Una vez detectada la primera arritmia, siempre mostramos este estado
       arrhythmiaStatus = `ARRITMIA DETECTADA|${this.arrhythmiaCount}`;
     } else {
       arrhythmiaStatus = `SIN ARRITMIAS|${this.arrhythmiaCount}`;
@@ -78,15 +80,6 @@ export class VitalSignsProcessor {
       rmssd: this.lastRMSSD,
       rrVariation: this.lastRRVariation
     } : null;
-
-    console.log('VitalSignsProcessor - Estado:', {
-      isLearningPhase: this.isLearningPhase,
-      arrhythmiaDetected: this.arrhythmiaDetected,
-      arrhythmiaCount: this.arrhythmiaCount,
-      status: arrhythmiaStatus,
-      rmssd: this.lastRMSSD,
-      rrVariation: this.lastRRVariation
-    });
 
     return {
       spo2,
@@ -121,10 +114,13 @@ export class VitalSignsProcessor {
     const newArrhythmiaState = rmssd > this.RMSSD_THRESHOLD && rrVariation > 0.20;
     
     // Si es una nueva arritmia y ha pasado suficiente tiempo desde la última
-    if (newArrhythmiaState && !this.arrhythmiaDetected && 
+    if (newArrhythmiaState && 
         currentTime - this.lastArrhythmiaTime > 1000) { // Mínimo 1 segundo entre arritmias
       this.arrhythmiaCount++;
       this.lastArrhythmiaTime = currentTime;
+      
+      // Marcar que ya detectamos la primera arritmia
+      this.hasDetectedFirstArrhythmia = true;
       
       console.log('VitalSignsProcessor - Nueva arritmia detectada:', {
         contador: this.arrhythmiaCount,
@@ -135,6 +131,25 @@ export class VitalSignsProcessor {
     }
 
     this.arrhythmiaDetected = newArrhythmiaState;
+  }
+
+  public reset() {
+    this.ppgValues = [];
+    this.spo2Buffer = [];
+    this.systolicBuffer = [];
+    this.diastolicBuffer = [];
+    this.lastValue = 0;
+    this.lastPeakTime = null;
+    this.rrIntervals = [];
+    this.baselineRhythm = 0;
+    this.isLearningPhase = true;
+    this.hasDetectedFirstArrhythmia = false;
+    this.arrhythmiaDetected = false;
+    this.arrhythmiaCount = 0;
+    this.measurementStartTime = Date.now();
+    this.lastRMSSD = 0;
+    this.lastRRVariation = 0;
+    this.lastArrhythmiaTime = 0;
   }
 
   private processHeartBeat() {
@@ -385,23 +400,5 @@ export class VitalSignsProcessor {
     const smaBuffer = this.ppgValues.slice(-this.SMA_WINDOW);
     smaBuffer.push(value);
     return smaBuffer.reduce((a, b) => a + b, 0) / smaBuffer.length;
-  }
-
-  public reset() {
-    this.ppgValues = [];
-    this.spo2Buffer = [];
-    this.systolicBuffer = [];
-    this.diastolicBuffer = [];
-    this.lastValue = 0;
-    this.lastPeakTime = null;
-    this.rrIntervals = [];
-    this.baselineRhythm = 0;
-    this.isLearningPhase = true;
-    this.arrhythmiaDetected = false;
-    this.arrhythmiaCount = 0;
-    this.measurementStartTime = Date.now();
-    this.lastRMSSD = 0;
-    this.lastRRVariation = 0;
-    this.lastArrhythmiaTime = 0;
   }
 }
