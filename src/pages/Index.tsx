@@ -297,11 +297,12 @@ const Index = () => {
               onStartMeasurement={startMonitoring}
               onReset={stopMonitoring}
               arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
+              rawArrhythmiaData={lastArrhythmiaData}
             />
           </div>
 
-          <div className="fixed bottom-[200px] left-0 right-0 px-4 z-50">
-            <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4 shadow-lg">
+          <div className="absolute bottom-40 left-0 right-0 px-4">
+            <div className="bg-black/40 backdrop-blur rounded-xl p-4">
               <div className="grid grid-cols-4 gap-2">
                 <VitalSign 
                   label="FRECUENCIA CARDÍACA"
@@ -327,21 +328,29 @@ const Index = () => {
           </div>
 
           {isMonitoring && (
-            <div className="fixed bottom-40 left-0 right-0 text-center">
+            <div className="absolute bottom-28 left-0 right-0 text-center">
               <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 30s</span>
             </div>
           )}
 
-          <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 mt-auto">
+          <div className="h-[80px] grid grid-cols-2 gap-px bg-black/80 mt-auto">
             <button 
               onClick={startMonitoring}
-              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
+              className="relative overflow-hidden bg-black/60 text-white font-bold text-2xl
+                       hover:bg-black/40 active:bg-black/30 transition-all duration-200
+                       after:absolute after:inset-0 after:bg-gradient-to-r 
+                       after:from-blue-500/10 after:to-transparent after:opacity-0
+                       hover:after:opacity-100 after:transition-opacity"
             >
               INICIAR
             </button>
             <button 
               onClick={stopMonitoring}
-              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
+              className="relative overflow-hidden bg-black/60 text-white font-bold text-2xl
+                       hover:bg-black/40 active:bg-black/30 transition-all duration-200
+                       after:absolute after:inset-0 after:bg-gradient-to-r 
+                       after:from-red-500/10 after:to-transparent after:opacity-0
+                       hover:after:opacity-100 after:transition-opacity"
             >
               RESET
             </button>
