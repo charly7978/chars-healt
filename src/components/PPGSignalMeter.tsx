@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useCallback, useMemo } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -43,17 +42,21 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
   const animationFrameRef = useRef<number>();
 
   useEffect(() => {
-    // Inicializar el contexto de audio
-    audioContextRef.current = new AudioContext();
-    oscillatorRef.current = audioContextRef.current.createOscillator();
-    gainNodeRef.current = audioContextRef.current.createGain();
-    
-    oscillatorRef.current.connect(gainNodeRef.current);
-    gainNodeRef.current.connect(audioContextRef.current.destination);
-    
-    oscillatorRef.current.frequency.setValueAtTime(880, audioContextRef.current.currentTime);
-    gainNodeRef.current.gain.setValueAtTime(0, audioContextRef.current.currentTime);
-    oscillatorRef.current.start();
+    const initAudio = async () => {
+      audioContextRef.current = new AudioContext();
+      await audioContextRef.current.resume();
+      oscillatorRef.current = audioContextRef.current.createOscillator();
+      gainNodeRef.current = audioContextRef.current.createGain();
+      
+      oscillatorRef.current.connect(gainNodeRef.current);
+      gainNodeRef.current.connect(audioContextRef.current.destination);
+      
+      oscillatorRef.current.frequency.setValueAtTime(880, audioContextRef.current.currentTime);
+      gainNodeRef.current.gain.setValueAtTime(0, audioContextRef.current.currentTime);
+      oscillatorRef.current.start();
+    };
+
+    initAudio().catch(console.error);
 
     return () => {
       if (oscillatorRef.current) {
@@ -87,25 +90,21 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     
-    // Dibujar cuadrícula
     ctx.beginPath();
     ctx.strokeStyle = GRID_COLOR;
     ctx.lineWidth = 0.5;
 
-    // Líneas verticales
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X) {
       ctx.moveTo(x, 0);
       ctx.lineTo(x, CANVAS_HEIGHT);
     }
 
-    // Líneas horizontales
     for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y) {
       ctx.moveTo(0, y);
       ctx.lineTo(CANVAS_WIDTH, y);
     }
     ctx.stroke();
 
-    // Línea central más destacada
     ctx.beginPath();
     ctx.strokeStyle = 'rgba(51, 65, 85, 0.3)';
     ctx.lineWidth = 1;
@@ -125,7 +124,6 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
 
     const now = Date.now();
     
-    // Actualizar baseline
     if (baselineRef.current === 0) {
       baselineRef.current = value;
     } else {
@@ -135,7 +133,6 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
     const normalizedValue = value - baselineRef.current;
     const scaledValue = normalizedValue * VERTICAL_SCALE;
 
-    // Detectar picos para el beep
     if (Math.abs(scaledValue) > 30) {
       playBeep(scaledValue);
     }
@@ -148,7 +145,6 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
     
     dataBufferRef.current.push(dataPoint);
 
-    // Renderizado optimizado
     ctx.save();
     drawGrid(ctx);
 
@@ -159,7 +155,6 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
 
       points.forEach((point, index) => {
         if (point.isArrhythmia !== isArrhythmiaSegment || index === points.length - 1) {
-          // Dibujar segmento actual
           if (currentPath.length > 0) {
             ctx.beginPath();
             ctx.strokeStyle = isArrhythmiaSegment ? ARRHYTHMIA_COLOR : SIGNAL_COLOR;
@@ -181,7 +176,6 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
             ctx.stroke();
           }
 
-          // Comenzar nuevo segmento
           currentPath = [point];
           isArrhythmiaSegment = point.isArrhythmia;
         } else {
@@ -203,15 +197,15 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
     };
   }, [renderSignal]);
 
-  const handleStartMeasurement = useMemo(() => 
-    debounce(onStartMeasurement, 300), 
-    [onStartMeasurement]
-  );
+  const handleStartMeasurement = useCallback(() => {
+    console.log('Iniciando medición...');
+    onStartMeasurement();
+  }, [onStartMeasurement]);
 
-  const handleReset = useMemo(() => 
-    debounce(onReset, 300), 
-    [onReset]
-  );
+  const handleReset = useCallback(() => {
+    console.log('Reseteando medición...');
+    onReset();
+  }, [onReset]);
 
   const getQualityColor = useMemo(() => {
     if (!isFingerDetected) return 'from-gray-400 to-gray-500';
@@ -268,6 +262,23 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
         className="w-full h-[calc(40vh)] mt-20"
         style={{ imageRendering: 'pixelated' }}
       />
+
+      <div className="fixed bottom-0 left-0 right-0 h-[80px] grid grid-cols-2 gap-px bg-gray-900">
+        <button 
+          onClick={handleStartMeasurement}
+          className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
+          type="button"
+        >
+          INICIAR
+        </button>
+        <button 
+          onClick={handleReset}
+          className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
+          type="button"
+        >
+          RESET
+        </button>
+      </div>
     </div>
   );
 };
