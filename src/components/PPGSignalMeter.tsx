@@ -329,18 +329,45 @@ const PPGSignalMeter = ({
         className="w-full h-[calc(40vh)] mt-20"
       />
 
-      <div className="fixed bottom-0 left-0 right-0 h-[60px] grid grid-cols-2 gap-px bg-white/80 backdrop-blur-sm border-t border-slate-100">
+      <div className="fixed bottom-0 left-0 right-0 h-[80px] grid grid-cols-2 gap-px overflow-hidden">
         <button 
           onClick={onStartMeasurement}
-          className="w-full h-full bg-white/90 hover:bg-slate-100/90 text-xl font-bold text-slate-700 transition-all duration-300 active:bg-slate-200/90 shadow-sm"
+          className="relative group bg-gradient-to-b from-white/90 to-slate-50/90 
+                   hover:from-slate-50/90 hover:to-white/90 
+                   active:from-slate-100/90 active:to-slate-50/90
+                   transition-all duration-300"
         >
-          INICIAR
+          <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/0 via-cyan-500/10 to-cyan-500/0 
+                        opacity-0 group-hover:opacity-100 transform translate-x-[-100%] 
+                        group-hover:translate-x-[100%] transition-all duration-1000" />
+          
+          <div className="relative flex flex-col items-center justify-center h-full">
+            <span className="text-2xl font-bold text-slate-700">INICIAR/DETENER</span>
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r 
+                          from-cyan-500/0 via-cyan-500/50 to-cyan-500/0 
+                          transform scale-x-0 group-hover:scale-x-100 
+                          transition-transform duration-300" />
+          </div>
         </button>
+
         <button 
-          onClick={handleReset}
-          className="w-full h-full bg-white/90 hover:bg-slate-100/90 text-xl font-bold text-slate-700 transition-all duration-300 active:bg-slate-200/90 shadow-sm"
+          onClick={onReset}
+          className="relative group bg-gradient-to-b from-white/90 to-slate-50/90 
+                   hover:from-slate-50/90 hover:to-white/90 
+                   active:from-slate-100/90 active:to-slate-50/90
+                   transition-all duration-300"
         >
-          RESET
+          <div className="absolute inset-0 bg-gradient-to-r from-rose-500/0 via-rose-500/10 to-rose-500/0 
+                        opacity-0 group-hover:opacity-100 transform translate-x-[-100%] 
+                        group-hover:translate-x-[100%] transition-all duration-1000" />
+          
+          <div className="relative flex flex-col items-center justify-center h-full">
+            <span className="text-2xl font-bold text-slate-700">RESETEAR</span>
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r 
+                          from-rose-500/0 via-rose-500/50 to-rose-500/0 
+                          transform scale-x-0 group-hover:scale-x-100 
+                          transition-transform duration-300" />
+          </div>
         </button>
       </div>
     </div>
