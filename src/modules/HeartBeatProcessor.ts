@@ -1,10 +1,3 @@
-/**
- * HeartBeatProcessor
- * 
- * Procesa la señal PPG para estimar la frecuencia cardíaca y emite un beep
- * cada vez que el detector de picos identifica un pico real.
- */
-
 export class HeartBeatProcessor {
   // ────────── CONFIGURACIONES PRINCIPALES ──────────
   private readonly SAMPLE_RATE = 30;
