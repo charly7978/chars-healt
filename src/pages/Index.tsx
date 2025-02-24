@@ -1,18 +1,11 @@
 
 import { useState, useRef, useEffect } from "react";
-import { Button } from "@/components/ui/button";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
 import { useSignalProcessor } from "@/hooks/useSignalProcessor";
-import SignalQualityIndicator from "@/components/SignalQualityIndicator";
-import PPGSignalMeter from "@/components/PPGSignalMeter";
 import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
-import CalibrationDialog from "@/components/CalibrationDialog";
-import MeasurementsHistory from "@/components/MeasurementsHistory";
-import { supabase } from "@/integrations/supabase/client";
-import { LogOut, Settings, Play, Square, History } from "lucide-react";
-import { useToast } from "@/components/ui/use-toast";
+import PPGSignalMeter from "@/components/PPGSignalMeter";
 
 interface VitalSigns {
   spo2: number;
@@ -22,7 +15,6 @@ interface VitalSigns {
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [signalQuality, setSignalQuality] = useState(0);
   const [vitalSigns, setVitalSigns] = useState<VitalSigns>({ 
@@ -32,40 +24,55 @@ const Index = () => {
   });
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState<string | number>("--");
-  const [showCalibrationDialog, setShowCalibrationDialog] = useState(false);
-  const [showHistoryDialog, setShowHistoryDialog] = useState(false);
-  const [measurements, setMeasurements] = useState<any[]>([]);
-  const [email, setEmail] = useState<string>("");
   const [elapsedTime, setElapsedTime] = useState(0);
   const measurementTimerRef = useRef<number | null>(null);
-  const { toast } = useToast();
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
+  const enterFullScreen = async () => {
+    const elem = document.documentElement;
+    try {
+      if (elem.requestFullscreen) {
+        await elem.requestFullscreen();
+      } else if (elem.webkitRequestFullscreen) {
+        await elem.webkitRequestFullscreen();
+      } else if (elem.mozRequestFullScreen) {
+        await elem.mozRequestFullScreen();
+      } else if (elem.msRequestFullscreen) {
+        await elem.msRequestFullscreen();
+      }
+    } catch (err) {
+      console.log('Error al entrar en pantalla completa:', err);
+    }
+  };
+
   useEffect(() => {
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        window.location.href = "/auth";
-      } else {
-        setEmail(session.user.email || "");
-        loadMeasurements();
+    const preventScroll = (e: Event) => e.preventDefault();
+    
+    const lockOrientation = async () => {
+      try {
+        if (screen.orientation?.lock) {
+          await screen.orientation.lock('portrait');
+        }
+      } catch (error) {
+        console.log('No se pudo bloquear la orientación:', error);
       }
     };
+    
+    lockOrientation();
+    
+    document.body.addEventListener('touchmove', preventScroll, { passive: false });
+    document.body.addEventListener('scroll', preventScroll, { passive: false });
 
-    checkSession();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) {
-        window.location.href = "/auth";
-      }
-    });
-
-    return () => subscription.unsubscribe();
+    return () => {
+      document.body.removeEventListener('touchmove', preventScroll);
+      document.body.removeEventListener('scroll', preventScroll);
+    };
   }, []);
 
+<<<<<<< HEAD
   const loadMeasurements = async () => {
     try {
       const { data, error } = await supabase
@@ -180,10 +187,12 @@ const Index = () => {
     }
   };
 
+=======
+>>>>>>> 0122d66317e756f27c2d042d38f5253360f96c8b
   const startMonitoring = () => {
+    enterFullScreen();
     setIsMonitoring(true);
     setIsCameraOn(true);
-    setIsPaused(false);
     startProcessing();
     setElapsedTime(0);
     
@@ -195,7 +204,6 @@ const Index = () => {
       setElapsedTime(prev => {
         if (prev >= 30) {
           stopMonitoring();
-          saveMeasurement();
           return 30;
         }
         return prev + 1;
@@ -206,10 +214,17 @@ const Index = () => {
   const stopMonitoring = () => {
     setIsMonitoring(false);
     setIsCameraOn(false);
-    setIsPaused(false);
     stopProcessing();
     resetVitalSigns();
     setElapsedTime(0);
+    setHeartRate(0);
+    setVitalSigns({ 
+      spo2: 0, 
+      pressure: "--/--",
+      arrhythmiaStatus: "--" 
+    });
+    setArrhythmiaCount("--");
+    setSignalQuality(0);
     
     if (measurementTimerRef.current) {
       clearInterval(measurementTimerRef.current);
@@ -217,82 +232,9 @@ const Index = () => {
     }
   };
 
-  const pauseMonitoring = () => {
-    if (isMonitoring) {
-      setIsPaused(true);
-      stopProcessing();
-      if (measurementTimerRef.current) {
-        clearInterval(measurementTimerRef.current);
-        measurementTimerRef.current = null;
-      }
-    }
-  };
-
-  const resumeMonitoring = () => {
-    if (isMonitoring) {
-      setIsPaused(false);
-      startProcessing();
-      if (elapsedTime < 30 && !measurementTimerRef.current) {
-        measurementTimerRef.current = window.setInterval(() => {
-          setElapsedTime(prev => {
-            if (prev >= 30) {
-              if (measurementTimerRef.current) {
-                clearInterval(measurementTimerRef.current);
-                measurementTimerRef.current = null;
-              }
-              return 30;
-            }
-            return prev + 1;
-          });
-        }, 1000);
-      }
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      if (measurementTimerRef.current) {
-        clearInterval(measurementTimerRef.current);
-        measurementTimerRef.current = null;
-      }
-    };
-  }, []);
-
-  const handleCalibrationStart = () => {
-    if (isMonitoring) {
-      pauseMonitoring();
-    }
-  };
-
-  const handleCalibrationEnd = () => {
-    if (isMonitoring) {
-      resumeMonitoring();
-    }
-  };
-
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        if (isMonitoring && !isPaused) {
-          pauseMonitoring();
-        }
-      } else {
-        if (isMonitoring && isPaused && !showCalibrationDialog) {
-          resumeMonitoring();
-        }
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [isMonitoring, isPaused, showCalibrationDialog]);
-
   const handleStreamReady = (stream: MediaStream) => {
     if (!isMonitoring) return;
     
-    console.log("Index: Camera stream ready", stream.getVideoTracks()[0].getSettings());
     const videoTrack = stream.getVideoTracks()[0];
     const imageCapture = new ImageCapture(videoTrack);
     
@@ -305,15 +247,12 @@ const Index = () => {
     const tempCanvas = document.createElement('canvas');
     const tempCtx = tempCanvas.getContext('2d');
     if (!tempCtx) {
-      console.error("Index: No se pudo obtener el contexto 2D del canvas temporal");
+      console.error("No se pudo obtener el contexto 2D");
       return;
     }
     
     const processImage = async () => {
-      if (!isMonitoring) {
-        console.log("Index: Monitoreo detenido, no se procesan más frames");
-        return;
-      }
+      if (!isMonitoring) return;
       
       try {
         const frame = await imageCapture.grabFrame();
@@ -327,7 +266,7 @@ const Index = () => {
           requestAnimationFrame(processImage);
         }
       } catch (error) {
-        console.error("Index: Error capturando frame:", error);
+        console.error("Error capturando frame:", error);
         if (isMonitoring) {
           requestAnimationFrame(processImage);
         }
@@ -345,7 +284,7 @@ const Index = () => {
       const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
       if (vitals) {
         setVitalSigns(vitals);
-        setArrhythmiaCount(vitals.arrhythmiaStatus);
+        setArrhythmiaCount(vitals.arrhythmiaStatus.split('|')[1] || "--");
       }
       
       setSignalQuality(lastSignal.quality);
@@ -353,11 +292,18 @@ const Index = () => {
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
 
   return (
-    <div className="w-screen h-screen bg-gray-900 overflow-hidden">
-      <div className="relative w-full h-full">
+    <div 
+      className="fixed inset-0 flex flex-col bg-black" 
+      style={{ 
+        height: 'calc(100vh + env(safe-area-inset-bottom))',
+        paddingTop: 'env(safe-area-inset-top)',
+        paddingBottom: 'env(safe-area-inset-bottom)'
+      }}
+    >
+      <div className="flex-1 relative">
         <div className="absolute inset-0">
           <CameraView 
-            onStreamReady={handleStreamReady} 
+            onStreamReady={handleStreamReady}
             isMonitoring={isCameraOn}
             isFingerDetected={lastSignal?.fingerDetected}
             signalQuality={signalQuality}
@@ -365,101 +311,65 @@ const Index = () => {
           />
         </div>
 
-        <div className="relative z-10 h-full flex flex-col justify-between p-4">
-          <div className="flex justify-between items-start w-full">
-            <h1 className="text-lg font-bold text-white bg-black/30 px-3 py-1 rounded">PPG Monitor</h1>
-            <div className="flex gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="bg-black/30 text-gray-300 hover:text-white h-8 w-8"
-                onClick={() => setShowHistoryDialog(true)}
-              >
-                <History className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="bg-black/30 text-gray-300 hover:text-white h-8 w-8"
-                onClick={handleCalibrationClick}
-              >
-                <Settings className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="bg-black/30 text-gray-300 hover:text-white h-8 w-8"
-                onClick={handleLogout}
-              >
-                <LogOut className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-
-          <div className="flex-1 flex flex-col justify-center gap-2 max-w-md mx-auto w-full mt-[-12rem]">
-            <div className="relative">
-              <PPGSignalMeter 
-                value={lastSignal?.filteredValue || 0}
-                quality={lastSignal?.quality || 0}
-                isFingerDetected={lastSignal?.fingerDetected || false}
-              />
-            </div>
-
-            <SignalQualityIndicator 
-              quality={signalQuality} 
-              isMonitoring={isMonitoring}
+        <div className="relative z-10 h-full flex flex-col">
+          <div className="flex-1">
+            <PPGSignalMeter 
+              value={lastSignal?.filteredValue || 0}
+              quality={lastSignal?.quality || 0}
+              isFingerDetected={lastSignal?.fingerDetected || false}
+              onStartMeasurement={startMonitoring}
+              onReset={stopMonitoring}
             />
+          </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <VitalSign label="Heart Rate" value={heartRate} unit="BPM" />
-              <VitalSign label="SpO2" value={vitalSigns.spo2} unit="%" />
-              <VitalSign label="Blood Pressure" value={vitalSigns.pressure} unit="mmHg" />
-              <VitalSign label="Arrhythmias" value={arrhythmiaCount} />
+          <div className="absolute bottom-[120px] left-0 right-0 px-4">
+            <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4">
+              <div className="grid grid-cols-4 gap-2">
+                <VitalSign 
+                  label="FRECUENCIA CARDÍACA"
+                  value={heartRate || "--"}
+                  unit="BPM"
+                />
+                <VitalSign 
+                  label="SPO2"
+                  value={vitalSigns.spo2 || "--"}
+                  unit="%"
+                />
+                <VitalSign 
+                  label="PRESIÓN ARTERIAL"
+                  value={vitalSigns.pressure}
+                  unit="mmHg"
+                />
+                <VitalSign 
+                  label="ARRITMIAS"
+                  value={vitalSigns.arrhythmiaStatus}
+                />
+              </div>
             </div>
           </div>
 
-          <div className="flex flex-col items-center gap-1 w-full max-w-md mx-auto mt-[-8rem]">
-            {isMonitoring && (
-              <div className="text-xs font-medium text-gray-300 mb-1">
-                Tiempo de medición: {elapsedTime}s / 30s
-              </div>
-            )}
-            <Button
-              onClick={isMonitoring ? stopMonitoring : startMonitoring}
-              className={`flex-1 w-full measure-button ${
-                isMonitoring 
-                  ? 'bg-red-600/80 hover:bg-red-600' 
-                  : 'bg-green-600/80 hover:bg-green-600'
-              } text-white gap-2`}
+          {isMonitoring && (
+            <div className="absolute bottom-28 left-0 right-0 text-center">
+              <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 30s</span>
+            </div>
+          )}
+
+          <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 mt-auto">
+            <button 
+              onClick={startMonitoring}
+              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
             >
-              {isMonitoring ? (
-                <>
-                  <Square className="h-4 w-4" />
-                  Detener Medición
-                </>
-              ) : (
-                <>
-                  <Play className="h-4 w-4" />
-                  Iniciar Medición
-                </>
-              )}
-            </Button>
+              INICIAR
+            </button>
+            <button 
+              onClick={stopMonitoring}
+              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
+            >
+              RESET
+            </button>
           </div>
         </div>
       </div>
-
-      <CalibrationDialog
-        isOpen={showCalibrationDialog}
-        onClose={() => setShowCalibrationDialog(false)}
-        onCalibrationStart={handleCalibrationStart}
-        onCalibrationEnd={handleCalibrationEnd}
-      />
-
-      <MeasurementsHistory
-        isOpen={showHistoryDialog}
-        onClose={() => setShowHistoryDialog(false)}
-        measurements={measurements}
-      />
     </div>
   );
 };

@@ -3,10 +3,8 @@ import * as React from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { motion } from "framer-motion";
 import { Input } from "@/components/ui/input";
-import { useToast } from "@/components/ui/use-toast";
 
 interface CalibrationDialogProps {
   isOpen: boolean;
@@ -24,40 +22,14 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({
   const [systolic, setSystolic] = React.useState<string>("");
   const [diastolic, setDiastolic] = React.useState<string>("");
   const [isSubmitting, setIsSubmitting] = React.useState(false);
-  const { toast } = useToast();
 
   const handleCalibration = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        toast({
-          title: "Error de sesión",
-          description: "Por favor, inicie sesión nuevamente",
-          variant: "destructive"
-        });
-        return;
-      }
-
       setIsSubmitting(true);
       onCalibrationStart();
 
-      const { error } = await supabase
-        .from('calibration_settings')
-        .upsert({
-          user_id: session.user.id,
-          status: 'completed',
-          is_active: true,
-          systolic_reference: parseInt(systolic),
-          diastolic_reference: parseInt(diastolic),
-          last_calibration_date: new Date().toISOString()
-        });
-
-      if (error) throw error;
-
-      toast({
-        title: "Calibración exitosa",
-        description: "Los valores de referencia han sido actualizados"
-      });
+      // Simulamos un pequeño delay para la calibración
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
       onCalibrationEnd();
       setTimeout(() => {
@@ -66,11 +38,6 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({
 
     } catch (error) {
       console.error("Error durante la calibración:", error);
-      toast({
-        title: "Error de calibración",
-        description: "No se pudo completar la calibración",
-        variant: "destructive"
-      });
       onCalibrationEnd();
       onClose();
     } finally {

@@ -1,14 +1,5 @@
-
 import React, { useRef, useEffect, useState } from 'react';
 import { Fingerprint } from 'lucide-react';
-
-interface CameraViewProps {
-  onStreamReady?: (stream: MediaStream) => void;
-  isMonitoring: boolean;
-  isFingerDetected?: boolean;
-  signalQuality?: number;
-  buttonPosition?: DOMRect;
-}
 
 const CameraView = ({ 
   onStreamReady, 
@@ -16,9 +7,9 @@ const CameraView = ({
   isFingerDetected = false, 
   signalQuality = 0,
   buttonPosition 
-}: CameraViewProps) => {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const [stream, setStream] = useState<MediaStream | null>(null);
+}) => {
+  const videoRef = useRef(null);
+  const [stream, setStream] = useState(null);
 
   const stopCamera = async () => {
     if (stream) {
@@ -40,14 +31,12 @@ const CameraView = ({
 
       const isAndroid = /android/i.test(navigator.userAgent);
 
-      // Configuración base de video
-      const baseVideoConstraints: MediaTrackConstraints = {
+      const baseVideoConstraints = {
         facingMode: 'environment',
         width: { ideal: 720 },
         height: { ideal: 480 }
       };
 
-      // Agregar configuraciones específicas para Android
       if (isAndroid) {
         Object.assign(baseVideoConstraints, {
           frameRate: { ideal: 25 },
@@ -55,8 +44,7 @@ const CameraView = ({
         });
       }
 
-      // Construir constraints finales
-      const constraints: MediaStreamConstraints = {
+      const constraints = {
         video: baseVideoConstraints
       };
 
@@ -65,11 +53,9 @@ const CameraView = ({
 
       if (videoTrack && isAndroid) {
         try {
-          // Intentar aplicar configuraciones avanzadas de manera segura
           const capabilities = videoTrack.getCapabilities();
-          const advancedConstraints: MediaTrackConstraintSet[] = [];
+          const advancedConstraints = [];
           
-          // Solo agregar las restricciones si el dispositivo las soporta
           if (capabilities.exposureMode) {
             advancedConstraints.push({ exposureMode: 'continuous' });
           }
@@ -86,7 +72,6 @@ const CameraView = ({
             });
           }
 
-          // Optimizaciones de renderizado para Android
           if (videoRef.current) {
             videoRef.current.style.transform = 'translateZ(0)';
             videoRef.current.style.backfaceVisibility = 'hidden';
@@ -161,4 +146,4 @@ const CameraView = ({
   );
 };
 
-export default CameraView;
+export default CameraView; 

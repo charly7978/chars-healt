@@ -1,4 +1,3 @@
-
 interface HeartRateDisplayProps {
   bpm: number;
   confidence: number;

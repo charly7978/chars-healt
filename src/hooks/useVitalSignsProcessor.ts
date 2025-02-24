@@ -1,3 +1,4 @@
+
 import { useState, useCallback, useRef } from 'react';
 import { VitalSignsProcessor } from '../modules/VitalSignsProcessor';
 
@@ -13,10 +14,14 @@ export const useVitalSignsProcessor = () => {
     const currentTime = Date.now();
     
     if (result.arrhythmiaStatus === "ARRITMIA DETECTADA") {
+      // Solo contar si:
+      // 1. Ha pasado suficiente tiempo desde la última
+      // 2. No hemos llegado al máximo
+      // 3. La señal tiene buena calidad (usamos los datos RR como indicador)
       if (
         currentTime - lastArrhythmiaTime.current >= MIN_TIME_BETWEEN_ARRHYTHMIAS &&
         arrhythmiaCounter < MAX_ARRHYTHMIAS_PER_SESSION &&
-        rrData?.intervals.length >= 3
+        rrData?.intervals.length >= 3 // Aseguramos tener suficientes datos
       ) {
         setArrhythmiaCounter(prev => prev + 1);
         lastArrhythmiaTime.current = currentTime;
