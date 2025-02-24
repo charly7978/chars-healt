@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -47,13 +46,16 @@ const PPGSignalMeter = ({
   }, []);
 
   const getQualityColor = useCallback((q: number) => {
-    if (!isFingerDetected) return 'from-gray-500 to-gray-600';
-    return 'from-red-600 to-red-500';
-  }, [isFingerDetected]);
+    if (q > 75) return 'from-green-500 to-emerald-500';
+    if (q > 50) return 'from-yellow-500 to-orange-500';
+    return 'from-red-500 to-rose-500';
+  }, []);
 
   const getQualityText = useCallback((q: number) => {
-    return isFingerDetected ? "Dedo detectado" : "Ubique su dedo";
-  }, [isFingerDetected]);
+    if (q > 75) return 'Señal óptima';
+    if (q > 50) return 'Señal aceptable';
+    return 'Señal débil';
+  }, []);
 
   const smoothValue = useCallback((currentValue: number, previousValue: number | null): number => {
     if (previousValue === null) return currentValue;
@@ -61,41 +63,34 @@ const PPGSignalMeter = ({
   }, []);
 
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
-    // Cuadrícula menor
     ctx.beginPath();
     ctx.strokeStyle = 'rgba(51, 65, 85, 0.1)';
     ctx.lineWidth = 0.5;
-    
+
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X) {
       ctx.moveTo(x, 0);
       ctx.lineTo(x, CANVAS_HEIGHT);
-      
-      // Añadir marcadores de tiempo
       if (x % (GRID_SIZE_X * 4) === 0) {
         ctx.fillStyle = 'rgba(51, 65, 85, 0.5)';
         ctx.font = '10px Inter';
         ctx.textAlign = 'center';
-        const timeMs = (WINDOW_WIDTH_MS * x) / CANVAS_WIDTH;
-        ctx.fillText(`${timeMs}ms`, x, CANVAS_HEIGHT - 5);
+        ctx.fillText(`${x / 10}ms`, x, CANVAS_HEIGHT - 5);
       }
     }
 
     for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y) {
       ctx.moveTo(0, y);
       ctx.lineTo(CANVAS_WIDTH, y);
-      
-      // Añadir marcadores de amplitud
-      if (y % (GRID_SIZE_Y * 2) === 0) {
+      if (y % (GRID_SIZE_Y * 4) === 0) {
+        const amplitude = ((CANVAS_HEIGHT / 2) - y) / verticalScale;
         ctx.fillStyle = 'rgba(51, 65, 85, 0.5)';
         ctx.font = '10px Inter';
         ctx.textAlign = 'right';
-        const amplitude = ((CANVAS_HEIGHT/2) - y) / verticalScale;
-        ctx.fillText(`${amplitude.toFixed(1)}`, 25, y + 4);
+        ctx.fillText(amplitude.toFixed(1), 25, y + 4);
       }
     }
     ctx.stroke();
 
-    // Cuadrícula mayor
     ctx.beginPath();
     ctx.strokeStyle = 'rgba(51, 65, 85, 0.2)';
     ctx.lineWidth = 1;
@@ -111,7 +106,6 @@ const PPGSignalMeter = ({
     }
     ctx.stroke();
 
-    // Línea central
     ctx.beginPath();
     ctx.strokeStyle = 'rgba(51, 65, 85, 0.3)';
     ctx.lineWidth = 1.5;
@@ -182,12 +176,11 @@ const PPGSignalMeter = ({
     const points = dataBufferRef.current.getPoints();
     if (points.length > 1) {
       ctx.beginPath();
-      ctx.strokeStyle = '#EA384C';
+      ctx.strokeStyle = '#0EA5E9';
       ctx.lineWidth = 2;
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
 
-      let peakCount = 0;
       points.forEach((point, index) => {
         const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
         const y = canvas.height / 2 - point.value;
@@ -198,25 +191,22 @@ const PPGSignalMeter = ({
           ctx.lineTo(x, y);
         }
 
-        // Detectar y numerar picos
         if (index > 0 && index < points.length - 1) {
           const prevPoint = points[index - 1];
           const nextPoint = points[index + 1];
           
           if (point.value > prevPoint.value && point.value > nextPoint.value) {
-            peakCount++;
             ctx.stroke();
             ctx.beginPath();
-            
-            // Dibujar número del pico
-            ctx.font = '12px Inter';
-            ctx.fillStyle = 'rgba(51, 65, 85, 0.8)';
-            ctx.textAlign = 'center';
-            ctx.fillText(`${peakCount}`, x, y - 15);
-            
             ctx.arc(x, y, 4, 0, Math.PI * 2);
-            ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#EA384C';
+            ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
             ctx.fill();
+
+            const peakValue = Math.abs(point.value / verticalScale).toFixed(2);
+            ctx.font = '10px Inter';
+            ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
+            ctx.textAlign = 'center';
+            ctx.fillText(peakValue, x, y - 10);
 
             if (point.isArrhythmia) {
               ctx.save();
@@ -226,11 +216,16 @@ const PPGSignalMeter = ({
               ctx.strokeStyle = '#DC2626';
               ctx.lineWidth = 1;
               ctx.stroke();
+              
+              ctx.font = '12px Inter';
+              ctx.fillStyle = '#DC2626';
+              ctx.textAlign = 'center';
+              ctx.fillText('!', x, y - 25);
               ctx.restore();
             }
 
             ctx.beginPath();
-            ctx.strokeStyle = '#EA384C';
+            ctx.strokeStyle = '#0EA5E9';
             ctx.lineWidth = 2;
             ctx.moveTo(x, y);
           }
@@ -275,7 +270,7 @@ const PPGSignalMeter = ({
               />
             </div>
             <span className="text-[9px] text-center mt-0.5 font-medium transition-colors duration-700 block" 
-                  style={{ color: isFingerDetected ? '#EA384C' : '#6B7280' }}>
+                  style={{ color: quality > 60 ? '#0EA5E9' : '#F59E0B' }}>
               {getQualityText(quality)}
             </span>
           </div>
@@ -284,7 +279,10 @@ const PPGSignalMeter = ({
         <div className="flex flex-col items-center">
           <Fingerprint
             className={`h-12 w-12 transition-colors duration-300 ${
-              !isFingerDetected ? 'text-gray-400' : 'text-red-500'
+              !isFingerDetected ? 'text-gray-400' :
+              quality > 75 ? 'text-green-500' :
+              quality > 50 ? 'text-yellow-500' :
+              'text-red-500'
             }`}
             strokeWidth={1.5}
           />
