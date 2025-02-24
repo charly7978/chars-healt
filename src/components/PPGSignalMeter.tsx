@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useCallback, useMemo } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -304,7 +303,7 @@ const PPGSignalMeter = ({
         height={CANVAS_HEIGHT}
         className="w-full h-[calc(40vh)] mt-20 transform-gpu"
         style={{ 
-          imageRendering: 'optimizeSpeed',
+          imageRendering: 'optimizespeed',
           willChange: 'transform',
           backfaceVisibility: 'hidden'
         }}
