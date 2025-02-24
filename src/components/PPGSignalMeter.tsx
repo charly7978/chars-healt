@@ -28,23 +28,20 @@ const PPGSignalMeter = ({
 }: PPGSignalMeterProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dataRef = useRef<PPGDataPoint[]>([]);
-  const [startTime, setStartTime] = useState<number>(Date.now());
-  const WINDOW_WIDTH_MS = 4000;
-  const CANVAS_WIDTH = 1000;
-  const CANVAS_HEIGHT = 200;
-  const verticalScale = 48.0;
-  const baselineRef = useRef<number | null>(null);
-  const maxAmplitudeRef = useRef<number>(0);
-  const lastValueRef = useRef<number>(0);
-  const lastArrhythmiaRef = useRef<boolean>(false);
   const animationFrameRef = useRef<number>();
+  const [startTime, setStartTime] = useState<number>(Date.now());
+  
+  const WINDOW_WIDTH_MS = 5000;
+  const CANVAS_WIDTH = 800;
+  const CANVAS_HEIGHT = 300;
+  const verticalScale = 60.0;
+  const baselineRef = useRef<number | null>(null);
+  const lastValueRef = useRef<number>(0);
 
   const handleReset = () => {
     dataRef.current = [];
     baselineRef.current = null;
-    maxAmplitudeRef.current = 0;
     lastValueRef.current = 0;
-    lastArrhythmiaRef.current = false;
     setStartTime(Date.now());
     onReset();
   };
@@ -73,23 +70,24 @@ const PPGSignalMeter = ({
     if (!ctx) return;
 
     const currentTime = Date.now();
-    
+
     if (baselineRef.current === null) {
       baselineRef.current = value;
     } else {
-      baselineRef.current = baselineRef.current * 0.99 + value * 0.01;
+      const alpha = 0.05;
+      baselineRef.current = baselineRef.current * (1 - alpha) + value * alpha;
     }
 
     const normalizedValue = (value - (baselineRef.current || 0)) * verticalScale;
-    const isWaveStart = lastValueRef.current < 0 && normalizedValue >= 0;
-    lastValueRef.current = normalizedValue;
     
     dataRef.current.push({
       time: currentTime,
       value: normalizedValue,
-      isWaveStart,
+      isWaveStart: lastValueRef.current < 0 && normalizedValue >= 0,
       isArrhythmia: false
     });
+
+    lastValueRef.current = normalizedValue;
 
     const cutoffTime = currentTime - WINDOW_WIDTH_MS;
     dataRef.current = dataRef.current.filter(point => point.time >= cutoffTime);
@@ -100,18 +98,17 @@ const PPGSignalMeter = ({
 
       ctx.strokeStyle = 'rgba(51, 65, 85, 0.1)';
       ctx.lineWidth = 0.5;
-      
-      for (let i = 0; i < 40; i++) {
-        const x = canvas.width - (canvas.width * (i / 40));
+
+      for (let i = 0; i <= WINDOW_WIDTH_MS; i += 200) {
+        const x = canvas.width - (i * canvas.width / WINDOW_WIDTH_MS);
         ctx.beginPath();
         ctx.moveTo(x, 0);
         ctx.lineTo(x, canvas.height);
         ctx.stroke();
       }
 
-      const amplitudeLines = 8;
-      for (let i = 0; i <= amplitudeLines; i++) {
-        const y = (canvas.height / amplitudeLines) * i;
+      for (let i = 0; i <= 6; i++) {
+        const y = (canvas.height / 6) * i;
         ctx.beginPath();
         ctx.moveTo(0, y);
         ctx.lineTo(canvas.width, y);
@@ -126,22 +123,21 @@ const PPGSignalMeter = ({
       ctx.stroke();
 
       if (dataRef.current.length > 1) {
-        ctx.lineWidth = 2.5;
+        ctx.lineWidth = 2;
         ctx.strokeStyle = '#0ea5e9';
         ctx.beginPath();
-        
+
         const firstPoint = dataRef.current[0];
-        ctx.moveTo(
-          canvas.width - ((currentTime - firstPoint.time) * canvas.width / WINDOW_WIDTH_MS),
-          canvas.height / 2 + firstPoint.value
-        );
+        const startX = canvas.width - ((currentTime - firstPoint.time) * canvas.width / WINDOW_WIDTH_MS);
+        ctx.moveTo(startX, canvas.height / 2 + firstPoint.value);
 
         for (let i = 1; i < dataRef.current.length; i++) {
           const point = dataRef.current[i];
+          const prevPoint = dataRef.current[i - 1];
+          
           const x = canvas.width - ((currentTime - point.time) * canvas.width / WINDOW_WIDTH_MS);
           const y = canvas.height / 2 + point.value;
           
-          const prevPoint = dataRef.current[i - 1];
           const prevX = canvas.width - ((currentTime - prevPoint.time) * canvas.width / WINDOW_WIDTH_MS);
           const prevY = canvas.height / 2 + prevPoint.value;
           
@@ -162,7 +158,7 @@ const PPGSignalMeter = ({
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [value, quality, isFingerDetected, arrhythmiaStatus]);
+  }, [value, isFingerDetected]);
 
   return (
     <div className="h-full flex flex-col">
