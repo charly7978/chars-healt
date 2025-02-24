@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -31,11 +32,8 @@ const Index = () => {
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
   const enterFullScreen = async () => {
-    const elem = document.documentElement;
     try {
-      if (elem.requestFullscreen) {
-        await elem.requestFullscreen();
-      }
+      await document.documentElement.requestFullscreen();
     } catch (err) {
       console.log('Error al entrar en pantalla completa:', err);
     }
@@ -46,7 +44,7 @@ const Index = () => {
     
     const lockOrientation = async () => {
       try {
-        if (screen.orientation?.lock) {
+        if (screen.orientation) {
           await screen.orientation.lock('portrait');
         }
       } catch (error) {
