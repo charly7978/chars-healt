@@ -7,6 +7,20 @@ import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 
+declare global {
+  interface Document {
+    webkitExitFullscreen?: () => Promise<void>;
+    mozCancelFullScreen?: () => Promise<void>;
+    msExitFullscreen?: () => Promise<void>;
+  }
+
+  interface HTMLElement {
+    webkitRequestFullscreen?: () => Promise<void>;
+    mozRequestFullScreen?: () => Promise<void>;
+    msRequestFullscreen?: () => Promise<void>;
+  }
+}
+
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
@@ -43,7 +57,7 @@ const Index = () => {
   };
 
   useEffect(() => {
-    const preventScroll = (e) => e.preventDefault();
+    const preventScroll = (e: Event) => e.preventDefault();
     
     const lockOrientation = async () => {
       try {
@@ -219,7 +233,7 @@ const Index = () => {
                 />
                 <VitalSign 
                   label="ARRITMIAS"
-                  value={vitalSigns.arrhythmiaStatus}
+                  value={arrhythmiaCount}
                 />
               </div>
             </div>
@@ -235,12 +249,14 @@ const Index = () => {
             <button 
               onClick={startMonitoring}
               className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
+              type="button"
             >
               INICIAR
             </button>
             <button 
               onClick={stopMonitoring}
               className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
+              type="button"
             >
               RESET
             </button>
