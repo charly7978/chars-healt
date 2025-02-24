@@ -11,11 +11,6 @@ interface PPGSignalMeterProps {
   onStartMeasurement: () => void;
   onReset: () => void;
   arrhythmiaStatus?: string;
-  rawArrhythmiaData?: {
-    timestamp: number;
-    rmssd: number;
-    rrVariation: number;
-  } | null;
 }
 
 const WINDOW_WIDTH_MS = 3000;
@@ -36,8 +31,7 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
   isFingerDetected,
   onStartMeasurement,
   onReset,
-  arrhythmiaStatus,
-  rawArrhythmiaData
+  arrhythmiaStatus
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dataBufferRef = useRef<CircularBuffer>(new CircularBuffer(300));
@@ -98,18 +92,20 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
     ctx.strokeStyle = GRID_COLOR;
     ctx.lineWidth = 0.5;
 
+    // Líneas verticales
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X) {
       ctx.moveTo(x, 0);
       ctx.lineTo(x, CANVAS_HEIGHT);
     }
 
+    // Líneas horizontales
     for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y) {
       ctx.moveTo(0, y);
       ctx.lineTo(CANVAS_WIDTH, y);
     }
     ctx.stroke();
 
-    // Línea central
+    // Línea central más destacada
     ctx.beginPath();
     ctx.strokeStyle = 'rgba(51, 65, 85, 0.3)';
     ctx.lineWidth = 1;
