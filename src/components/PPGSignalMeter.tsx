@@ -71,7 +71,6 @@ const PPGSignalMeter = ({
   const dataBufferRef = useRef<CircularBuffer>(new CircularBuffer(1000));
   const baselineRef = useRef<number | null>(null);
   const lastValueRef = useRef<number>(0);
-  const lastArrhythmiaTimeRef = useRef<number>(0);
   
   const WINDOW_WIDTH_MS = 5000;
   const CANVAS_WIDTH = 1000;
@@ -116,7 +115,7 @@ const PPGSignalMeter = ({
     const lastPeakTime = rawArrhythmiaData?.lastPeakTime;
     const timeSinceLastPeak = lastPeakTime ? currentTime - lastPeakTime : Infinity;
     
-    const isNearPeak = timeSinceLastPeak < 100;
+    const isNearPeak = timeSinceLastPeak < 50;
     const shouldMarkArrhythmia = isCurrentArrhythmia && isNearPeak;
 
     if (isNearPeak) {
@@ -135,10 +134,10 @@ const PPGSignalMeter = ({
       isArrhythmia: shouldMarkArrhythmia
     });
 
-    ctx.fillStyle = '#F1F5F9';
+    ctx.fillStyle = '#F8FAFC';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    ctx.strokeStyle = 'rgba(51, 65, 85, 0.2)';
+    ctx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
     ctx.lineWidth = 0.5;
     
     for (let i = 0; i < 40; i++) {
@@ -163,12 +162,14 @@ const PPGSignalMeter = ({
         const x2 = canvas.width - ((currentTime - nextPoint.time) * canvas.width / WINDOW_WIDTH_MS);
         const y2 = canvas.height / 2 + nextPoint.value;
 
-        ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-        
-        ctx.strokeStyle = currentPoint.isArrhythmia ? '#DC2626' : '#0EA5E9';
-        ctx.stroke();
+        if (x1 >= 0 && x2 >= 0 && x1 <= canvas.width && x2 <= canvas.width) {
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          
+          ctx.strokeStyle = currentPoint.isArrhythmia ? '#DC2626' : '#0EA5E9';
+          ctx.stroke();
+        }
       }
     }
 
@@ -178,7 +179,6 @@ const PPGSignalMeter = ({
     dataBufferRef.current.clear();
     baselineRef.current = null;
     lastValueRef.current = 0;
-    lastArrhythmiaTimeRef.current = 0;
     onReset();
   }, [onReset]);
 
