@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Progress } from "@/components/ui/progress";
 import VitalSign from '@/components/VitalSign';
@@ -39,6 +38,9 @@ const PPGSignalMeter = ({
   const maxAmplitudeRef = useRef<number>(0);
   const lastValueRef = useRef<number>(0);
   const requestIdRef = useRef<number>();
+  
+  const POINTS_PER_PIXEL = 2;
+  const BUFFER_PADDING = 100;
 
   const handleReset = useCallback(() => {
     dataRef.current = [];
@@ -63,6 +65,16 @@ const PPGSignalMeter = ({
     if (quality > 60) return 'Good';
     if (quality > 40) return 'Fair';
     return 'Poor';
+  }, []);
+
+  const getVisiblePoints = useCallback((allPoints: PPGDataPoint[], currentTime: number, canvasWidth: number) => {
+    if (allPoints.length === 0) return [];
+    
+    const pointsNeeded = canvasWidth * POINTS_PER_PIXEL + BUFFER_PADDING;
+    
+    const startIndex = Math.max(0, allPoints.length - pointsNeeded);
+    
+    return allPoints.slice(startIndex);
   }, []);
 
   useEffect(() => {
@@ -97,11 +109,11 @@ const PPGSignalMeter = ({
     const cutoffTime = currentTime - WINDOW_WIDTH_MS;
     dataRef.current = dataRef.current.filter(point => point.time >= cutoffTime);
 
-    // Dibujar el fondo
+    const visiblePoints = getVisiblePoints(dataRef.current, currentTime, canvas.width);
+
     ctx.fillStyle = '#F8FAFC';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Dibujar la cuadrícula
     ctx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
     ctx.lineWidth = 0.5;
     
@@ -135,14 +147,13 @@ const PPGSignalMeter = ({
     ctx.lineTo(canvas.width, canvas.height / 2);
     ctx.stroke();
 
-    // Dibujar las ondas PPG
-    if (dataRef.current.length > 1) {
+    if (visiblePoints.length > 1) {
       ctx.lineWidth = 3;
       let lastX = 0;
       let lastY = 0;
       let isFirstPoint = true;
 
-      dataRef.current.forEach((point, index) => {
+      visiblePoints.forEach((point, index) => {
         const x = canvas.width - ((currentTime - point.time) * canvas.width / WINDOW_WIDTH_MS);
         const y = canvas.height / 2 + point.value;
 
@@ -151,7 +162,7 @@ const PPGSignalMeter = ({
           ctx.moveTo(x, y);
           isFirstPoint = false;
         } else {
-          if (point.isArrhythmia !== dataRef.current[index - 1]?.isArrhythmia) {
+          if (point.isArrhythmia !== visiblePoints[index - 1]?.isArrhythmia) {
             ctx.stroke();
             ctx.beginPath();
             ctx.moveTo(lastX, lastY);
@@ -168,9 +179,8 @@ const PPGSignalMeter = ({
       ctx.stroke();
     }
 
-  }, [value, quality, isFingerDetected, arrhythmiaStatus]);
+  }, [value, quality, isFingerDetected, arrhythmiaStatus, getVisiblePoints]);
 
-  // Cleanup de recursos cuando el componente se desmonta
   useEffect(() => {
     return () => {
       if (requestIdRef.current) {
