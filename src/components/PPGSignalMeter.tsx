@@ -96,11 +96,13 @@ const PPGSignalMeter = ({
     const normalizedValue = (baselineRef.current || 0) - smoothedValue;
     const scaledValue = normalizedValue * verticalScale;
     
-    // Check for peak with safe access
-    const currentPeakTime = rawArrhythmiaData?.lastPeakTime ?? null;
-    const isPeak = currentPeakTime !== null && currentPeakTime !== lastKnownPeakTime.current;
+    // Verificar pico de manera consistente
+    const currentPeakTime = rawArrhythmiaData?.lastPeakTime;
+    const isPeak = currentPeakTime !== null && 
+                  currentPeakTime !== undefined && 
+                  currentPeakTime !== lastKnownPeakTime.current;
     
-    if (isPeak) {
+    if (isPeak && currentPeakTime !== null) {
       lastKnownPeakTime.current = currentPeakTime;
       console.log('Pico detectado:', {
         time: currentPeakTime,
@@ -116,7 +118,7 @@ const PPGSignalMeter = ({
     
     dataBufferRef.current.push(dataPoint);
 
-    // Clear canvas
+    // Limpiar canvas
     ctx.fillStyle = '#F8FAFC';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -141,16 +143,17 @@ const PPGSignalMeter = ({
           ctx.stroke();
         }
 
-        // Draw points and numbers only if we have a valid peak time
-        const peakTime = rawArrhythmiaData?.lastPeakTime;
-        if (typeof peakTime === 'number' && Math.abs(point.time - peakTime) < 100) {
-          // Draw circle
+        // Dibujar puntos y números cerca del pico
+        if (currentPeakTime !== null && 
+            currentPeakTime !== undefined && 
+            Math.abs(point.time - currentPeakTime) < 100) {
+          // Dibujar círculo
           ctx.beginPath();
           ctx.arc(x, y, 4, 0, Math.PI * 2);
           ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
           ctx.fill();
 
-          // Show numeric value
+          // Mostrar valor numérico
           const displayValue = Math.abs(Math.round(point.value));
           ctx.font = '12px Inter';
           ctx.fillStyle = 'rgba(51, 65, 85, 0.8)';
@@ -163,7 +166,7 @@ const PPGSignalMeter = ({
       });
     }
 
-    // Draw grid
+    // Dibujar grilla
     ctx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
     ctx.lineWidth = 0.5;
 
