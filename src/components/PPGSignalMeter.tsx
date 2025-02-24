@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -36,7 +37,6 @@ const PPGSignalMeter = ({
   const SMOOTHING_FACTOR = 0.85;
   const TARGET_FPS = 60;
   const FRAME_TIME = 1000 / TARGET_FPS;
-  const ARRHYTHMIA_THRESHOLD = 1000;
 
   useEffect(() => {
     if (!dataBufferRef.current) {
@@ -61,11 +61,10 @@ const PPGSignalMeter = ({
     return previousValue + SMOOTHING_FACTOR * (currentValue - previousValue);
   }, []);
 
-  const isArrhythmicBeat = useCallback((currentTime: number): boolean => {
+  const isArrhythmicBeat = useCallback((): boolean => {
     if (!rawArrhythmiaData?.rrIntervals.length) return false;
-    
     const lastInterval = rawArrhythmiaData.rrIntervals[rawArrhythmiaData.rrIntervals.length - 1];
-    return lastInterval > ARRHYTHMIA_THRESHOLD;
+    return lastInterval > 1000;
   }, [rawArrhythmiaData]);
 
   const renderSignal = useCallback(() => {
@@ -94,12 +93,17 @@ const PPGSignalMeter = ({
     const smoothedValue = smoothValue(value, lastValueRef.current);
     lastValueRef.current = smoothedValue;
 
-    const isPeak = rawArrhythmiaData?.lastPeakTime !== lastKnownPeakTime.current;
+    // Detectar si este punto es un pico
+    const isPeak = rawArrhythmiaData?.lastPeakTime !== null && 
+                  rawArrhythmiaData.lastPeakTime !== lastKnownPeakTime.current;
+    
     if (isPeak && rawArrhythmiaData?.lastPeakTime) {
       lastKnownPeakTime.current = rawArrhythmiaData.lastPeakTime;
+      console.log('Pico detectado:', {
+        time: rawArrhythmiaData.lastPeakTime,
+        isArrhythmic: isArrhythmicBeat()
+      });
     }
-
-    const isArrhythmic = isPeak && isArrhythmicBeat(now);
 
     const normalizedValue = (baselineRef.current || 0) - smoothedValue;
     const scaledValue = normalizedValue * verticalScale;
@@ -107,7 +111,7 @@ const PPGSignalMeter = ({
     const dataPoint: PPGDataPoint = {
       time: now,
       value: scaledValue,
-      isArrhythmia: isArrhythmic
+      isArrhythmia: isPeak && isArrhythmicBeat()
     };
     
     dataBufferRef.current.push(dataPoint);
@@ -121,7 +125,6 @@ const PPGSignalMeter = ({
       let lastX = 0;
       let lastY = 0;
       let firstPoint = true;
-      let currentColor = '#0EA5E9';
 
       points.forEach((point, index) => {
         const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
@@ -130,30 +133,22 @@ const PPGSignalMeter = ({
         if (firstPoint) {
           firstPoint = false;
         } else {
-          const pointColor = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
-          if (pointColor !== currentColor) {
-            ctx.beginPath();
-            ctx.moveTo(lastX, lastY);
-            ctx.lineTo(x, y);
-            ctx.strokeStyle = currentColor;
-            ctx.stroke();
-            
-            currentColor = pointColor;
-          }
-
           ctx.beginPath();
           ctx.moveTo(lastX, lastY);
           ctx.lineTo(x, y);
-          ctx.strokeStyle = currentColor;
+          ctx.strokeStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
           ctx.stroke();
         }
 
-        if (point.time === lastKnownPeakTime.current) {
+        // Dibujar punto y número solo si es un pico
+        if (Math.abs(point.time - (rawArrhythmiaData?.lastPeakTime || 0)) < 100) {
+          // Dibujar círculo en el pico
           ctx.beginPath();
           ctx.arc(x, y, 4, 0, Math.PI * 2);
           ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
           ctx.fill();
 
+          // Mostrar valor numérico
           const displayValue = Math.abs(Math.round(point.value));
           ctx.font = '12px Inter';
           ctx.fillStyle = 'rgba(51, 65, 85, 0.8)';
@@ -166,6 +161,7 @@ const PPGSignalMeter = ({
       });
     }
 
+    // Dibujar grilla
     ctx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
     ctx.lineWidth = 0.5;
 
