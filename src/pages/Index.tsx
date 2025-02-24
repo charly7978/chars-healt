@@ -24,6 +24,16 @@ const Index = () => {
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
+  const requestFullScreen = async () => {
+    try {
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen();
+      }
+    } catch (err) {
+      console.log('Error al entrar en pantalla completa:', err);
+    }
+  };
+
   useEffect(() => {
     const lockOrientation = async () => {
       try {
@@ -58,17 +68,7 @@ const Index = () => {
     document.addEventListener('contextmenu', preventContextMenu);
     
     // Solicitar pantalla completa al inicio
-    const enterFullScreen = async () => {
-      try {
-        if (!document.fullscreenElement) {
-          await document.documentElement.requestFullscreen();
-        }
-      } catch (err) {
-        console.log('Error al entrar en pantalla completa:', err);
-      }
-    };
-    
-    enterFullScreen();
+    requestFullScreen();
 
     return () => {
       document.removeEventListener('touchmove', preventScroll);
@@ -84,7 +84,7 @@ const Index = () => {
     if (isMonitoring) {
       handleReset();
     } else {
-      enterFullScreen();
+      requestFullScreen();
       setIsMonitoring(true);
       setIsCameraOn(true);
       startProcessing();
@@ -185,22 +185,15 @@ const Index = () => {
       // Procesar signos vitales y arritmias
       const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
       if (vitals) {
-        // Actualizar estado de signos vitales de manera inmediata
-        setVitalSigns(vitals);
+        setVitalSigns(prevVitals => ({
+          ...prevVitals,
+          ...vitals
+        }));
         
-        // Si hay datos de arritmia nuevos, actualizar estado
-        if (vitals.lastArrhythmiaData) {
-          setLastArrhythmiaData(vitals.lastArrhythmiaData);
-          
-          // Actualizar el contador y estado directamente del status
+        // Si el status contiene información de arritmia, actualizar el contador
+        if (vitals.arrhythmiaStatus) {
           const [status, count] = vitals.arrhythmiaStatus.split('|');
           setArrhythmiaCount(count || "0");
-          
-          // Forzar actualización del display con el nuevo estado
-          setVitalSigns(current => ({
-            ...current,
-            arrhythmiaStatus: vitals.arrhythmiaStatus
-          }));
         }
       }
       
@@ -212,8 +205,8 @@ const Index = () => {
     <div 
       className="fixed inset-0 flex flex-col bg-black select-none touch-none"
       style={{ 
-        height: '100vh',
-        height: '-webkit-fill-available',
+        minHeight: '100vh',
+        minHeight: '-webkit-fill-available',
         paddingTop: 'env(safe-area-inset-top)',
         paddingBottom: 'env(safe-area-inset-bottom)'
       }}
@@ -237,7 +230,6 @@ const Index = () => {
               onStartMeasurement={startMonitoring}
               onReset={handleReset}
               arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
-              rawArrhythmiaData={lastSignal?.arrhythmiaData}
             />
           </div>
 
