@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -7,50 +6,38 @@ import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 
-declare global {
-  interface Document {
-    webkitExitFullscreen?: () => Promise<void>;
-    mozCancelFullScreen?: () => Promise<void>;
-    msExitFullscreen?: () => Promise<void>;
-  }
-
-  interface HTMLElement {
-    webkitRequestFullscreen?: () => Promise<void>;
-    mozRequestFullScreen?: () => Promise<void>;
-    msRequestFullscreen?: () => Promise<void>;
-  }
+interface VitalSigns {
+  spo2: number;
+  pressure: string;
+  arrhythmiaStatus: string;
 }
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [signalQuality, setSignalQuality] = useState(0);
-  const [vitalSigns, setVitalSigns] = useState({ 
+  const [vitalSigns, setVitalSigns] = useState<VitalSigns>({ 
     spo2: 0, 
     pressure: "--/--",
     arrhythmiaStatus: "--" 
   });
   const [heartRate, setHeartRate] = useState(0);
-  const [arrhythmiaCount, setArrhythmiaCount] = useState("--");
+  const [arrhythmiaCount, setArrhythmiaCount] = useState<string | number>("--");
   const [elapsedTime, setElapsedTime] = useState(0);
   const measurementTimerRef = useRef<number | null>(null);
+  const [lastArrhythmiaData, setLastArrhythmiaData] = useState<{
+    timestamp: number;
+    rmssd: number;
+    rrVariation: number;
+  } | null>(null);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
   const enterFullScreen = async () => {
-    const elem = document.documentElement;
     try {
-      if (elem.requestFullscreen) {
-        await elem.requestFullscreen();
-      } else if (elem.webkitRequestFullscreen) {
-        await elem.webkitRequestFullscreen();
-      } else if (elem.mozRequestFullScreen) {
-        await elem.mozRequestFullScreen();
-      } else if (elem.msRequestFullscreen) {
-        await elem.msRequestFullscreen();
-      }
+      await document.documentElement.requestFullscreen();
     } catch (err) {
       console.log('Error al entrar en pantalla completa:', err);
     }
@@ -58,19 +45,6 @@ const Index = () => {
 
   useEffect(() => {
     const preventScroll = (e: Event) => e.preventDefault();
-    
-    const lockOrientation = async () => {
-      try {
-        if (screen.orientation?.lock) {
-          await screen.orientation.lock('portrait');
-        }
-      } catch (error) {
-        console.log('No se pudo bloquear la orientación:', error);
-      }
-    };
-    
-    lockOrientation();
-    
     document.body.addEventListener('touchmove', preventScroll, { passive: false });
     document.body.addEventListener('scroll', preventScroll, { passive: false });
 
@@ -81,31 +55,45 @@ const Index = () => {
   }, []);
 
   const startMonitoring = () => {
-    enterFullScreen();
-    setIsMonitoring(true);
-    setIsCameraOn(true);
-    startProcessing();
-    setElapsedTime(0);
-    
-    if (measurementTimerRef.current) {
-      clearInterval(measurementTimerRef.current);
+    if (isMonitoring) {
+      handleReset();
+    } else {
+      enterFullScreen();
+      setIsMonitoring(true);
+      setIsCameraOn(true);
+      startProcessing();
+      setElapsedTime(0);
+      setVitalSigns(prev => ({
+        ...prev,
+        arrhythmiaStatus: "SIN ARRITMIAS|0"
+      }));
+      
+      if (measurementTimerRef.current) {
+        clearInterval(measurementTimerRef.current);
+      }
+      
+      measurementTimerRef.current = window.setInterval(() => {
+        setElapsedTime(prev => {
+          if (prev >= 30) {
+            handleReset();
+            return 30;
+          }
+          return prev + 1;
+        });
+      }, 1000);
     }
-    
-    measurementTimerRef.current = window.setInterval(() => {
-      setElapsedTime(prev => {
-        if (prev >= 30) {
-          stopMonitoring();
-          return 30;
-        }
-        return prev + 1;
-      });
-    }, 1000);
   };
 
-  const stopMonitoring = () => {
+  const handleReset = () => {
     setIsMonitoring(false);
     setIsCameraOn(false);
     stopProcessing();
+    
+    if (measurementTimerRef.current) {
+      clearInterval(measurementTimerRef.current);
+      measurementTimerRef.current = null;
+    }
+    
     resetVitalSigns();
     setElapsedTime(0);
     setHeartRate(0);
@@ -116,11 +104,7 @@ const Index = () => {
     });
     setArrhythmiaCount("--");
     setSignalQuality(0);
-    
-    if (measurementTimerRef.current) {
-      clearInterval(measurementTimerRef.current);
-      measurementTimerRef.current = null;
-    }
+    setLastArrhythmiaData(null);
   };
 
   const handleStreamReady = (stream: MediaStream) => {
@@ -169,13 +153,30 @@ const Index = () => {
 
   useEffect(() => {
     if (lastSignal && lastSignal.fingerDetected && isMonitoring) {
+      // Procesar latidos cardíacos
       const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
       setHeartRate(heartBeatResult.bpm);
       
+      // Procesar signos vitales y arritmias
       const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
       if (vitals) {
+        // Actualizar estado de signos vitales de manera inmediata
         setVitalSigns(vitals);
-        setArrhythmiaCount(vitals.arrhythmiaStatus.split('|')[1] || "--");
+        
+        // Si hay datos de arritmia nuevos, actualizar estado
+        if (vitals.lastArrhythmiaData) {
+          setLastArrhythmiaData(vitals.lastArrhythmiaData);
+          
+          // Actualizar el contador y estado directamente del status
+          const [status, count] = vitals.arrhythmiaStatus.split('|');
+          setArrhythmiaCount(count || "0");
+          
+          // Forzar actualización del display con el nuevo estado
+          setVitalSigns(current => ({
+            ...current,
+            arrhythmiaStatus: vitals.arrhythmiaStatus
+          }));
+        }
       }
       
       setSignalQuality(lastSignal.quality);
@@ -186,7 +187,7 @@ const Index = () => {
     <div 
       className="fixed inset-0 flex flex-col bg-black" 
       style={{ 
-        height: 'calc(100vh + env(safe-area-inset-bottom))',
+        height: '100vh',
         paddingTop: 'env(safe-area-inset-top)',
         paddingBottom: 'env(safe-area-inset-bottom)'
       }}
@@ -208,14 +209,15 @@ const Index = () => {
               quality={lastSignal?.quality || 0}
               isFingerDetected={lastSignal?.fingerDetected || false}
               onStartMeasurement={startMonitoring}
-              onReset={stopMonitoring}
+              onReset={handleReset}
               arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
+              rawArrhythmiaData={lastArrhythmiaData}
             />
           </div>
 
-          <div className="absolute bottom-[200px] left-0 right-0 px-4">
+          <div className="absolute bottom-[100px] left-0 right-0 px-4">
             <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4">
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 gap-4">
                 <VitalSign 
                   label="FRECUENCIA CARDÍACA"
                   value={heartRate || "--"}
@@ -233,14 +235,14 @@ const Index = () => {
                 />
                 <VitalSign 
                   label="ARRITMIAS"
-                  value={arrhythmiaCount}
+                  value={vitalSigns.arrhythmiaStatus}
                 />
               </div>
             </div>
           </div>
 
           {isMonitoring && (
-            <div className="absolute bottom-40 left-0 right-0 text-center">
+            <div className="absolute bottom-16 left-0 right-0 text-center">
               <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 30s</span>
             </div>
           )}
@@ -249,14 +251,12 @@ const Index = () => {
             <button 
               onClick={startMonitoring}
               className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
-              type="button"
             >
               INICIAR
             </button>
             <button 
-              onClick={stopMonitoring}
+              onClick={handleReset}
               className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
-              type="button"
             >
               RESET
             </button>

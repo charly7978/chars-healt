@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -7,18 +8,8 @@
     <meta name="theme-color" content="#000000" />
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="mobile-web-app-capable" content="yes">
     <title>healthpulse-captain</title>
     <style>
-      /* Reseteo universal */
-      *, *::before, *::after {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-        -webkit-tap-highlight-color: transparent;
-      }
-      
-      /* Variables para insets seguros */
       :root {
         --sat: env(safe-area-inset-top);
         --sar: env(safe-area-inset-right);
@@ -26,65 +17,43 @@
         --sal: env(safe-area-inset-left);
       }
       
-      /* Configuración de altura para iOS y Android */
-      html {
-        height: 100%;
-        height: 100dvh;
-        height: -webkit-fill-available;
-        overflow: hidden;
-        background: #000;
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
       }
       
-      /* Aseguramos que el body ocupe toda la pantalla */
+      html {
+        height: 100%;
+        height: -webkit-fill-available;
+      }
+      
       body {
         min-height: 100%;
-        min-height: 100dvh;
         min-height: -webkit-fill-available;
         background: #000;
         overflow: hidden;
         position: fixed;
         inset: 0;
         padding: var(--sat) var(--sar) var(--sab) var(--sal);
-        touch-action: none;
-        -webkit-user-select: none;
-        user-select: none;
-        overscroll-behavior: none;
       }
       
-      /* Configuración del contenedor root */
       #root {
         width: 100%;
         height: 100%;
-        height: 100dvh;
+        height: 100vh;
         height: -webkit-fill-available;
         display: flex;
         flex-direction: column;
         background: #000;
         overflow: hidden;
-        overscroll-behavior: none;
       }
 
-      /* Prevenir rebotes en iOS */
-      @supports (-webkit-touch-callout: none) {
-        body {
-          position: fixed;
-          width: 100%;
+      @supports (height: 100dvh) {
+        #root {
+          height: 100dvh;
         }
-      }
-
-      /* Ocultar barras de scroll */
-      ::-webkit-scrollbar {
-        display: none;
-      }
-      
-      /* Deshabilitar selección de texto */
-      ::selection {
-        background: transparent;
-      }
-      
-      /* Prevenir zoom en doble tap */
-      * {
-        touch-action: manipulation;
       }
     </style>
   </head>

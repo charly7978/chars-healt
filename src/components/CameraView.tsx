@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, useState } from 'react';
 
 interface CameraViewProps {
@@ -16,33 +15,15 @@ const CameraView = ({
 }: CameraViewProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
-  const torchRef = useRef<boolean>(false);
-
-  const toggleTorch = async (enable: boolean) => {
-    if (stream) {
-      const videoTrack = stream.getVideoTracks()[0];
-      if (videoTrack?.getCapabilities()?.torch) {
-        try {
-          await videoTrack.applyConstraints({
-            advanced: [{ torch: enable }]
-          });
-          torchRef.current = enable;
-        } catch (err) {
-          console.warn('Error al controlar la linterna:', err);
-        }
-      }
-    }
-  };
 
   const stopCamera = async () => {
     if (stream) {
-      await toggleTorch(false); // Asegurar que la linterna se apague
       stream.getTracks().forEach(track => {
         track.stop();
+        if (videoRef.current) {
+          videoRef.current.srcObject = null;
+        }
       });
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-      }
       setStream(null);
     }
   };
@@ -62,6 +43,7 @@ const CameraView = ({
       };
 
       if (isAndroid) {
+        // Ajustes para mejorar la extracción de señal en Android
         Object.assign(baseVideoConstraints, {
           frameRate: { ideal: 25 },
           resizeMode: 'crop-and-scale'
@@ -95,6 +77,11 @@ const CameraView = ({
               advanced: advancedConstraints
             });
           }
+
+          if (videoRef.current) {
+            videoRef.current.style.transform = 'translateZ(0)';
+            videoRef.current.style.backfaceVisibility = 'hidden';
+          }
         } catch (err) {
           console.log("No se pudieron aplicar algunas optimizaciones:", err);
         }
@@ -102,6 +89,10 @@ const CameraView = ({
 
       if (videoRef.current) {
         videoRef.current.srcObject = newStream;
+        if (isAndroid) {
+          videoRef.current.style.willChange = 'transform';
+          videoRef.current.style.transform = 'translateZ(0)';
+        }
       }
 
       setStream(newStream);
@@ -109,9 +100,6 @@ const CameraView = ({
       if (onStreamReady) {
         onStreamReady(newStream);
       }
-
-      // Encender la linterna después de inicializar todo
-      await toggleTorch(true);
     } catch (err) {
       console.error("Error al iniciar la cámara:", err);
     }
@@ -135,6 +123,11 @@ const CameraView = ({
       playsInline
       muted
       className="absolute top-0 left-0 min-w-full min-h-full w-auto h-auto z-0 object-cover"
+      style={{
+        willChange: 'transform',
+        transform: 'translateZ(0)',
+        backfaceVisibility: 'hidden'
+      }}
     />
   );
 };

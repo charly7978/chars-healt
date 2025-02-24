@@ -34,7 +34,6 @@ export class VitalSignsProcessor {
     rrData?: { intervals: number[]; lastPeakTime: number | null }
   ) {
     const currentTime = Date.now();
-    const timeSinceStart = currentTime - this.measurementStartTime;
 
     // Actualizar RR intervals si están disponibles
     if (rrData?.intervals && rrData.intervals.length > 0) {
@@ -54,6 +53,7 @@ export class VitalSignsProcessor {
     }
 
     // Verificar fase de aprendizaje
+    const timeSinceStart = currentTime - this.measurementStartTime;
     if (timeSinceStart > this.ARRHYTHMIA_LEARNING_PERIOD) {
       this.isLearningPhase = false;
     }
@@ -62,8 +62,11 @@ export class VitalSignsProcessor {
     let arrhythmiaStatus;
     if (this.isLearningPhase) {
       arrhythmiaStatus = "CALIBRANDO...";
+    } else if (this.hasDetectedFirstArrhythmia) {
+      // Una vez detectada la primera arritmia, siempre mostramos este estado
+      arrhythmiaStatus = `ARRITMIA DETECTADA|${this.arrhythmiaCount}`;
     } else {
-      arrhythmiaStatus = `${this.arrhythmiaDetected ? "ARRITMIA DETECTADA" : "SIN ARRITMIAS"}|${this.arrhythmiaCount}`;
+      arrhythmiaStatus = `SIN ARRITMIAS|${this.arrhythmiaCount}`;
     }
 
     // Calcular otros signos vitales
@@ -111,10 +114,13 @@ export class VitalSignsProcessor {
     const newArrhythmiaState = rmssd > this.RMSSD_THRESHOLD && rrVariation > 0.20;
     
     // Si es una nueva arritmia y ha pasado suficiente tiempo desde la última
-    if (newArrhythmiaState && currentTime - this.lastArrhythmiaTime > 1000) {
+    if (newArrhythmiaState && 
+        currentTime - this.lastArrhythmiaTime > 1000) { // Mínimo 1 segundo entre arritmias
       this.arrhythmiaCount++;
       this.lastArrhythmiaTime = currentTime;
-      this.arrhythmiaDetected = true;
+      
+      // Marcar que ya detectamos la primera arritmia
+      this.hasDetectedFirstArrhythmia = true;
       
       console.log('VitalSignsProcessor - Nueva arritmia detectada:', {
         contador: this.arrhythmiaCount,
@@ -122,10 +128,9 @@ export class VitalSignsProcessor {
         rrVariation,
         timestamp: currentTime
       });
-    } else {
-      // Si no es una nueva arritmia, resetear el estado de detección
-      this.arrhythmiaDetected = false;
     }
+
+    this.arrhythmiaDetected = newArrhythmiaState;
   }
 
   public reset() {
@@ -138,9 +143,10 @@ export class VitalSignsProcessor {
     this.rrIntervals = [];
     this.baselineRhythm = 0;
     this.isLearningPhase = true;
+    this.hasDetectedFirstArrhythmia = false;
     this.arrhythmiaDetected = false;
-    this.measurementStartTime = Date.now();
     this.arrhythmiaCount = 0;
+    this.measurementStartTime = Date.now();
     this.lastRMSSD = 0;
     this.lastRRVariation = 0;
     this.lastArrhythmiaTime = 0;
