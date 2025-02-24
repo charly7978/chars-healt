@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useCallback } from 'react';
-import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
+import { FingerprintIcon } from '@heroicons/react/outline';
 
 interface PPGSignalMeterProps {
   value: number;
@@ -43,15 +43,15 @@ const PPGSignalMeter = ({
     }
   }, []);
 
-  const getQualityColor = useCallback((quality: number) => {
-    if (quality > 75) return 'from-green-500 to-emerald-500';
-    if (quality > 50) return 'from-yellow-500 to-orange-500';
+  const getQualityColor = useCallback((q: number) => {
+    if (q > 75) return 'from-green-500 to-emerald-500';
+    if (q > 50) return 'from-yellow-500 to-orange-500';
     return 'from-red-500 to-rose-500';
   }, []);
 
-  const getQualityText = useCallback((quality: number) => {
-    if (quality > 75) return 'Señal óptima';
-    if (quality > 50) return 'Señal aceptable';
+  const getQualityText = useCallback((q: number) => {
+    if (q > 75) return 'Señal óptima';
+    if (q > 50) return 'Señal aceptable';
     return 'Señal débil';
   }, []);
 
@@ -61,7 +61,10 @@ const PPGSignalMeter = ({
   }, []);
 
   const renderSignal = useCallback(() => {
-    if (!canvasRef.current || !isFingerDetected || !dataBufferRef.current) return;
+    if (!canvasRef.current || !isFingerDetected || !dataBufferRef.current) {
+      animationFrameRef.current = requestAnimationFrame(renderSignal);
+      return;
+    }
 
     const currentTime = performance.now();
     const timeSinceLastRender = currentTime - lastRenderTimeRef.current;
@@ -73,7 +76,10 @@ const PPGSignalMeter = ({
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (!ctx) {
+      animationFrameRef.current = requestAnimationFrame(renderSignal);
+      return;
+    }
 
     const now = Date.now();
     
@@ -89,22 +95,17 @@ const PPGSignalMeter = ({
     const normalizedValue = (baselineRef.current || 0) - smoothedValue;
     const scaledValue = normalizedValue * verticalScale;
     
-    // Mejorada la detección de arritmias
+    // Detección de latido con arrhythmia si corresponde
     let isArrhythmia = false;
     const arrhythmiaDetected = arrhythmiaStatus?.includes("ARRITMIA DETECTADA");
-    
-    if (arrhythmiaDetected && rawArrhythmiaData?.rrIntervals && rawArrhythmiaData.rrIntervals.length > 0) {
+    if (arrhythmiaDetected && rawArrhythmiaData?.rrIntervals?.length) {
       const lastRRInterval = rawArrhythmiaData.rrIntervals[rawArrhythmiaData.rrIntervals.length - 1];
-      const now = Date.now();
-      
-      // Solo marcamos como arritmia si:
-      // 1. El intervalo RR está fuera del rango normal
-      // 2. Ha pasado suficiente tiempo desde la última arritmia (500ms)
-      if ((lastRRInterval > 1000 || lastRRInterval < 700) && 
-          (now - lastArrhythmiaTime.current > 500)) {
+      const timeNow = Date.now();
+      if ((lastRRInterval > 1000 || lastRRInterval < 700) &&
+          (timeNow - lastArrhythmiaTime.current > 500)) {
         isArrhythmia = true;
-        lastArrhythmiaTime.current = now;
-        console.log('Arritmia detectada:', { lastRRInterval, time: now });
+        lastArrhythmiaTime.current = timeNow;
+        console.log('Arritmia detectada en gráfico:', { lastRRInterval, timeNow });
       }
     }
 
@@ -244,9 +245,8 @@ const PPGSignalMeter = ({
             </span>
           </div>
         </div>
-
         <div className="flex flex-col items-center">
-          <Fingerprint
+          <FingerprintIcon
             size={48}
             className={`transition-colors duration-300 ${
               !isFingerDetected ? 'text-gray-400' :

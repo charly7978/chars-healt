@@ -27,10 +27,10 @@ export class PPGSignalProcessor implements SignalProcessor {
   private lastValues: number[] = [];
   private readonly DEFAULT_CONFIG = {
     BUFFER_SIZE: 10,
-    MIN_RED_THRESHOLD: 80,  // Reducido de 85 a 80 para mayor sensibilidad
+    MIN_RED_THRESHOLD: 80,
     MAX_RED_THRESHOLD: 245,
-    STABILITY_WINDOW: 4,    // Reducido de 5 a 4 para detección más rápida
-    MIN_STABILITY_COUNT: 3  // Mantenido en 3 para evitar falsos positivos
+    STABILITY_WINDOW: 4,
+    MIN_STABILITY_COUNT: 3
   };
   private currentConfig: typeof this.DEFAULT_CONFIG;
   private readonly BUFFER_SIZE = 10;
@@ -40,7 +40,7 @@ export class PPGSignalProcessor implements SignalProcessor {
   private readonly MIN_STABILITY_COUNT = 3;
   private stableFrameCount: number = 0;
   private lastStableValue: number = 0;
-  private readonly PERFUSION_INDEX_THRESHOLD = 0.045; // Ajustado de 0.05 a 0.045 para mejor sensibilidad sin comprometer precisión
+  private readonly PERFUSION_INDEX_THRESHOLD = 0.045;
 
   constructor(
     public onSignalReady?: (signal: ProcessedSignal) => void,
@@ -85,10 +85,8 @@ export class PPGSignalProcessor implements SignalProcessor {
       console.log("PPGSignalProcessor: Iniciando calibración");
       await this.initialize();
 
-      // Simulamos el proceso de calibración
       await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Ajustamos los umbrales basados en las condiciones actuales
+
       this.currentConfig = {
         ...this.DEFAULT_CONFIG,
         MIN_RED_THRESHOLD: Math.max(25, this.MIN_RED_THRESHOLD - 5),
@@ -159,7 +157,6 @@ export class PPGSignalProcessor implements SignalProcessor {
     let redSum = 0;
     let count = 0;
     
-    // Analizar solo el centro de la imagen (25% central)
     const startX = Math.floor(imageData.width * 0.375);
     const endX = Math.floor(imageData.width * 0.625);
     const startY = Math.floor(imageData.height * 0.375);
@@ -178,7 +175,6 @@ export class PPGSignalProcessor implements SignalProcessor {
   }
 
   private analyzeSignal(filtered: number, rawValue: number): { isFingerDetected: boolean, quality: number } {
-    // Invertimos la lógica: si el valor está fuera del rango, NO hay dedo
     const isInRange = rawValue >= this.MIN_RED_THRESHOLD && rawValue <= this.MAX_RED_THRESHOLD;
     
     if (!isInRange) {
@@ -191,22 +187,18 @@ export class PPGSignalProcessor implements SignalProcessor {
       return { isFingerDetected: false, quality: 0 };
     }
 
-    // Mejora en la detección de estabilidad para picos cardíacos
     const recentValues = this.lastValues.slice(-this.STABILITY_WINDOW);
     const avgValue = recentValues.reduce((sum, val) => sum + val, 0) / recentValues.length;
     
-    // Análisis mejorado de variación para detectar picos
     const variations = recentValues.map((val, i, arr) => {
       if (i === 0) return 0;
       return val - arr[i-1];
     });
 
-    // Detección más sensible de picos cardíacos
     const maxVariation = Math.max(...variations.map(Math.abs));
     const minVariation = Math.min(...variations);
     
-    // Umbrales adaptativos para mejor detección de picos
-    const adaptiveThreshold = Math.max(1.5, avgValue * 0.02); // 2% del valor promedio
+    const adaptiveThreshold = Math.max(1.5, avgValue * 0.02);
     const isStable = maxVariation < adaptiveThreshold * 2 && 
                     minVariation > -adaptiveThreshold * 2;
 
@@ -214,16 +206,13 @@ export class PPGSignalProcessor implements SignalProcessor {
       this.stableFrameCount = Math.min(this.stableFrameCount + 1, this.MIN_STABILITY_COUNT * 2);
       this.lastStableValue = filtered;
     } else {
-      // Reducción más gradual para mantener mejor la detección
       this.stableFrameCount = Math.max(0, this.stableFrameCount - 0.5);
     }
 
-    // Ajuste en la lógica de detección del dedo
     const isFingerDetected = this.stableFrameCount >= this.MIN_STABILITY_COUNT;
     
     let quality = 0;
     if (isFingerDetected) {
-      // Cálculo de calidad mejorado
       const stabilityScore = Math.min(this.stableFrameCount / (this.MIN_STABILITY_COUNT * 2), 1);
       const intensityScore = Math.min((rawValue - this.MIN_RED_THRESHOLD) / 
                                     (this.MAX_RED_THRESHOLD - this.MIN_RED_THRESHOLD), 1);

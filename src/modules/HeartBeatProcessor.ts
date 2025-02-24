@@ -3,24 +3,24 @@ export class HeartBeatProcessor {
   private readonly SAMPLE_RATE = 30;
   private readonly WINDOW_SIZE = 60;
   private readonly MIN_BPM = 40;
-  private readonly MAX_BPM = 200; // Aumentado para permitir más latidos
-  private readonly SIGNAL_THRESHOLD = 0.40; // Reducido para ser más sensible
-  private readonly MIN_CONFIDENCE = 0.60; // Reducido para ser más permisivo
-  private readonly DERIVATIVE_THRESHOLD = -0.03; // Menos restrictivo
-  private readonly MIN_PEAK_TIME_MS = 400; // Reducido para permitir latidos más cercanos
-  private readonly WARMUP_TIME_MS = 3000; // Reducido para empezar antes
+  private readonly MAX_BPM = 200; // Se mantiene amplio para no perder picos fuera de rango
+  private readonly SIGNAL_THRESHOLD = 0.40; 
+  private readonly MIN_CONFIDENCE = 0.60;
+  private readonly DERIVATIVE_THRESHOLD = -0.03; 
+  private readonly MIN_PEAK_TIME_MS = 400; 
+  private readonly WARMUP_TIME_MS = 3000; 
 
-  // Parámetros de filtrado ajustados
-  private readonly MEDIAN_FILTER_WINDOW = 3; // Reducido para mayor sensibilidad
-  private readonly MOVING_AVERAGE_WINDOW = 3; // Reducido para mayor sensibilidad
-  private readonly EMA_ALPHA = 0.4; // Aumentado para respuesta más rápida
-  private readonly BASELINE_FACTOR = 1.0; // Ajustado para adaptación más rápida
+  // Parámetros de filtrado
+  private readonly MEDIAN_FILTER_WINDOW = 3; 
+  private readonly MOVING_AVERAGE_WINDOW = 3; 
+  private readonly EMA_ALPHA = 0.4; 
+  private readonly BASELINE_FACTOR = 1.0; 
 
-  // Parámetros de beep ajustados para sonido más realista
-  private readonly BEEP_PRIMARY_FREQUENCY = 880; // Frecuencia principal (La4)
-  private readonly BEEP_SECONDARY_FREQUENCY = 440; // Armónico (La3)
-  private readonly BEEP_DURATION = 80; // Duración más larga
-  private readonly BEEP_VOLUME = 0.9; // Volumen aumentado
+  // Parámetros de beep
+  private readonly BEEP_PRIMARY_FREQUENCY = 880; 
+  private readonly BEEP_SECONDARY_FREQUENCY = 440; 
+  private readonly BEEP_DURATION = 80; 
+  private readonly BEEP_VOLUME = 0.9; 
   private readonly MIN_BEEP_INTERVAL_MS = 300;
 
   // ────────── AUTO-RESET SI LA SEÑAL ES MUY BAJA ──────────
@@ -60,8 +60,8 @@ export class HeartBeatProcessor {
       await this.audioContext.resume();
       await this.playBeep(0.01);
       console.log("HeartBeatProcessor: Audio Context Initialized");
-    } catch (err) {
-      console.error("HeartBeatProcessor: Error initializing audio", err);
+    } catch (error) {
+      console.error("HeartBeatProcessor: Error initializing audio", error);
     }
   }
 
@@ -72,22 +72,18 @@ export class HeartBeatProcessor {
     if (now - this.lastBeepTime < this.MIN_BEEP_INTERVAL_MS) return;
 
     try {
-      // Oscilador principal
       const primaryOscillator = this.audioContext.createOscillator();
       const primaryGain = this.audioContext.createGain();
-      
-      // Oscilador secundario para armónicos
+
       const secondaryOscillator = this.audioContext.createOscillator();
       const secondaryGain = this.audioContext.createGain();
 
-      // Configurar oscilador principal
       primaryOscillator.type = "sine";
       primaryOscillator.frequency.setValueAtTime(
         this.BEEP_PRIMARY_FREQUENCY,
         this.audioContext.currentTime
       );
 
-      // Configurar oscilador secundario
       secondaryOscillator.type = "sine";
       secondaryOscillator.frequency.setValueAtTime(
         this.BEEP_SECONDARY_FREQUENCY,
@@ -105,10 +101,10 @@ export class HeartBeatProcessor {
         this.audioContext.currentTime + this.BEEP_DURATION / 1000
       );
 
-      // Envelope del sonido secundario (más suave)
+      // Envelope del sonido secundario
       secondaryGain.gain.setValueAtTime(0, this.audioContext.currentTime);
       secondaryGain.gain.linearRampToValueAtTime(
-        volume * 0.3, // Armónico más suave
+        volume * 0.3,
         this.audioContext.currentTime + 0.01
       );
       secondaryGain.gain.exponentialRampToValueAtTime(
@@ -116,21 +112,20 @@ export class HeartBeatProcessor {
         this.audioContext.currentTime + this.BEEP_DURATION / 1000
       );
 
-      // Conectar nodos de audio
       primaryOscillator.connect(primaryGain);
       secondaryOscillator.connect(secondaryGain);
       primaryGain.connect(this.audioContext.destination);
       secondaryGain.connect(this.audioContext.destination);
 
-      // Iniciar y detener osciladores
       primaryOscillator.start();
       secondaryOscillator.start();
+
       primaryOscillator.stop(this.audioContext.currentTime + this.BEEP_DURATION / 1000 + 0.05);
       secondaryOscillator.stop(this.audioContext.currentTime + this.BEEP_DURATION / 1000 + 0.05);
 
       this.lastBeepTime = now;
-    } catch (err) {
-      console.error("HeartBeatProcessor: Error playing beep", err);
+    } catch (error) {
+      console.error("HeartBeatProcessor: Error playing beep", error);
     }
   }
 
@@ -169,6 +164,7 @@ export class HeartBeatProcessor {
     filteredValue: number;
     arrhythmiaCount: number;
   } {
+    // Filtros sucesivos para mejorar la señal
     const medVal = this.medianFilter(value);
     const movAvgVal = this.calculateMovingAverage(medVal);
     const smoothed = this.calculateEMA(movAvgVal);
@@ -217,7 +213,7 @@ export class HeartBeatProcessor {
       if (timeSinceLastPeak >= this.MIN_PEAK_TIME_MS) {
         this.previousPeakTime = this.lastPeakTime;
         this.lastPeakTime = now;
-        this.playBeep(0.12);
+        this.playBeep(0.12); // Suena beep cuando se confirma pico
         this.updateBPM();
       }
     }
@@ -266,7 +262,7 @@ export class HeartBeatProcessor {
       return { isPeak: false, confidence: 0 };
     }
 
-    const isPeak =
+    const isOverThreshold =
       derivative < this.DERIVATIVE_THRESHOLD &&
       normalizedValue > this.SIGNAL_THRESHOLD &&
       this.lastValue > this.baseline * 0.98;
@@ -280,9 +276,10 @@ export class HeartBeatProcessor {
       1
     );
 
+    // Aproximación a la confianza final
     const confidence = (amplitudeConfidence + derivativeConfidence) / 2;
 
-    return { isPeak, confidence };
+    return { isPeak: isOverThreshold, confidence };
   }
 
   private confirmPeak(
@@ -384,7 +381,7 @@ export class HeartBeatProcessor {
     this.lowSignalCount = 0;
   }
 
-  public getRRIntervals(): { intervals: number[], lastPeakTime: number | null } {
+  public getRRIntervals(): { intervals: number[]; lastPeakTime: number | null } {
     return {
       intervals: [...this.bpmHistory],
       lastPeakTime: this.lastPeakTime

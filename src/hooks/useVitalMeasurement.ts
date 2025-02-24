@@ -15,7 +15,6 @@ export const useVitalMeasurement = (isMeasuring: boolean) => {
     arrhythmiaCount: 0
   });
   const [elapsedTime, setElapsedTime] = useState(0);
-  const [lastArrhythmiaCount, setLastArrhythmiaCount] = useState(0);
 
   useEffect(() => {
     console.log('useVitalMeasurement - Estado:', {
@@ -41,14 +40,13 @@ export const useVitalMeasurement = (isMeasuring: boolean) => {
     const MEASUREMENT_DURATION = 30000;
 
     const updateMeasurements = () => {
-      const processor = window.heartBeatProcessor;
+      const processor = (window as any).heartBeatProcessor;
       if (!processor) {
         console.warn('VitalMeasurement: No se encontró el procesador');
         return;
       }
 
       const bpm = processor.getFinalBPM() || 0;
-
       console.log('useVitalMeasurement - Actualización:', {
         processor: !!processor,
         bpm,
@@ -59,7 +57,6 @@ export const useVitalMeasurement = (isMeasuring: boolean) => {
         if (prev.heartRate === bpm) {
           return prev;
         }
-
         return {
           ...prev,
           heartRate: bpm

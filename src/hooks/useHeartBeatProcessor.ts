@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { HeartBeatProcessor } from '../modules/HeartBeatProcessor';
 
@@ -24,7 +23,7 @@ export const useHeartBeatProcessor = () => {
     processorRef.current = new HeartBeatProcessor();
     
     if (typeof window !== 'undefined') {
-      window.heartBeatProcessor = processorRef.current;
+      (window as any).heartBeatProcessor = processorRef.current;
     }
 
     return () => {
@@ -33,7 +32,7 @@ export const useHeartBeatProcessor = () => {
         processorRef.current = null;
       }
       if (typeof window !== 'undefined') {
-        window.heartBeatProcessor = undefined;
+        (window as any).heartBeatProcessor = undefined;
       }
     };
   }, []);

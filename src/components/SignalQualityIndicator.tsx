@@ -8,17 +8,17 @@ interface SignalQualityIndicatorProps {
 const SignalQualityIndicator = ({ quality, isMonitoring = false }: SignalQualityIndicatorProps) => {
   const displayQuality = isMonitoring ? quality : 0;
 
-  const getQualityColor = (quality: number) => {
-    if (quality === 0) return '#666666';
-    if (quality > 75) return '#00ff00';
-    if (quality > 50) return '#ffff00';
+  const getQualityColor = (q: number) => {
+    if (q === 0) return '#666666';
+    if (q > 75) return '#00ff00';
+    if (q > 50) return '#ffff00';
     return '#ff0000';
   };
 
-  const getQualityText = (quality: number) => {
-    if (quality === 0) return 'Sin Dedo';
-    if (quality > 75) return 'Excelente';
-    if (quality > 50) return 'Buena';
+  const getQualityText = (q: number) => {
+    if (q === 0) return 'Sin Dedo';
+    if (q > 75) return 'Excelente';
+    if (q > 50) return 'Buena';
     return 'Baja';
   };
 

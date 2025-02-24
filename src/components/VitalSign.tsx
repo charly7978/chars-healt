@@ -1,4 +1,3 @@
-
 interface VitalSignProps {
   label: string;
   value: string | number;

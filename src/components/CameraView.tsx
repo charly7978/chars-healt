@@ -43,6 +43,7 @@ const CameraView = ({
       };
 
       if (isAndroid) {
+        // Ajustes para mejorar la extracción de señal en Android
         Object.assign(baseVideoConstraints, {
           frameRate: { ideal: 25 },
           resizeMode: 'crop-and-scale'
