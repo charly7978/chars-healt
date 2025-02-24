@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -32,20 +33,22 @@ const PPGSignalMeter = ({
   const animationFrameRef = useRef<number>();
   const lastRenderTimeRef = useRef<number>(0);
   const lastArrhythmiaTime = useRef<number>(0);
+  const arrhythmiaCountRef = useRef<number>(0);
   
-  const WINDOW_WIDTH_MS = 5000;
+  const WINDOW_WIDTH_MS = 3000; // Reducido para mejor rendimiento
   const CANVAS_WIDTH = 1000;
   const CANVAS_HEIGHT = 200;
   const GRID_SIZE_X = 50;
   const GRID_SIZE_Y = 25;
   const verticalScale = 28.0;
-  const SMOOTHING_FACTOR = 0.85;
+  const SMOOTHING_FACTOR = 0.75; // Ajustado para menor latencia
   const TARGET_FPS = 60;
   const FRAME_TIME = 1000 / TARGET_FPS;
+  const BUFFER_SIZE = 600; // Reducido para mejor rendimiento
 
   useEffect(() => {
     if (!dataBufferRef.current) {
-      dataBufferRef.current = new CircularBuffer(1000);
+      dataBufferRef.current = new CircularBuffer(BUFFER_SIZE);
     }
   }, []);
 
@@ -167,6 +170,7 @@ const PPGSignalMeter = ({
         now - rawArrhythmiaData.timestamp < 1000) {
       isArrhythmia = true;
       lastArrhythmiaTime.current = now;
+      arrhythmiaCountRef.current++;
     }
 
     const dataPoint: PPGDataPoint = {
@@ -181,27 +185,27 @@ const PPGSignalMeter = ({
 
     const points = dataBufferRef.current.getPoints();
     if (points.length > 1) {
+      // Dibujamos la línea segmento por segmento para cambio de color inmediato
       for (let i = 1; i < points.length; i++) {
         const prevPoint = points[i - 1];
         const point = points[i];
-        
-        ctx.beginPath();
         
         const x1 = canvas.width - ((now - prevPoint.time) * canvas.width / WINDOW_WIDTH_MS);
         const y1 = canvas.height / 2 - prevPoint.value;
         const x2 = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
         const y2 = canvas.height / 2 - point.value;
 
+        ctx.beginPath();
         ctx.strokeStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
         ctx.lineWidth = 2;
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
-        
         ctx.moveTo(x1, y1);
         ctx.lineTo(x2, y2);
         ctx.stroke();
       }
 
+      // Marcamos los picos
       points.forEach((point, index) => {
         if (index > 0 && index < points.length - 1) {
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
