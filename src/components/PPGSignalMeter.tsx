@@ -32,7 +32,7 @@ const PPGSignalMeter = ({
   const WINDOW_WIDTH_MS = 5000;
   const CANVAS_WIDTH = 1000;
   const CANVAS_HEIGHT = 200;
-  const verticalScale = -35.0; // Invertido para que los picos vayan hacia arriba
+  const verticalScale = 35.0; // Valor positivo para que los picos vayan hacia arriba
   const SMOOTHING_FACTOR = 0.85;
   const TARGET_FPS = 60;
   const FRAME_TIME = 1000 / TARGET_FPS;
@@ -41,6 +41,7 @@ const PPGSignalMeter = ({
     if (!dataBufferRef.current) {
       dataBufferRef.current = new CircularBuffer(1000);
     }
+    console.log("PPGSignalMeter mounted");
   }, []);
 
   const getQualityColor = useCallback((quality: number) => {
@@ -77,6 +78,7 @@ const PPGSignalMeter = ({
 
     const now = Date.now();
     
+    // Actualizar línea base
     if (baselineRef.current === null) {
       baselineRef.current = value;
     } else {
@@ -86,99 +88,43 @@ const PPGSignalMeter = ({
     const smoothedValue = smoothValue(value, lastValueRef.current);
     lastValueRef.current = smoothedValue;
 
-    const normalizedValue = (smoothedValue - (baselineRef.current || 0)) * verticalScale;
+    // Normalizar valor para que los picos vayan hacia arriba
+    const normalizedValue = -(smoothedValue - (baselineRef.current || 0)) * verticalScale;
     
     const isCurrentArrhythmia = arrhythmiaStatus?.includes('ARRITMIA DETECTADA') || false;
     const lastPeakTime = rawArrhythmiaData?.lastPeakTime;
-    const timeSinceLastPeak = lastPeakTime ? now - lastPeakTime : Infinity;
-    const isNearPeak = timeSinceLastPeak < 50;
-
+    
     const dataPoint: PPGDataPoint = {
       time: now,
       value: normalizedValue,
-      isArrhythmia: isCurrentArrhythmia && isNearPeak
+      isArrhythmia: isCurrentArrhythmia
     };
     
     dataBufferRef.current.push(dataPoint);
 
-    // Limpiar el canvas
+    // Limpiar canvas
     ctx.fillStyle = '#F8FAFC';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Dibujar grilla
-    ctx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
-    ctx.lineWidth = 0.5;
-    ctx.font = '10px Inter';
-    ctx.fillStyle = 'rgba(51, 65, 85, 0.6)';
-    
-    // Grilla vertical (amplitud)
-    const amplitudeStep = 50;
-    const maxAmplitude = 200;
-    for (let y = 0; y <= maxAmplitude; y += amplitudeStep) {
-      const yPos = (canvas.height / 2) + y;
-      const yNeg = (canvas.height / 2) - y;
-      
-      ctx.beginPath();
-      ctx.moveTo(0, yPos);
-      ctx.lineTo(canvas.width, yPos);
-      ctx.moveTo(0, yNeg);
-      ctx.lineTo(canvas.width, yNeg);
-      ctx.stroke();
-      
-      // Numeración del eje Y
-      ctx.textAlign = 'right';
-      if (y > 0) {
-        ctx.fillText(`${y}`, 25, yNeg + 4);
-        ctx.fillText(`-${y}`, 25, yPos + 4);
-      }
-    }
-
-    // Grilla horizontal (tiempo)
-    ctx.textAlign = 'center';
-    const timeStep = 1000;
-    for (let t = 0; t <= WINDOW_WIDTH_MS; t += timeStep) {
-      const x = canvas.width - (t * canvas.width / WINDOW_WIDTH_MS);
-      
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, canvas.height);
-      ctx.stroke();
-      
-      ctx.fillText(`${t/1000}s`, x, canvas.height - 5);
-    }
-
-    // Línea central
-    ctx.strokeStyle = 'rgba(51, 65, 85, 0.3)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(0, canvas.height / 2);
-    ctx.lineTo(canvas.width, canvas.height / 2);
-    ctx.stroke();
-
-    const points = dataBufferRef.current.getPoints();
-    
     // Dibujar señal PPG
+    const points = dataBufferRef.current.getPoints();
     if (points.length > 1) {
-      ctx.lineWidth = 2;
-      ctx.lineJoin = 'round';
-      ctx.lineCap = 'round';
-      
       let lastX = 0;
       let lastY = 0;
       let firstPoint = true;
 
       points.forEach((point, index) => {
         const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-        const y = canvas.height / 2 + point.value;
+        const y = canvas.height / 2 + point.value; // Sumamos para que vaya hacia arriba
 
         if (firstPoint) {
           firstPoint = false;
         } else {
-          // Dibujar segmento de línea con color según arritmia
           ctx.beginPath();
           ctx.moveTo(lastX, lastY);
           ctx.lineTo(x, y);
           ctx.strokeStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
+          ctx.lineWidth = 2;
           ctx.stroke();
         }
 
@@ -190,29 +136,58 @@ const PPGSignalMeter = ({
           const prevValue = points[index-1].value;
           const nextValue = points[index+1].value;
           
-          if (point.value < prevValue && point.value < nextValue && 
-              lastPeakTime && Math.abs(point.time - lastPeakTime) < 100) {
-            // Dibujar marcador de pico
-            ctx.beginPath();
-            ctx.arc(x, y, 4, 0, Math.PI * 2);
-            ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
-            ctx.fill();
+          // Detectar picos (valores más negativos son picos hacia arriba)
+          if (point.value < prevValue && point.value < nextValue) {
+            if (lastPeakTime && Math.abs(point.time - lastPeakTime) < 100) {
+              ctx.beginPath();
+              ctx.arc(x, y, 4, 0, Math.PI * 2);
+              ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
+              ctx.fill();
 
-            // Valor numérico del pico
-            ctx.font = '10px Inter';
-            ctx.fillStyle = 'rgba(51, 65, 85, 0.8)';
-            ctx.textAlign = 'left';
-            ctx.fillText(`${Math.round(Math.abs(point.value))}`, x + 8, y - 8);
+              ctx.font = '10px Inter';
+              ctx.fillStyle = 'rgba(51, 65, 85, 0.8)';
+              ctx.textAlign = 'left';
+              ctx.fillText(`${Math.round(Math.abs(point.value))}`, x + 8, y - 8);
+            }
           }
         }
       });
     }
+
+    // Dibujar grilla después de la señal
+    ctx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
+    ctx.lineWidth = 0.5;
+
+    // Grilla horizontal
+    for (let i = 0; i <= CANVAS_HEIGHT; i += 50) {
+      ctx.beginPath();
+      ctx.moveTo(0, i);
+      ctx.lineTo(CANVAS_WIDTH, i);
+      ctx.stroke();
+    }
+
+    // Grilla vertical
+    for (let i = 0; i <= CANVAS_WIDTH; i += 100) {
+      ctx.beginPath();
+      ctx.moveTo(i, 0);
+      ctx.lineTo(i, CANVAS_HEIGHT);
+      ctx.stroke();
+    }
+
+    // Línea central más visible
+    ctx.strokeStyle = 'rgba(51, 65, 85, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, CANVAS_HEIGHT / 2);
+    ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT / 2);
+    ctx.stroke();
 
     lastRenderTimeRef.current = currentTime;
     animationFrameRef.current = requestAnimationFrame(renderSignal);
   }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus, smoothValue]);
 
   useEffect(() => {
+    console.log("Rendering signal with value:", value);
     renderSignal();
     return () => {
       if (animationFrameRef.current) {
