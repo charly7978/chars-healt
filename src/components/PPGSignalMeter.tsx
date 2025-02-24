@@ -32,7 +32,7 @@ const PPGSignalMeter = ({
   const WINDOW_WIDTH_MS = 5000;
   const CANVAS_WIDTH = 1000;
   const CANVAS_HEIGHT = 200;
-  const verticalScale = 35.0; // Valor positivo para que los picos vayan hacia arriba
+  const verticalScale = 35.0;
   const SMOOTHING_FACTOR = 0.85;
   const TARGET_FPS = 60;
   const FRAME_TIME = 1000 / TARGET_FPS;
@@ -41,7 +41,6 @@ const PPGSignalMeter = ({
     if (!dataBufferRef.current) {
       dataBufferRef.current = new CircularBuffer(1000);
     }
-    console.log("PPGSignalMeter mounted");
   }, []);
 
   const getQualityColor = useCallback((quality: number) => {
@@ -78,7 +77,6 @@ const PPGSignalMeter = ({
 
     const now = Date.now();
     
-    // Actualizar línea base
     if (baselineRef.current === null) {
       baselineRef.current = value;
     } else {
@@ -88,16 +86,19 @@ const PPGSignalMeter = ({
     const smoothedValue = smoothValue(value, lastValueRef.current);
     lastValueRef.current = smoothedValue;
 
-    // Normalizar valor para que los picos vayan hacia arriba
-    const normalizedValue = -(smoothedValue - (baselineRef.current || 0)) * verticalScale;
+    // Invertimos el valor para que los picos vayan hacia arriba
+    const normalizedValue = (baselineRef.current || 0) - smoothedValue;
+    const scaledValue = normalizedValue * verticalScale;
     
-    const isCurrentArrhythmia = arrhythmiaStatus?.includes('ARRITMIA DETECTADA') || false;
-    const lastPeakTime = rawArrhythmiaData?.lastPeakTime;
-    
+    // Verificamos si este punto coincide con un latido real usando rawArrhythmiaData
+    const isArrhythmia = rawArrhythmiaData?.rrIntervals.length 
+      ? rawArrhythmiaData.rrIntervals[rawArrhythmiaData.rrIntervals.length - 1] > 1000 
+      : false;
+
     const dataPoint: PPGDataPoint = {
       time: now,
-      value: normalizedValue,
-      isArrhythmia: isCurrentArrhythmia
+      value: scaledValue,
+      isArrhythmia
     };
     
     dataBufferRef.current.push(dataPoint);
@@ -109,13 +110,14 @@ const PPGSignalMeter = ({
     // Dibujar señal PPG
     const points = dataBufferRef.current.getPoints();
     if (points.length > 1) {
+      ctx.lineWidth = 2;
       let lastX = 0;
       let lastY = 0;
       let firstPoint = true;
 
       points.forEach((point, index) => {
         const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-        const y = canvas.height / 2 + point.value; // Sumamos para que vaya hacia arriba
+        const y = canvas.height / 2 - point.value; // Restamos para que vaya hacia arriba
 
         if (firstPoint) {
           firstPoint = false;
@@ -124,37 +126,37 @@ const PPGSignalMeter = ({
           ctx.moveTo(lastX, lastY);
           ctx.lineTo(x, y);
           ctx.strokeStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
-          ctx.lineWidth = 2;
           ctx.stroke();
+        }
+
+        // Detectar y marcar picos
+        if (index > 0 && index < points.length - 1) {
+          const prevPoint = points[index - 1];
+          const nextPoint = points[index + 1];
+          
+          // Un punto es un pico si su valor es mayor que sus vecinos
+          if (point.value > prevPoint.value && point.value > nextPoint.value) {
+            // Dibujar punto en el pico
+            ctx.beginPath();
+            ctx.arc(x, y, 4, 0, Math.PI * 2);
+            ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
+            ctx.fill();
+
+            // Mostrar valor numérico
+            const displayValue = Math.abs(Math.round(point.value));
+            ctx.font = '12px Inter';
+            ctx.fillStyle = 'rgba(51, 65, 85, 0.8)';
+            ctx.textAlign = 'left';
+            ctx.fillText(`${displayValue}`, x + 8, y - 8);
+          }
         }
 
         lastX = x;
         lastY = y;
-
-        // Marcar picos
-        if (index > 0 && index < points.length - 1) {
-          const prevValue = points[index-1].value;
-          const nextValue = points[index+1].value;
-          
-          // Detectar picos (valores más negativos son picos hacia arriba)
-          if (point.value < prevValue && point.value < nextValue) {
-            if (lastPeakTime && Math.abs(point.time - lastPeakTime) < 100) {
-              ctx.beginPath();
-              ctx.arc(x, y, 4, 0, Math.PI * 2);
-              ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
-              ctx.fill();
-
-              ctx.font = '10px Inter';
-              ctx.fillStyle = 'rgba(51, 65, 85, 0.8)';
-              ctx.textAlign = 'left';
-              ctx.fillText(`${Math.round(Math.abs(point.value))}`, x + 8, y - 8);
-            }
-          }
-        }
       });
     }
 
-    // Dibujar grilla después de la señal
+    // Dibujar grilla
     ctx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
     ctx.lineWidth = 0.5;
 
@@ -174,7 +176,7 @@ const PPGSignalMeter = ({
       ctx.stroke();
     }
 
-    // Línea central más visible
+    // Línea central
     ctx.strokeStyle = 'rgba(51, 65, 85, 0.3)';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -184,10 +186,9 @@ const PPGSignalMeter = ({
 
     lastRenderTimeRef.current = currentTime;
     animationFrameRef.current = requestAnimationFrame(renderSignal);
-  }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus, smoothValue]);
+  }, [value, quality, isFingerDetected, rawArrhythmiaData, smoothValue]);
 
   useEffect(() => {
-    console.log("Rendering signal with value:", value);
     renderSignal();
     return () => {
       if (animationFrameRef.current) {
