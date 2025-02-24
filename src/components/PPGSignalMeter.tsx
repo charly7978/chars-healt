@@ -93,22 +93,20 @@ const PPGSignalMeter = ({
     const smoothedValue = smoothValue(value, lastValueRef.current);
     lastValueRef.current = smoothedValue;
 
-    // Detectar si este punto es un pico
-    let isPeak = false;
-    const currentPeakTime = rawArrhythmiaData?.lastPeakTime;
+    const normalizedValue = (baselineRef.current || 0) - smoothedValue;
+    const scaledValue = normalizedValue * verticalScale;
     
-    if (currentPeakTime !== undefined && currentPeakTime !== null && 
-        currentPeakTime !== lastKnownPeakTime.current) {
-      isPeak = true;
+    // Check for peak with safe access
+    const currentPeakTime = rawArrhythmiaData?.lastPeakTime ?? null;
+    const isPeak = currentPeakTime !== null && currentPeakTime !== lastKnownPeakTime.current;
+    
+    if (isPeak) {
       lastKnownPeakTime.current = currentPeakTime;
       console.log('Pico detectado:', {
         time: currentPeakTime,
         isArrhythmic: isArrhythmicBeat()
       });
     }
-
-    const normalizedValue = (baselineRef.current || 0) - smoothedValue;
-    const scaledValue = normalizedValue * verticalScale;
     
     const dataPoint: PPGDataPoint = {
       time: now,
@@ -118,6 +116,7 @@ const PPGSignalMeter = ({
     
     dataBufferRef.current.push(dataPoint);
 
+    // Clear canvas
     ctx.fillStyle = '#F8FAFC';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -128,7 +127,7 @@ const PPGSignalMeter = ({
       let lastY = 0;
       let firstPoint = true;
 
-      points.forEach((point, index) => {
+      points.forEach((point) => {
         const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
         const y = canvas.height / 2 - point.value;
 
@@ -142,16 +141,16 @@ const PPGSignalMeter = ({
           ctx.stroke();
         }
 
-        // Solo dibujar puntos y números si tenemos un tiempo de pico válido
-        if (currentPeakTime !== undefined && currentPeakTime !== null &&
-            Math.abs(point.time - currentPeakTime) < 100) {
-          // Dibujar círculo en el pico
+        // Draw points and numbers only if we have a valid peak time
+        const peakTime = rawArrhythmiaData?.lastPeakTime;
+        if (typeof peakTime === 'number' && Math.abs(point.time - peakTime) < 100) {
+          // Draw circle
           ctx.beginPath();
           ctx.arc(x, y, 4, 0, Math.PI * 2);
           ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
           ctx.fill();
 
-          // Mostrar valor numérico
+          // Show numeric value
           const displayValue = Math.abs(Math.round(point.value));
           ctx.font = '12px Inter';
           ctx.fillStyle = 'rgba(51, 65, 85, 0.8)';
@@ -164,7 +163,7 @@ const PPGSignalMeter = ({
       });
     }
 
-    // Dibujar grilla
+    // Draw grid
     ctx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
     ctx.lineWidth = 0.5;
 
@@ -194,9 +193,11 @@ const PPGSignalMeter = ({
   }, [value, quality, isFingerDetected, rawArrhythmiaData, smoothValue, isArrhythmicBeat]);
 
   useEffect(() => {
-    if (!canvasRef.current) return; // Guard clause to prevent initial render without canvas
+    const canvas = canvasRef.current;
+    if (!canvas) return;
     
     renderSignal();
+    
     return () => {
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
