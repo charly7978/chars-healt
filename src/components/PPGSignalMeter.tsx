@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -25,12 +26,16 @@ const PPGSignalMeter = ({
   const baselineRef = useRef<number | null>(null);
   const dataBufferRef = useRef<CircularBuffer | null>(null);
   const lastValueRef = useRef<number | null>(null);
+  const animationFrameRef = useRef<number>();
+  const lastRenderTimeRef = useRef<number>(0);
   
   const WINDOW_WIDTH_MS = 5000;
   const CANVAS_WIDTH = 1000;
   const CANVAS_HEIGHT = 200;
   const verticalScale = 35.0;
-  const SMOOTHING_FACTOR = 0.85; // Factor de suavizado más agresivo
+  const SMOOTHING_FACTOR = 0.85;
+  const TARGET_FPS = 60;
+  const FRAME_TIME = 1000 / TARGET_FPS;
 
   useEffect(() => {
     if (!dataBufferRef.current) {
@@ -55,14 +60,22 @@ const PPGSignalMeter = ({
     return previousValue + SMOOTHING_FACTOR * (currentValue - previousValue);
   }, []);
 
-  useEffect(() => {
+  const renderSignal = useCallback(() => {
     if (!canvasRef.current || !isFingerDetected || !dataBufferRef.current) return;
 
+    const currentTime = performance.now();
+    const timeSinceLastRender = currentTime - lastRenderTimeRef.current;
+
+    if (timeSinceLastRender < FRAME_TIME) {
+      animationFrameRef.current = requestAnimationFrame(renderSignal);
+      return;
+    }
+
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) return;
 
-    const currentTime = Date.now();
+    const now = Date.now();
     
     if (baselineRef.current === null) {
       baselineRef.current = value;
@@ -70,7 +83,6 @@ const PPGSignalMeter = ({
       baselineRef.current = baselineRef.current * 0.95 + value * 0.05;
     }
 
-    // Aplicar suavizado simple pero rápido
     const smoothedValue = smoothValue(value, lastValueRef.current);
     lastValueRef.current = smoothedValue;
 
@@ -78,73 +90,96 @@ const PPGSignalMeter = ({
     
     const isCurrentArrhythmia = arrhythmiaStatus?.includes('ARRITMIA DETECTADA') || false;
     const lastPeakTime = rawArrhythmiaData?.lastPeakTime;
-    const timeSinceLastPeak = lastPeakTime ? currentTime - lastPeakTime : Infinity;
+    const timeSinceLastPeak = lastPeakTime ? now - lastPeakTime : Infinity;
     const isNearPeak = timeSinceLastPeak < 50;
 
     const dataPoint: PPGDataPoint = {
-      time: currentTime,
+      time: now,
       value: normalizedValue,
       isArrhythmia: isCurrentArrhythmia && isNearPeak
     };
     
     dataBufferRef.current.push(dataPoint);
 
-    ctx.fillStyle = '#F8FAFC';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    ctx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
-    ctx.lineWidth = 0.5;
+    // Optimizar el renderizado usando técnicas de doble buffer
+    const offscreenCanvas = new OffscreenCanvas(canvas.width, canvas.height);
+    const offscreenCtx = offscreenCanvas.getContext('2d', { alpha: false });
     
-    for (let i = 0; i < 40; i++) {
-      const x = canvas.width - (canvas.width * (i / 40));
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, canvas.height);
-      ctx.stroke();
+    if (!offscreenCtx) return;
+
+    offscreenCtx.fillStyle = '#F8FAFC';
+    offscreenCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Dibujar grid
+    offscreenCtx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
+    offscreenCtx.lineWidth = 0.5;
+    
+    const gridSpacing = canvas.width / 40;
+    for (let x = canvas.width; x > 0; x -= gridSpacing) {
+      offscreenCtx.beginPath();
+      offscreenCtx.moveTo(x, 0);
+      offscreenCtx.lineTo(x, canvas.height);
+      offscreenCtx.stroke();
     }
 
     const points = dataBufferRef.current.getPoints();
     
     if (points.length > 1) {
-      ctx.lineWidth = 2;
-      ctx.lineJoin = 'round';
-      ctx.lineCap = 'round';
-      ctx.beginPath();
+      offscreenCtx.lineWidth = 2;
+      offscreenCtx.lineJoin = 'round';
+      offscreenCtx.lineCap = 'round';
+      offscreenCtx.beginPath();
       
-      points.forEach((point, index) => {
-        const x = canvas.width - ((currentTime - point.time) * canvas.width / WINDOW_WIDTH_MS);
+      let firstPoint = true;
+      points.forEach((point) => {
+        const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
         const y = canvas.height / 2 + point.value;
         
-        if (index === 0) {
-          ctx.moveTo(x, y);
+        if (firstPoint) {
+          offscreenCtx.moveTo(x, y);
+          firstPoint = false;
         } else {
-          ctx.lineTo(x, y);
+          offscreenCtx.lineTo(x, y);
         }
       });
       
-      ctx.strokeStyle = '#0EA5E9';
-      ctx.stroke();
+      offscreenCtx.strokeStyle = '#0EA5E9';
+      offscreenCtx.stroke();
       
-      // Marcar picos de manera más visible
+      // Dibujar picos
       points.forEach((point, i) => {
         if (i > 0 && i < points.length - 1) {
           const prevValue = points[i-1].value;
           const nextValue = points[i+1].value;
           
           if (point.value > prevValue && point.value > nextValue) {
-            const x = canvas.width - ((currentTime - point.time) * canvas.width / WINDOW_WIDTH_MS);
+            const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
             const y = canvas.height / 2 + point.value;
             
-            ctx.beginPath();
-            ctx.arc(x, y, 4, 0, Math.PI * 2);
-            ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
-            ctx.fill();
+            offscreenCtx.beginPath();
+            offscreenCtx.arc(x, y, 4, 0, Math.PI * 2);
+            offscreenCtx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
+            offscreenCtx.fill();
           }
         }
       });
     }
 
+    // Transferir el contenido del buffer al canvas visible
+    ctx.drawImage(offscreenCanvas, 0, 0);
+    
+    lastRenderTimeRef.current = currentTime;
+    animationFrameRef.current = requestAnimationFrame(renderSignal);
   }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus, smoothValue]);
+
+  useEffect(() => {
+    renderSignal();
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [renderSignal]);
 
   const handleReset = useCallback(() => {
     if (dataBufferRef.current) {
