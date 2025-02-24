@@ -26,8 +26,8 @@ export class PPGSignalProcessor implements SignalProcessor {
   private kalmanFilter: KalmanFilter;
   private lastValues: number[] = [];
   private readonly DEFAULT_CONFIG = {
-    BUFFER_SIZE: 10,
-    MIN_RED_THRESHOLD: 10,  // Reducido de 85 a 80 para mayor sensibilidad
+    BUFFER_SIZE: 20,
+    MIN_RED_THRESHOLD: 1,  // Reducido de 85 a 80 para mayor sensibilidad
     MAX_RED_THRESHOLD: 10,
     STABILITY_WINDOW: 5,    // Reducido de 5 a 4 para detección más rápida
     MIN_STABILITY_COUNT: 3  // Mantenido en 3 para evitar falsos positivos
