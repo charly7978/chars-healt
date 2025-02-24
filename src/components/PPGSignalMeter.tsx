@@ -322,26 +322,20 @@ const PPGSignalMeter = ({
       <div className="fixed bottom-0 left-0 right-0 h-[80px] grid grid-cols-2 gap-px bg-gray-100">
         <button 
           onClick={handleStartMeasurement}
-          className="relative overflow-hidden bg-white text-slate-700
-                   hover:bg-gray-50 active:bg-gray-100 transition-all duration-200
-                   after:absolute after:inset-0 after:bg-gradient-to-r 
-                   after:from-blue-500/10 after:to-transparent after:opacity-0
-                   hover:after:opacity-100 after:transition-opacity"
+          className="bg-white text-slate-700 hover:bg-gray-50 active:bg-gray-100 transform-gpu transition-all duration-150 hover:shadow-lg active:shadow-inner active:scale-[0.99] hover:text-blue-600"
+          style={{ willChange: 'transform' }}
         >
-          <span className="text-lg font-semibold relative z-10">
+          <span className="text-lg font-semibold">
             INICIAR/DETENER
           </span>
         </button>
 
         <button 
           onClick={handleReset}
-          className="relative overflow-hidden bg-white text-slate-700
-                   hover:bg-gray-50 active:bg-gray-100 transition-all duration-200
-                   after:absolute after:inset-0 after:bg-gradient-to-r 
-                   after:from-red-500/10 after:to-transparent after:opacity-0
-                   hover:after:opacity-100 after:transition-opacity"
+          className="bg-white text-slate-700 hover:bg-gray-50 active:bg-gray-100 transform-gpu transition-all duration-150 hover:shadow-lg active:shadow-inner active:scale-[0.99] hover:text-rose-600"
+          style={{ willChange: 'transform' }}
         >
-          <span className="text-lg font-semibold relative z-10">
+          <span className="text-lg font-semibold">
             RESETEAR
           </span>
         </button>

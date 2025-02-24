@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -298,12 +297,11 @@ const Index = () => {
               onStartMeasurement={startMonitoring}
               onReset={stopMonitoring}
               arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
-              rawArrhythmiaData={lastArrhythmiaData}
             />
           </div>
 
-          <div className="absolute bottom-20 left-0 right-0 px-4">
-            <div className="bg-black/40 backdrop-blur-sm rounded-xl p-4">
+          <div className="fixed bottom-[200px] left-0 right-0 px-4 z-50">
+            <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4 shadow-lg">
               <div className="grid grid-cols-4 gap-2">
                 <VitalSign 
                   label="FRECUENCIA CARDÍACA"
@@ -329,31 +327,21 @@ const Index = () => {
           </div>
 
           {isMonitoring && (
-            <div className="absolute bottom-[120px] left-0 right-0 text-center">
+            <div className="fixed bottom-40 left-0 right-0 text-center">
               <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 30s</span>
             </div>
           )}
 
-          <div className="h-[80px] grid grid-cols-2 gap-px bg-black mt-auto">
+          <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 mt-auto">
             <button 
               onClick={startMonitoring}
-              className="relative overflow-hidden bg-black/80 text-2xl font-bold text-white
-                       hover:bg-black/60 active:bg-black/70
-                       transition-colors duration-200 ease-out
-                       after:absolute after:inset-0 
-                       after:bg-gradient-to-r after:from-cyan-500/20 after:to-transparent 
-                       after:opacity-0 hover:after:opacity-100 after:transition-opacity"
+              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
             >
               INICIAR
             </button>
             <button 
               onClick={stopMonitoring}
-              className="relative overflow-hidden bg-black/80 text-2xl font-bold text-white
-                       hover:bg-black/60 active:bg-black/70
-                       transition-colors duration-200 ease-out
-                       after:absolute after:inset-0 
-                       after:bg-gradient-to-r after:from-rose-500/20 after:to-transparent 
-                       after:opacity-0 hover:after:opacity-100 after:transition-opacity"
+              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
             >
               RESET
             </button>
