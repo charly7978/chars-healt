@@ -27,9 +27,7 @@ const VERTICAL_SCALE = 40.0;
 const SMOOTHING_FACTOR = 0.3;
 const TARGET_FPS = 20; // Reducido para mejor rendimiento
 const FRAME_TIME = 1000 / TARGET_FPS;
-const BUFFER_SIZE = 150; // Reducido para mostrar menos puntos
-const POINT_SPACING = 3; // Espaciado entre puntos importantes
-const POINT_THRESHOLD = 0.5; // Umbral para considerar un punto como importante
+const BUFFER_SIZE = 300; // Reducido para mejor rendimiento
 const TYPED_ARRAY_SIZE = 1024; // Para TypedArray
 
 const PPGSignalMeter = ({ 
@@ -147,7 +145,7 @@ const PPGSignalMeter = ({
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d', { 
       alpha: false,
-      desynchronized: true
+      desynchronized: true // Reducir latencia
     });
     
     if (!ctx) {
@@ -185,7 +183,7 @@ const PPGSignalMeter = ({
     const dataPoint: PPGDataPoint = {
       time: now,
       value: scaledValue,
-      isArrhythmia: false
+      isArrhythmia
     };
     
     dataBufferRef.current.push(dataPoint);
@@ -204,34 +202,26 @@ const PPGSignalMeter = ({
       ctx.lineCap = 'round';
 
       let firstPoint = true;
-      let lastDrawnX = -Infinity;
-
       points.forEach((point, i) => {
         const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
         const y = canvas.height / 2 - point.value;
 
-        // Solo dibujar puntos importantes o espaciados
-        const isImportantPoint = Math.abs(point.value) > POINT_THRESHOLD || 
-                                x - lastDrawnX > POINT_SPACING;
+        if (firstPoint) {
+          ctx.moveTo(x, y);
+          firstPoint = false;
+        } else {
+          ctx.lineTo(x, y);
+        }
 
-        if (isImportantPoint) {
-          if (firstPoint) {
-            ctx.moveTo(x, y);
-            firstPoint = false;
-          } else {
-            ctx.lineTo(x, y);
-          }
-          lastDrawnX = x;
-
-          if (point.isArrhythmia) {
-            ctx.stroke(); // Terminar la línea actual
-            ctx.beginPath();
-            ctx.fillStyle = '#DC2626';
-            ctx.arc(x, y, 4, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.beginPath(); // Comenzar nueva línea
-            ctx.moveTo(x, y);
-          }
+        // Dibujar puntos de arritmia
+        if (point.isArrhythmia) {
+          ctx.stroke(); // Terminar la línea actual
+          ctx.beginPath();
+          ctx.fillStyle = '#DC2626';
+          ctx.arc(x, y, 4, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath(); // Comenzar nueva línea
+          ctx.moveTo(x, y);
         }
       });
       ctx.stroke();
@@ -322,7 +312,7 @@ const PPGSignalMeter = ({
       <div className="fixed bottom-0 left-0 right-0 h-[80px] grid grid-cols-2 gap-px bg-gray-100">
         <button 
           onClick={handleStartMeasurement}
-          className="bg-white text-slate-700 hover:bg-gray-50 active:bg-gray-100 transform-gpu transition-all duration-150 hover:shadow-lg active:shadow-inner active:scale-[0.99] hover:text-blue-600"
+          className="bg-white text-slate-700 hover:bg-gray-50 active:bg-gray-100 transform-gpu"
           style={{ willChange: 'transform' }}
         >
           <span className="text-lg font-semibold">
@@ -332,7 +322,7 @@ const PPGSignalMeter = ({
 
         <button 
           onClick={handleReset}
-          className="bg-white text-slate-700 hover:bg-gray-50 active:bg-gray-100 transform-gpu transition-all duration-150 hover:shadow-lg active:shadow-inner active:scale-[0.99] hover:text-rose-600"
+          className="bg-white text-slate-700 hover:bg-gray-50 active:bg-gray-100 transform-gpu"
           style={{ willChange: 'transform' }}
         >
           <span className="text-lg font-semibold">

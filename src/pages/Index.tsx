@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -300,8 +301,8 @@ const Index = () => {
             />
           </div>
 
-          <div className="fixed bottom-[200px] left-0 right-0 px-4 z-50">
-            <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4 shadow-lg">
+          <div className="absolute bottom-[200px] left-0 right-0 px-4">
+            <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4">
               <div className="grid grid-cols-4 gap-2">
                 <VitalSign 
                   label="FRECUENCIA CARDÍACA"
@@ -327,7 +328,7 @@ const Index = () => {
           </div>
 
           {isMonitoring && (
-            <div className="fixed bottom-40 left-0 right-0 text-center">
+            <div className="absolute bottom-40 left-0 right-0 text-center">
               <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 30s</span>
             </div>
           )}
