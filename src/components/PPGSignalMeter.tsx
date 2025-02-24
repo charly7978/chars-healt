@@ -36,7 +36,7 @@ const PPGSignalMeter = ({
   
   const WINDOW_WIDTH_MS = 4000; // Reducido para mejor rendimiento
   const CANVAS_WIDTH = 700;
-  const CANVAS_HEIGHT = 350;
+  const CANVAS_HEIGHT = 150;
   const GRID_SIZE_X = 100;
   const GRID_SIZE_Y = 50;
   const verticalScale = 40.0;
