@@ -40,7 +40,8 @@ export class PPGSignalProcessor implements SignalProcessor {
   private readonly MIN_STABILITY_COUNT = 3;
   private stableFrameCount: number = 0;
   private lastStableValue: number = 0;
-  
+  private readonly PERFUSION_INDEX_THRESHOLD = 0.045; // Ajustado de 0.05 a 0.045 para mejor sensibilidad sin comprometer precisión
+
   constructor(
     public onSignalReady?: (signal: ProcessedSignal) => void,
     public onError?: (error: ProcessingError) => void

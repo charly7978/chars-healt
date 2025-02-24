@@ -110,25 +110,30 @@ const PPGSignalMeter = ({
 
     const normalizedValue = (value - (baselineRef.current || 0)) * verticalScale;
     
-    // Ahora tomamos la detección de arritmia directamente del análisis RR
+    // Detección más precisa de arritmias usando el análisis RR
     let isCurrentArrhythmia = false;
-    if (rawArrhythmiaData?.rrIntervals.length >= 3) {
-      const recentRR = rawArrhythmiaData.rrIntervals.slice(-3);
+    if (rawArrhythmiaData?.rrIntervals.length >= 2) {
+      const recentRR = rawArrhythmiaData.rrIntervals;
       const lastRR = recentRR[recentRR.length - 1];
       const prevRR = recentRR[recentRR.length - 2];
       
-      // Calculamos variación RR instantánea
-      const rrVariation = Math.abs(lastRR - prevRR) / prevRR;
-      // Si la variación es mayor al 25%, consideramos arritmia
-      isCurrentArrhythmia = rrVariation > 0.25;
+      // Umbral más preciso para la detección de arritmias
+      const RR_VARIATION_THRESHOLD = 0.22; // Ajustado de 0.25 a 0.22 para mayor precisión
+      
+      if (lastRR && prevRR) {
+        const rrVariation = Math.abs(lastRR - prevRR) / prevRR;
+        isCurrentArrhythmia = rrVariation > RR_VARIATION_THRESHOLD;
 
-      console.log('Análisis de arritmia:', {
-        lastRR,
-        prevRR,
-        variation: rrVariation,
-        isArrhythmia: isCurrentArrhythmia,
-        timestamp: new Date().toISOString()
-      });
+        // Log detallado para debugging
+        console.log('Análisis detallado de arritmia:', {
+          lastRR: Math.round(lastRR),
+          prevRR: Math.round(prevRR),
+          variation: rrVariation.toFixed(3),
+          threshold: RR_VARIATION_THRESHOLD,
+          isArrhythmia: isCurrentArrhythmia,
+          timestamp: new Date().toISOString()
+        });
+      }
     }
     
     dataBufferRef.current.push({
@@ -171,6 +176,7 @@ const PPGSignalMeter = ({
         ctx.moveTo(x1, y1);
         ctx.lineTo(x2, y2);
         
+        // Asegurarnos de que el color cambie inmediatamente
         ctx.strokeStyle = currentPoint.isArrhythmia ? '#FF2E2E' : '#0ea5e9';
         ctx.stroke();
       }
