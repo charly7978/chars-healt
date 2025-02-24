@@ -35,7 +35,6 @@ const Index = () => {
     try {
       const elem = rootRef.current || document.documentElement;
 
-      // Solicitar pantalla completa con fallbacks para diferentes navegadores
       if (elem.requestFullscreen) {
         await elem.requestFullscreen();
       } else if ((elem as any).webkitRequestFullscreen) {
@@ -46,7 +45,6 @@ const Index = () => {
         await (elem as any).msRequestFullscreen();
       }
 
-      // Forzar orientación vertical
       if (screen.orientation?.lock) {
         try {
           await screen.orientation.lock('portrait');
@@ -55,13 +53,11 @@ const Index = () => {
         }
       }
 
-      // Ocultar barra de navegación en Android
       if (navigator.userAgent.match(/Android/i)) {
         document.documentElement.style.setProperty('--sab', '0px');
         document.documentElement.style.setProperty('--sat', '0px');
       }
 
-      // Establecer meta viewport para iOS
       const viewport = document.querySelector('meta[name=viewport]');
       if (viewport) {
         viewport.setAttribute('content', 
@@ -73,16 +69,13 @@ const Index = () => {
     }
   };
 
-  // Efecto para activar pantalla completa inmediatamente al montar el componente
   useEffect(() => {
     const enableImmersiveMode = async () => {
       await requestFullScreen();
     };
 
-    // Intentar activar modo inmersivo al cargar
     enableImmersiveMode();
 
-    // Reactivar modo inmersivo cuando la ventana obtiene el foco
     const handleFocus = () => {
       enableImmersiveMode();
     };
@@ -90,75 +83,6 @@ const Index = () => {
     window.addEventListener('focus', handleFocus);
     return () => {
       window.removeEventListener('focus', handleFocus);
-    };
-  }, []);
-
-  useEffect(() => {
-    const preventDefaultBehaviors = (e: Event) => {
-      e.preventDefault();
-    };
-
-    // Prevenir comportamientos por defecto que puedan interferir
-    const events = [
-      'touchmove', 
-      'scroll', 
-      'resize', 
-      'contextmenu',
-      'gesturestart',
-      'gesturechange',
-      'gestureend'
-    ];
-
-    events.forEach(event => {
-      document.addEventListener(event, preventDefaultBehaviors, { passive: false });
-    });
-
-    // Configurar pantalla completa inmersiva
-    document.documentElement.style.overflow = 'hidden';
-    document.body.style.overflow = 'hidden';
-    document.body.style.position = 'fixed';
-    document.body.style.width = '100%';
-    document.body.style.height = '100%';
-    document.body.style.touchAction = 'none';
-
-    // Detectar cambios en pantalla completa
-    const handleFullscreenChange = () => {
-      if (!document.fullscreenElement && 
-          !(document as any).webkitFullscreenElement && 
-          !(document as any).mozFullScreenElement) {
-        requestFullScreen();
-      }
-    };
-
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
-    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
-
-    // Manejar visibilidad
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        requestFullScreen();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    // Limpiar al desmontar
-    return () => {
-      events.forEach(event => {
-        document.removeEventListener(event, preventDefaultBehaviors);
-      });
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
-      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      
-      document.documentElement.style.overflow = '';
-      document.body.style.overflow = '';
-      document.body.style.position = '';
-      document.body.style.width = '';
-      document.body.style.height = '';
-      document.body.style.touchAction = '';
     };
   }, []);
 
@@ -257,6 +181,9 @@ const Index = () => {
       if (vitals) {
         setVitalSigns(vitals);
         setArrhythmiaCount(vitals.arrhythmiaStatus.split('|')[1] || "--");
+        if (vitals.lastArrhythmiaData) {
+          setLastArrhythmiaData(vitals.lastArrhythmiaData);
+        }
       }
       
       setSignalQuality(lastSignal.quality);
