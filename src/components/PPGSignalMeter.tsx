@@ -110,24 +110,25 @@ const PPGSignalMeter = ({
 
     const normalizedValue = (value - (baselineRef.current || 0)) * verticalScale;
     
-    // Detección más precisa de arritmias usando el análisis RR
+    // Nueva implementación de detección de arritmias
     let isCurrentArrhythmia = false;
     if (rawArrhythmiaData?.rrIntervals.length >= 2) {
       const recentRR = rawArrhythmiaData.rrIntervals;
       const lastRR = recentRR[recentRR.length - 1];
-      const prevRR = recentRR[recentRR.length - 2];
       
-      // Umbral más preciso para la detección de arritmias
-      const RR_VARIATION_THRESHOLD = 0.22; // Ajustado de 0.25 a 0.22 para mayor precisión
+      // Calculamos la media móvil de los últimos 5 intervalos o menos si no hay tantos
+      const sampleSize = Math.min(5, recentRR.length - 1);
+      const recentIntervals = recentRR.slice(-sampleSize - 1, -1);
+      const avgRR = recentIntervals.reduce((a, b) => a + b, 0) / recentIntervals.length;
       
-      if (lastRR && prevRR) {
-        const rrVariation = Math.abs(lastRR - prevRR) / prevRR;
+      if (lastRR && avgRR) {
+        const rrVariation = Math.abs(lastRR - avgRR) / avgRR;
+        const RR_VARIATION_THRESHOLD = 0.20; // Umbral más sensible
         isCurrentArrhythmia = rrVariation > RR_VARIATION_THRESHOLD;
 
-        // Log detallado para debugging
         console.log('Análisis detallado de arritmia:', {
           lastRR: Math.round(lastRR),
-          prevRR: Math.round(prevRR),
+          avgRR: Math.round(avgRR),
           variation: rrVariation.toFixed(3),
           threshold: RR_VARIATION_THRESHOLD,
           isArrhythmia: isCurrentArrhythmia,
@@ -142,12 +143,12 @@ const PPGSignalMeter = ({
       isArrhythmia: isCurrentArrhythmia
     });
 
-    // Limpiar canvas
-    ctx.fillStyle = '#F8FAFC';
+    // Fondo del gráfico ligeramente más oscuro
+    ctx.fillStyle = '#F1F5F9'; // Slate-100 de Tailwind
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Dibujar grid
-    ctx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
+    // Grid más visible
+    ctx.strokeStyle = 'rgba(51, 65, 85, 0.2)'; // Incrementado opacity
     ctx.lineWidth = 0.5;
     
     for (let i = 0; i < 40; i++) {
@@ -176,7 +177,6 @@ const PPGSignalMeter = ({
         ctx.moveTo(x1, y1);
         ctx.lineTo(x2, y2);
         
-        // Asegurarnos de que el color cambie inmediatamente
         ctx.strokeStyle = currentPoint.isArrhythmia ? '#FF2E2E' : '#0ea5e9';
         ctx.stroke();
       }
@@ -237,13 +237,13 @@ const PPGSignalMeter = ({
       <div className="fixed bottom-0 left-0 right-0 h-[60px] grid grid-cols-2 gap-px bg-white/80 backdrop-blur-sm border-t border-slate-100">
         <button 
           onClick={onStartMeasurement}
-          className="w-full h-full bg-white/80 hover:bg-slate-50/80 text-xl font-bold text-slate-700 transition-all duration-300"
+          className="w-full h-full bg-white/90 hover:bg-slate-100/90 text-xl font-bold text-slate-700 transition-all duration-300 active:bg-slate-200/90 shadow-sm"
         >
           INICIAR
         </button>
         <button 
           onClick={handleReset}
-          className="w-full h-full bg-white/80 hover:bg-slate-50/80 text-xl font-bold text-slate-700 transition-all duration-300"
+          className="w-full h-full bg-white/90 hover:bg-slate-100/90 text-xl font-bold text-slate-700 transition-all duration-300 active:bg-slate-200/90 shadow-sm"
         >
           RESET
         </button>
