@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -26,17 +25,12 @@ const PPGSignalMeter = ({
   const baselineRef = useRef<number | null>(null);
   const dataBufferRef = useRef<CircularBuffer | null>(null);
   const lastValueRef = useRef<number | null>(null);
-  const lastSlopeRef = useRef<number>(0);
-  const peakCandidateRef = useRef<number | null>(null);
   
   const WINDOW_WIDTH_MS = 5000;
   const CANVAS_WIDTH = 1000;
   const CANVAS_HEIGHT = 200;
-  const verticalScale = 30.0;
-  const SMOOTHING_FACTOR_UP = 0.5; // Aumentado para mantener picos pronunciados
-  const SMOOTHING_FACTOR_DOWN = 0.05; // Reducido para descenso más suave
-  const SLOPE_THRESHOLD = 0.5; // Umbral para detectar cambios bruscos
-  const PEAK_THRESHOLD = 0.8; // Umbral para confirmar picos
+  const verticalScale = 35.0;
+  const SMOOTHING_FACTOR = 0.85; // Factor de suavizado más agresivo
 
   useEffect(() => {
     if (!dataBufferRef.current) {
@@ -58,36 +52,7 @@ const PPGSignalMeter = ({
 
   const smoothValue = useCallback((currentValue: number, previousValue: number | null): number => {
     if (previousValue === null) return currentValue;
-    
-    // Calcular pendiente actual
-    const currentSlope = currentValue - previousValue;
-    
-    // Detectar cambio de dirección
-    const isChangingDirection = (currentSlope * lastSlopeRef.current) < 0;
-    
-    // Detectar posible pico
-    if (isChangingDirection && lastSlopeRef.current > PEAK_THRESHOLD) {
-      peakCandidateRef.current = previousValue;
-    }
-    
-    // Si hay un cambio brusco hacia arriba, usar factor más agresivo
-    const smoothingFactor = isChangingDirection && currentSlope > SLOPE_THRESHOLD 
-      ? SMOOTHING_FACTOR_UP 
-      : currentSlope > 0 
-        ? SMOOTHING_FACTOR_UP 
-        : SMOOTHING_FACTOR_DOWN;
-    
-    // Actualizar pendiente anterior
-    lastSlopeRef.current = currentSlope;
-    
-    // Si tenemos un candidato a pico, preservarlo
-    if (peakCandidateRef.current !== null && currentValue < peakCandidateRef.current) {
-      const result = peakCandidateRef.current;
-      peakCandidateRef.current = null;
-      return result;
-    }
-    
-    return previousValue + smoothingFactor * (currentValue - previousValue);
+    return previousValue + SMOOTHING_FACTOR * (currentValue - previousValue);
   }, []);
 
   useEffect(() => {
@@ -105,7 +70,7 @@ const PPGSignalMeter = ({
       baselineRef.current = baselineRef.current * 0.95 + value * 0.05;
     }
 
-    // Aplicar suavizado adaptativo
+    // Aplicar suavizado simple pero rápido
     const smoothedValue = smoothValue(value, lastValueRef.current);
     lastValueRef.current = smoothedValue;
 
@@ -124,17 +89,12 @@ const PPGSignalMeter = ({
     
     dataBufferRef.current.push(dataPoint);
 
-    // Renderizar con antialiasing
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-
     ctx.fillStyle = '#F8FAFC';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     ctx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
     ctx.lineWidth = 0.5;
     
-    // Dibujar grid
     for (let i = 0; i < 40; i++) {
       const x = canvas.width - (canvas.width * (i / 40));
       ctx.beginPath();
@@ -146,40 +106,26 @@ const PPGSignalMeter = ({
     const points = dataBufferRef.current.getPoints();
     
     if (points.length > 1) {
-      // Usar curvas Bézier para suavizar la visualización
-      ctx.lineWidth = 2.5;
+      ctx.lineWidth = 2;
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
-      
       ctx.beginPath();
-      ctx.moveTo(
-        canvas.width - ((currentTime - points[0].time) * canvas.width / WINDOW_WIDTH_MS),
-        canvas.height / 2 + points[0].value
-      );
       
-      for (let i = 1; i < points.length; i++) {
-        const currentPoint = points[i];
-        const prevPoint = points[i - 1];
+      points.forEach((point, index) => {
+        const x = canvas.width - ((currentTime - point.time) * canvas.width / WINDOW_WIDTH_MS);
+        const y = canvas.height / 2 + point.value;
         
-        const x1 = canvas.width - ((currentTime - prevPoint.time) * canvas.width / WINDOW_WIDTH_MS);
-        const y1 = canvas.height / 2 + prevPoint.value;
-        const x2 = canvas.width - ((currentTime - currentPoint.time) * canvas.width / WINDOW_WIDTH_MS);
-        const y2 = canvas.height / 2 + currentPoint.value;
-        
-        if (x1 >= 0 && x2 >= 0 && x1 <= canvas.width && x2 <= canvas.width) {
-          const xc = (x1 + x2) / 2;
-          const yc = (y1 + y2) / 2;
-          ctx.quadraticCurveTo(x1, y1, xc, yc);
+        if (index === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
         }
-      }
+      });
       
-      // Dibujar la línea con sombra para mejor definición
-      ctx.shadowColor = 'rgba(14, 165, 233, 0.2)';
-      ctx.shadowBlur = 4;
       ctx.strokeStyle = '#0EA5E9';
       ctx.stroke();
       
-      // Resaltar picos con puntos
+      // Marcar picos de manera más visible
       points.forEach((point, i) => {
         if (i > 0 && i < points.length - 1) {
           const prevValue = points[i-1].value;
@@ -190,7 +136,7 @@ const PPGSignalMeter = ({
             const y = canvas.height / 2 + point.value;
             
             ctx.beginPath();
-            ctx.arc(x, y, 3, 0, Math.PI * 2);
+            ctx.arc(x, y, 4, 0, Math.PI * 2);
             ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
             ctx.fill();
           }
@@ -206,8 +152,6 @@ const PPGSignalMeter = ({
     }
     baselineRef.current = null;
     lastValueRef.current = null;
-    lastSlopeRef.current = 0;
-    peakCandidateRef.current = null;
     onReset();
   }, [onReset]);
 
