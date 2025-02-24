@@ -1,5 +1,5 @@
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Progress } from "@/components/ui/progress";
 import VitalSign from '@/components/VitalSign';
 import { Fingerprint } from 'lucide-react';
@@ -38,33 +38,32 @@ const PPGSignalMeter = ({
   const baselineRef = useRef<number | null>(null);
   const maxAmplitudeRef = useRef<number>(0);
   const lastValueRef = useRef<number>(0);
-  const lastArrhythmiaRef = useRef<boolean>(false);
+  const requestIdRef = useRef<number>();
 
-  const handleReset = () => {
+  const handleReset = useCallback(() => {
     dataRef.current = [];
     baselineRef.current = null;
     maxAmplitudeRef.current = 0;
     lastValueRef.current = 0;
-    lastArrhythmiaRef.current = false;
     setStartTime(Date.now());
     onReset();
-  };
+  }, [onReset]);
 
-  const getQualityColor = (quality: number) => {
+  const getQualityColor = useCallback((quality: number) => {
     if (quality > 90) return 'from-emerald-500/80 to-emerald-400/80';
     if (quality > 75) return 'from-sky-500/80 to-sky-400/80';
     if (quality > 60) return 'from-indigo-500/80 to-indigo-400/80';
     if (quality > 40) return 'from-amber-500/80 to-amber-400/80';
     return 'from-red-500/80 to-red-400/80';
-  };
+  }, []);
 
-  const getQualityText = (quality: number) => {
+  const getQualityText = useCallback((quality: number) => {
     if (quality > 90) return 'Excellent';
     if (quality > 75) return 'Very Good';
     if (quality > 60) return 'Good';
     if (quality > 40) return 'Fair';
     return 'Poor';
-  };
+  }, []);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -86,7 +85,6 @@ const PPGSignalMeter = ({
     const isWaveStart = lastValueRef.current < 0 && normalizedValue >= 0;
     lastValueRef.current = normalizedValue;
     
-    // La arritmia se detecta para cada punto individual
     const isCurrentPointArrhythmic = arrhythmiaStatus?.includes('ARRITMIA DETECTADA') || false;
     
     dataRef.current.push({
@@ -114,7 +112,7 @@ const PPGSignalMeter = ({
       ctx.lineTo(x, canvas.height);
       ctx.stroke();
       
-      if (i % 4 === 0) { // Mostrar etiquetas cada 200ms
+      if (i % 4 === 0) {
         ctx.fillStyle = 'rgba(51, 65, 85, 0.5)';
         ctx.font = '12px Inter';
         ctx.fillText(`${i * 50}ms`, x - 25, canvas.height - 5);
@@ -153,14 +151,12 @@ const PPGSignalMeter = ({
           ctx.moveTo(x, y);
           isFirstPoint = false;
         } else {
-          // Comenzar un nuevo trazo si cambia el estado de arritmia
           if (point.isArrhythmia !== dataRef.current[index - 1]?.isArrhythmia) {
             ctx.stroke();
             ctx.beginPath();
             ctx.moveTo(lastX, lastY);
           }
           
-          // Color basado en el punto actual
           ctx.strokeStyle = point.isArrhythmia ? '#FF2E2E' : '#0ea5e9';
           ctx.lineTo(x, y);
         }
@@ -173,6 +169,15 @@ const PPGSignalMeter = ({
     }
 
   }, [value, quality, isFingerDetected, arrhythmiaStatus]);
+
+  // Cleanup de recursos cuando el componente se desmonta
+  useEffect(() => {
+    return () => {
+      if (requestIdRef.current) {
+        cancelAnimationFrame(requestIdRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div className="fixed inset-0 bg-gradient-to-b from-white to-slate-50/30">
