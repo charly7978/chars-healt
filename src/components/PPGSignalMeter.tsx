@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react';
-// import { Fingerprint } from 'lucide-react'; // Comentado para evitar el error
 import { Progress } from "@/components/ui/progress";
 import VitalSign from '@/components/VitalSign';
 
@@ -85,20 +84,25 @@ const PPGSignalMeter = ({
     const isWaveStart = lastValueRef.current < 0 && normalizedValue >= 0;
     lastValueRef.current = normalizedValue;
     
+    // Detectar si es una arritmia basado en el status
+    const isArrhythmia = arrhythmiaStatus?.includes('ARRITMIA DETECTADA') || false;
+    lastArrhythmiaRef.current = isArrhythmia;
+    
     dataRef.current.push({
       time: currentTime,
       value: normalizedValue,
       isWaveStart,
-      isArrhythmia: false
+      isArrhythmia
     });
 
     const cutoffTime = currentTime - WINDOW_WIDTH_MS;
     dataRef.current = dataRef.current.filter(point => point.time >= cutoffTime);
 
+    // Dibujar el fondo
     ctx.fillStyle = '#F8FAFC';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Ajuste de la cuadrícula para mostrar marcas cada 50ms en lugar de 100ms
+    // Dibujar la cuadrícula
     ctx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
     ctx.lineWidth = 0.5;
     
@@ -132,16 +136,24 @@ const PPGSignalMeter = ({
     ctx.lineTo(canvas.width, canvas.height / 2);
     ctx.stroke();
 
+    // Dibujar las ondas PPG
     if (dataRef.current.length > 1) {
       ctx.lineWidth = 3;
       
       let waveStartIndex = 0;
+      let currentWaveIsArrhythmia = false;
 
       dataRef.current.forEach((point, index) => {
         if (point.isWaveStart || index === dataRef.current.length - 1) {
           if (index > waveStartIndex) {
+            // Determinar si esta onda es una arritmia
+            currentWaveIsArrhythmia = dataRef.current
+              .slice(waveStartIndex, index)
+              .some(p => p.isArrhythmia);
+
             ctx.beginPath();
-            ctx.strokeStyle = '#0ea5e9';
+            // Color azul para latidos normales, rojo para arritmias
+            ctx.strokeStyle = currentWaveIsArrhythmia ? '#FF2E2E' : '#0ea5e9';
             
             const startPoint = dataRef.current[waveStartIndex];
             ctx.moveTo(
@@ -165,6 +177,32 @@ const PPGSignalMeter = ({
     }
 
   }, [value, quality, isFingerDetected, arrhythmiaStatus]);
+
+  const handleReset = () => {
+    dataRef.current = [];
+    baselineRef.current = null;
+    maxAmplitudeRef.current = 0;
+    lastValueRef.current = 0;
+    lastArrhythmiaRef.current = false;
+    setStartTime(Date.now());
+    onReset();
+  };
+
+  const getQualityColor = (quality: number) => {
+    if (quality > 90) return 'from-emerald-500/80 to-emerald-400/80';
+    if (quality > 75) return 'from-sky-500/80 to-sky-400/80';
+    if (quality > 60) return 'from-indigo-500/80 to-indigo-400/80';
+    if (quality > 40) return 'from-amber-500/80 to-amber-400/80';
+    return 'from-red-500/80 to-red-400/80';
+  };
+
+  const getQualityText = (quality: number) => {
+    if (quality > 90) return 'Excellent';
+    if (quality > 75) return 'Very Good';
+    if (quality > 60) return 'Good';
+    if (quality > 40) return 'Fair';
+    return 'Poor';
+  };
 
   return (
     <div className="fixed inset-0 bg-gradient-to-b from-white to-slate-50/30">
