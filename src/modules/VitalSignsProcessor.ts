@@ -1,3 +1,4 @@
+
 export class VitalSignsProcessor {
   private readonly WINDOW_SIZE = 300;
   private readonly SPO2_CALIBRATION_FACTOR = 1.02;
@@ -54,44 +55,53 @@ export class VitalSignsProcessor {
       this.isLearningPhase = false;
     }
 
+    // Importante: Aquí es donde enviamos el contador
     const arrhythmiaStatus = this.isLearningPhase 
       ? "CALIBRANDO..." 
       : this.arrhythmiaDetected 
         ? `ARRITMIA DETECTADA|${this.arrhythmiaCount}`
-        : "SIN ARRITMIAS|0";
+        : `SIN ARRITMIAS|${this.arrhythmiaCount}`;
 
     return {
       spo2,
       pressure: `${bp.systolic}/${bp.diastolic}`,
-      arrhythmiaStatus
+      arrhythmiaStatus,
+      lastArrhythmiaData: this.arrhythmiaDetected ? {
+        timestamp: currentTime,
+        rmssd: this.lastRMSSD || 0,
+        rrVariation: this.lastRRVariation || 0
+      } : null
     };
   }
 
   private detectArrhythmia() {
     if (this.rrIntervals.length < this.RR_WINDOW_SIZE) return;
 
-    // Tomar los últimos N intervalos
     const recentRR = this.rrIntervals.slice(-this.RR_WINDOW_SIZE);
-    
-    // Calcular diferencias sucesivas
     let sumSquaredDiff = 0;
     for (let i = 1; i < recentRR.length; i++) {
       const diff = recentRR[i] - recentRR[i-1];
       sumSquaredDiff += diff * diff;
     }
     
-    // Calcular RMSSD
     const rmssd = Math.sqrt(sumSquaredDiff / (recentRR.length - 1));
-    
-    // Detectar latidos prematuros
     const avgRR = recentRR.reduce((a, b) => a + b, 0) / recentRR.length;
     const lastRR = recentRR[recentRR.length - 1];
-    const prematureBeat = Math.abs(lastRR - avgRR) > (avgRR * 0.25);
+    const rrVariation = Math.abs(lastRR - avgRR) / avgRR;
     
-    const newArrhythmiaState = rmssd > this.RMSSD_THRESHOLD && prematureBeat;
+    this.lastRMSSD = rmssd;
+    this.lastRRVariation = rrVariation;
+    
+    const newArrhythmiaState = rmssd > this.RMSSD_THRESHOLD && rrVariation > 0.20;
 
     if (newArrhythmiaState && !this.arrhythmiaDetected) {
       this.arrhythmiaCount++;
+      console.log('Nueva arritmia detectada:', {
+        contador: this.arrhythmiaCount,
+        rmssd,
+        rrVariation,
+        timestamp: Date.now()
+      });
     }
 
     this.arrhythmiaDetected = newArrhythmiaState;

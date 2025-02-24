@@ -14,16 +14,17 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit }) => {
     if (!isArrhythmiaDisplay) return { text: value, color: "" };
     
     const [status, count] = String(value).split('|');
+    console.log('Procesando display de arritmias:', { status, count, value });
     
     if (status === "ARRITMIA DETECTADA") {
       return {
-        text: count ? `ARRITMIA (${count})` : "ARRITMIA DETECTADA",
+        text: count ? `ARRITMIAS: ${count}` : "ARRITMIA DETECTADA",
         color: "text-red-500"
       };
     }
     
     return {
-      text: status === "CALIBRANDO..." ? status : "SIN ARRITMIAS",
+      text: status === "CALIBRANDO..." ? status : `ARRITMIAS: ${count || '0'}`,
       color: status === "CALIBRANDO..." ? "text-yellow-500" : "text-cyan-500"
     };
   };
@@ -35,13 +36,9 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit }) => {
       <h3 className="text-gray-400/90 text-xs mb-2">{label}</h3>
       <div className="flex items-baseline gap-1 justify-center">
         <span 
-          className={`
-            ${isArrhythmiaDisplay ? 'text-sm' : 'text-2xl'} 
-            font-bold 
-            ${color || 'text-white'}
-          `}
+          className={`text-lg font-bold ${color || 'text-white'}`}
         >
-          {isArrhythmiaDisplay ? text : value}
+          {text}
         </span>
         {!isArrhythmiaDisplay && unit && (
           <span className="text-gray-400/90 text-xs">{unit}</span>

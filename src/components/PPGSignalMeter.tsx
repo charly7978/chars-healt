@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -170,7 +169,6 @@ const PPGSignalMeter = ({
         now - rawArrhythmiaData.timestamp < 1000) {
       isArrhythmia = true;
       lastArrhythmiaTime.current = now;
-      arrhythmiaCountRef.current++;
     }
 
     const dataPoint: PPGDataPoint = {
@@ -185,7 +183,6 @@ const PPGSignalMeter = ({
 
     const points = dataBufferRef.current.getPoints();
     if (points.length > 1) {
-      // Dibujamos la línea segmento por segmento para cambio de color inmediato
       for (let i = 1; i < points.length; i++) {
         const prevPoint = points[i - 1];
         const point = points[i];
@@ -205,7 +202,6 @@ const PPGSignalMeter = ({
         ctx.stroke();
       }
 
-      // Marcamos los picos
       points.forEach((point, index) => {
         if (index > 0 && index < points.length - 1) {
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
@@ -219,15 +215,8 @@ const PPGSignalMeter = ({
             ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
             ctx.fill();
 
-            if (point.isArrhythmia) {
-              ctx.beginPath();
-              ctx.arc(x, y, 40, 0, Math.PI * 2);
-              ctx.fillStyle = 'rgba(220, 38, 38, 0.15)';
-              ctx.fill();
-            }
-
             ctx.font = 'bold 12px Inter';
-            ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
+            ctx.fillStyle = '#000000';
             ctx.textAlign = 'center';
             ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 20);
           }
