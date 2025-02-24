@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -33,6 +32,8 @@ const PPGSignalMeter = ({
   const WINDOW_WIDTH_MS = 5000;
   const CANVAS_WIDTH = 1000;
   const CANVAS_HEIGHT = 200;
+  const GRID_SIZE_X = 50;
+  const GRID_SIZE_Y = 25;
   const verticalScale = 28.0;
   const SMOOTHING_FACTOR = 0.85;
   const TARGET_FPS = 60;
@@ -61,8 +62,47 @@ const PPGSignalMeter = ({
     return previousValue + SMOOTHING_FACTOR * (currentValue - previousValue);
   }, []);
 
+  const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(51, 65, 85, 0.1)';
+    ctx.lineWidth = 0.5;
+
+    for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X) {
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, CANVAS_HEIGHT);
+    }
+
+    for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y) {
+      ctx.moveTo(0, y);
+      ctx.lineTo(CANVAS_WIDTH, y);
+    }
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(51, 65, 85, 0.2)';
+    ctx.lineWidth = 1;
+
+    for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X * 4) {
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, CANVAS_HEIGHT);
+    }
+
+    for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y * 4) {
+      ctx.moveTo(0, y);
+      ctx.lineTo(CANVAS_WIDTH, y);
+    }
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(51, 65, 85, 0.3)';
+    ctx.lineWidth = 1.5;
+    ctx.moveTo(0, CANVAS_HEIGHT / 2);
+    ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT / 2);
+    ctx.stroke();
+  }, []);
+
   const renderSignal = useCallback(() => {
-    if (!canvasRef.current || !isFingerDetected || !dataBufferRef.current) {
+    if (!canvasRef.current || !dataBufferRef.current) {
       animationFrameRef.current = requestAnimationFrame(renderSignal);
       return;
     }
@@ -76,7 +116,7 @@ const PPGSignalMeter = ({
     }
 
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) {
       animationFrameRef.current = requestAnimationFrame(renderSignal);
       return;
@@ -97,15 +137,13 @@ const PPGSignalMeter = ({
     const scaledValue = normalizedValue * verticalScale;
     
     let isArrhythmia = false;
-    const arrhythmiaDetected = arrhythmiaStatus?.includes("ARRITMIA DETECTADA");
-    if (arrhythmiaDetected && rawArrhythmiaData?.rrIntervals?.length) {
+    if (arrhythmiaStatus?.includes("ARRITMIA DETECTADA") && rawArrhythmiaData?.rrIntervals?.length) {
       const lastRRInterval = rawArrhythmiaData.rrIntervals[rawArrhythmiaData.rrIntervals.length - 1];
       const timeNow = Date.now();
       if ((lastRRInterval > 1000 || lastRRInterval < 700) &&
           (timeNow - lastArrhythmiaTime.current > 500)) {
         isArrhythmia = true;
         lastArrhythmiaTime.current = timeNow;
-        console.log('Arritmia detectada en gráfico:', { lastRRInterval, timeNow });
       }
     }
 
@@ -120,25 +158,24 @@ const PPGSignalMeter = ({
     ctx.fillStyle = '#F8FAFC';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+    drawGrid(ctx);
+
     const points = dataBufferRef.current.getPoints();
     if (points.length > 1) {
-      let lastX = 0;
-      let lastY = 0;
-      let firstPoint = true;
+      ctx.beginPath();
+      ctx.strokeStyle = '#0EA5E9';
+      ctx.lineWidth = 2;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
 
       points.forEach((point, index) => {
         const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
         const y = canvas.height / 2 - point.value;
 
-        if (firstPoint) {
-          firstPoint = false;
+        if (index === 0) {
+          ctx.moveTo(x, y);
         } else {
-          ctx.beginPath();
-          ctx.moveTo(lastX, lastY);
           ctx.lineTo(x, y);
-          ctx.strokeStyle = '#0EA5E9';
-          ctx.lineWidth = 2;
-          ctx.stroke();
         }
 
         if (index > 0 && index < points.length - 1) {
@@ -146,57 +183,42 @@ const PPGSignalMeter = ({
           const nextPoint = points[index + 1];
           
           if (point.value > prevPoint.value && point.value > nextPoint.value) {
+            ctx.stroke();
             ctx.beginPath();
             ctx.arc(x, y, 4, 0, Math.PI * 2);
             ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
             ctx.fill();
 
-            const displayValue = Math.abs(Math.round(point.value));
-            ctx.font = '12px Inter';
-            ctx.fillStyle = point.isArrhythmia ? 'rgba(220, 38, 38, 0.8)' : 'rgba(51, 65, 85, 0.8)';
-            ctx.textAlign = 'left';
-            ctx.fillText(`${displayValue}`, x + 8, y - 8);
-
             if (point.isArrhythmia) {
-              ctx.font = '10px Inter';
+              ctx.save();
+              ctx.beginPath();
+              ctx.moveTo(x, y - 20);
+              ctx.lineTo(x, y + 20);
+              ctx.strokeStyle = '#DC2626';
+              ctx.lineWidth = 1;
+              ctx.stroke();
+              
+              ctx.font = '12px Inter';
               ctx.fillStyle = '#DC2626';
-              ctx.fillText('⚠️', x + 8, y - 20);
+              ctx.textAlign = 'center';
+              ctx.fillText('!', x, y - 25);
+              ctx.restore();
             }
+
+            ctx.beginPath();
+            ctx.strokeStyle = '#0EA5E9';
+            ctx.lineWidth = 2;
+            ctx.moveTo(x, y);
           }
         }
-
-        lastX = x;
-        lastY = y;
       });
-    }
 
-    ctx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
-    ctx.lineWidth = 0.5;
-
-    for (let i = 0; i <= CANVAS_HEIGHT; i += 50) {
-      ctx.beginPath();
-      ctx.moveTo(0, i);
-      ctx.lineTo(CANVAS_WIDTH, i);
       ctx.stroke();
     }
-
-    for (let i = 0; i <= CANVAS_WIDTH; i += 100) {
-      ctx.beginPath();
-      ctx.moveTo(i, 0);
-      ctx.lineTo(i, CANVAS_HEIGHT);
-      ctx.stroke();
-    }
-
-    ctx.strokeStyle = 'rgba(51, 65, 85, 0.3)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(0, CANVAS_HEIGHT / 2);
-    ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT / 2);
-    ctx.stroke();
 
     lastRenderTimeRef.current = currentTime;
     animationFrameRef.current = requestAnimationFrame(renderSignal);
-  }, [value, quality, isFingerDetected, rawArrhythmiaData, smoothValue, arrhythmiaStatus]);
+  }, [value, quality, isFingerDetected, rawArrhythmiaData, smoothValue, arrhythmiaStatus, drawGrid]);
 
   useEffect(() => {
     renderSignal();
