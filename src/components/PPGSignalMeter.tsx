@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Progress } from "@/components/ui/progress";
 import VitalSign from '@/components/VitalSign';
@@ -115,15 +114,12 @@ const PPGSignalMeter = ({
       isArrhythmia: isCurrentArrhythmia
     });
 
-    // Limpiar canvas
     ctx.fillStyle = '#F8FAFC';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Dibujar grid
     ctx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
     ctx.lineWidth = 0.5;
     
-    // Dibujar líneas de grid
     for (let i = 0; i < 40; i++) {
       const x = canvas.width - (canvas.width * (i / 40));
       ctx.beginPath();
@@ -136,35 +132,24 @@ const PPGSignalMeter = ({
     
     if (points.length > 1) {
       ctx.lineWidth = 3;
-      let lastX = 0;
-      let lastY = 0;
-      let lastWasArrhythmia = false;
+      let pathStarted = false;
       
-      points.forEach((point, index) => {
-        const x = canvas.width - ((currentTime - point.time) * canvas.width / WINDOW_WIDTH_MS);
-        const y = canvas.height / 2 + point.value;
+      for (let i = 0; i < points.length - 1; i++) {
+        const currentPoint = points[i];
+        const nextPoint = points[i + 1];
+        
+        const x1 = canvas.width - ((currentTime - currentPoint.time) * canvas.width / WINDOW_WIDTH_MS);
+        const y1 = canvas.height / 2 + currentPoint.value;
+        const x2 = canvas.width - ((currentTime - nextPoint.time) * canvas.width / WINDOW_WIDTH_MS);
+        const y2 = canvas.height / 2 + nextPoint.value;
 
-        if (index === 0) {
-          ctx.beginPath();
-          ctx.moveTo(x, y);
-          lastWasArrhythmia = point.isArrhythmia;
-        } else {
-          if (point.isArrhythmia !== lastWasArrhythmia) {
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(lastX, lastY);
-          }
-          
-          ctx.strokeStyle = point.isArrhythmia ? '#FF2E2E' : '#0ea5e9';
-          ctx.lineTo(x, y);
-          lastWasArrhythmia = point.isArrhythmia;
-        }
-
-        lastX = x;
-        lastY = y;
-      });
-
-      ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        
+        ctx.strokeStyle = currentPoint.isArrhythmia ? '#FF2E2E' : '#0ea5e9';
+        ctx.stroke();
+      }
     }
 
   }, [value, quality, isFingerDetected, arrhythmiaStatus]);
@@ -179,36 +164,36 @@ const PPGSignalMeter = ({
   return (
     <div className="fixed inset-0 bg-gradient-to-b from-white to-slate-50/30">
       <div className="absolute top-0 left-0 right-0 p-2 flex justify-between items-center bg-white/60 backdrop-blur-sm border-b border-slate-100 shadow-sm">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-1">
           <span className="text-xl font-bold text-slate-700">PPG</span>
-          <div className="flex flex-col flex-1">
-            <div className={`h-1.5 w-full mx-auto rounded-full bg-gradient-to-r ${getQualityColor(quality)} transition-all duration-1000 ease-in-out`}>
+          <div className="flex-1">
+            <div className={`h-1.5 w-[400px] mx-auto rounded-full bg-gradient-to-r ${getQualityColor(quality)} transition-all duration-1000 ease-in-out`}>
               <div
                 className="h-full rounded-full bg-white/20 animate-pulse transition-all duration-1000"
                 style={{ width: `${quality}%` }}
               />
             </div>
-            <span className="text-[9px] text-center mt-0.5 font-medium transition-colors duration-700" 
+            <span className="text-[9px] text-center mt-0.5 font-medium transition-colors duration-700 block" 
                   style={{ color: quality > 60 ? '#0EA5E9' : '#F59E0B' }}>
               {getQualityText(quality)}
             </span>
           </div>
+        </div>
 
-          <div className="flex flex-col items-center">
-            <Fingerprint
-              size={48}
-              className={`transition-colors duration-300 ${
-                !isFingerDetected ? 'text-gray-400' :
-                quality > 75 ? 'text-green-500' :
-                quality > 50 ? 'text-yellow-500' :
-                'text-red-500'
-              }`}
-              strokeWidth={1.5}
-            />
-            <span className="text-[10px] text-center mt-0.5 font-medium text-slate-600">
-              {isFingerDetected ? "Dedo detectado" : "Ubique su dedo"}
-            </span>
-          </div>
+        <div className="flex flex-col items-center ml-4">
+          <Fingerprint
+            size={48}
+            className={`transition-colors duration-300 ${
+              !isFingerDetected ? 'text-gray-400' :
+              quality > 75 ? 'text-green-500' :
+              quality > 50 ? 'text-yellow-500' :
+              'text-red-500'
+            }`}
+            strokeWidth={1.5}
+          />
+          <span className="text-[10px] text-center mt-0.5 font-medium text-slate-600">
+            {isFingerDetected ? "Dedo detectado" : "Ubique su dedo"}
+          </span>
         </div>
       </div>
 
