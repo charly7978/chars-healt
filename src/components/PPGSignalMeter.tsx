@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useCallback } from 'react';
 import { FingerPrintIcon } from '@heroicons/react/24/outline';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -28,8 +29,6 @@ const PPGSignalMeter = ({
   const animationFrameRef = useRef<number>();
   const lastRenderTimeRef = useRef<number>(0);
   const lastArrhythmiaTime = useRef<number>(0);
-  const stableReadingsCountRef = useRef<number>(0);
-  const lastStableValueRef = useRef<number | null>(null);
   
   const WINDOW_WIDTH_MS = 5000;
   const CANVAS_WIDTH = 1000;
@@ -38,10 +37,6 @@ const PPGSignalMeter = ({
   const SMOOTHING_FACTOR = 0.85;
   const TARGET_FPS = 60;
   const FRAME_TIME = 1000 / TARGET_FPS;
-  const MIN_STABLE_READINGS = 15;
-  const VALUE_STABILITY_THRESHOLD = 8.0;
-  const MIN_RED_VALUE = 120;
-  const MAX_RED_VALUE = 230;
 
   useEffect(() => {
     if (!dataBufferRef.current) {
@@ -66,35 +61,8 @@ const PPGSignalMeter = ({
     return previousValue + SMOOTHING_FACTOR * (currentValue - previousValue);
   }, []);
 
-  const isStableReading = useCallback((currentValue: number): boolean => {
-    if (lastStableValueRef.current === null) {
-      lastStableValueRef.current = currentValue;
-      stableReadingsCountRef.current = 1;
-      return false;
-    }
-
-    const difference = Math.abs(currentValue - lastStableValueRef.current);
-    
-    if (difference <= VALUE_STABILITY_THRESHOLD) {
-      stableReadingsCountRef.current++;
-      lastStableValueRef.current = currentValue;
-      return stableReadingsCountRef.current >= MIN_STABLE_READINGS;
-    } else {
-      stableReadingsCountRef.current = Math.max(0, stableReadingsCountRef.current - 2);
-      lastStableValueRef.current = currentValue;
-      return false;
-    }
-  }, []);
-
   const renderSignal = useCallback(() => {
     if (!canvasRef.current || !isFingerDetected || !dataBufferRef.current) {
-      animationFrameRef.current = requestAnimationFrame(renderSignal);
-      return;
-    }
-
-    if (value < MIN_RED_VALUE || value > MAX_RED_VALUE || !isStableReading(value)) {
-      stableReadingsCountRef.current = 0;
-      lastStableValueRef.current = null;
       animationFrameRef.current = requestAnimationFrame(renderSignal);
       return;
     }
@@ -228,7 +196,7 @@ const PPGSignalMeter = ({
 
     lastRenderTimeRef.current = currentTime;
     animationFrameRef.current = requestAnimationFrame(renderSignal);
-  }, [value, quality, isFingerDetected, rawArrhythmiaData, smoothValue, arrhythmiaStatus, isStableReading]);
+  }, [value, quality, isFingerDetected, rawArrhythmiaData, smoothValue, arrhythmiaStatus]);
 
   useEffect(() => {
     renderSignal();
@@ -245,8 +213,6 @@ const PPGSignalMeter = ({
     }
     baselineRef.current = null;
     lastValueRef.current = null;
-    stableReadingsCountRef.current = 0;
-    lastStableValueRef.current = null;
     onReset();
   }, [onReset]);
 
