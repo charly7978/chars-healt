@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -161,23 +160,22 @@ const Index = () => {
       // Procesar signos vitales y arritmias
       const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
       if (vitals) {
-        console.log('Index - Datos vitales recibidos:', {
-          arrhythmiaStatus: vitals.arrhythmiaStatus,
-          lastArrhythmiaData: vitals.lastArrhythmiaData
-        });
-
-        // Actualizar estado de signos vitales
+        // Actualizar estado de signos vitales de manera inmediata
         setVitalSigns(vitals);
         
-        // Actualizar datos de arritmia si hay nuevos
+        // Si hay datos de arritmia nuevos, actualizar estado
         if (vitals.lastArrhythmiaData) {
           setLastArrhythmiaData(vitals.lastArrhythmiaData);
           
-          // Extraer y actualizar contador de arritmias
+          // Actualizar el contador y estado directamente del status
           const [status, count] = vitals.arrhythmiaStatus.split('|');
-          if (status.includes("ARRITMIA")) {
-            setArrhythmiaCount(count || "0");
-          }
+          setArrhythmiaCount(count || "0");
+          
+          // Forzar actualización del display con el nuevo estado
+          setVitalSigns(current => ({
+            ...current,
+            arrhythmiaStatus: vitals.arrhythmiaStatus
+          }));
         }
       }
       
@@ -237,7 +235,7 @@ const Index = () => {
                 />
                 <VitalSign 
                   label="ARRITMIAS"
-                  value={!isMonitoring ? "--" : vitalSigns.arrhythmiaStatus}
+                  value={vitalSigns.arrhythmiaStatus}
                 />
               </div>
             </div>
