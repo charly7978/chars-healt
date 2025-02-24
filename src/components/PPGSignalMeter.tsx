@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useCallback } from 'react';
+import { Fingerprint } from '@heroicons/react/24/outline';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
-import { FingerprintIcon } from '@heroicons/react/outline';
 
 interface PPGSignalMeterProps {
   value: number;
@@ -95,7 +95,6 @@ const PPGSignalMeter = ({
     const normalizedValue = (baselineRef.current || 0) - smoothedValue;
     const scaledValue = normalizedValue * verticalScale;
     
-    // Detección de latido con arrhythmia si corresponde
     let isArrhythmia = false;
     const arrhythmiaDetected = arrhythmiaStatus?.includes("ARRITMIA DETECTADA");
     if (arrhythmiaDetected && rawArrhythmiaData?.rrIntervals?.length) {
@@ -117,18 +116,15 @@ const PPGSignalMeter = ({
     
     dataBufferRef.current.push(dataPoint);
 
-    // Limpiar canvas
     ctx.fillStyle = '#F8FAFC';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Dibujar señal PPG
     const points = dataBufferRef.current.getPoints();
     if (points.length > 1) {
       let lastX = 0;
       let lastY = 0;
       let firstPoint = true;
 
-      // Luego dibujamos la línea de la señal
       points.forEach((point, index) => {
         const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
         const y = canvas.height / 2 - point.value;
@@ -139,31 +135,27 @@ const PPGSignalMeter = ({
           ctx.beginPath();
           ctx.moveTo(lastX, lastY);
           ctx.lineTo(x, y);
-          ctx.strokeStyle = '#0EA5E9'; // Siempre azul para la línea
+          ctx.strokeStyle = '#0EA5E9';
           ctx.lineWidth = 2;
           ctx.stroke();
         }
 
-        // Detectar y marcar picos
         if (index > 0 && index < points.length - 1) {
           const prevPoint = points[index - 1];
           const nextPoint = points[index + 1];
           
           if (point.value > prevPoint.value && point.value > nextPoint.value) {
-            // Dibujar círculo en el pico
             ctx.beginPath();
             ctx.arc(x, y, 4, 0, Math.PI * 2);
             ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
             ctx.fill();
 
-            // Mostrar valor numérico
             const displayValue = Math.abs(Math.round(point.value));
             ctx.font = '12px Inter';
             ctx.fillStyle = point.isArrhythmia ? 'rgba(220, 38, 38, 0.8)' : 'rgba(51, 65, 85, 0.8)';
             ctx.textAlign = 'left';
             ctx.fillText(`${displayValue}`, x + 8, y - 8);
 
-            // Si es arritmia, añadir indicador
             if (point.isArrhythmia) {
               ctx.font = '10px Inter';
               ctx.fillStyle = '#DC2626';
@@ -177,11 +169,9 @@ const PPGSignalMeter = ({
       });
     }
 
-    // Dibujar grilla
     ctx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
     ctx.lineWidth = 0.5;
 
-    // Grilla horizontal
     for (let i = 0; i <= CANVAS_HEIGHT; i += 50) {
       ctx.beginPath();
       ctx.moveTo(0, i);
@@ -189,7 +179,6 @@ const PPGSignalMeter = ({
       ctx.stroke();
     }
 
-    // Grilla vertical
     for (let i = 0; i <= CANVAS_WIDTH; i += 100) {
       ctx.beginPath();
       ctx.moveTo(i, 0);
@@ -197,7 +186,6 @@ const PPGSignalMeter = ({
       ctx.stroke();
     }
 
-    // Línea central
     ctx.strokeStyle = 'rgba(51, 65, 85, 0.3)';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -246,7 +234,7 @@ const PPGSignalMeter = ({
           </div>
         </div>
         <div className="flex flex-col items-center">
-          <FingerprintIcon
+          <Fingerprint
             size={48}
             className={`transition-colors duration-300 ${
               !isFingerDetected ? 'text-gray-400' :
