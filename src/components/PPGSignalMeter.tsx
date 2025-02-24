@@ -237,7 +237,7 @@ const PPGSignalMeter = ({
         </div>
 
         <div className="flex flex-col items-center">
-          <FingerprintIcon
+          <FingerPrintIcon
             className={`h-12 w-12 transition-colors duration-300 ${
               !isFingerDetected ? 'text-gray-400' :
               quality > 75 ? 'text-green-500' :
