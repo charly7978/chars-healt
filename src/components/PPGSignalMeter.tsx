@@ -35,12 +35,12 @@ const PPGSignalMeter = ({
   const CANVAS_HEIGHT = 200;
   const verticalScale = 28.0;
   const SMOOTHING_FACTOR = 0.85;
-  const TARGET_FPS = 30; // Optimizado a 30 FPS sin afectar la visualización
+  const TARGET_FPS = 60; // Restaurado a 60 FPS
   const FRAME_TIME = 1000 / TARGET_FPS;
 
   useEffect(() => {
     if (!dataBufferRef.current) {
-      dataBufferRef.current = new CircularBuffer(1000);
+      dataBufferRef.current = new CircularBuffer(1000); // Restaurado a 1000
     }
     return () => {
       if (animationFrameRef.current) {
@@ -105,10 +105,12 @@ const PPGSignalMeter = ({
     if (arrhythmiaStatus?.includes("ARRITMIA DETECTADA") && rawArrhythmiaData?.rrIntervals?.length) {
       const lastRRInterval = rawArrhythmiaData.rrIntervals[rawArrhythmiaData.rrIntervals.length - 1];
       const timeNow = Date.now();
+      // Solo marcamos arritmia si el intervalo RR está fuera del rango normal
       if ((lastRRInterval > 1000 || lastRRInterval < 700) &&
           (timeNow - lastArrhythmiaTime.current > 500)) {
         isArrhythmia = true;
         lastArrhythmiaTime.current = timeNow;
+        console.log("Arritmia detectada:", { lastRRInterval, time: timeNow });
       }
     }
 
@@ -120,9 +122,11 @@ const PPGSignalMeter = ({
     
     dataBufferRef.current.push(dataPoint);
 
+    // Limpiar el canvas
     ctx.fillStyle = '#F8FAFC';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+    // Dibujar la señal
     const points = dataBufferRef.current.getPoints();
     if (points.length > 1) {
       ctx.beginPath();
@@ -139,11 +143,13 @@ const PPGSignalMeter = ({
           ctx.lineTo(x, y);
         }
 
+        // Marcar picos y arritmias
         if (index > 0 && index < points.length - 1) {
           const prevPoint = points[index - 1];
           const nextPoint = points[index + 1];
           
           if (point.value > prevPoint.value && point.value > nextPoint.value) {
+            // Dibujar el punto del pico
             ctx.stroke();
             ctx.beginPath();
             ctx.arc(x, y, 4, 0, Math.PI * 2);
@@ -152,8 +158,10 @@ const PPGSignalMeter = ({
             ctx.beginPath();
             ctx.moveTo(x, y);
 
+            // Si es arritmia, marcarla visualmente
             if (point.isArrhythmia) {
               ctx.save();
+              // Línea vertical roja
               ctx.beginPath();
               ctx.moveTo(x, y - 15);
               ctx.lineTo(x, y + 15);
@@ -161,6 +169,7 @@ const PPGSignalMeter = ({
               ctx.lineWidth = 1;
               ctx.stroke();
               
+              // Signo de exclamación
               ctx.font = '10px Inter';
               ctx.fillStyle = '#DC2626';
               ctx.textAlign = 'center';
@@ -173,11 +182,13 @@ const PPGSignalMeter = ({
         }
       });
 
+      // Dibujar la línea principal
       ctx.strokeStyle = '#0EA5E9';
       ctx.lineWidth = 2;
       ctx.stroke();
     }
 
+    // Dibujar la cuadrícula
     ctx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
     ctx.lineWidth = 0.5;
 
@@ -195,6 +206,7 @@ const PPGSignalMeter = ({
     }
     ctx.stroke();
 
+    // Línea central
     ctx.strokeStyle = 'rgba(51, 65, 85, 0.3)';
     ctx.lineWidth = 1;
     ctx.beginPath();
