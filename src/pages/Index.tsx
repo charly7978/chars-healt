@@ -201,7 +201,7 @@ const Index = () => {
             />
           </div>
 
-          <div className="absolute bottom-[200px] left-0 right-0 px-4">
+          <div className="absolute bottom-[120px] left-0 right-0 px-4">
             <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4">
               <div className="grid grid-cols-2 gap-4">
                 <VitalSign 
@@ -221,7 +221,7 @@ const Index = () => {
                 />
                 <VitalSign 
                   label="ARRITMIAS"
-                  value={vitalSigns.arrhythmiaStatus}
+                  value={vitalSigns.arrhythmiaStatus || "--"}
                 />
               </div>
             </div>

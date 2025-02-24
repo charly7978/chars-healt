@@ -1,4 +1,3 @@
-
 export class VitalSignsProcessor {
   private readonly WINDOW_SIZE = 300;
   private readonly SPO2_CALIBRATION_FACTOR = 1.02;
@@ -25,6 +24,8 @@ export class VitalSignsProcessor {
   private arrhythmiaDetected = false;
   private measurementStartTime: number = Date.now();
   private arrhythmiaCount = 0;
+  private lastRMSSD: number = 0;
+  private lastRRVariation: number = 0;
 
   public processSignal(
     ppgValue: number,
