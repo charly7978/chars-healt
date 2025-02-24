@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Progress } from "@/components/ui/progress";
 import VitalSign from '@/components/VitalSign';
@@ -10,7 +11,28 @@ interface PPGDataPoint {
 }
 
 class CircularBuffer {
-  // ... existing code ...
+  private buffer: PPGDataPoint[];
+  private maxSize: number;
+
+  constructor(size: number) {
+    this.buffer = [];
+    this.maxSize = size;
+  }
+
+  push(point: PPGDataPoint) {
+    this.buffer.push(point);
+    if (this.buffer.length > this.maxSize) {
+      this.buffer.shift();
+    }
+  }
+
+  getPoints(): PPGDataPoint[] {
+    return this.buffer;
+  }
+
+  clear() {
+    this.buffer = [];
+  }
 }
 
 interface PPGSignalMeterProps {
@@ -36,17 +58,21 @@ const PPGSignalMeter = ({
   const dataBufferRef = useRef<CircularBuffer>(new CircularBuffer(1000));
   const baselineRef = useRef<number | null>(null);
   
-  const WINDOW_WIDTH_MS = 6000;
+  const WINDOW_WIDTH_MS = 5000;
   const CANVAS_WIDTH = 1000;
   const CANVAS_HEIGHT = 200;
-  const verticalScale = 25.0;
+  const verticalScale = 32.0;
 
   const getQualityColor = useCallback((quality: number) => {
-    // ... existing code ...
+    if (quality > 75) return 'from-green-500 to-emerald-500';
+    if (quality > 50) return 'from-yellow-500 to-orange-500';
+    return 'from-red-500 to-rose-500';
   }, []);
 
   const getQualityText = useCallback((quality: number) => {
-    // ... existing code ...
+    if (quality > 75) return 'Señal óptima';
+    if (quality > 50) return 'Señal aceptable';
+    return 'Señal débil';
   }, []);
 
   useEffect(() => {
@@ -67,17 +93,14 @@ const PPGSignalMeter = ({
     const normalizedValue = (value - (baselineRef.current || 0)) * verticalScale;
     
     const isCurrentArrhythmia = arrhythmiaStatus?.includes('ARRITMIA DETECTADA') || false;
-    
     const lastPeakTime = rawArrhythmiaData?.lastPeakTime;
     const timeSinceLastPeak = lastPeakTime ? currentTime - lastPeakTime : Infinity;
-    
     const isNearPeak = timeSinceLastPeak < 50;
-    const shouldMarkArrhythmia = isCurrentArrhythmia && isNearPeak;
-
+    
     dataBufferRef.current.push({
       time: currentTime,
       value: normalizedValue,
-      isArrhythmia: shouldMarkArrhythmia
+      isArrhythmia: isCurrentArrhythmia && isNearPeak
     });
 
     ctx.fillStyle = '#F8FAFC';
