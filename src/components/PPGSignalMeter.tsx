@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Progress } from "@/components/ui/progress";
 import VitalSign from '@/components/VitalSign';
@@ -72,6 +71,8 @@ const PPGSignalMeter = ({
   const dataBufferRef = useRef<CircularBuffer>(new CircularBuffer(1000));
   const baselineRef = useRef<number | null>(null);
   const lastValueRef = useRef<number>(0);
+  const lastArrhythmiaTimeRef = useRef<number>(0);
+  
   const WINDOW_WIDTH_MS = 5000;
   const CANVAS_WIDTH = 1000;
   const CANVAS_HEIGHT = 200;
@@ -110,45 +111,34 @@ const PPGSignalMeter = ({
 
     const normalizedValue = (value - (baselineRef.current || 0)) * verticalScale;
     
-    // Nueva implementación de detección de arritmias
-    let isCurrentArrhythmia = false;
-    if (rawArrhythmiaData?.rrIntervals.length >= 2) {
-      const recentRR = rawArrhythmiaData.rrIntervals;
-      const lastRR = recentRR[recentRR.length - 1];
-      
-      // Calculamos la media móvil de los últimos 5 intervalos o menos si no hay tantos
-      const sampleSize = Math.min(5, recentRR.length - 1);
-      const recentIntervals = recentRR.slice(-sampleSize - 1, -1);
-      const avgRR = recentIntervals.reduce((a, b) => a + b, 0) / recentIntervals.length;
-      
-      if (lastRR && avgRR) {
-        const rrVariation = Math.abs(lastRR - avgRR) / avgRR;
-        const RR_VARIATION_THRESHOLD = 0.20; // Umbral más sensible
-        isCurrentArrhythmia = rrVariation > RR_VARIATION_THRESHOLD;
+    const isCurrentArrhythmia = arrhythmiaStatus?.includes('ARRITMIA DETECTADA') || false;
+    
+    const lastPeakTime = rawArrhythmiaData?.lastPeakTime;
+    const timeSinceLastPeak = lastPeakTime ? currentTime - lastPeakTime : Infinity;
+    
+    const isNearPeak = timeSinceLastPeak < 100;
+    const shouldMarkArrhythmia = isCurrentArrhythmia && isNearPeak;
 
-        console.log('Análisis detallado de arritmia:', {
-          lastRR: Math.round(lastRR),
-          avgRR: Math.round(avgRR),
-          variation: rrVariation.toFixed(3),
-          threshold: RR_VARIATION_THRESHOLD,
-          isArrhythmia: isCurrentArrhythmia,
-          timestamp: new Date().toISOString()
-        });
-      }
+    if (isNearPeak) {
+      console.log('Punto cerca de pico detectado:', {
+        currentTime,
+        lastPeakTime,
+        timeSinceLastPeak,
+        isCurrentArrhythmia,
+        shouldMarkArrhythmia
+      });
     }
     
     dataBufferRef.current.push({
       time: currentTime,
       value: normalizedValue,
-      isArrhythmia: isCurrentArrhythmia
+      isArrhythmia: shouldMarkArrhythmia
     });
 
-    // Fondo del gráfico ligeramente más oscuro
-    ctx.fillStyle = '#F1F5F9'; // Slate-100 de Tailwind
+    ctx.fillStyle = '#F1F5F9';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Grid más visible
-    ctx.strokeStyle = 'rgba(51, 65, 85, 0.2)'; // Incrementado opacity
+    ctx.strokeStyle = 'rgba(51, 65, 85, 0.2)';
     ctx.lineWidth = 0.5;
     
     for (let i = 0; i < 40; i++) {
@@ -177,17 +167,18 @@ const PPGSignalMeter = ({
         ctx.moveTo(x1, y1);
         ctx.lineTo(x2, y2);
         
-        ctx.strokeStyle = currentPoint.isArrhythmia ? '#FF2E2E' : '#0ea5e9';
+        ctx.strokeStyle = currentPoint.isArrhythmia ? '#DC2626' : '#0EA5E9';
         ctx.stroke();
       }
     }
 
-  }, [value, quality, isFingerDetected, rawArrhythmiaData]);
+  }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus]);
 
   const handleReset = useCallback(() => {
     dataBufferRef.current.clear();
     baselineRef.current = null;
     lastValueRef.current = 0;
+    lastArrhythmiaTimeRef.current = 0;
     onReset();
   }, [onReset]);
 
