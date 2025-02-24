@@ -26,21 +26,21 @@ export class PPGSignalProcessor implements SignalProcessor {
   private kalmanFilter: KalmanFilter;
   private lastValues: number[] = [];
   private readonly DEFAULT_CONFIG = {
-    BUFFER_SIZE: 10,
-    MIN_RED_THRESHOLD: 80,
-    MAX_RED_THRESHOLD: 245,
-    STABILITY_WINDOW: 4,
-    MIN_STABILITY_COUNT: 3
+    BUFFER_SIZE: 12,
+    MIN_RED_THRESHOLD: 90,
+    MAX_RED_THRESHOLD: 240,
+    STABILITY_WINDOW: 5,
+    MIN_STABILITY_COUNT: 4
   };
   private currentConfig: typeof this.DEFAULT_CONFIG;
-  private readonly BUFFER_SIZE = 10;
-  private readonly MIN_RED_THRESHOLD = 85;
-  private readonly MAX_RED_THRESHOLD = 245;
+  private readonly BUFFER_SIZE = 12;
+  private readonly MIN_RED_THRESHOLD = 90;
+  private readonly MAX_RED_THRESHOLD = 240;
   private readonly STABILITY_WINDOW = 5;
-  private readonly MIN_STABILITY_COUNT = 3;
+  private readonly MIN_STABILITY_COUNT = 4;
   private stableFrameCount: number = 0;
   private lastStableValue: number = 0;
-  private readonly PERFUSION_INDEX_THRESHOLD = 0.045;
+  private readonly PERFUSION_INDEX_THRESHOLD = 0.05;
 
   constructor(
     public onSignalReady?: (signal: ProcessedSignal) => void,
@@ -48,7 +48,7 @@ export class PPGSignalProcessor implements SignalProcessor {
   ) {
     this.kalmanFilter = new KalmanFilter();
     this.currentConfig = { ...this.DEFAULT_CONFIG };
-    console.log("PPGSignalProcessor: Instancia creada");
+    console.log("PPGSignalProcessor: Instancia creada con nueva configuración");
   }
 
   async initialize(): Promise<void> {
@@ -178,8 +178,7 @@ export class PPGSignalProcessor implements SignalProcessor {
     const isInRange = rawValue >= this.MIN_RED_THRESHOLD && rawValue <= this.MAX_RED_THRESHOLD;
     
     if (!isInRange) {
-      this.stableFrameCount = 0;
-      this.lastStableValue = 0;
+      this.stableFrameCount = Math.max(0, this.stableFrameCount - 1);
       return { isFingerDetected: false, quality: 0 };
     }
 
@@ -192,15 +191,14 @@ export class PPGSignalProcessor implements SignalProcessor {
     
     const variations = recentValues.map((val, i, arr) => {
       if (i === 0) return 0;
-      return val - arr[i-1];
+      return Math.abs(val - arr[i-1]);
     });
 
-    const maxVariation = Math.max(...variations.map(Math.abs));
-    const minVariation = Math.min(...variations);
+    const maxVariation = Math.max(...variations);
+    const avgVariation = variations.reduce((sum, val) => sum + val, 0) / variations.length;
     
-    const adaptiveThreshold = Math.max(1.5, avgValue * 0.02);
-    const isStable = maxVariation < adaptiveThreshold * 2 && 
-                    minVariation > -adaptiveThreshold * 2;
+    const adaptiveThreshold = Math.max(2.0, avgValue * 0.025);
+    const isStable = maxVariation < adaptiveThreshold * 2 && avgVariation < adaptiveThreshold;
 
     if (isStable) {
       this.stableFrameCount = Math.min(this.stableFrameCount + 1, this.MIN_STABILITY_COUNT * 2);
@@ -216,9 +214,9 @@ export class PPGSignalProcessor implements SignalProcessor {
       const stabilityScore = Math.min(this.stableFrameCount / (this.MIN_STABILITY_COUNT * 2), 1);
       const intensityScore = Math.min((rawValue - this.MIN_RED_THRESHOLD) / 
                                     (this.MAX_RED_THRESHOLD - this.MIN_RED_THRESHOLD), 1);
-      const variationScore = Math.max(0, 1 - (maxVariation / (adaptiveThreshold * 3)));
+      const variationScore = Math.max(0, 1 - (avgVariation / (adaptiveThreshold * 3)));
       
-      quality = Math.round((stabilityScore * 0.4 + intensityScore * 0.3 + variationScore * 0.3) * 100);
+      quality = Math.round((stabilityScore * 0.5 + intensityScore * 0.2 + variationScore * 0.3) * 100);
     }
 
     return { isFingerDetected, quality };
