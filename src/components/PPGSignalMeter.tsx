@@ -96,20 +96,21 @@ const PPGSignalMeter = ({
     const normalizedValue = (baselineRef.current || 0) - smoothedValue;
     const scaledValue = normalizedValue * verticalScale;
     
-    // Verificar pico de manera consistente
-    const currentPeakTime = rawArrhythmiaData?.lastPeakTime;
-    const isPeak = currentPeakTime !== null && 
-                  currentPeakTime !== undefined && 
-                  currentPeakTime !== lastKnownPeakTime.current;
+    // Paso 1: Detectar pico
+    const isPeak = rawArrhythmiaData?.lastPeakTime !== undefined && 
+                  rawArrhythmiaData.lastPeakTime !== null &&
+                  rawArrhythmiaData.lastPeakTime !== lastKnownPeakTime.current;
     
-    if (isPeak && currentPeakTime !== null) {
-      lastKnownPeakTime.current = currentPeakTime;
-      console.log('Pico detectado:', {
-        time: currentPeakTime,
+    // Paso 2: Actualizar último pico conocido
+    if (isPeak && rawArrhythmiaData?.lastPeakTime) {
+      lastKnownPeakTime.current = rawArrhythmiaData.lastPeakTime;
+      console.log('Nuevo pico detectado:', {
+        time: rawArrhythmiaData.lastPeakTime,
         isArrhythmic: isArrhythmicBeat()
       });
     }
     
+    // Paso 3: Crear punto de datos
     const dataPoint: PPGDataPoint = {
       time: now,
       value: scaledValue,
@@ -122,6 +123,7 @@ const PPGSignalMeter = ({
     ctx.fillStyle = '#F8FAFC';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+    // Paso 4: Dibujar puntos
     const points = dataBufferRef.current.getPoints();
     if (points.length > 1) {
       ctx.lineWidth = 2;
@@ -136,6 +138,7 @@ const PPGSignalMeter = ({
         if (firstPoint) {
           firstPoint = false;
         } else {
+          // Dibujar línea
           ctx.beginPath();
           ctx.moveTo(lastX, lastY);
           ctx.lineTo(x, y);
@@ -143,11 +146,9 @@ const PPGSignalMeter = ({
           ctx.stroke();
         }
 
-        // Dibujar puntos y números cerca del pico
-        if (currentPeakTime !== null && 
-            currentPeakTime !== undefined && 
-            Math.abs(point.time - currentPeakTime) < 100) {
-          // Dibujar círculo
+        // Paso 5: Dibujar puntos y números en los picos
+        if (point.isArrhythmia || point.time === lastKnownPeakTime.current) {
+          // Dibujar círculo en el pico
           ctx.beginPath();
           ctx.arc(x, y, 4, 0, Math.PI * 2);
           ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
@@ -170,6 +171,7 @@ const PPGSignalMeter = ({
     ctx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
     ctx.lineWidth = 0.5;
 
+    // Líneas horizontales
     for (let i = 0; i <= CANVAS_HEIGHT; i += 50) {
       ctx.beginPath();
       ctx.moveTo(0, i);
@@ -177,6 +179,7 @@ const PPGSignalMeter = ({
       ctx.stroke();
     }
 
+    // Líneas verticales
     for (let i = 0; i <= CANVAS_WIDTH; i += 100) {
       ctx.beginPath();
       ctx.moveTo(i, 0);
@@ -184,6 +187,7 @@ const PPGSignalMeter = ({
       ctx.stroke();
     }
 
+    // Línea central
     ctx.strokeStyle = 'rgba(51, 65, 85, 0.3)';
     ctx.lineWidth = 1;
     ctx.beginPath();
