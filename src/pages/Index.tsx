@@ -19,150 +19,55 @@ const Index = () => {
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState("--");
   const [elapsedTime, setElapsedTime] = useState(0);
-  const [lastArrhythmiaData, setLastArrhythmiaData] = useState<{
-    timestamp: number;
-    rmssd: number;
-    rrVariation: number;
-  } | null>(null);
   const measurementTimerRef = useRef<number | null>(null);
-  const rootRef = useRef<HTMLDivElement>(null);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
-  const requestFullScreen = async () => {
+  const enterFullScreen = async () => {
+    const elem = document.documentElement;
     try {
-      const elem = rootRef.current || document.documentElement;
-
-      // Solicitar pantalla completa con fallbacks para diferentes navegadores
       if (elem.requestFullscreen) {
         await elem.requestFullscreen();
-      } else if ((elem as any).webkitRequestFullscreen) {
-        await (elem as any).webkitRequestFullscreen();
-      } else if ((elem as any).mozRequestFullScreen) {
-        await (elem as any).mozRequestFullScreen();
-      } else if ((elem as any).msRequestFullscreen) {
-        await (elem as any).msRequestFullscreen();
-      }
-
-      // Forzar orientación vertical
-      if (screen.orientation?.lock) {
-        try {
-          await screen.orientation.lock('portrait');
-        } catch (err) {
-          console.warn('No se pudo bloquear la orientación:', err);
-        }
-      }
-
-      // Ocultar barra de navegación en Android
-      if (navigator.userAgent.match(/Android/i)) {
-        document.documentElement.style.setProperty('--sab', '0px');
-        document.documentElement.style.setProperty('--sat', '0px');
-      }
-
-      // Establecer meta viewport para iOS
-      const viewport = document.querySelector('meta[name=viewport]');
-      if (viewport) {
-        viewport.setAttribute('content', 
-          'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover'
-        );
+      } else if (elem.webkitRequestFullscreen) {
+        await elem.webkitRequestFullscreen();
+      } else if (elem.mozRequestFullScreen) {
+        await elem.mozRequestFullScreen();
+      } else if (elem.msRequestFullscreen) {
+        await elem.msRequestFullscreen();
       }
     } catch (err) {
-      console.warn('Error al entrar en pantalla completa:', err);
+      console.log('Error al entrar en pantalla completa:', err);
     }
   };
 
-  // Efecto para activar pantalla completa inmediatamente al montar el componente
   useEffect(() => {
-    const enableImmersiveMode = async () => {
-      await requestFullScreen();
+    const preventScroll = (e) => e.preventDefault();
+    
+    const lockOrientation = async () => {
+      try {
+        if (screen.orientation?.lock) {
+          await screen.orientation.lock('portrait');
+        }
+      } catch (error) {
+        console.log('No se pudo bloquear la orientación:', error);
+      }
     };
+    
+    lockOrientation();
+    
+    document.body.addEventListener('touchmove', preventScroll, { passive: false });
+    document.body.addEventListener('scroll', preventScroll, { passive: false });
 
-    // Intentar activar modo inmersivo al cargar
-    enableImmersiveMode();
-
-    // Reactivar modo inmersivo cuando la ventana obtiene el foco
-    const handleFocus = () => {
-      enableImmersiveMode();
-    };
-
-    window.addEventListener('focus', handleFocus);
     return () => {
-      window.removeEventListener('focus', handleFocus);
+      document.body.removeEventListener('touchmove', preventScroll);
+      document.body.removeEventListener('scroll', preventScroll);
     };
   }, []);
 
-  useEffect(() => {
-    const preventDefaultBehaviors = (e: Event) => {
-      e.preventDefault();
-    };
-
-    // Prevenir comportamientos por defecto que puedan interferir
-    const events = [
-      'touchmove', 
-      'scroll', 
-      'resize', 
-      'contextmenu',
-      'gesturestart',
-      'gesturechange',
-      'gestureend'
-    ];
-
-    events.forEach(event => {
-      document.addEventListener(event, preventDefaultBehaviors, { passive: false });
-    });
-
-    // Configurar pantalla completa inmersiva
-    document.documentElement.style.overflow = 'hidden';
-    document.body.style.overflow = 'hidden';
-    document.body.style.position = 'fixed';
-    document.body.style.width = '100%';
-    document.body.style.height = '100%';
-    document.body.style.touchAction = 'none';
-
-    // Detectar cambios en pantalla completa
-    const handleFullscreenChange = () => {
-      if (!document.fullscreenElement && 
-          !(document as any).webkitFullscreenElement && 
-          !(document as any).mozFullScreenElement) {
-        requestFullScreen();
-      }
-    };
-
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
-    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
-
-    // Manejar visibilidad
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        requestFullScreen();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    // Limpiar al desmontar
-    return () => {
-      events.forEach(event => {
-        document.removeEventListener(event, preventDefaultBehaviors);
-      });
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
-      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      
-      document.documentElement.style.overflow = '';
-      document.body.style.overflow = '';
-      document.body.style.position = '';
-      document.body.style.width = '';
-      document.body.style.height = '';
-      document.body.style.touchAction = '';
-    };
-  }, []);
-
-  const startMonitoring = async () => {
+  const startMonitoring = () => {
+    enterFullScreen();
     setIsMonitoring(true);
     setIsCameraOn(true);
     startProcessing();
@@ -257,9 +162,6 @@ const Index = () => {
       if (vitals) {
         setVitalSigns(vitals);
         setArrhythmiaCount(vitals.arrhythmiaStatus.split('|')[1] || "--");
-        if (vitals.lastArrhythmiaData) {
-          setLastArrhythmiaData(vitals.lastArrhythmiaData);
-        }
       }
       
       setSignalQuality(lastSignal.quality);
@@ -268,18 +170,11 @@ const Index = () => {
 
   return (
     <div 
-      ref={rootRef}
-      className="fixed inset-0 flex flex-col bg-black select-none touch-none"
+      className="fixed inset-0 flex flex-col bg-black" 
       style={{ 
-        height: '100dvh',
-        minHeight: '-webkit-fill-available',
+        height: 'calc(100vh + env(safe-area-inset-bottom))',
         paddingTop: 'env(safe-area-inset-top)',
-        paddingBottom: 'env(safe-area-inset-bottom)',
-        WebkitTouchCallout: 'none',
-        WebkitUserSelect: 'none',
-        MozUserSelect: 'none',
-        msUserSelect: 'none',
-        userSelect: 'none'
+        paddingBottom: 'env(safe-area-inset-bottom)'
       }}
     >
       <div className="flex-1 relative">
@@ -301,12 +196,11 @@ const Index = () => {
               onStartMeasurement={startMonitoring}
               onReset={stopMonitoring}
               arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
-              rawArrhythmiaData={lastArrhythmiaData}
             />
           </div>
 
-          <div className="absolute bottom-20 left-0 right-0 px-4">
-            <div className="bg-black/40 backdrop-blur-sm rounded-xl p-4">
+          <div className="absolute bottom-[200px] left-0 right-0 px-4">
+            <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4">
               <div className="grid grid-cols-4 gap-2">
                 <VitalSign 
                   label="FRECUENCIA CARDÍACA"
@@ -332,31 +226,21 @@ const Index = () => {
           </div>
 
           {isMonitoring && (
-            <div className="absolute bottom-[120px] left-0 right-0 text-center">
+            <div className="absolute bottom-40 left-0 right-0 text-center">
               <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 30s</span>
             </div>
           )}
 
-          <div className="h-[80px] grid grid-cols-2 gap-px bg-black mt-auto">
+          <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 mt-auto">
             <button 
               onClick={startMonitoring}
-              className="relative overflow-hidden bg-black/80 text-2xl font-bold text-white
-                       hover:bg-black/60 active:bg-black/70
-                       transition-colors duration-200 ease-out
-                       after:absolute after:inset-0 
-                       after:bg-gradient-to-r after:from-cyan-500/20 after:to-transparent 
-                       after:opacity-0 hover:after:opacity-100 after:transition-opacity"
+              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
             >
               INICIAR
             </button>
             <button 
               onClick={stopMonitoring}
-              className="relative overflow-hidden bg-black/80 text-2xl font-bold text-white
-                       hover:bg-black/60 active:bg-black/70
-                       transition-colors duration-200 ease-out
-                       after:absolute after:inset-0 
-                       after:bg-gradient-to-r after:from-rose-500/20 after:to-transparent 
-                       after:opacity-0 hover:after:opacity-100 after:transition-opacity"
+              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
             >
               RESET
             </button>
