@@ -6,51 +6,77 @@ import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 
-interface VitalSigns {
-  spo2: number;
-  pressure: string;
-  arrhythmiaStatus: string;
-}
-
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [signalQuality, setSignalQuality] = useState(0);
-  const [vitalSigns, setVitalSigns] = useState<VitalSigns>({ 
+  const [vitalSigns, setVitalSigns] = useState({ 
     spo2: 0, 
     pressure: "--/--",
     arrhythmiaStatus: "--" 
   });
   const [heartRate, setHeartRate] = useState(0);
-  const [arrhythmiaCount, setArrhythmiaCount] = useState<string | number>("--");
+  const [arrhythmiaCount, setArrhythmiaCount] = useState("--");
   const [elapsedTime, setElapsedTime] = useState(0);
   const measurementTimerRef = useRef<number | null>(null);
-  const [lastArrhythmiaData, setLastArrhythmiaData] = useState<{
-    timestamp: number;
-    rmssd: number;
-    rrVariation: number;
-  } | null>(null);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
-  const enterFullScreen = async () => {
-    try {
-      await document.documentElement.requestFullscreen();
-    } catch (err) {
-      console.log('Error al entrar en pantalla completa:', err);
-    }
-  };
-
   useEffect(() => {
-    const preventScroll = (e: Event) => e.preventDefault();
-    document.body.addEventListener('touchmove', preventScroll, { passive: false });
-    document.body.addEventListener('scroll', preventScroll, { passive: false });
+    const lockOrientation = async () => {
+      try {
+        if (screen.orientation?.lock) {
+          await screen.orientation.lock('portrait');
+        }
+      } catch (error) {
+        console.log('Error al bloquear orientación:', error);
+      }
+    };
+
+    const preventScroll = (e: Event) => {
+      e.preventDefault();
+    };
+
+    const preventContextMenu = (e: Event) => {
+      e.preventDefault();
+    };
+
+    // Bloquear orientación
+    lockOrientation();
+    
+    // Prevenir scroll y gestos
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.touchAction = 'none';
+    
+    // Event listeners
+    const options = { passive: false };
+    document.addEventListener('touchmove', preventScroll, options);
+    document.addEventListener('scroll', preventScroll, options);
+    document.addEventListener('contextmenu', preventContextMenu);
+    
+    // Solicitar pantalla completa al inicio
+    const enterFullScreen = async () => {
+      try {
+        if (!document.fullscreenElement) {
+          await document.documentElement.requestFullscreen();
+        }
+      } catch (err) {
+        console.log('Error al entrar en pantalla completa:', err);
+      }
+    };
+    
+    enterFullScreen();
 
     return () => {
-      document.body.removeEventListener('touchmove', preventScroll);
-      document.body.removeEventListener('scroll', preventScroll);
+      document.removeEventListener('touchmove', preventScroll);
+      document.removeEventListener('scroll', preventScroll);
+      document.removeEventListener('contextmenu', preventContextMenu);
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.touchAction = '';
     };
   }, []);
 
@@ -104,7 +130,6 @@ const Index = () => {
     });
     setArrhythmiaCount("--");
     setSignalQuality(0);
-    setLastArrhythmiaData(null);
   };
 
   const handleStreamReady = (stream: MediaStream) => {
@@ -185,9 +210,10 @@ const Index = () => {
 
   return (
     <div 
-      className="fixed inset-0 flex flex-col bg-black" 
+      className="fixed inset-0 flex flex-col bg-black select-none touch-none"
       style={{ 
         height: '100vh',
+        height: '-webkit-fill-available',
         paddingTop: 'env(safe-area-inset-top)',
         paddingBottom: 'env(safe-area-inset-bottom)'
       }}
@@ -211,11 +237,11 @@ const Index = () => {
               onStartMeasurement={startMonitoring}
               onReset={handleReset}
               arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
-              rawArrhythmiaData={lastArrhythmiaData}
+              rawArrhythmiaData={lastSignal?.arrhythmiaData}
             />
           </div>
 
-          <div className="absolute bottom-[100px] left-0 right-0 px-4">
+          <div className="absolute bottom-24 left-0 right-0 px-4">
             <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4">
               <div className="grid grid-cols-2 gap-4">
                 <VitalSign 
@@ -243,20 +269,22 @@ const Index = () => {
 
           {isMonitoring && (
             <div className="absolute bottom-16 left-0 right-0 text-center">
-              <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 30s</span>
+              <span className="text-xl font-medium text-gray-300">
+                {elapsedTime}s / 30s
+              </span>
             </div>
           )}
 
           <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 mt-auto">
             <button 
               onClick={startMonitoring}
-              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
+              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800 select-none"
             >
               INICIAR
             </button>
             <button 
               onClick={handleReset}
-              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
+              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800 select-none"
             >
               RESET
             </button>
