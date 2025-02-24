@@ -202,6 +202,12 @@ const PPGSignalMeter = ({
             ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
             ctx.fill();
 
+            const peakValue = Math.abs(point.value / verticalScale).toFixed(2);
+            ctx.font = '10px Inter';
+            ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
+            ctx.textAlign = 'center';
+            ctx.fillText(peakValue, x, y - 10);
+
             if (point.isArrhythmia) {
               ctx.save();
               ctx.beginPath();
