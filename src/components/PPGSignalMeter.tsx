@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Progress } from "@/components/ui/progress";
 import VitalSign from '@/components/VitalSign';
@@ -11,28 +10,7 @@ interface PPGDataPoint {
 }
 
 class CircularBuffer {
-  private buffer: PPGDataPoint[];
-  private maxSize: number;
-
-  constructor(size: number) {
-    this.buffer = [];
-    this.maxSize = size;
-  }
-
-  push(point: PPGDataPoint) {
-    this.buffer.push(point);
-    if (this.buffer.length > this.maxSize) {
-      this.buffer.shift();
-    }
-  }
-
-  getPoints(): PPGDataPoint[] {
-    return this.buffer;
-  }
-
-  clear() {
-    this.buffer = [];
-  }
+  // ... existing code ...
 }
 
 interface PPGSignalMeterProps {
@@ -55,25 +33,28 @@ const PPGSignalMeter = ({
   rawArrhythmiaData
 }: PPGSignalMeterProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const dataBufferRef = useRef<CircularBuffer>(new CircularBuffer(1000));
   const baselineRef = useRef<number | null>(null);
-  // Initialize CircularBuffer directly with a new instance
-  const dataBufferRef = useRef(new CircularBuffer(1000));
   
-  const WINDOW_WIDTH_MS = 5000;
+  const WINDOW_WIDTH_MS = 6000;
   const CANVAS_WIDTH = 1000;
   const CANVAS_HEIGHT = 200;
-  const verticalScale = 32.0;
+  const verticalScale = 25.0;
 
   const getQualityColor = useCallback((quality: number) => {
-    if (quality > 75) return 'from-green-500 to-emerald-500';
-    if (quality > 50) return 'from-yellow-500 to-orange-500';
-    return 'from-red-500 to-rose-500';
+    if (quality > 90) return 'from-emerald-500/80 to-emerald-400/80';
+    if (quality > 75) return 'from-sky-500/80 to-sky-400/80';
+    if (quality > 60) return 'from-indigo-500/80 to-indigo-400/80';
+    if (quality > 40) return 'from-amber-500/80 to-amber-400/80';
+    return 'from-red-500/80 to-red-400/80';
   }, []);
 
   const getQualityText = useCallback((quality: number) => {
-    if (quality > 75) return 'Señal óptima';
-    if (quality > 50) return 'Señal aceptable';
-    return 'Señal débil';
+    if (quality > 90) return 'Excellent';
+    if (quality > 75) return 'Very Good';
+    if (quality > 60) return 'Good';
+    if (quality > 40) return 'Fair';
+    return 'Poor';
   }, []);
 
   useEffect(() => {
@@ -94,14 +75,27 @@ const PPGSignalMeter = ({
     const normalizedValue = (value - (baselineRef.current || 0)) * verticalScale;
     
     const isCurrentArrhythmia = arrhythmiaStatus?.includes('ARRITMIA DETECTADA') || false;
+    
     const lastPeakTime = rawArrhythmiaData?.lastPeakTime;
     const timeSinceLastPeak = lastPeakTime ? currentTime - lastPeakTime : Infinity;
+    
     const isNearPeak = timeSinceLastPeak < 50;
+    const shouldMarkArrhythmia = isCurrentArrhythmia && isNearPeak;
+
+    if (isNearPeak) {
+      console.log('Punto cerca de pico detectado:', {
+        currentTime,
+        lastPeakTime,
+        timeSinceLastPeak,
+        isCurrentArrhythmia,
+        shouldMarkArrhythmia
+      });
+    }
     
     dataBufferRef.current.push({
       time: currentTime,
       value: normalizedValue,
-      isArrhythmia: isCurrentArrhythmia && isNearPeak
+      isArrhythmia: shouldMarkArrhythmia
     });
 
     ctx.fillStyle = '#F8FAFC';
@@ -142,6 +136,18 @@ const PPGSignalMeter = ({
         }
       }
     }
+
+    // Dibujar puntos de arritmia
+    points.forEach(point => {
+      if (point.isArrhythmia) {
+        const x = canvas.width - ((currentTime - point.time) * canvas.width / WINDOW_WIDTH_MS);
+        const y = canvas.height / 2 + point.value;
+        ctx.fillStyle = '#DC2626';
+        ctx.beginPath();
+        ctx.arc(x, y, 5, 0, 2 * Math.PI);
+        ctx.fill();
+      }
+    });
 
   }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus]);
 
