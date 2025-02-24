@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -63,6 +64,13 @@ const PPGSignalMeter = ({
   }, []);
 
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
+    // Fondo sutilmente oscurecido con gradiente
+    const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+    gradient.addColorStop(0, '#f1f5f9');  // Gris muy claro
+    gradient.addColorStop(1, '#e2e8f0');  // Un poco más oscuro en la base
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
     ctx.beginPath();
     ctx.strokeStyle = 'rgba(51, 65, 85, 0.1)';
     ctx.lineWidth = 0.5;
@@ -168,9 +176,6 @@ const PPGSignalMeter = ({
     
     dataBufferRef.current.push(dataPoint);
 
-    ctx.fillStyle = '#F8FAFC';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
     drawGrid(ctx);
 
     const points = dataBufferRef.current.getPoints();
@@ -198,18 +203,22 @@ const PPGSignalMeter = ({
           if (point.value > prevPoint.value && point.value > nextPoint.value) {
             ctx.stroke();
             ctx.beginPath();
+
+            // Círculo del pico
             ctx.arc(x, y, 4, 0, Math.PI * 2);
             ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
             ctx.fill();
 
-            const peakValue = Math.abs(point.value / verticalScale).toFixed(2);
-            ctx.font = '10px Inter';
-            ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
+            // Número del pico en negro
+            ctx.font = 'bold 12px Inter';
+            ctx.fillStyle = '#000000';
             ctx.textAlign = 'center';
-            ctx.fillText(peakValue, x, y - 10);
+            ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 10);
 
+            // Indicador de arritmia
             if (point.isArrhythmia) {
               ctx.save();
+              // Línea vertical roja
               ctx.beginPath();
               ctx.moveTo(x, y - 20);
               ctx.lineTo(x, y + 20);
@@ -217,10 +226,17 @@ const PPGSignalMeter = ({
               ctx.lineWidth = 1;
               ctx.stroke();
               
-              ctx.font = '12px Inter';
+              // Círculo rojo de advertencia
+              ctx.beginPath();
+              ctx.arc(x, y - 25, 8, 0, Math.PI * 2);
               ctx.fillStyle = '#DC2626';
-              ctx.textAlign = 'center';
-              ctx.fillText('!', x, y - 25);
+              ctx.fill();
+              
+              // Signo de exclamación
+              ctx.font = 'bold 12px Inter';
+              ctx.fillStyle = '#FFFFFF';
+              ctx.fillText('!', x, y - 22);
+              
               ctx.restore();
             }
 
