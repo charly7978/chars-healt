@@ -26,13 +26,15 @@ const PPGSignalMeter = ({
   const baselineRef = useRef<number | null>(null);
   const dataBufferRef = useRef<CircularBuffer | null>(null);
   const lastValueRef = useRef<number | null>(null);
+  const lastSlopeRef = useRef<number>(0);
   
   const WINDOW_WIDTH_MS = 5000;
   const CANVAS_WIDTH = 1000;
   const CANVAS_HEIGHT = 200;
   const verticalScale = 32.0;
-  const SMOOTHING_FACTOR_UP = 0.3; // Para subidas (más rápida respuesta)
-  const SMOOTHING_FACTOR_DOWN = 0.1; // Para bajadas (más suave)
+  const SMOOTHING_FACTOR_UP = 0.7; // Aumentado para mantener picos pronunciados
+  const SMOOTHING_FACTOR_DOWN = 0.08; // Reducido para descenso más suave
+  const SLOPE_THRESHOLD = 0.5; // Umbral para detectar cambios bruscos
 
   useEffect(() => {
     if (!dataBufferRef.current) {
@@ -55,8 +57,22 @@ const PPGSignalMeter = ({
   const smoothValue = useCallback((currentValue: number, previousValue: number | null): number => {
     if (previousValue === null) return currentValue;
     
-    // Usa diferente factor de suavizado según si la señal sube o baja
-    const smoothingFactor = currentValue > previousValue ? SMOOTHING_FACTOR_UP : SMOOTHING_FACTOR_DOWN;
+    // Calcular pendiente actual
+    const currentSlope = currentValue - previousValue;
+    
+    // Detectar cambio de dirección
+    const isChangingDirection = (currentSlope * lastSlopeRef.current) < 0;
+    
+    // Si hay un cambio brusco hacia arriba, usar factor más agresivo
+    const smoothingFactor = isChangingDirection && currentSlope > SLOPE_THRESHOLD 
+      ? SMOOTHING_FACTOR_UP 
+      : currentSlope > 0 
+        ? SMOOTHING_FACTOR_UP 
+        : SMOOTHING_FACTOR_DOWN;
+    
+    // Actualizar pendiente anterior
+    lastSlopeRef.current = currentSlope;
+    
     return previousValue + smoothingFactor * (currentValue - previousValue);
   }, []);
 
@@ -141,6 +157,7 @@ const PPGSignalMeter = ({
     }
     baselineRef.current = null;
     lastValueRef.current = null;
+    lastSlopeRef.current = 0;
     onReset();
   }, [onReset]);
 
