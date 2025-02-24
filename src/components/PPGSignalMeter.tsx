@@ -28,11 +28,11 @@ const PPGSignalMeter = ({
   const lastValueRef = useRef<number | null>(null);
   const lastSlopeRef = useRef<number>(0);
   
-  const WINDOW_WIDTH_MS = 5000;
+  const WINDOW_WIDTH_MS = 7000;
   const CANVAS_WIDTH = 1000;
   const CANVAS_HEIGHT = 200;
   const verticalScale = 32.0;
-  const SMOOTHING_FACTOR_UP = 0.7; // Aumentado para mantener picos pronunciados
+  const SMOOTHING_FACTOR_UP = 0.8; // Aumentado para mantener picos pronunciados
   const SMOOTHING_FACTOR_DOWN = 0.08; // Reducido para descenso más suave
   const SLOPE_THRESHOLD = 0.5; // Umbral para detectar cambios bruscos
 
