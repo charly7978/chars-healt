@@ -21,12 +21,15 @@ const CameraView = ({
 
   const stopCamera = async () => {
     if (stream) {
-      stream.getTracks().forEach(track => {
+      const tracks = stream.getTracks();
+      for (const track of tracks) {
         track.stop();
-        if (videoRef.current) {
-          videoRef.current.srcObject = null;
-        }
-      });
+        stream.removeTrack(track); // Liberamos explícitamente cada track
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+        videoRef.current.load(); // Forzamos la liberación de recursos del video
+      }
       setStream(null);
     }
   };
@@ -56,6 +59,9 @@ const CameraView = ({
       const constraints: MediaStreamConstraints = {
         video: baseVideoConstraints
       };
+
+      // Limpiamos cualquier stream anterior antes de crear uno nuevo
+      await stopCamera();
 
       const newStream = await navigator.mediaDevices.getUserMedia(constraints);
       const videoTrack = newStream.getVideoTracks()[0];
@@ -91,6 +97,9 @@ const CameraView = ({
       }
 
       if (videoRef.current) {
+        if (videoRef.current.srcObject) {
+          (videoRef.current.srcObject as MediaStream).getTracks().forEach(track => track.stop());
+        }
         videoRef.current.srcObject = newStream;
         if (isAndroid) {
           videoRef.current.style.willChange = 'transform';
@@ -114,8 +123,14 @@ const CameraView = ({
     } else if (!isMonitoring && stream) {
       stopCamera();
     }
+    
+    // Limpieza mejorada al desmontar
     return () => {
       stopCamera();
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+        videoRef.current.load();
+      }
     };
   }, [isMonitoring]);
 
