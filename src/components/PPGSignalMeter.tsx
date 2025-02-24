@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import { Progress } from "@/components/ui/progress";
 import VitalSign from '@/components/VitalSign';
 import { Fingerprint } from 'lucide-react';
@@ -10,42 +10,7 @@ interface PPGDataPoint {
 }
 
 class CircularBuffer {
-  private buffer: PPGDataPoint[];
-  private maxSize: number;
-  private head: number = 0;
-  private tail: number = 0;
-  private count: number = 0;
-
-  constructor(size: number) {
-    this.maxSize = size;
-    this.buffer = new Array(size);
-  }
-
-  push(point: PPGDataPoint) {
-    this.buffer[this.head] = point;
-    this.head = (this.head + 1) % this.maxSize;
-    if (this.count < this.maxSize) {
-      this.count++;
-    } else {
-      this.tail = (this.tail + 1) % this.maxSize;
-    }
-  }
-
-  getPoints(): PPGDataPoint[] {
-    const points: PPGDataPoint[] = [];
-    let current = this.tail;
-    for (let i = 0; i < this.count; i++) {
-      points.push(this.buffer[current]);
-      current = (current + 1) % this.maxSize;
-    }
-    return points;
-  }
-
-  clear() {
-    this.head = 0;
-    this.tail = 0;
-    this.count = 0;
-  }
+  // ... existing code ...
 }
 
 interface PPGSignalMeterProps {
@@ -70,7 +35,6 @@ const PPGSignalMeter = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dataBufferRef = useRef<CircularBuffer>(new CircularBuffer(1000));
   const baselineRef = useRef<number | null>(null);
-  const lastValueRef = useRef<number>(0);
   
   const WINDOW_WIDTH_MS = 6000;
   const CANVAS_WIDTH = 1000;
@@ -78,19 +42,11 @@ const PPGSignalMeter = ({
   const verticalScale = 25.0;
 
   const getQualityColor = useCallback((quality: number) => {
-    if (quality > 90) return 'from-emerald-500/80 to-emerald-400/80';
-    if (quality > 75) return 'from-sky-500/80 to-sky-400/80';
-    if (quality > 60) return 'from-indigo-500/80 to-indigo-400/80';
-    if (quality > 40) return 'from-amber-500/80 to-amber-400/80';
-    return 'from-red-500/80 to-red-400/80';
+    // ... existing code ...
   }, []);
 
   const getQualityText = useCallback((quality: number) => {
-    if (quality > 90) return 'Excellent';
-    if (quality > 75) return 'Very Good';
-    if (quality > 60) return 'Good';
-    if (quality > 40) return 'Fair';
-    return 'Poor';
+    // ... existing code ...
   }, []);
 
   useEffect(() => {
@@ -118,16 +74,6 @@ const PPGSignalMeter = ({
     const isNearPeak = timeSinceLastPeak < 50;
     const shouldMarkArrhythmia = isCurrentArrhythmia && isNearPeak;
 
-    if (isNearPeak) {
-      console.log('Punto cerca de pico detectado:', {
-        currentTime,
-        lastPeakTime,
-        timeSinceLastPeak,
-        isCurrentArrhythmia,
-        shouldMarkArrhythmia
-      });
-    }
-    
     dataBufferRef.current.push({
       time: currentTime,
       value: normalizedValue,
@@ -178,7 +124,6 @@ const PPGSignalMeter = ({
   const handleReset = useCallback(() => {
     dataBufferRef.current.clear();
     baselineRef.current = null;
-    lastValueRef.current = 0;
     onReset();
   }, [onReset]);
 
