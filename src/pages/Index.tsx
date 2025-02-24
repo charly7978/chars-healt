@@ -205,9 +205,15 @@ const Index = () => {
             />
           </div>
 
-          <div className="absolute bottom-[120px] left-0 right-0 px-4">
+          {isMonitoring && (
+            <div className="mb-4 text-center">
+              <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 30s</span>
+            </div>
+          )}
+
+          <div className="px-4 mb-4">
             <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4">
-              <div className="flex justify-between items-center gap-2 overflow-x-auto">
+              <div className="grid grid-cols-2 gap-4">
                 <VitalSign 
                   label="FRECUENCIA CARDÍACA"
                   value={heartRate || "--"}
@@ -231,13 +237,7 @@ const Index = () => {
             </div>
           </div>
 
-          {isMonitoring && (
-            <div className="absolute bottom-28 left-0 right-0 text-center">
-              <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 30s</span>
-            </div>
-          )}
-
-          <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 mt-auto">
+          <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900">
             <button 
               onClick={startMonitoring}
               className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
