@@ -110,13 +110,25 @@ const PPGSignalMeter = ({
 
     const normalizedValue = (value - (baselineRef.current || 0)) * verticalScale;
     
-    // Aquí el cambio importante: Detectar arritmia usando los datos crudos
+    // Ahora tomamos la detección de arritmia directamente del análisis RR
     let isCurrentArrhythmia = false;
     if (rawArrhythmiaData?.rrIntervals.length >= 3) {
       const recentRR = rawArrhythmiaData.rrIntervals.slice(-3);
       const lastRR = recentRR[recentRR.length - 1];
-      const avgRR = recentRR.reduce((a, b) => a + b, 0) / recentRR.length;
-      isCurrentArrhythmia = Math.abs(lastRR - avgRR) > (avgRR * 0.25);
+      const prevRR = recentRR[recentRR.length - 2];
+      
+      // Calculamos variación RR instantánea
+      const rrVariation = Math.abs(lastRR - prevRR) / prevRR;
+      // Si la variación es mayor al 25%, consideramos arritmia
+      isCurrentArrhythmia = rrVariation > 0.25;
+
+      console.log('Análisis de arritmia:', {
+        lastRR,
+        prevRR,
+        variation: rrVariation,
+        isArrhythmia: isCurrentArrhythmia,
+        timestamp: new Date().toISOString()
+      });
     }
     
     dataBufferRef.current.push({
@@ -125,9 +137,11 @@ const PPGSignalMeter = ({
       isArrhythmia: isCurrentArrhythmia
     });
 
+    // Limpiar canvas
     ctx.fillStyle = '#F8FAFC';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+    // Dibujar grid
     ctx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
     ctx.lineWidth = 0.5;
     
