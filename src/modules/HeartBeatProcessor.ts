@@ -14,7 +14,7 @@ export class HeartBeatProcessor {
   private readonly MEDIAN_FILTER_WINDOW = 4; // Reducido para mayor sensibilidad
   private readonly MOVING_AVERAGE_WINDOW = 4; // Reducido para mayor sensibilidad
   private readonly EMA_ALPHA = 0.4; // Aumentado para respuesta más rápida
-  private readonly BASELINE_FACTOR = 1.1; // Ajustado para adaptación más rápida
+  private readonly BASELINE_FACTOR = 1.0; // Ajustado para adaptación más rápida
 
   // Parámetros de beep ajustados para sonido más realista
   private readonly BEEP_PRIMARY_FREQUENCY = 880; // Frecuencia principal (La4)
