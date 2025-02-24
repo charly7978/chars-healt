@@ -1,4 +1,3 @@
-
 import { ProcessedSignal, ProcessingError, SignalProcessor } from '../types/signal';
 
 class KalmanFilter {
@@ -26,21 +25,37 @@ export class PPGSignalProcessor implements SignalProcessor {
   private isProcessing: boolean = false;
   private kalmanFilter: KalmanFilter;
   private lastValues: number[] = [];
+  private readonly DEFAULT_CONFIG = {
+    BUFFER_SIZE: 10,
+    MIN_RED_THRESHOLD: 80,
+    MAX_RED_THRESHOLD: 245,
+    STABILITY_WINDOW: 4,
+    MIN_STABILITY_COUNT: 3
+  };
+  private currentConfig: typeof this.DEFAULT_CONFIG;
   private readonly BUFFER_SIZE = 10;
-  private readonly MIN_RED_VALUE = 10; // Aumentamos sensibilidad para detectar negro
-  private readonly MAX_RED_VALUE = 245;
+  private readonly MIN_RED_THRESHOLD = 85;
+  private readonly MAX_RED_THRESHOLD = 245;
+  private readonly STABILITY_WINDOW = 5;
+  private readonly MIN_STABILITY_COUNT = 3;
+  private stableFrameCount: number = 0;
+  private lastStableValue: number = 0;
+  private readonly PERFUSION_INDEX_THRESHOLD = 0.045;
 
   constructor(
     public onSignalReady?: (signal: ProcessedSignal) => void,
     public onError?: (error: ProcessingError) => void
   ) {
     this.kalmanFilter = new KalmanFilter();
+    this.currentConfig = { ...this.DEFAULT_CONFIG };
     console.log("PPGSignalProcessor: Instancia creada");
   }
 
   async initialize(): Promise<void> {
     try {
       this.lastValues = [];
+      this.stableFrameCount = 0;
+      this.lastStableValue = 0;
       this.kalmanFilter.reset();
       console.log("PPGSignalProcessor: Inicializado");
     } catch (error) {
@@ -59,6 +74,8 @@ export class PPGSignalProcessor implements SignalProcessor {
   stop(): void {
     this.isProcessing = false;
     this.lastValues = [];
+    this.stableFrameCount = 0;
+    this.lastStableValue = 0;
     this.kalmanFilter.reset();
     console.log("PPGSignalProcessor: Detenido");
   }
@@ -67,13 +84,30 @@ export class PPGSignalProcessor implements SignalProcessor {
     try {
       console.log("PPGSignalProcessor: Iniciando calibración");
       await this.initialize();
-      console.log("PPGSignalProcessor: Calibración completada");
+
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      this.currentConfig = {
+        ...this.DEFAULT_CONFIG,
+        MIN_RED_THRESHOLD: Math.max(25, this.MIN_RED_THRESHOLD - 5),
+        MAX_RED_THRESHOLD: Math.min(255, this.MAX_RED_THRESHOLD + 5),
+        STABILITY_WINDOW: this.STABILITY_WINDOW,
+        MIN_STABILITY_COUNT: this.MIN_STABILITY_COUNT
+      };
+
+      console.log("PPGSignalProcessor: Calibración completada", this.currentConfig);
       return true;
     } catch (error) {
       console.error("PPGSignalProcessor: Error de calibración", error);
       this.handleError("CALIBRATION_ERROR", "Error durante la calibración");
       return false;
     }
+  }
+
+  resetToDefault(): void {
+    this.currentConfig = { ...this.DEFAULT_CONFIG };
+    this.initialize();
+    console.log("PPGSignalProcessor: Configuración restaurada a valores por defecto");
   }
 
   processFrame(imageData: ImageData): void {
@@ -92,6 +126,14 @@ export class PPGSignalProcessor implements SignalProcessor {
       }
 
       const { isFingerDetected, quality } = this.analyzeSignal(filtered, redValue);
+
+      console.log("PPGSignalProcessor: Análisis", {
+        redValue,
+        filtered,
+        isFingerDetected,
+        quality,
+        stableFrames: this.stableFrameCount
+      });
 
       const processedSignal: ProcessedSignal = {
         timestamp: Date.now(),
@@ -128,43 +170,58 @@ export class PPGSignalProcessor implements SignalProcessor {
       }
     }
     
-    return redSum / count;
+    const avgRed = redSum / count;
+    return avgRed;
   }
 
   private analyzeSignal(filtered: number, rawValue: number): { isFingerDetected: boolean, quality: number } {
-    // Nueva lógica simplificada para detección de dedo:
-    // - Detecta desde negro total (cerca de 0) hasta rojo intenso (hasta 255)
-    // - Calidad basada en la estabilidad y la intensidad de la señal
-    const isInRange = rawValue >= this.MIN_RED_VALUE && rawValue <= this.MAX_RED_VALUE;
+    const isInRange = rawValue >= this.MIN_RED_THRESHOLD && rawValue <= this.MAX_RED_THRESHOLD;
     
     if (!isInRange) {
+      this.stableFrameCount = 0;
+      this.lastStableValue = 0;
       return { isFingerDetected: false, quality: 0 };
     }
 
-    // Calcula la calidad basada en la intensidad y estabilidad
-    const stability = this.calculateStability();
-    const intensityScore = Math.min((rawValue - this.MIN_RED_VALUE) / 
-                                  (this.MAX_RED_VALUE - this.MIN_RED_VALUE), 1);
-    
-    const quality = Math.round((stability * 0.6 + intensityScore * 0.4) * 100);
-    
-    return { 
-      isFingerDetected: true,
-      quality: quality
-    };
-  }
+    if (this.lastValues.length < this.STABILITY_WINDOW) {
+      return { isFingerDetected: false, quality: 0 };
+    }
 
-  private calculateStability(): number {
-    if (this.lastValues.length < 2) return 0;
+    const recentValues = this.lastValues.slice(-this.STABILITY_WINDOW);
+    const avgValue = recentValues.reduce((sum, val) => sum + val, 0) / recentValues.length;
     
-    const variations = this.lastValues.slice(1).map((val, i) => 
-      Math.abs(val - this.lastValues[i])
-    );
+    const variations = recentValues.map((val, i, arr) => {
+      if (i === 0) return 0;
+      return val - arr[i-1];
+    });
+
+    const maxVariation = Math.max(...variations.map(Math.abs));
+    const minVariation = Math.min(...variations);
     
-    const avgVariation = variations.reduce((sum, val) => sum + val, 0) / variations.length;
-    const normalizedStability = Math.max(0, Math.min(1, 1 - (avgVariation / 50)));
+    const adaptiveThreshold = Math.max(1.5, avgValue * 0.02);
+    const isStable = maxVariation < adaptiveThreshold * 2 && 
+                    minVariation > -adaptiveThreshold * 2;
+
+    if (isStable) {
+      this.stableFrameCount = Math.min(this.stableFrameCount + 1, this.MIN_STABILITY_COUNT * 2);
+      this.lastStableValue = filtered;
+    } else {
+      this.stableFrameCount = Math.max(0, this.stableFrameCount - 0.5);
+    }
+
+    const isFingerDetected = this.stableFrameCount >= this.MIN_STABILITY_COUNT;
     
-    return normalizedStability;
+    let quality = 0;
+    if (isFingerDetected) {
+      const stabilityScore = Math.min(this.stableFrameCount / (this.MIN_STABILITY_COUNT * 2), 1);
+      const intensityScore = Math.min((rawValue - this.MIN_RED_THRESHOLD) / 
+                                    (this.MAX_RED_THRESHOLD - this.MIN_RED_THRESHOLD), 1);
+      const variationScore = Math.max(0, 1 - (maxVariation / (adaptiveThreshold * 3)));
+      
+      quality = Math.round((stabilityScore * 0.4 + intensityScore * 0.3 + variationScore * 0.3) * 100);
+    }
+
+    return { isFingerDetected, quality };
   }
 
   private detectROI(redValue: number): ProcessedSignal['roi'] {

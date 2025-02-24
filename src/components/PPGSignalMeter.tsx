@@ -45,39 +45,48 @@ const PPGSignalMeter = ({
     }
   }, []);
 
+  const getQualityColor = useCallback((q: number) => {
+    if (q > 75) return 'from-green-500 to-emerald-500';
+    if (q > 50) return 'from-yellow-500 to-orange-500';
+    return 'from-red-500 to-rose-500';
+  }, []);
+
+  const getQualityText = useCallback((q: number) => {
+    if (q > 75) return 'Señal óptima';
+    if (q > 50) return 'Señal aceptable';
+    return 'Señal débil';
+  }, []);
+
+  const smoothValue = useCallback((currentValue: number, previousValue: number | null): number => {
+    if (previousValue === null) return currentValue;
+    return previousValue + SMOOTHING_FACTOR * (currentValue - previousValue);
+  }, []);
+
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
     ctx.beginPath();
     ctx.strokeStyle = 'rgba(51, 65, 85, 0.1)';
     ctx.lineWidth = 0.5;
-    
+
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X) {
       ctx.moveTo(x, 0);
       ctx.lineTo(x, CANVAS_HEIGHT);
-      
       if (x % (GRID_SIZE_X * 4) === 0) {
-        const timeMs = (WINDOW_WIDTH_MS * x) / CANVAS_WIDTH;
-        ctx.fillStyle = '#333333';
+        ctx.fillStyle = 'rgba(51, 65, 85, 0.5)';
         ctx.font = '10px Inter';
         ctx.textAlign = 'center';
-        ctx.fillText(`${timeMs}ms`, x, CANVAS_HEIGHT - 5);
+        ctx.fillText(`${x / 10}ms`, x, CANVAS_HEIGHT - 5);
       }
     }
 
     for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y) {
       ctx.moveTo(0, y);
       ctx.lineTo(CANVAS_WIDTH, y);
-      
-      if (y % (GRID_SIZE_Y * 2) === 0) {
-        const amplitude = ((CANVAS_HEIGHT/2) - y) / verticalScale;
-        ctx.fillStyle = '#333333';
+      if (y % (GRID_SIZE_Y * 4) === 0) {
+        const amplitude = ((CANVAS_HEIGHT / 2) - y) / verticalScale;
+        ctx.fillStyle = 'rgba(51, 65, 85, 0.5)';
         ctx.font = '10px Inter';
         ctx.textAlign = 'right';
-        ctx.fillText(`${amplitude.toFixed(2)}`, 25, y + 4);
-        
-        if (y === CANVAS_HEIGHT / 2) {
-          ctx.fillText('0 mV', 25, y + 4);
-          ctx.fillText('Línea base', 70, y + 4);
-        }
+        ctx.fillText(amplitude.toFixed(1), 25, y + 4);
       }
     }
     ctx.stroke();
@@ -105,11 +114,6 @@ const PPGSignalMeter = ({
     ctx.stroke();
   }, []);
 
-  const smoothValue = useCallback((currentValue: number, previousValue: number | null): number => {
-    if (previousValue === null) return currentValue;
-    return previousValue + SMOOTHING_FACTOR * (currentValue - previousValue);
-  }, []);
-
   const renderSignal = useCallback(() => {
     if (!canvasRef.current || !dataBufferRef.current) {
       animationFrameRef.current = requestAnimationFrame(renderSignal);
@@ -117,7 +121,9 @@ const PPGSignalMeter = ({
     }
 
     const currentTime = performance.now();
-    if (currentTime - lastRenderTimeRef.current < FRAME_TIME) {
+    const timeSinceLastRender = currentTime - lastRenderTimeRef.current;
+
+    if (timeSinceLastRender < FRAME_TIME) {
       animationFrameRef.current = requestAnimationFrame(renderSignal);
       return;
     }
@@ -170,12 +176,11 @@ const PPGSignalMeter = ({
     const points = dataBufferRef.current.getPoints();
     if (points.length > 1) {
       ctx.beginPath();
-      ctx.strokeStyle = '#EA384C';
+      ctx.strokeStyle = '#0EA5E9';
       ctx.lineWidth = 2;
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
 
-      let peakCount = 0;
       points.forEach((point, index) => {
         const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
         const y = canvas.height / 2 - point.value;
@@ -191,23 +196,17 @@ const PPGSignalMeter = ({
           const nextPoint = points[index + 1];
           
           if (point.value > prevPoint.value && point.value > nextPoint.value) {
-            peakCount++;
             ctx.stroke();
             ctx.beginPath();
-            
-            ctx.font = 'bold 12px Inter';
-            ctx.fillStyle = '#000000';
-            ctx.textAlign = 'center';
-            ctx.fillText(`${peakCount}`, x, y - 15);
-            
-            const amplitude = Math.abs(point.value / verticalScale).toFixed(2);
-            ctx.font = '10px Inter';
-            ctx.fillStyle = '#666666';
-            ctx.fillText(`${amplitude}mV`, x, y - 28);
-            
             ctx.arc(x, y, 4, 0, Math.PI * 2);
-            ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#EA384C';
+            ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
             ctx.fill();
+
+            const peakValue = Math.abs(point.value / verticalScale).toFixed(2);
+            ctx.font = '10px Inter';
+            ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
+            ctx.textAlign = 'center';
+            ctx.fillText(peakValue, x, y - 10);
 
             if (point.isArrhythmia) {
               ctx.save();
@@ -217,11 +216,16 @@ const PPGSignalMeter = ({
               ctx.strokeStyle = '#DC2626';
               ctx.lineWidth = 1;
               ctx.stroke();
+              
+              ctx.font = '12px Inter';
+              ctx.fillStyle = '#DC2626';
+              ctx.textAlign = 'center';
+              ctx.fillText('!', x, y - 25);
               ctx.restore();
             }
 
             ctx.beginPath();
-            ctx.strokeStyle = '#EA384C';
+            ctx.strokeStyle = '#0EA5E9';
             ctx.lineWidth = 2;
             ctx.moveTo(x, y);
           }
@@ -259,17 +263,15 @@ const PPGSignalMeter = ({
         <div className="flex items-center gap-3">
           <span className="text-xl font-bold text-slate-700">PPG</span>
           <div className="w-[200px]">
-            <div className={`h-1.5 w-full rounded-full bg-gradient-to-r ${
-              isFingerDetected ? 'from-red-600 to-red-500' : 'from-gray-400 to-gray-300'
-            } transition-all duration-1000 ease-in-out`}>
+            <div className={`h-1.5 w-full rounded-full bg-gradient-to-r ${getQualityColor(quality)} transition-all duration-1000 ease-in-out`}>
               <div
                 className="h-full rounded-full bg-white/20 animate-pulse transition-all duration-1000"
                 style={{ width: `${quality}%` }}
               />
             </div>
             <span className="text-[9px] text-center mt-0.5 font-medium transition-colors duration-700 block" 
-                  style={{ color: isFingerDetected ? '#DC2626' : '#6B7280' }}>
-              {isFingerDetected ? "Dedo detectado" : "Ubique su dedo"}
+                  style={{ color: quality > 60 ? '#0EA5E9' : '#F59E0B' }}>
+              {getQualityText(quality)}
             </span>
           </div>
         </div>
@@ -277,12 +279,15 @@ const PPGSignalMeter = ({
         <div className="flex flex-col items-center">
           <Fingerprint
             className={`h-12 w-12 transition-colors duration-300 ${
-              !isFingerDetected ? 'text-gray-400' : 'text-red-500'
+              !isFingerDetected ? 'text-gray-400' :
+              quality > 75 ? 'text-green-500' :
+              quality > 50 ? 'text-yellow-500' :
+              'text-red-500'
             }`}
             strokeWidth={1.5}
           />
           <span className="text-[10px] text-center mt-0.5 font-medium text-slate-600">
-            {isFingerDetected ? "Señal OK" : "Cubra el lente"}
+            {isFingerDetected ? "Dedo detectado" : "Ubique su dedo"}
           </span>
         </div>
       </div>
