@@ -1,6 +1,6 @@
+
 import React, { useEffect, useRef, useState } from 'react';
-// import { Fingerprint } from 'lucide-react'; // Comentado para evitar el error
-import { Progress } from "@/components/ui/progress";
+import { Fingerprint } from 'lucide-react';
 import VitalSign from '@/components/VitalSign';
 
 interface PPGSignalMeterProps {
@@ -30,10 +30,10 @@ const PPGSignalMeter = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dataRef = useRef<PPGDataPoint[]>([]);
   const [startTime, setStartTime] = useState<number>(Date.now());
-  const WINDOW_WIDTH_MS = 5000; // Reducido de 3000 a 2000 para comprimir horizontalmente
-  const CANVAS_WIDTH = 1000;  // antes 1200
-  const CANVAS_HEIGHT = 200; // antes 300
-  const verticalScale = 32.0; //toque antes 6
+  const WINDOW_WIDTH_MS = 2000;
+  const CANVAS_WIDTH = 1000;
+  const CANVAS_HEIGHT = 200;
+  const verticalScale = 32.0;
   const baselineRef = useRef<number | null>(null);
   const maxAmplitudeRef = useRef<number>(0);
   const lastValueRef = useRef<number>(0);
@@ -98,7 +98,6 @@ const PPGSignalMeter = ({
     ctx.fillStyle = '#F8FAFC';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Ajuste de la cuadrícula para mostrar marcas cada 50ms en lugar de 100ms
     ctx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
     ctx.lineWidth = 0.5;
     
@@ -109,7 +108,7 @@ const PPGSignalMeter = ({
       ctx.lineTo(x, canvas.height);
       ctx.stroke();
       
-      if (i % 4 === 0) { // Mostrar etiquetas cada 200ms
+      if (i % 4 === 0) {
         ctx.fillStyle = 'rgba(51, 65, 85, 0.5)';
         ctx.font = '12px Inter';
         ctx.fillText(`${i * 50}ms`, x - 25, canvas.height - 5);
@@ -168,35 +167,32 @@ const PPGSignalMeter = ({
 
   return (
     <div className="fixed inset-0 bg-gradient-to-b from-white to-slate-50/30">
-      <div className="absolute top-0 left-0 right-0 p-2 flex justify-between items-center bg-white/60 backdrop-blur-sm border-b border-slate-100 shadow-sm">
-        <div className="flex items-center gap-3 flex-1">
-          <span className="text-xl font-bold text-slate-700">PPG</span>
-          <div className="flex flex-col flex-1">
-            <div className={`h-1.5 w-[80%] mx-auto rounded-full bg-gradient-to-r ${getQualityColor(quality)} transition-all duration-1000 ease-in-out`}>
-              <div
-                className="h-full rounded-full bg-white/20 animate-pulse transition-all duration-1000"
-                style={{ width: `${quality}%` }}
-              />
-            </div>
-            <span className="text-[9px] text-center mt-0.5 font-medium transition-colors duration-700" 
-                  style={{ color: quality > 60 ? '#0EA5E9' : '#F59E0B' }}>
-              {getQualityText(quality)}
-            </span>
-          </div>
-          
-          <div className="flex flex-col items-center">
-            <div 
-              style={{ width: 56, height: 56, backgroundColor: isFingerDetected ? 'green' : 'gray' }}
-              className={`transition-all duration-700 ${
-                isFingerDetected 
-                  ? 'scale-100 drop-shadow-md'
-                  : 'scale-95'
-              }`}
+      <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center bg-white/60 backdrop-blur-sm border-b border-slate-100 shadow-sm">
+        <span className="text-xl font-bold text-slate-700">PPG</span>
+        <div className="flex flex-col items-center flex-1 mx-4">
+          <div className={`h-1.5 w-[80%] rounded-full bg-gradient-to-r ${getQualityColor(quality)} transition-all duration-1000 ease-in-out`}>
+            <div
+              className="h-full rounded-full bg-white/20 animate-pulse transition-all duration-1000"
+              style={{ width: `${quality}%` }}
             />
-            <span className="text-xs font-medium text-slate-600 transition-all duration-700">
-              {isFingerDetected ? 'Dedo detectado' : 'Ubique su dedo en el lente'}
-            </span>
           </div>
+          <span className="text-xs text-center mt-1 font-medium" 
+                style={{ color: quality > 60 ? '#0EA5E9' : '#F59E0B' }}>
+            {getQualityText(quality)}
+          </span>
+        </div>
+        <div className="flex flex-col items-center">
+          <Fingerprint 
+            size={48}
+            className={`transition-all duration-300 ${
+              isFingerDetected 
+                ? 'text-green-500'
+                : 'text-gray-400'
+            }`}
+          />
+          <span className="text-xs font-medium text-slate-600 text-center mt-1">
+            {isFingerDetected ? 'Dedo detectado' : 'Ubique su dedo'}
+          </span>
         </div>
       </div>
 
@@ -207,19 +203,36 @@ const PPGSignalMeter = ({
         className="w-full h-[calc(40vh)] mt-20"
       />
 
-      <div className="fixed bottom-0 left-0 right-0 h-[60px] grid grid-cols-2 gap-px bg-white/80 backdrop-blur-sm border-t border-slate-100">
-        <button 
-          onClick={onStartMeasurement}
-          className="w-full h-full bg-white/80 hover:bg-slate-50/80 text-xl font-bold text-slate-700 transition-all duration-300"
-        >
-          INICIAR
-        </button>
-        <button 
-          onClick={handleReset}
-          className="w-full h-full bg-white/80 hover:bg-slate-50/80 text-xl font-bold text-slate-700 transition-all duration-300"
-        >
-          RESET
-        </button>
+      <div className="fixed bottom-0 left-0 right-0">
+        <div className="bg-gray-900/30 backdrop-blur-sm p-4 mb-[80px]">
+          <div className="grid grid-cols-2 gap-4">
+            <VitalSign 
+              label="FRECUENCIA CARDÍACA"
+              value={value || "--"}
+              unit="BPM"
+            />
+            <VitalSign 
+              label="SPO2"
+              value={quality || "--"}
+              unit="%"
+            />
+          </div>
+        </div>
+        
+        <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900">
+          <button 
+            onClick={onStartMeasurement}
+            className="w-full h-full bg-white/80 hover:bg-slate-50/80 text-xl font-bold text-slate-700 transition-all duration-300"
+          >
+            INICIAR
+          </button>
+          <button 
+            onClick={handleReset}
+            className="w-full h-full bg-white/80 hover:bg-slate-50/80 text-xl font-bold text-slate-700 transition-all duration-300"
+          >
+            RESET
+          </button>
+        </div>
       </div>
     </div>
   );
