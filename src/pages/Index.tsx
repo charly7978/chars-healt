@@ -154,22 +154,30 @@ const Index = () => {
 
   useEffect(() => {
     if (lastSignal && lastSignal.fingerDetected && isMonitoring) {
+      // Procesar latidos cardíacos
       const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
       setHeartRate(heartBeatResult.bpm);
       
+      // Procesar signos vitales y arritmias
       const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
       if (vitals) {
-        setVitalSigns(prev => ({
-          ...vitals,
-          arrhythmiaStatus: vitals.arrhythmiaStatus || prev.arrhythmiaStatus
-        }));
+        console.log('Index - Datos vitales recibidos:', {
+          arrhythmiaStatus: vitals.arrhythmiaStatus,
+          lastArrhythmiaData: vitals.lastArrhythmiaData
+        });
+
+        // Actualizar estado de signos vitales
+        setVitalSigns(vitals);
+        
+        // Actualizar datos de arritmia si hay nuevos
         if (vitals.lastArrhythmiaData) {
           setLastArrhythmiaData(vitals.lastArrhythmiaData);
-        }
-        
-        const [status, count] = vitals.arrhythmiaStatus.split('|');
-        if (status === "ARRITMIA DETECTADA") {
-          setArrhythmiaCount(count || "0");
+          
+          // Extraer y actualizar contador de arritmias
+          const [status, count] = vitals.arrhythmiaStatus.split('|');
+          if (status.includes("ARRITMIA")) {
+            setArrhythmiaCount(count || "0");
+          }
         }
       }
       

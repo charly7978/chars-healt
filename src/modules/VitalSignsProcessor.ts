@@ -1,4 +1,3 @@
-
 export class VitalSignsProcessor {
   private readonly WINDOW_SIZE = 300;
   private readonly SPO2_CALIBRATION_FACTOR = 1.02;
@@ -27,12 +26,16 @@ export class VitalSignsProcessor {
   private arrhythmiaCount = 0;
   private lastRMSSD: number = 0;
   private lastRRVariation: number = 0;
+  private lastArrhythmiaTime: number = 0;
 
   public processSignal(
     ppgValue: number,
     rrData?: { intervals: number[]; lastPeakTime: number | null }
   ) {
-    if (rrData?.intervals) {
+    const currentTime = Date.now();
+
+    // Actualizar RR intervals si están disponibles
+    if (rrData?.intervals && rrData.intervals.length > 0) {
       this.rrIntervals = rrData.intervals;
       this.lastPeakTime = rrData.lastPeakTime;
       
@@ -41,53 +44,65 @@ export class VitalSignsProcessor {
       }
     }
 
+    // Procesar la señal PPG
     const filtered = this.applySMAFilter(ppgValue);
     this.ppgValues.push(filtered);
     if (this.ppgValues.length > this.WINDOW_SIZE) {
       this.ppgValues.shift();
     }
 
-    const currentTime = Date.now();
+    // Verificar fase de aprendizaje
     const timeSinceStart = currentTime - this.measurementStartTime;
-
     if (timeSinceStart > this.ARRHYTHMIA_LEARNING_PERIOD) {
       this.isLearningPhase = false;
     }
 
+    // Determinar estado de arritmia
     let arrhythmiaStatus;
     if (this.isLearningPhase) {
       arrhythmiaStatus = "CALIBRANDO...";
-    } else if (this.arrhythmiaDetected || this.arrhythmiaCount > 0) {
+    } else if (this.arrhythmiaDetected) {
       arrhythmiaStatus = `ARRITMIA DETECTADA|${this.arrhythmiaCount}`;
     } else {
-      arrhythmiaStatus = "SIN ARRITMIAS|0";
+      arrhythmiaStatus = `SIN ARRITMIAS|${this.arrhythmiaCount}`;
     }
 
-    const vitalSigns = {
-      spo2: this.calculateSpO2(this.ppgValues.slice(-60)),
-      pressure: `${this.calculateBloodPressure(this.ppgValues.slice(-60)).systolic}/${this.calculateBloodPressure(this.ppgValues.slice(-60)).diastolic}`,
-      arrhythmiaStatus,
-      lastArrhythmiaData: this.arrhythmiaDetected ? {
-        timestamp: currentTime,
-        rmssd: this.lastRMSSD,
-        rrVariation: this.lastRRVariation
-      } : null
-    };
+    // Calcular otros signos vitales
+    const spo2 = this.calculateSpO2(this.ppgValues.slice(-60));
+    const bp = this.calculateBloodPressure(this.ppgValues.slice(-60));
+    const pressure = `${bp.systolic}/${bp.diastolic}`;
 
-    console.log('Estado actual:', {
+    // Preparar datos de arritmia si se detectó una
+    const lastArrhythmiaData = this.arrhythmiaDetected ? {
+      timestamp: currentTime,
+      rmssd: this.lastRMSSD,
+      rrVariation: this.lastRRVariation
+    } : null;
+
+    console.log('VitalSignsProcessor - Estado:', {
       isLearningPhase: this.isLearningPhase,
       arrhythmiaDetected: this.arrhythmiaDetected,
       arrhythmiaCount: this.arrhythmiaCount,
-      status: arrhythmiaStatus
+      status: arrhythmiaStatus,
+      rmssd: this.lastRMSSD,
+      rrVariation: this.lastRRVariation
     });
 
-    return vitalSigns;
+    return {
+      spo2,
+      pressure,
+      arrhythmiaStatus,
+      lastArrhythmiaData
+    };
   }
 
   private detectArrhythmia() {
     if (this.rrIntervals.length < this.RR_WINDOW_SIZE) return;
 
+    const currentTime = Date.now();
     const recentRR = this.rrIntervals.slice(-this.RR_WINDOW_SIZE);
+    
+    // Calcular RMSSD
     let sumSquaredDiff = 0;
     for (let i = 1; i < recentRR.length; i++) {
       const diff = recentRR[i] - recentRR[i-1];
@@ -102,15 +117,20 @@ export class VitalSignsProcessor {
     this.lastRMSSD = rmssd;
     this.lastRRVariation = rrVariation;
     
+    // Detectar arritmia basada en umbrales
     const newArrhythmiaState = rmssd > this.RMSSD_THRESHOLD && rrVariation > 0.20;
-
-    if (newArrhythmiaState && !this.arrhythmiaDetected) {
+    
+    // Si es una nueva arritmia y ha pasado suficiente tiempo desde la última
+    if (newArrhythmiaState && !this.arrhythmiaDetected && 
+        currentTime - this.lastArrhythmiaTime > 1000) { // Mínimo 1 segundo entre arritmias
       this.arrhythmiaCount++;
-      console.log('Nueva arritmia detectada:', {
+      this.lastArrhythmiaTime = currentTime;
+      
+      console.log('VitalSignsProcessor - Nueva arritmia detectada:', {
         contador: this.arrhythmiaCount,
         rmssd,
         rrVariation,
-        timestamp: Date.now()
+        timestamp: currentTime
       });
     }
 
@@ -382,5 +402,6 @@ export class VitalSignsProcessor {
     this.measurementStartTime = Date.now();
     this.lastRMSSD = 0;
     this.lastRRVariation = 0;
+    this.lastArrhythmiaTime = 0;
   }
 }
