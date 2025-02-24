@@ -4,15 +4,15 @@ export class HeartBeatProcessor {
   private readonly WINDOW_SIZE = 60;
   private readonly MIN_BPM = 40;
   private readonly MAX_BPM = 200; // Aumentado para permitir más latidos
-  private readonly SIGNAL_THRESHOLD = 0.60; // Reducido para ser más sensible
-  private readonly MIN_CONFIDENCE = 0.50; // Reducido para ser más permisivo
-  private readonly DERIVATIVE_THRESHOLD = -0.02; // Menos restrictivo
-  private readonly MIN_PEAK_TIME_MS = 500; // Reducido para permitir latidos más cercanos
+  private readonly SIGNAL_THRESHOLD = 0.40; // Reducido para ser más sensible
+  private readonly MIN_CONFIDENCE = 0.60; // Reducido para ser más permisivo
+  private readonly DERIVATIVE_THRESHOLD = -0.03; // Menos restrictivo
+  private readonly MIN_PEAK_TIME_MS = 400; // Reducido para permitir latidos más cercanos
   private readonly WARMUP_TIME_MS = 3000; // Reducido para empezar antes
 
   // Parámetros de filtrado ajustados
-  private readonly MEDIAN_FILTER_WINDOW = 4; // Reducido para mayor sensibilidad
-  private readonly MOVING_AVERAGE_WINDOW = 4; // Reducido para mayor sensibilidad
+  private readonly MEDIAN_FILTER_WINDOW = 3; // Reducido para mayor sensibilidad
+  private readonly MOVING_AVERAGE_WINDOW = 3; // Reducido para mayor sensibilidad
   private readonly EMA_ALPHA = 0.4; // Aumentado para respuesta más rápida
   private readonly BASELINE_FACTOR = 1.0; // Ajustado para adaptación más rápida
 
