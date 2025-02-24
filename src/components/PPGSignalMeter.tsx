@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -27,6 +28,7 @@ const PPGSignalMeter = ({
   const lastValueRef = useRef<number | null>(null);
   const animationFrameRef = useRef<number>();
   const lastRenderTimeRef = useRef<number>(0);
+  const lastArrhythmiaTime = useRef<number>(0);
   
   const WINDOW_WIDTH_MS = 5000;
   const CANVAS_WIDTH = 1000;
@@ -88,8 +90,13 @@ const PPGSignalMeter = ({
     const normalizedValue = (baselineRef.current || 0) - smoothedValue;
     const scaledValue = normalizedValue * verticalScale;
     
-    // Ajustamos la detección de arritmias para que sea más sensible
-    const isArrhythmia = arrhythmiaStatus?.includes("ARRITMIA DETECTADA") || false;
+    // Solo marcamos como arritmia si detectamos un latido anormal
+    let isArrhythmia = false;
+    if (rawArrhythmiaData?.rrIntervals && rawArrhythmiaData.rrIntervals.length > 0) {
+      const lastRRInterval = rawArrhythmiaData.rrIntervals[rawArrhythmiaData.rrIntervals.length - 1];
+      // Solo marcamos como arritmia si el intervalo es muy largo o muy corto
+      isArrhythmia = lastRRInterval > 1200 || lastRRInterval < 600;
+    }
 
     const dataPoint: PPGDataPoint = {
       time: now,
@@ -110,17 +117,6 @@ const PPGSignalMeter = ({
       let lastY = 0;
       let firstPoint = true;
 
-      // Primero dibujamos el fondo de las zonas con arritmia
-      points.forEach((point, index) => {
-        if (point.isArrhythmia && index > 0) {
-          const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-          const prevX = canvas.width - ((now - points[index - 1].time) * canvas.width / WINDOW_WIDTH_MS);
-          
-          ctx.fillStyle = 'rgba(220, 38, 38, 0.1)'; // Rojo suave para el fondo
-          ctx.fillRect(prevX, 0, x - prevX, canvas.height);
-        }
-      });
-
       // Luego dibujamos la línea de la señal
       points.forEach((point, index) => {
         const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
@@ -132,7 +128,7 @@ const PPGSignalMeter = ({
           ctx.beginPath();
           ctx.moveTo(lastX, lastY);
           ctx.lineTo(x, y);
-          ctx.strokeStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
+          ctx.strokeStyle = '#0EA5E9'; // Siempre azul para la línea
           ctx.lineWidth = 2;
           ctx.stroke();
         }
@@ -160,7 +156,7 @@ const PPGSignalMeter = ({
             if (point.isArrhythmia) {
               ctx.font = '10px Inter';
               ctx.fillStyle = '#DC2626';
-              ctx.fillText('⚠️ Arritmia', x + 8, y - 20);
+              ctx.fillText('⚠️', x + 8, y - 20);
             }
           }
         }
@@ -200,7 +196,7 @@ const PPGSignalMeter = ({
 
     lastRenderTimeRef.current = currentTime;
     animationFrameRef.current = requestAnimationFrame(renderSignal);
-  }, [value, quality, isFingerDetected, rawArrhythmiaData, smoothValue, arrhythmiaStatus]);
+  }, [value, quality, isFingerDetected, rawArrhythmiaData, smoothValue]);
 
   useEffect(() => {
     renderSignal();
