@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useCallback } from 'react';
 import { FingerPrintIcon } from '@heroicons/react/24/outline';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
