@@ -1,3 +1,4 @@
+
 import React, { useRef, useEffect, useState } from 'react';
 
 interface CameraViewProps {
@@ -18,6 +19,18 @@ const CameraView = ({
 
   const stopCamera = async () => {
     if (stream) {
+      const videoTrack = stream.getVideoTracks()[0];
+      // Apagar la linterna antes de detener la cámara
+      if (videoTrack?.getCapabilities()?.torch) {
+        try {
+          await videoTrack.applyConstraints({
+            advanced: [{ torch: false }]
+          });
+        } catch (err) {
+          console.warn('Error al apagar la linterna:', err);
+        }
+      }
+      
       stream.getTracks().forEach(track => {
         track.stop();
         if (videoRef.current) {
@@ -43,7 +56,6 @@ const CameraView = ({
       };
 
       if (isAndroid) {
-        // Ajustes para mejorar la extracción de señal en Android
         Object.assign(baseVideoConstraints, {
           frameRate: { ideal: 25 },
           resizeMode: 'crop-and-scale'
