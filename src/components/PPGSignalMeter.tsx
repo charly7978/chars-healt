@@ -9,7 +9,11 @@ interface PPGSignalMeterProps {
   onStartMeasurement: () => void;
   onReset: () => void;
   arrhythmiaStatus?: string;
-  rawArrhythmiaData?: { rrIntervals: number[], lastPeakTime: number | null };
+  rawArrhythmiaData?: {
+    timestamp: number;
+    rmssd: number;
+    rrVariation: number;
+  } | null;
 }
 
 const PPGSignalMeter = ({ 
@@ -22,8 +26,8 @@ const PPGSignalMeter = ({
   rawArrhythmiaData
 }: PPGSignalMeterProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const baselineRef = useRef<number | null>(null);
   const dataBufferRef = useRef<CircularBuffer | null>(null);
+  const baselineRef = useRef<number | null>(null);
   const lastValueRef = useRef<number | null>(null);
   const animationFrameRef = useRef<number>();
   const lastRenderTimeRef = useRef<number>(0);
@@ -158,23 +162,11 @@ const PPGSignalMeter = ({
     const scaledValue = normalizedValue * verticalScale;
     
     let isArrhythmia = false;
-    if (arrhythmiaStatus?.includes("ARRITMIA") && rawArrhythmiaData?.rrIntervals?.length >= 3) {
-      const lastThreeIntervals = rawArrhythmiaData.rrIntervals.slice(-3);
-      const avgRR = lastThreeIntervals.reduce((a, b) => a + b, 0) / lastThreeIntervals.length;
-      const lastRR = lastThreeIntervals[lastThreeIntervals.length - 1];
-      const rrVariation = Math.abs(lastRR - avgRR) / avgRR;
-      
-      if (rrVariation > 0.20 && (now - lastArrhythmiaTime.current > 1000)) {
-        isArrhythmia = true;
-        lastArrhythmiaTime.current = now;
-        
-        console.log('Marcando arritmia en gráfico:', {
-          lastRR,
-          avgRR,
-          variation: (rrVariation * 100).toFixed(1) + '%',
-          timestamp: now
-        });
-      }
+    if (rawArrhythmiaData && 
+        arrhythmiaStatus?.includes("ARRITMIA") && 
+        now - rawArrhythmiaData.timestamp < 1000) {
+      isArrhythmia = true;
+      lastArrhythmiaTime.current = now;
     }
 
     const dataPoint: PPGDataPoint = {
@@ -220,45 +212,36 @@ const PPGSignalMeter = ({
             ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
             ctx.fill();
 
-            ctx.font = 'bold 12px Inter';
-            ctx.fillStyle = '#000000';
-            ctx.textAlign = 'center';
-            ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 10);
-
             if (point.isArrhythmia) {
-              ctx.save();
-              
+              ctx.beginPath();
+              ctx.fillStyle = 'rgba(220, 38, 38, 0.15)';
+              ctx.arc(x, y, 40, 0, Math.PI * 2);
+              ctx.fill();
+
               ctx.beginPath();
               ctx.setLineDash([5, 5]);
-              ctx.moveTo(x, y - 40);
-              ctx.lineTo(x, y + 40);
+              ctx.moveTo(x, y - 60);
+              ctx.lineTo(x, y + 60);
               ctx.strokeStyle = '#DC2626';
-              ctx.lineWidth = 1;
+              ctx.lineWidth = 2;
               ctx.stroke();
-              
-              ctx.beginPath();
-              ctx.fillStyle = 'rgba(220, 38, 38, 0.1)';
-              const radius = 30;
-              ctx.arc(x, y, radius, 0, Math.PI * 2);
-              ctx.fill();
-              
-              ctx.beginPath();
               ctx.setLineDash([]);
-              ctx.arc(x, y - radius - 10, 8, 0, Math.PI * 2);
+
+              ctx.beginPath();
+              ctx.arc(x, y - 50, 15, 0, Math.PI * 2);
               ctx.fillStyle = '#DC2626';
               ctx.fill();
-              ctx.font = 'bold 12px Inter';
+              ctx.font = 'bold 16px Inter';
               ctx.fillStyle = '#FFFFFF';
               ctx.textAlign = 'center';
-              ctx.fillText('!', x, y - radius - 7);
-              
-              ctx.restore();
+              ctx.textBaseline = 'middle';
+              ctx.fillText('!', x, y - 50);
             }
 
-            ctx.beginPath();
-            ctx.strokeStyle = '#0EA5E9';
-            ctx.lineWidth = 2;
-            ctx.moveTo(x, y);
+            ctx.font = 'bold 12px Inter';
+            ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
+            ctx.textAlign = 'center';
+            ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 20);
           }
         }
       });
@@ -266,7 +249,7 @@ const PPGSignalMeter = ({
 
     lastRenderTimeRef.current = currentTime;
     animationFrameRef.current = requestAnimationFrame(renderSignal);
-  }, [value, quality, isFingerDetected, rawArrhythmiaData, smoothValue, arrhythmiaStatus, drawGrid]);
+  }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus]);
 
   useEffect(() => {
     renderSignal();
@@ -276,16 +259,6 @@ const PPGSignalMeter = ({
       }
     };
   }, [renderSignal]);
-
-  const handleReset = useCallback(() => {
-    if (dataBufferRef.current) {
-      dataBufferRef.current.clear();
-    }
-    baselineRef.current = null;
-    lastValueRef.current = null;
-    lastArrhythmiaTime.current = 0;
-    onReset();
-  }, [onReset]);
 
   return (
     <div className="fixed inset-0 bg-gradient-to-b from-white to-slate-50/30">
@@ -332,9 +305,9 @@ const PPGSignalMeter = ({
       <div className="fixed bottom-0 left-0 right-0 h-[80px] grid grid-cols-2 gap-px overflow-hidden">
         <button 
           onClick={onStartMeasurement}
-          className="relative group bg-gradient-to-b from-white/90 to-slate-50/90 
-                   hover:from-slate-50/90 hover:to-white/90 
-                   active:from-slate-100/90 active:to-slate-50/90
+          className="relative group bg-gradient-to-b from-slate-50 to-white
+                   hover:from-white hover:to-slate-50 
+                   active:from-slate-100 active:to-slate-50
                    transition-all duration-300"
         >
           <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/0 via-cyan-500/10 to-cyan-500/0 
@@ -352,9 +325,9 @@ const PPGSignalMeter = ({
 
         <button 
           onClick={onReset}
-          className="relative group bg-gradient-to-b from-white/90 to-slate-50/90 
-                   hover:from-slate-50/90 hover:to-white/90 
-                   active:from-slate-100/90 active:to-slate-50/90
+          className="relative group bg-gradient-to-b from-slate-50 to-white
+                   hover:from-white hover:to-slate-50 
+                   active:from-slate-100 active:to-slate-50
                    transition-all duration-300"
         >
           <div className="absolute inset-0 bg-gradient-to-r from-rose-500/0 via-rose-500/10 to-rose-500/0 
