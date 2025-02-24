@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -101,7 +100,6 @@ const PPGSignalMeter = ({
     
     dataBufferRef.current.push(dataPoint);
 
-    // Optimizar el renderizado usando técnicas de doble buffer
     const offscreenCanvas = new OffscreenCanvas(canvas.width, canvas.height);
     const offscreenCtx = offscreenCanvas.getContext('2d', { alpha: false });
     
@@ -110,18 +108,52 @@ const PPGSignalMeter = ({
     offscreenCtx.fillStyle = '#F8FAFC';
     offscreenCtx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Dibujar grid
     offscreenCtx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
     offscreenCtx.lineWidth = 0.5;
+    offscreenCtx.font = '10px Inter';
+    offscreenCtx.fillStyle = 'rgba(51, 65, 85, 0.6)';
+    offscreenCtx.textAlign = 'right';
     
-    const gridSpacing = canvas.width / 40;
-    for (let x = canvas.width; x > 0; x -= gridSpacing) {
+    const amplitudeStep = 50;
+    const maxAmplitude = 200;
+    for (let y = 0; y <= maxAmplitude; y += amplitudeStep) {
+      const yPos = (canvas.height / 2) + y;
+      const yNeg = (canvas.height / 2) - y;
+      
+      offscreenCtx.beginPath();
+      offscreenCtx.moveTo(0, yPos);
+      offscreenCtx.lineTo(canvas.width, yPos);
+      offscreenCtx.moveTo(0, yNeg);
+      offscreenCtx.lineTo(canvas.width, yNeg);
+      offscreenCtx.stroke();
+      
+      if (y > 0) {
+        offscreenCtx.fillText(`${y}`, 25, yPos + 4);
+        offscreenCtx.fillText(`-${y}`, 25, yNeg + 4);
+      }
+    }
+
+    const timeStep = 1000; // 1 segundo
+    offscreenCtx.textAlign = 'center';
+    for (let t = 0; t <= WINDOW_WIDTH_MS; t += timeStep) {
+      const x = canvas.width - (t * canvas.width / WINDOW_WIDTH_MS);
+      
       offscreenCtx.beginPath();
       offscreenCtx.moveTo(x, 0);
       offscreenCtx.lineTo(x, canvas.height);
       offscreenCtx.stroke();
+      
+      const seconds = t / 1000;
+      offscreenCtx.fillText(`${seconds}s`, x, canvas.height - 5);
     }
 
+    offscreenCtx.strokeStyle = 'rgba(51, 65, 85, 0.3)';
+    offscreenCtx.lineWidth = 1;
+    offscreenCtx.beginPath();
+    offscreenCtx.moveTo(0, canvas.height / 2);
+    offscreenCtx.lineTo(canvas.width, canvas.height / 2);
+    offscreenCtx.stroke();
+    
     const points = dataBufferRef.current.getPoints();
     
     if (points.length > 1) {
@@ -146,7 +178,6 @@ const PPGSignalMeter = ({
       offscreenCtx.strokeStyle = '#0EA5E9';
       offscreenCtx.stroke();
       
-      // Dibujar picos
       points.forEach((point, i) => {
         if (i > 0 && i < points.length - 1) {
           const prevValue = points[i-1].value;
@@ -160,12 +191,16 @@ const PPGSignalMeter = ({
             offscreenCtx.arc(x, y, 4, 0, Math.PI * 2);
             offscreenCtx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
             offscreenCtx.fill();
+            
+            offscreenCtx.font = '10px Inter';
+            offscreenCtx.fillStyle = 'rgba(51, 65, 85, 0.8)';
+            offscreenCtx.textAlign = 'left';
+            offscreenCtx.fillText(`${Math.round(point.value)}`, x + 8, y - 8);
           }
         }
       });
     }
 
-    // Transferir el contenido del buffer al canvas visible
     ctx.drawImage(offscreenCanvas, 0, 0);
     
     lastRenderTimeRef.current = currentTime;
