@@ -6,6 +6,7 @@ export const useVitalSignsProcessor = () => {
   const [processor] = useState(() => new VitalSignsProcessor());
   const [arrhythmiaCounter, setArrhythmiaCounter] = useState(0);
   const lastArrhythmiaTime = useRef<number>(0);
+  const hasDetectedArrhythmia = useRef<boolean>(false);
   const MIN_TIME_BETWEEN_ARRHYTHMIAS = 1000; // Mínimo 1 segundo entre arritmias
   const MAX_ARRHYTHMIAS_PER_SESSION = 15; // Máximo razonable para 30 segundos
   
@@ -18,17 +19,14 @@ export const useVitalSignsProcessor = () => {
       const lastThreeIntervals = rrData.intervals.slice(-3);
       const avgRR = lastThreeIntervals.reduce((a, b) => a + b, 0) / lastThreeIntervals.length;
       
-      // Calculamos la variabilidad usando RMSSD (Root Mean Square of Successive Differences)
+      // Calculamos la variabilidad usando RMSSD
       let rmssd = 0;
       for (let i = 1; i < lastThreeIntervals.length; i++) {
         rmssd += Math.pow(lastThreeIntervals[i] - lastThreeIntervals[i-1], 2);
       }
       rmssd = Math.sqrt(rmssd / (lastThreeIntervals.length - 1));
       
-      // Criterios más estrictos para arritmias:
-      // 1. RMSSD > 50ms (alta variabilidad)
-      // 2. Último intervalo RR significativamente diferente del promedio (>20%)
-      // 3. Suficiente tiempo desde la última arritmia
+      // Criterios para arritmias
       const lastRR = lastThreeIntervals[lastThreeIntervals.length - 1];
       const rrVariation = Math.abs(lastRR - avgRR) / avgRR;
       
@@ -37,6 +35,7 @@ export const useVitalSignsProcessor = () => {
           currentTime - lastArrhythmiaTime.current >= MIN_TIME_BETWEEN_ARRHYTHMIAS &&
           arrhythmiaCounter < MAX_ARRHYTHMIAS_PER_SESSION) {
         
+        hasDetectedArrhythmia.current = true;
         setArrhythmiaCounter(prev => prev + 1);
         lastArrhythmiaTime.current = currentTime;
         
@@ -62,14 +61,21 @@ export const useVitalSignsProcessor = () => {
       }
     }
     
-    const status = arrhythmiaCounter > 0 ? 
-      `ARRITMIAS DETECTADAS|${arrhythmiaCounter}` : 
-      `SIN ARRITMIAS|${arrhythmiaCounter}`;
+    // Si ya detectamos una arritmia antes, mantenemos el estado
+    if (hasDetectedArrhythmia.current) {
+      return {
+        spo2: result.spo2,
+        pressure: result.pressure,
+        arrhythmiaStatus: `ARRITMIA DETECTADA|${arrhythmiaCounter}`,
+        lastArrhythmiaData: null
+      };
+    }
     
+    // Si no hay arritmias detectadas aún
     return {
       spo2: result.spo2,
       pressure: result.pressure,
-      arrhythmiaStatus: status
+      arrhythmiaStatus: `SIN ARRITMIAS|${arrhythmiaCounter}`
     };
   }, [processor, arrhythmiaCounter]);
 
@@ -77,6 +83,7 @@ export const useVitalSignsProcessor = () => {
     processor.reset();
     setArrhythmiaCounter(0);
     lastArrhythmiaTime.current = 0;
+    hasDetectedArrhythmia.current = false;
     console.log("Reseteo de detección de arritmias");
   }, [processor]);
 
