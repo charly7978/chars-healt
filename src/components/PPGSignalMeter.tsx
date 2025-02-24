@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -89,10 +88,8 @@ const PPGSignalMeter = ({
     const normalizedValue = (baselineRef.current || 0) - smoothedValue;
     const scaledValue = normalizedValue * verticalScale;
     
-    // Verificamos si este punto coincide con un latido real usando rawArrhythmiaData
-    const isArrhythmia = rawArrhythmiaData?.rrIntervals?.length 
-      ? rawArrhythmiaData.rrIntervals[rawArrhythmiaData.rrIntervals.length - 1] > 1000 
-      : false;
+    // Ajustamos la detección de arritmias para que sea más sensible
+    const isArrhythmia = arrhythmiaStatus?.includes("ARRITMIA DETECTADA") || false;
 
     const dataPoint: PPGDataPoint = {
       time: now,
@@ -203,7 +200,7 @@ const PPGSignalMeter = ({
 
     lastRenderTimeRef.current = currentTime;
     animationFrameRef.current = requestAnimationFrame(renderSignal);
-  }, [value, quality, isFingerDetected, rawArrhythmiaData, smoothValue]);
+  }, [value, quality, isFingerDetected, rawArrhythmiaData, smoothValue, arrhythmiaStatus]);
 
   useEffect(() => {
     renderSignal();
