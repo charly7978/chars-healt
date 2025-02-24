@@ -303,7 +303,7 @@ const PPGSignalMeter = ({
         height={CANVAS_HEIGHT}
         className="w-full h-[calc(40vh)] mt-20 transform-gpu"
         style={{ 
-          imageRendering: 'optimizespeed',
+          imageRendering: 'pixelated',
           willChange: 'transform',
           backfaceVisibility: 'hidden'
         }}

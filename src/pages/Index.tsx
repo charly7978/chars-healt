@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -32,10 +33,9 @@ const Index = () => {
 
   const requestFullScreen = async () => {
     try {
-      // Lista de métodos de pantalla completa para diferentes navegadores
-      const elem = rootRef.current;
-      if (!elem) return;
+      const elem = rootRef.current || document.documentElement;
 
+      // Solicitar pantalla completa con fallbacks para diferentes navegadores
       if (elem.requestFullscreen) {
         await elem.requestFullscreen();
       } else if ((elem as any).webkitRequestFullscreen) {
@@ -72,6 +72,26 @@ const Index = () => {
       console.warn('Error al entrar en pantalla completa:', err);
     }
   };
+
+  // Efecto para activar pantalla completa inmediatamente al montar el componente
+  useEffect(() => {
+    const enableImmersiveMode = async () => {
+      await requestFullScreen();
+    };
+
+    // Intentar activar modo inmersivo al cargar
+    enableImmersiveMode();
+
+    // Reactivar modo inmersivo cuando la ventana obtiene el foco
+    const handleFocus = () => {
+      enableImmersiveMode();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, []);
 
   useEffect(() => {
     const preventDefaultBehaviors = (e: Event) => {
@@ -143,7 +163,6 @@ const Index = () => {
   }, []);
 
   const startMonitoring = async () => {
-    await requestFullScreen();
     setIsMonitoring(true);
     setIsCameraOn(true);
     startProcessing();
