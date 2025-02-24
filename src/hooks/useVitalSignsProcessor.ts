@@ -1,3 +1,4 @@
+
 import { useState, useCallback, useRef } from 'react';
 import { VitalSignsProcessor } from '../modules/VitalSignsProcessor';
 
@@ -12,32 +13,63 @@ export const useVitalSignsProcessor = () => {
     const result = processor.processSignal(value, rrData);
     const currentTime = Date.now();
     
-    if (result.arrhythmiaStatus === "ARRITMIA DETECTADA") {
-      // Solo contar si:
-      // 1. Ha pasado suficiente tiempo desde la última
-      // 2. No hemos llegado al máximo
-      // 3. La señal tiene buena calidad (usamos los datos RR como indicador)
-      if (
-        currentTime - lastArrhythmiaTime.current >= MIN_TIME_BETWEEN_ARRHYTHMIAS &&
-        arrhythmiaCounter < MAX_ARRHYTHMIAS_PER_SESSION &&
-        rrData?.intervals.length >= 3 // Aseguramos tener suficientes datos
-      ) {
+    // Análisis más riguroso de intervalos RR para arritmias
+    if (rrData?.intervals && rrData.intervals.length >= 3) {
+      const lastThreeIntervals = rrData.intervals.slice(-3);
+      const avgRR = lastThreeIntervals.reduce((a, b) => a + b, 0) / lastThreeIntervals.length;
+      
+      // Calculamos la variabilidad usando RMSSD (Root Mean Square of Successive Differences)
+      let rmssd = 0;
+      for (let i = 1; i < lastThreeIntervals.length; i++) {
+        rmssd += Math.pow(lastThreeIntervals[i] - lastThreeIntervals[i-1], 2);
+      }
+      rmssd = Math.sqrt(rmssd / (lastThreeIntervals.length - 1));
+      
+      // Criterios más estrictos para arritmias:
+      // 1. RMSSD > 50ms (alta variabilidad)
+      // 2. Último intervalo RR significativamente diferente del promedio (>20%)
+      // 3. Suficiente tiempo desde la última arritmia
+      const lastRR = lastThreeIntervals[lastThreeIntervals.length - 1];
+      const rrVariation = Math.abs(lastRR - avgRR) / avgRR;
+      
+      if (rmssd > 50 && 
+          rrVariation > 0.20 && 
+          currentTime - lastArrhythmiaTime.current >= MIN_TIME_BETWEEN_ARRHYTHMIAS &&
+          arrhythmiaCounter < MAX_ARRHYTHMIAS_PER_SESSION) {
+        
         setArrhythmiaCounter(prev => prev + 1);
         lastArrhythmiaTime.current = currentTime;
-        console.log("Nueva arritmia detectada:", {
-          total: arrhythmiaCounter + 1,
-          timeGap: currentTime - lastArrhythmiaTime.current,
-          signalQuality: rrData.intervals.length
+        
+        console.log("Arritmia detectada:", {
+          rmssd,
+          rrVariation,
+          lastRR,
+          avgRR,
+          intervals: lastThreeIntervals,
+          counter: arrhythmiaCounter + 1
         });
+
+        return {
+          spo2: result.spo2,
+          pressure: result.pressure,
+          arrhythmiaStatus: `ARRITMIA DETECTADA|${arrhythmiaCounter + 1}`,
+          lastArrhythmiaData: {
+            timestamp: currentTime,
+            rmssd,
+            rrVariation
+          }
+        };
       }
     }
     
-    const status = arrhythmiaCounter > 0 ? "ARRITMIA DETECTADA" : "SIN ARRITMIAS";
+    const status = arrhythmiaCounter > 0 ? 
+      `ARRITMIAS DETECTADAS|${arrhythmiaCounter}` : 
+      `SIN ARRITMIAS|${arrhythmiaCounter}`;
     
     return {
       spo2: result.spo2,
       pressure: result.pressure,
-      arrhythmiaStatus: `${status}|${arrhythmiaCounter}`
+      arrhythmiaStatus: status
     };
   }, [processor, arrhythmiaCounter]);
 
