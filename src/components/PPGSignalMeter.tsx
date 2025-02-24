@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from 'react';
 import { Progress } from "@/components/ui/progress";
 import VitalSign from '@/components/VitalSign';
@@ -29,10 +30,10 @@ const PPGSignalMeter = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dataRef = useRef<PPGDataPoint[]>([]);
   const [startTime, setStartTime] = useState<number>(Date.now());
-  const WINDOW_WIDTH_MS = 5000; // Reducido de 3000 a 2000 para comprimir horizontalmente
-  const CANVAS_WIDTH = 1000;  // antes 1200
-  const CANVAS_HEIGHT = 200; // antes 300
-  const verticalScale = 32.0; //toque antes 6
+  const WINDOW_WIDTH_MS = 5000;
+  const CANVAS_WIDTH = 1000;
+  const CANVAS_HEIGHT = 200;
+  const verticalScale = 32.0;
   const baselineRef = useRef<number | null>(null);
   const maxAmplitudeRef = useRef<number>(0);
   const lastValueRef = useRef<number>(0);
@@ -178,32 +179,6 @@ const PPGSignalMeter = ({
 
   }, [value, quality, isFingerDetected, arrhythmiaStatus]);
 
-  const handleReset = () => {
-    dataRef.current = [];
-    baselineRef.current = null;
-    maxAmplitudeRef.current = 0;
-    lastValueRef.current = 0;
-    lastArrhythmiaRef.current = false;
-    setStartTime(Date.now());
-    onReset();
-  };
-
-  const getQualityColor = (quality: number) => {
-    if (quality > 90) return 'from-emerald-500/80 to-emerald-400/80';
-    if (quality > 75) return 'from-sky-500/80 to-sky-400/80';
-    if (quality > 60) return 'from-indigo-500/80 to-indigo-400/80';
-    if (quality > 40) return 'from-amber-500/80 to-amber-400/80';
-    return 'from-red-500/80 to-red-400/80';
-  };
-
-  const getQualityText = (quality: number) => {
-    if (quality > 90) return 'Excellent';
-    if (quality > 75) return 'Very Good';
-    if (quality > 60) return 'Good';
-    if (quality > 40) return 'Fair';
-    return 'Poor';
-  };
-
   return (
     <div className="fixed inset-0 bg-gradient-to-b from-white to-slate-50/30">
       <div className="absolute top-0 left-0 right-0 p-2 flex justify-between items-center bg-white/60 backdrop-blur-sm border-b border-slate-100 shadow-sm">
@@ -219,20 +194,6 @@ const PPGSignalMeter = ({
             <span className="text-[9px] text-center mt-0.5 font-medium transition-colors duration-700" 
                   style={{ color: quality > 60 ? '#0EA5E9' : '#F59E0B' }}>
               {getQualityText(quality)}
-            </span>
-          </div>
-          
-          <div className="flex flex-col items-center">
-            <div 
-              style={{ width: 56, height: 56, backgroundColor: isFingerDetected ? 'green' : 'gray' }}
-              className={`transition-all duration-700 ${
-                isFingerDetected 
-                  ? 'scale-100 drop-shadow-md'
-                  : 'scale-95'
-              }`}
-            />
-            <span className="text-xs font-medium text-slate-600 transition-all duration-700">
-              {isFingerDetected ? 'Dedo detectado' : 'Ubique su dedo en el lente'}
             </span>
           </div>
         </div>
