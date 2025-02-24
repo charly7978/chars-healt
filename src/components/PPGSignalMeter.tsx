@@ -56,20 +56,13 @@ const PPGSignalMeter = ({
 }: PPGSignalMeterProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const baselineRef = useRef<number | null>(null);
-  // Initialize CircularBuffer with null and create it in useEffect
-  const dataBufferRef = useRef<CircularBuffer | null>(null);
+  // Initialize CircularBuffer directly with a new instance
+  const dataBufferRef = useRef(new CircularBuffer(1000));
   
   const WINDOW_WIDTH_MS = 5000;
   const CANVAS_WIDTH = 1000;
   const CANVAS_HEIGHT = 200;
   const verticalScale = 32.0;
-
-  // Initialize CircularBuffer on component mount
-  useEffect(() => {
-    if (!dataBufferRef.current) {
-      dataBufferRef.current = new CircularBuffer(1000);
-    }
-  }, []);
 
   const getQualityColor = useCallback((quality: number) => {
     if (quality > 75) return 'from-green-500 to-emerald-500';
@@ -84,7 +77,7 @@ const PPGSignalMeter = ({
   }, []);
 
   useEffect(() => {
-    if (!canvasRef.current || !isFingerDetected || !dataBufferRef.current) return;
+    if (!canvasRef.current || !isFingerDetected) return;
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
@@ -153,9 +146,7 @@ const PPGSignalMeter = ({
   }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus]);
 
   const handleReset = useCallback(() => {
-    if (dataBufferRef.current) {
-      dataBufferRef.current.clear();
-    }
+    dataBufferRef.current.clear();
     baselineRef.current = null;
     onReset();
   }, [onReset]);
