@@ -29,7 +29,7 @@ const PPGSignalMeter = ({
   const WINDOW_WIDTH_MS = 6000;
   const CANVAS_WIDTH = 1000;
   const CANVAS_HEIGHT = 200;
-  const verticalScale = 25.0;
+  const verticalScale = 12.0;
 
   // Initialize buffer on mount
   useEffect(() => {
