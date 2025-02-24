@@ -4,10 +4,10 @@ export class HeartBeatProcessor {
   private readonly WINDOW_SIZE = 60;
   private readonly MIN_BPM = 40;
   private readonly MAX_BPM = 200; // Aumentado para permitir más latidos
-  private readonly SIGNAL_THRESHOLD = 0.60; // Reducido para ser más sensible
-  private readonly MIN_CONFIDENCE = 0.50; // Reducido para ser más permisivo
+  private readonly SIGNAL_THRESHOLD = 0.70; // Reducido para ser más sensible
+  private readonly MIN_CONFIDENCE = 0.80; // Reducido para ser más permisivo
   private readonly DERIVATIVE_THRESHOLD = -0.03; // Menos restrictivo
-  private readonly MIN_PEAK_TIME_MS = 400; // Reducido para permitir latidos más cercanos
+  private readonly MIN_PEAK_TIME_MS = 500; // Reducido para permitir latidos más cercanos
   private readonly WARMUP_TIME_MS = 3000; // Reducido para empezar antes
 
   // Parámetros de filtrado ajustados
@@ -19,8 +19,8 @@ export class HeartBeatProcessor {
   // Parámetros de beep ajustados para sonido más realista
   private readonly BEEP_PRIMARY_FREQUENCY = 880; // Frecuencia principal (La4)
   private readonly BEEP_SECONDARY_FREQUENCY = 440; // Armónico (La3)
-  private readonly BEEP_DURATION = 100; // Duración más larga
-  private readonly BEEP_VOLUME = 0.7; // Volumen aumentado
+  private readonly BEEP_DURATION = 80; // Duración más larga
+  private readonly BEEP_VOLUME = 0.9; // Volumen aumentado
   private readonly MIN_BEEP_INTERVAL_MS = 300;
 
   // ────────── AUTO-RESET SI LA SEÑAL ES MUY BAJA ──────────
