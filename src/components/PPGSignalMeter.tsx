@@ -28,7 +28,6 @@ const PPGSignalMeter = ({
   const lastValueRef = useRef<number | null>(null);
   const animationFrameRef = useRef<number>();
   const lastRenderTimeRef = useRef<number>(0);
-  const lastKnownPeakTime = useRef<number | null>(null);
   
   const WINDOW_WIDTH_MS = 5000;
   const CANVAS_WIDTH = 1000;
@@ -61,12 +60,6 @@ const PPGSignalMeter = ({
     return previousValue + SMOOTHING_FACTOR * (currentValue - previousValue);
   }, []);
 
-  const isArrhythmicBeat = useCallback((): boolean => {
-    if (!rawArrhythmiaData?.rrIntervals?.length) return false;
-    const lastInterval = rawArrhythmiaData.rrIntervals[rawArrhythmiaData.rrIntervals.length - 1];
-    return lastInterval > 1000;
-  }, [rawArrhythmiaData]);
-
   const renderSignal = useCallback(() => {
     if (!canvasRef.current || !isFingerDetected || !dataBufferRef.current) return;
 
@@ -96,28 +89,11 @@ const PPGSignalMeter = ({
     const normalizedValue = (baselineRef.current || 0) - smoothedValue;
     const scaledValue = normalizedValue * verticalScale;
     
-    // Detección de pico
-    const isPeak = rawArrhythmiaData?.lastPeakTime !== lastKnownPeakTime.current && 
-                  rawArrhythmiaData?.lastPeakTime != null;
-    
-    // Actualizar último pico conocido
-    if (isPeak) {
-      lastKnownPeakTime.current = rawArrhythmiaData?.lastPeakTime || null;
-      const isArrhythmic = isArrhythmicBeat();
-      console.log('Nuevo pico detectado:', {
-        time: lastKnownPeakTime.current,
-        isArrhythmic,
-        now,
-        diff: now - (lastKnownPeakTime.current || 0)
-      });
-    }
-    
-    // Crear punto con marca de pico
     const dataPoint: PPGDataPoint = {
       time: now,
       value: scaledValue,
-      isArrhythmia: isPeak && isArrhythmicBeat(),
-      isPeak: isPeak
+      isArrhythmia: false,
+      isPeak: false
     };
     
     dataBufferRef.current.push(dataPoint);
@@ -128,55 +104,22 @@ const PPGSignalMeter = ({
 
     const points = dataBufferRef.current.getPoints();
     if (points.length > 1) {
+      ctx.beginPath();
+      ctx.strokeStyle = '#0EA5E9';
       ctx.lineWidth = 2;
-      let lastX = 0;
-      let lastY = 0;
-      let firstPoint = true;
 
-      points.forEach((point) => {
+      points.forEach((point, index) => {
         const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
         const y = canvas.height / 2 - point.value;
 
-        if (firstPoint) {
-          firstPoint = false;
+        if (index === 0) {
+          ctx.moveTo(x, y);
         } else {
-          // Dibujar línea
-          ctx.beginPath();
-          ctx.moveTo(lastX, lastY);
           ctx.lineTo(x, y);
-          ctx.strokeStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
-          ctx.stroke();
         }
-
-        // Dibujar círculo y número si es un pico
-        if (point.isPeak || point.isArrhythmia) {
-          // Dibujar círculo
-          ctx.beginPath();
-          ctx.arc(x, y, 4, 0, Math.PI * 2);
-          ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
-          ctx.fill();
-
-          // Mostrar valor numérico
-          const displayValue = Math.abs(Math.round(point.value));
-          ctx.font = '12px Inter';
-          ctx.fillStyle = 'rgba(51, 65, 85, 0.8)';
-          ctx.textAlign = 'left';
-          ctx.fillText(`${displayValue}`, x + 8, y - 8);
-
-          // Debug: mostrar en consola los puntos que se están dibujando
-          console.log('Dibujando punto:', {
-            x,
-            y,
-            value: displayValue,
-            isPeak: point.isPeak,
-            isArrhythmia: point.isArrhythmia,
-            time: point.time
-          });
-        }
-
-        lastX = x;
-        lastY = y;
       });
+
+      ctx.stroke();
     }
 
     // Dibujar grilla
@@ -209,7 +152,7 @@ const PPGSignalMeter = ({
 
     lastRenderTimeRef.current = currentTime;
     animationFrameRef.current = requestAnimationFrame(renderSignal);
-  }, [value, quality, isFingerDetected, rawArrhythmiaData, smoothValue, isArrhythmicBeat]);
+  }, [value, quality, isFingerDetected, smoothValue]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
