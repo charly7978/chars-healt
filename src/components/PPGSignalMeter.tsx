@@ -93,18 +93,18 @@ const PPGSignalMeter = ({
     const smoothedValue = smoothValue(value, lastValueRef.current);
     lastValueRef.current = smoothedValue;
 
-    // Detección segura de picos
+    // Detectar si este punto es un pico
     let isPeak = false;
-    if (rawArrhythmiaData && typeof rawArrhythmiaData.lastPeakTime === 'number') {
-      isPeak = rawArrhythmiaData.lastPeakTime !== lastKnownPeakTime.current;
-      
-      if (isPeak) {
-        lastKnownPeakTime.current = rawArrhythmiaData.lastPeakTime;
-        console.log('Pico detectado:', {
-          time: rawArrhythmiaData.lastPeakTime,
-          isArrhythmic: isArrhythmicBeat()
-        });
-      }
+    const currentPeakTime = rawArrhythmiaData?.lastPeakTime;
+    
+    if (currentPeakTime !== undefined && currentPeakTime !== null && 
+        currentPeakTime !== lastKnownPeakTime.current) {
+      isPeak = true;
+      lastKnownPeakTime.current = currentPeakTime;
+      console.log('Pico detectado:', {
+        time: currentPeakTime,
+        isArrhythmic: isArrhythmicBeat()
+      });
     }
 
     const normalizedValue = (baselineRef.current || 0) - smoothedValue;
@@ -142,9 +142,9 @@ const PPGSignalMeter = ({
           ctx.stroke();
         }
 
-        // Verificación segura para dibujar puntos y números
-        const currentPeakTime = rawArrhythmiaData?.lastPeakTime;
-        if (currentPeakTime && Math.abs(point.time - currentPeakTime) < 100) {
+        // Solo dibujar puntos y números si tenemos un tiempo de pico válido
+        if (currentPeakTime !== undefined && currentPeakTime !== null &&
+            Math.abs(point.time - currentPeakTime) < 100) {
           // Dibujar círculo en el pico
           ctx.beginPath();
           ctx.arc(x, y, 4, 0, Math.PI * 2);
@@ -194,9 +194,9 @@ const PPGSignalMeter = ({
   }, [value, quality, isFingerDetected, rawArrhythmiaData, smoothValue, isArrhythmicBeat]);
 
   useEffect(() => {
-    if (canvasRef.current) {  // Added safety check
-      renderSignal();
-    }
+    if (!canvasRef.current) return; // Guard clause to prevent initial render without canvas
+    
+    renderSignal();
     return () => {
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
