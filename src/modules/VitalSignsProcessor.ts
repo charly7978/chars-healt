@@ -46,9 +46,6 @@ export class VitalSignsProcessor {
       this.ppgValues.shift();
     }
 
-    const spo2 = this.calculateSpO2(this.ppgValues.slice(-60));
-    const bp = this.calculateBloodPressure(this.ppgValues.slice(-60));
-    
     const currentTime = Date.now();
     const timeSinceStart = currentTime - this.measurementStartTime;
 
@@ -56,21 +53,23 @@ export class VitalSignsProcessor {
       this.isLearningPhase = false;
     }
 
-    // Importante: Aquí es donde enviamos el contador
-    const arrhythmiaStatus = this.isLearningPhase 
-      ? "CALIBRANDO..." 
-      : this.arrhythmiaDetected 
-        ? `ARRITMIA DETECTADA|${this.arrhythmiaCount}`
-        : `SIN ARRITMIAS|${this.arrhythmiaCount}`;
+    let arrhythmiaStatus;
+    if (this.isLearningPhase) {
+      arrhythmiaStatus = "CALIBRANDO...";
+    } else if (this.arrhythmiaDetected || this.arrhythmiaCount > 0) {
+      arrhythmiaStatus = `ARRITMIA DETECTADA|${this.arrhythmiaCount}`;
+    } else {
+      arrhythmiaStatus = "SIN ARRITMIAS|0";
+    }
 
     return {
-      spo2,
-      pressure: `${bp.systolic}/${bp.diastolic}`,
+      spo2: this.calculateSpO2(this.ppgValues.slice(-60)),
+      pressure: `${this.calculateBloodPressure(this.ppgValues.slice(-60)).systolic}/${this.calculateBloodPressure(this.ppgValues.slice(-60)).diastolic}`,
       arrhythmiaStatus,
       lastArrhythmiaData: this.arrhythmiaDetected ? {
         timestamp: currentTime,
-        rmssd: this.lastRMSSD || 0,
-        rrVariation: this.lastRRVariation || 0
+        rmssd: this.lastRMSSD,
+        rrVariation: this.lastRRVariation
       } : null
     };
   }
@@ -371,5 +370,7 @@ export class VitalSignsProcessor {
     this.arrhythmiaDetected = false;
     this.arrhythmiaCount = 0;
     this.measurementStartTime = Date.now();
+    this.lastRMSSD = 0;
+    this.lastRRVariation = 0;
   }
 }

@@ -51,7 +51,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit }) => {
       <h3 className="text-gray-400/90 text-xs mb-2">{label}</h3>
       <div className="flex items-baseline gap-1 justify-center">
         <span 
-          className={`text-lg font-bold ${color || 'text-white'} transition-colors duration-300`}
+          className={`${isArrhythmiaDisplay ? 'text-sm' : 'text-lg'} font-bold ${color || 'text-white'} transition-colors duration-300`}
         >
           {text}
         </span>
