@@ -167,6 +167,7 @@ const PPGSignalMeter = ({
 
   return (
     <div className="fixed inset-0 bg-gradient-to-b from-white to-slate-50/30">
+      {/* Header con título, barra de calidad y huella */}
       <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center bg-white/60 backdrop-blur-sm border-b border-slate-100 shadow-sm">
         <span className="text-xl font-bold text-slate-700">PPG</span>
         <div className="flex flex-col items-center flex-1 mx-4">
@@ -196,16 +197,18 @@ const PPGSignalMeter = ({
         </div>
       </div>
 
+      {/* Gráfica PPG */}
       <canvas
         ref={canvasRef}
         width={CANVAS_WIDTH}
         height={CANVAS_HEIGHT}
-        className="w-full h-[calc(40vh)] mt-20"
+        className="w-full h-[calc(35vh)] mt-20"
       />
 
-      <div className="fixed bottom-0 left-0 right-0">
-        <div className="bg-gray-900/30 backdrop-blur-sm p-4 mb-[80px]">
-          <div className="grid grid-cols-2 gap-4">
+      {/* Panel de indicadores vitales */}
+      <div className="fixed bottom-[80px] left-0 right-0">
+        <div className="bg-gray-900/30 backdrop-blur-sm p-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 px-2">
             <VitalSign 
               label="FRECUENCIA CARDÍACA"
               value={value || "--"}
@@ -216,23 +219,33 @@ const PPGSignalMeter = ({
               value={quality || "--"}
               unit="%"
             />
+            <VitalSign 
+              label="PRESIÓN ARTERIAL"
+              value="--/--"
+              unit="mmHg"
+            />
+            <VitalSign 
+              label="ARRITMIAS"
+              value="SIN ARRITMIAS"
+            />
           </div>
         </div>
-        
-        <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900">
-          <button 
-            onClick={onStartMeasurement}
-            className="w-full h-full bg-white/80 hover:bg-slate-50/80 text-xl font-bold text-slate-700 transition-all duration-300"
-          >
-            INICIAR
-          </button>
-          <button 
-            onClick={handleReset}
-            className="w-full h-full bg-white/80 hover:bg-slate-50/80 text-xl font-bold text-slate-700 transition-all duration-300"
-          >
-            RESET
-          </button>
-        </div>
+      </div>
+
+      {/* Botones de control */}
+      <div className="fixed bottom-0 left-0 right-0 h-[80px] grid grid-cols-2 gap-px bg-gray-900">
+        <button 
+          onClick={onStartMeasurement}
+          className="w-full h-full bg-white/80 hover:bg-slate-50/80 text-xl font-bold text-slate-700 transition-all duration-300"
+        >
+          INICIAR
+        </button>
+        <button 
+          onClick={handleReset}
+          className="w-full h-full bg-white/80 hover:bg-slate-50/80 text-xl font-bold text-slate-700 transition-all duration-300"
+        >
+          RESET
+        </button>
       </div>
     </div>
   );
