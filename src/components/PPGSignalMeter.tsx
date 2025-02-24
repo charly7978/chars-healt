@@ -181,23 +181,26 @@ const PPGSignalMeter = ({
 
     const points = dataBufferRef.current.getPoints();
     if (points.length > 1) {
-      ctx.beginPath();
-      ctx.strokeStyle = '#0EA5E9';
-      ctx.lineWidth = 2;
-      ctx.lineJoin = 'round';
-      ctx.lineCap = 'round';
+      for (let i = 1; i < points.length; i++) {
+        const prevPoint = points[i - 1];
+        const point = points[i];
+        
+        ctx.beginPath();
+        
+        const x1 = canvas.width - ((now - prevPoint.time) * canvas.width / WINDOW_WIDTH_MS);
+        const y1 = canvas.height / 2 - prevPoint.value;
+        const x2 = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
+        const y2 = canvas.height / 2 - point.value;
 
-      points.forEach((point, index) => {
-        const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-        const y = canvas.height / 2 - point.value;
-
-        if (index === 0) {
-          ctx.moveTo(x, y);
-        } else {
-          ctx.lineTo(x, y);
-        }
-      });
-      ctx.stroke();
+        ctx.strokeStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
+        ctx.lineWidth = 2;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      }
 
       points.forEach((point, index) => {
         if (index > 0 && index < points.length - 1) {
@@ -214,28 +217,9 @@ const PPGSignalMeter = ({
 
             if (point.isArrhythmia) {
               ctx.beginPath();
-              ctx.fillStyle = 'rgba(220, 38, 38, 0.15)';
               ctx.arc(x, y, 40, 0, Math.PI * 2);
+              ctx.fillStyle = 'rgba(220, 38, 38, 0.15)';
               ctx.fill();
-
-              ctx.beginPath();
-              ctx.setLineDash([5, 5]);
-              ctx.moveTo(x, y - 60);
-              ctx.lineTo(x, y + 60);
-              ctx.strokeStyle = '#DC2626';
-              ctx.lineWidth = 2;
-              ctx.stroke();
-              ctx.setLineDash([]);
-
-              ctx.beginPath();
-              ctx.arc(x, y - 50, 15, 0, Math.PI * 2);
-              ctx.fillStyle = '#DC2626';
-              ctx.fill();
-              ctx.font = 'bold 16px Inter';
-              ctx.fillStyle = '#FFFFFF';
-              ctx.textAlign = 'center';
-              ctx.textBaseline = 'middle';
-              ctx.fillText('!', x, y - 50);
             }
 
             ctx.font = 'bold 12px Inter';
