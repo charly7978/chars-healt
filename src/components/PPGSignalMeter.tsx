@@ -32,11 +32,10 @@ const PPGSignalMeter = ({
   const animationFrameRef = useRef<number>();
   const [startTime, setStartTime] = useState<number>(Date.now());
   
-  // Ajustados para mejor fluidez
-  const WINDOW_WIDTH_MS = 3000;  // Reducido para más fluidez
+  const WINDOW_WIDTH_MS = 3000;
   const CANVAS_WIDTH = 800;
   const CANVAS_HEIGHT = 200;
-  const verticalScale = 35.0;
+  const verticalScale = 25.0;
   const baselineRef = useRef<number | null>(null);
   const lastValueRef = useRef<number>(0);
 
@@ -76,7 +75,7 @@ const PPGSignalMeter = ({
     if (baselineRef.current === null) {
       baselineRef.current = value;
     } else {
-      const alpha = 0.01; // Suavizado más suave
+      const alpha = 0.02;
       baselineRef.current = baselineRef.current * (1 - alpha) + value * alpha;
     }
 
@@ -98,12 +97,10 @@ const PPGSignalMeter = ({
       ctx.fillStyle = '#F8FAFC';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Grid más sutil
-      ctx.strokeStyle = 'rgba(51, 65, 85, 0.08)';
+      ctx.strokeStyle = 'rgba(51, 65, 85, 0.1)';
       ctx.lineWidth = 0.5;
 
-      // Líneas verticales cada 100ms para más suavidad
-      for (let i = 0; i <= WINDOW_WIDTH_MS; i += 100) {
+      for (let i = 0; i <= WINDOW_WIDTH_MS; i += 200) {
         const x = canvas.width - (i * canvas.width / WINDOW_WIDTH_MS);
         ctx.beginPath();
         ctx.moveTo(x, 0);
@@ -119,16 +116,15 @@ const PPGSignalMeter = ({
         ctx.stroke();
       }
 
-      // Línea central
-      ctx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
-      ctx.lineWidth = 0.75;
+      ctx.strokeStyle = 'rgba(51, 65, 85, 0.2)';
+      ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(0, canvas.height / 2);
       ctx.lineTo(canvas.width, canvas.height / 2);
       ctx.stroke();
 
       if (dataRef.current.length > 1) {
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = 2;
         ctx.strokeStyle = '#0ea5e9';
         ctx.beginPath();
 
@@ -140,7 +136,6 @@ const PPGSignalMeter = ({
           canvas.height / 2 + firstPoint.value
         );
 
-        // Interpolación más suave
         for (let i = 1; i < points.length; i++) {
           const point = points[i];
           const prevPoint = points[i - 1];
@@ -151,12 +146,8 @@ const PPGSignalMeter = ({
           const prevX = canvas.width - ((currentTime - prevPoint.time) * canvas.width / WINDOW_WIDTH_MS);
           const prevY = canvas.height / 2 + prevPoint.value;
           
-          const cp1x = prevX + (x - prevX) / 3;
-          const cp1y = prevY;
-          const cp2x = prevX + (x - prevX) * 2/3;
-          const cp2y = y;
-          
-          ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, x, y);
+          const cpx = (prevX + x) / 2;
+          ctx.quadraticCurveTo(prevX, prevY, cpx, (prevY + y) / 2);
         }
         
         ctx.stroke();
@@ -209,11 +200,11 @@ const PPGSignalMeter = ({
         ref={canvasRef}
         width={CANVAS_WIDTH}
         height={CANVAS_HEIGHT}
-        className="w-full h-[25vh] mt-2"
+        className="w-full h-[20vh] mt-2"
       />
 
       <div className="mt-auto">
-        <div className="bg-gray-900/30 backdrop-blur-sm p-2 mb-[60px]">
+        <div className="bg-gray-900/30 backdrop-blur-sm p-2 mb-[100px]">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <VitalSign 
               label="FRECUENCIA CARDÍACA"
@@ -237,7 +228,7 @@ const PPGSignalMeter = ({
           </div>
         </div>
 
-        <div className="fixed bottom-0 left-0 right-0 h-[60px] grid grid-cols-2 gap-px bg-gray-900">
+        <div className="fixed bottom-0 left-0 right-0 h-[80px] grid grid-cols-2 gap-px bg-gray-900">
           <button 
             onClick={onStartMeasurement}
             className="w-full h-full bg-white/80 hover:bg-slate-50/80 text-xl font-bold text-slate-700 transition-all duration-300"
