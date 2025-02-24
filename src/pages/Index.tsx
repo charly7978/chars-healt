@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -19,6 +18,11 @@ const Index = () => {
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState("--");
   const [elapsedTime, setElapsedTime] = useState(0);
+  const [lastArrhythmiaData, setLastArrhythmiaData] = useState<{
+    timestamp: number;
+    rmssd: number;
+    rrVariation: number;
+  } | null>(null);
   const measurementTimerRef = useRef<number | null>(null);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
@@ -54,21 +58,16 @@ const Index = () => {
       e.preventDefault();
     };
 
-    // Bloquear orientación
     lockOrientation();
     
-    // Prevenir scroll y gestos
     document.body.style.overflow = 'hidden';
     document.body.style.position = 'fixed';
     document.body.style.touchAction = 'none';
     
-    // Event listeners
-    const options = { passive: false };
-    document.addEventListener('touchmove', preventScroll, options);
-    document.addEventListener('scroll', preventScroll, options);
+    document.addEventListener('touchmove', preventScroll, { passive: false });
+    document.addEventListener('scroll', preventScroll, { passive: false });
     document.addEventListener('contextmenu', preventContextMenu);
     
-    // Solicitar pantalla completa al inicio
     requestFullScreen();
 
     return () => {
@@ -94,6 +93,7 @@ const Index = () => {
         ...prev,
         arrhythmiaStatus: "SIN ARRITMIAS|0"
       }));
+      setLastArrhythmiaData(null);
       
       if (measurementTimerRef.current) {
         clearInterval(measurementTimerRef.current);
@@ -131,6 +131,7 @@ const Index = () => {
     });
     setArrhythmiaCount("--");
     setSignalQuality(0);
+    setLastArrhythmiaData(null);
   };
 
   const handleStreamReady = (stream: MediaStream) => {
@@ -179,11 +180,9 @@ const Index = () => {
 
   useEffect(() => {
     if (lastSignal && lastSignal.fingerDetected && isMonitoring) {
-      // Procesar latidos cardíacos
       const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
       setHeartRate(heartBeatResult.bpm);
       
-      // Procesar signos vitales y arritmias
       const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
       if (vitals) {
         setVitalSigns(prevVitals => ({
@@ -191,7 +190,10 @@ const Index = () => {
           ...vitals
         }));
         
-        // Si el status contiene información de arritmia, actualizar el contador
+        if (vitals.lastArrhythmiaData) {
+          setLastArrhythmiaData(vitals.lastArrhythmiaData);
+        }
+        
         if (vitals.arrhythmiaStatus) {
           const [status, count] = vitals.arrhythmiaStatus.split('|');
           setArrhythmiaCount(count || "0");
@@ -230,6 +232,7 @@ const Index = () => {
               onStartMeasurement={startMonitoring}
               onReset={handleReset}
               arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
+              rawArrhythmiaData={lastArrhythmiaData}
             />
           </div>
 
