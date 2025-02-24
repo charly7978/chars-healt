@@ -96,25 +96,28 @@ const PPGSignalMeter = ({
     const normalizedValue = (baselineRef.current || 0) - smoothedValue;
     const scaledValue = normalizedValue * verticalScale;
     
-    // Paso 1: Detectar pico
-    const isPeak = rawArrhythmiaData?.lastPeakTime !== undefined && 
-                  rawArrhythmiaData.lastPeakTime !== null &&
-                  rawArrhythmiaData.lastPeakTime !== lastKnownPeakTime.current;
+    // Detección de pico mejorada
+    const isPeak = rawArrhythmiaData?.lastPeakTime !== lastKnownPeakTime.current && 
+                  rawArrhythmiaData?.lastPeakTime != null;
     
-    // Paso 2: Actualizar último pico conocido
-    if (isPeak && rawArrhythmiaData?.lastPeakTime) {
-      lastKnownPeakTime.current = rawArrhythmiaData.lastPeakTime;
+    // Solo actualizar si realmente hay un nuevo pico
+    if (isPeak) {
+      lastKnownPeakTime.current = rawArrhythmiaData?.lastPeakTime || null;
+      const isArrhythmic = isArrhythmicBeat();
       console.log('Nuevo pico detectado:', {
-        time: rawArrhythmiaData.lastPeakTime,
-        isArrhythmic: isArrhythmicBeat()
+        time: lastKnownPeakTime.current,
+        isArrhythmic,
+        now,
+        diff: now - (lastKnownPeakTime.current || 0)
       });
     }
     
-    // Paso 3: Crear punto de datos
+    // Crear punto con marca de pico
     const dataPoint: PPGDataPoint = {
       time: now,
       value: scaledValue,
-      isArrhythmia: isPeak && isArrhythmicBeat()
+      isArrhythmia: isPeak && isArrhythmicBeat(),
+      isPeak: isPeak
     };
     
     dataBufferRef.current.push(dataPoint);
@@ -123,7 +126,6 @@ const PPGSignalMeter = ({
     ctx.fillStyle = '#F8FAFC';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Paso 4: Dibujar puntos
     const points = dataBufferRef.current.getPoints();
     if (points.length > 1) {
       ctx.lineWidth = 2;
@@ -146,9 +148,9 @@ const PPGSignalMeter = ({
           ctx.stroke();
         }
 
-        // Paso 5: Dibujar puntos y números en los picos
-        if (point.isArrhythmia || point.time === lastKnownPeakTime.current) {
-          // Dibujar círculo en el pico
+        // Dibujar círculo y número si es un pico
+        if (point.isPeak || point.isArrhythmia) {
+          // Dibujar círculo
           ctx.beginPath();
           ctx.arc(x, y, 4, 0, Math.PI * 2);
           ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
