@@ -52,7 +52,7 @@ const Index = () => {
         await elem.msRequestFullscreen();
       }
     } catch (err) {
-      console.log('Error al entrar en pantalla completa:', err);
+      console.error('Error al entrar en pantalla completa:', err);
     }
   };
 
@@ -65,7 +65,7 @@ const Index = () => {
           await screen.orientation.lock('portrait');
         }
       } catch (error) {
-        console.log('No se pudo bloquear la orientación:', error);
+        console.error('No se pudo bloquear la orientación:', error);
       }
     };
     
@@ -81,6 +81,7 @@ const Index = () => {
   }, []);
 
   const startMonitoring = () => {
+    console.log('Iniciando monitoreo...');
     enterFullScreen();
     setIsMonitoring(true);
     setIsCameraOn(true);
@@ -103,6 +104,7 @@ const Index = () => {
   };
 
   const stopMonitoring = () => {
+    console.log('Deteniendo monitoreo...');
     setIsMonitoring(false);
     setIsCameraOn(false);
     stopProcessing();
