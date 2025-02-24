@@ -1,13 +1,10 @@
-
 import React, { useRef, useEffect, useState } from 'react';
-import { Fingerprint } from 'lucide-react';
 
 interface CameraViewProps {
   onStreamReady?: (stream: MediaStream) => void;
   isMonitoring: boolean;
   isFingerDetected?: boolean;
   signalQuality?: number;
-  buttonPosition?: DOMRect;
 }
 
 const CameraView = ({ 
@@ -15,7 +12,6 @@ const CameraView = ({
   isMonitoring, 
   isFingerDetected = false, 
   signalQuality = 0,
-  buttonPosition 
 }: CameraViewProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
@@ -139,25 +135,6 @@ const CameraView = ({
           backfaceVisibility: 'hidden'
         }}
       />
-      {isMonitoring && (
-        <div className="absolute bottom-24 left-1/2 transform -translate-x-1/2 z-20 flex flex-col items-center">
-          <Fingerprint
-            size={64}
-            className={`transition-colors duration-300 ${
-              !isFingerDetected ? 'text-gray-400' :
-              signalQuality > 75 ? 'text-green-500' :
-              signalQuality > 50 ? 'text-yellow-500' :
-              'text-red-500'
-            }`}
-            strokeWidth={1.5}
-          />
-          <span className={`text-xs mt-2 font-medium transition-colors duration-300 ${
-            isFingerDetected ? 'text-green-500' : 'text-gray-400'
-          }`}>
-            {isFingerDetected ? "Dedo detectado" : "Ubique su dedo en el lente"}
-          </span>
-        </div>
-      )}
     </>
   );
 };

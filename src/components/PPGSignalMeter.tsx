@@ -4,6 +4,51 @@ import { Progress } from "@/components/ui/progress";
 import VitalSign from '@/components/VitalSign';
 import { Fingerprint } from 'lucide-react';
 
+interface PPGDataPoint {
+  time: number;
+  value: number;
+  isArrhythmia: boolean;
+}
+
+class CircularBuffer {
+  private buffer: PPGDataPoint[];
+  private maxSize: number;
+  private head: number = 0;
+  private tail: number = 0;
+  private count: number = 0;
+
+  constructor(size: number) {
+    this.maxSize = size;
+    this.buffer = new Array(size);
+  }
+
+  push(point: PPGDataPoint) {
+    this.buffer[this.head] = point;
+    this.head = (this.head + 1) % this.maxSize;
+    if (this.count < this.maxSize) {
+      this.count++;
+    } else {
+      this.tail = (this.tail + 1) % this.maxSize;
+    }
+  }
+
+  getPoints(): PPGDataPoint[] {
+    const points: PPGDataPoint[] = [];
+    let current = this.tail;
+    for (let i = 0; i < this.count; i++) {
+      points.push(this.buffer[current]);
+      current = (current + 1) % this.maxSize;
+    }
+    return points;
+  }
+
+  clear() {
+    this.head = 0;
+    this.tail = 0;
+    this.count = 0;
+  }
+}
+
 interface PPGSignalMeterProps {
   value: number;
   quality: number;
@@ -11,13 +56,6 @@ interface PPGSignalMeterProps {
   onStartMeasurement: () => void;
   onReset: () => void;
   arrhythmiaStatus?: string;
-}
-
-interface PPGDataPoint {
-  time: number;
-  value: number;
-  isWaveStart: boolean;
-  isArrhythmia: boolean;
 }
 
 const PPGSignalMeter = ({ 
@@ -29,28 +67,13 @@ const PPGSignalMeter = ({
   arrhythmiaStatus
 }: PPGSignalMeterProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const dataRef = useRef<PPGDataPoint[]>([]);
-  const [startTime, setStartTime] = useState<number>(Date.now());
-  const WINDOW_WIDTH_MS = 6000;
-  const CANVAS_WIDTH = 400;
-  const CANVAS_HEIGHT = 800;
-  const verticalScale = 40.0;
+  const dataBufferRef = useRef<CircularBuffer>(new CircularBuffer(1000));
   const baselineRef = useRef<number | null>(null);
-  const maxAmplitudeRef = useRef<number>(0);
   const lastValueRef = useRef<number>(0);
-  const requestIdRef = useRef<number>();
-  
-  const POINTS_PER_PIXEL = 2;
-  const BUFFER_PADDING = 100;
-
-  const handleReset = useCallback(() => {
-    dataRef.current = [];
-    baselineRef.current = null;
-    maxAmplitudeRef.current = 0;
-    lastValueRef.current = 0;
-    setStartTime(Date.now());
-    onReset();
-  }, [onReset]);
+  const WINDOW_WIDTH_MS = 5000;
+  const CANVAS_WIDTH = 1000;
+  const CANVAS_HEIGHT = 200;
+  const verticalScale = 32.0;
 
   const getQualityColor = useCallback((quality: number) => {
     if (quality > 90) return 'from-emerald-500/80 to-emerald-400/80';
@@ -68,19 +91,8 @@ const PPGSignalMeter = ({
     return 'Poor';
   }, []);
 
-  const getVisiblePoints = useCallback((allPoints: PPGDataPoint[], currentTime: number, canvasWidth: number) => {
-    if (allPoints.length === 0) return [];
-    
-    const pointsNeeded = canvasWidth * POINTS_PER_PIXEL + BUFFER_PADDING;
-    
-    const startIndex = Math.max(0, allPoints.length - pointsNeeded);
-    
-    return allPoints.slice(startIndex);
-  }, []);
-
   useEffect(() => {
-    if (!canvasRef.current) return;
-    if (!isFingerDetected) return;
+    if (!canvasRef.current || !isFingerDetected) return;
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
@@ -95,26 +107,19 @@ const PPGSignalMeter = ({
     }
 
     const normalizedValue = (value - (baselineRef.current || 0)) * verticalScale;
-    const isWaveStart = lastValueRef.current < 0 && normalizedValue >= 0;
-    lastValueRef.current = normalizedValue;
+    const isCurrentArrhythmia = arrhythmiaStatus?.includes('ARRITMIA DETECTADA') || false;
     
-    const isCurrentPointArrhythmic = arrhythmiaStatus?.includes('ARRITMIA DETECTADA') || false;
-    
-    dataRef.current.push({
+    dataBufferRef.current.push({
       time: currentTime,
       value: normalizedValue,
-      isWaveStart,
-      isArrhythmia: isCurrentPointArrhythmic
+      isArrhythmia: isCurrentArrhythmia
     });
 
-    const cutoffTime = currentTime - WINDOW_WIDTH_MS;
-    dataRef.current = dataRef.current.filter(point => point.time >= cutoffTime);
-
-    const visiblePoints = getVisiblePoints(dataRef.current, currentTime, canvas.width);
-
+    // Limpiar canvas
     ctx.fillStyle = '#F8FAFC';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+    // Dibujar grid
     ctx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
     ctx.lineWidth = 0.5;
     
@@ -124,46 +129,26 @@ const PPGSignalMeter = ({
       ctx.moveTo(x, 0);
       ctx.lineTo(x, canvas.height);
       ctx.stroke();
-      
-      if (i % 4 === 0) {
-        ctx.fillStyle = 'rgba(51, 65, 85, 0.5)';
-        ctx.font = '12px Inter';
-        ctx.fillText(`${i * 50}ms`, x - 25, canvas.height - 5);
-      }
     }
 
-    const amplitudeLines = 10;
-    for (let i = 0; i <= amplitudeLines; i++) {
-      const y = (canvas.height / amplitudeLines) * i;
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(canvas.width, y);
-      ctx.stroke();
-    }
-
-    ctx.strokeStyle = 'rgba(51, 65, 85, 0.2)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(0, canvas.height / 2);
-    ctx.lineTo(canvas.width, canvas.height / 2);
-    ctx.stroke();
-
-    if (visiblePoints.length > 1) {
+    const points = dataBufferRef.current.getPoints();
+    
+    if (points.length > 1) {
       ctx.lineWidth = 3;
       let lastX = 0;
       let lastY = 0;
-      let isFirstPoint = true;
-
-      visiblePoints.forEach((point, index) => {
+      let lastWasArrhythmia = false;
+      
+      points.forEach((point, index) => {
         const x = canvas.width - ((currentTime - point.time) * canvas.width / WINDOW_WIDTH_MS);
         const y = canvas.height / 2 + point.value;
 
-        if (isFirstPoint) {
+        if (index === 0) {
           ctx.beginPath();
           ctx.moveTo(x, y);
-          isFirstPoint = false;
+          lastWasArrhythmia = point.isArrhythmia;
         } else {
-          if (point.isArrhythmia !== visiblePoints[index - 1]?.isArrhythmia) {
+          if (point.isArrhythmia !== lastWasArrhythmia) {
             ctx.stroke();
             ctx.beginPath();
             ctx.moveTo(lastX, lastY);
@@ -171,6 +156,7 @@ const PPGSignalMeter = ({
           
           ctx.strokeStyle = point.isArrhythmia ? '#FF2E2E' : '#0ea5e9';
           ctx.lineTo(x, y);
+          lastWasArrhythmia = point.isArrhythmia;
         }
 
         lastX = x;
@@ -180,15 +166,14 @@ const PPGSignalMeter = ({
       ctx.stroke();
     }
 
-  }, [value, quality, isFingerDetected, arrhythmiaStatus, getVisiblePoints]);
+  }, [value, quality, isFingerDetected, arrhythmiaStatus]);
 
-  useEffect(() => {
-    return () => {
-      if (requestIdRef.current) {
-        cancelAnimationFrame(requestIdRef.current);
-      }
-    };
-  }, []);
+  const handleReset = useCallback(() => {
+    dataBufferRef.current.clear();
+    baselineRef.current = null;
+    lastValueRef.current = 0;
+    onReset();
+  }, [onReset]);
 
   return (
     <div className="fixed inset-0 bg-gradient-to-b from-white to-slate-50/30">
@@ -207,22 +192,22 @@ const PPGSignalMeter = ({
               {getQualityText(quality)}
             </span>
           </div>
-        </div>
 
-        <div className="flex flex-col items-center">
-          <Fingerprint
-            size={48}
-            className={`transition-colors duration-300 ${
-              !isFingerDetected ? 'text-gray-400' :
-              quality > 75 ? 'text-green-500' :
-              quality > 50 ? 'text-yellow-500' :
-              'text-red-500'
-            }`}
-            strokeWidth={1.5}
-          />
-          <span className="text-[10px] text-center mt-0.5 font-medium text-slate-600">
-            {isFingerDetected ? "Dedo detectado" : "Ubique su dedo"}
-          </span>
+          <div className="flex flex-col items-center">
+            <Fingerprint
+              size={48}
+              className={`transition-colors duration-300 ${
+                !isFingerDetected ? 'text-gray-400' :
+                quality > 75 ? 'text-green-500' :
+                quality > 50 ? 'text-yellow-500' :
+                'text-red-500'
+              }`}
+              strokeWidth={1.5}
+            />
+            <span className="text-[10px] text-center mt-0.5 font-medium text-slate-600">
+              {isFingerDetected ? "Dedo detectado" : "Ubique su dedo"}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -241,7 +226,7 @@ const PPGSignalMeter = ({
           INICIAR
         </button>
         <button 
-          onClick={onReset}
+          onClick={handleReset}
           className="w-full h-full bg-white/80 hover:bg-slate-50/80 text-xl font-bold text-slate-700 transition-all duration-300"
         >
           RESET
