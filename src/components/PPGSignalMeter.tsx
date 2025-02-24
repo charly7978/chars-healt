@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 import { Fingerprint } from 'lucide-react';
 import VitalSign from '@/components/VitalSign';
@@ -166,9 +165,9 @@ const PPGSignalMeter = ({
   }, [value, quality, isFingerDetected, arrhythmiaStatus]);
 
   return (
-    <div className="fixed inset-0 bg-gradient-to-b from-white to-slate-50/30">
-      {/* Header con título, barra de calidad y huella */}
-      <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center bg-white/60 backdrop-blur-sm border-b border-slate-100 shadow-sm">
+    <div className="h-full flex flex-col">
+      {/* Header */}
+      <div className="p-4 flex justify-between items-center bg-white/60 backdrop-blur-sm border-b border-slate-100 shadow-sm">
         <span className="text-xl font-bold text-slate-700">PPG</span>
         <div className="flex flex-col items-center flex-1 mx-4">
           <div className={`h-1.5 w-[80%] rounded-full bg-gradient-to-r ${getQualityColor(quality)} transition-all duration-1000 ease-in-out`}>
@@ -202,13 +201,13 @@ const PPGSignalMeter = ({
         ref={canvasRef}
         width={CANVAS_WIDTH}
         height={CANVAS_HEIGHT}
-        className="w-full h-[calc(35vh)] mt-20"
+        className="w-full h-[35vh] mt-4"
       />
 
-      {/* Panel de indicadores vitales */}
-      <div className="fixed bottom-[80px] left-0 right-0">
-        <div className="bg-gray-900/30 backdrop-blur-sm p-2">
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 px-2">
+      {/* Indicadores Vitales */}
+      <div className="mt-auto">
+        <div className="bg-gray-900/30 backdrop-blur-sm p-2 mb-[80px]">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <VitalSign 
               label="FRECUENCIA CARDÍACA"
               value={value || "--"}
@@ -226,26 +225,26 @@ const PPGSignalMeter = ({
             />
             <VitalSign 
               label="ARRITMIAS"
-              value="SIN ARRITMIAS"
+              value={arrhythmiaStatus || "SIN ARRITMIAS"}
             />
           </div>
         </div>
-      </div>
 
-      {/* Botones de control */}
-      <div className="fixed bottom-0 left-0 right-0 h-[80px] grid grid-cols-2 gap-px bg-gray-900">
-        <button 
-          onClick={onStartMeasurement}
-          className="w-full h-full bg-white/80 hover:bg-slate-50/80 text-xl font-bold text-slate-700 transition-all duration-300"
-        >
-          INICIAR
-        </button>
-        <button 
-          onClick={handleReset}
-          className="w-full h-full bg-white/80 hover:bg-slate-50/80 text-xl font-bold text-slate-700 transition-all duration-300"
-        >
-          RESET
-        </button>
+        {/* Botones */}
+        <div className="fixed bottom-0 left-0 right-0 h-[80px] grid grid-cols-2 gap-px bg-gray-900">
+          <button 
+            onClick={onStartMeasurement}
+            className="w-full h-full bg-white/80 hover:bg-slate-50/80 text-xl font-bold text-slate-700 transition-all duration-300"
+          >
+            INICIAR
+          </button>
+          <button 
+            onClick={onReset}
+            className="w-full h-full bg-white/80 hover:bg-slate-50/80 text-xl font-bold text-slate-700 transition-all duration-300"
+          >
+            RESET
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -1,6 +1,4 @@
-
 import { useState, useRef, useEffect } from "react";
-import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
 import { useSignalProcessor } from "@/hooks/useSignalProcessor";
 import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
@@ -175,14 +173,7 @@ const Index = () => {
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
 
   return (
-    <div 
-      className="fixed inset-0 flex flex-col bg-black" 
-      style={{ 
-        height: 'calc(100vh + env(safe-area-inset-bottom))',
-        paddingTop: 'env(safe-area-inset-top)',
-        paddingBottom: 'env(safe-area-inset-bottom)'
-      }}
-    >
+    <div className="fixed inset-0 flex flex-col bg-black">
       <div className="flex-1 relative">
         <div className="absolute inset-0">
           <CameraView 
@@ -194,63 +185,15 @@ const Index = () => {
           />
         </div>
 
-        <div className="relative z-10 h-full flex flex-col">
-          <div className="flex-1">
-            <PPGSignalMeter 
-              value={lastSignal?.filteredValue || 0}
-              quality={lastSignal?.quality || 0}
-              isFingerDetected={lastSignal?.fingerDetected || false}
-              onStartMeasurement={startMonitoring}
-              onReset={stopMonitoring}
-            />
-          </div>
-
-          <div className="absolute bottom-[120px] left-0 right-0 px-4">
-            <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4">
-              <div className="grid grid-cols-4 gap-2">
-                <VitalSign 
-                  label="FRECUENCIA CARDÍACA"
-                  value={heartRate || "--"}
-                  unit="BPM"
-                />
-                <VitalSign 
-                  label="SPO2"
-                  value={vitalSigns.spo2 || "--"}
-                  unit="%"
-                />
-                <VitalSign 
-                  label="PRESIÓN ARTERIAL"
-                  value={vitalSigns.pressure}
-                  unit="mmHg"
-                />
-                <VitalSign 
-                  label="ARRITMIAS"
-                  value={vitalSigns.arrhythmiaStatus}
-                />
-              </div>
-            </div>
-          </div>
-
-          {isMonitoring && (
-            <div className="absolute bottom-28 left-0 right-0 text-center">
-              <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 30s</span>
-            </div>
-          )}
-
-          <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 mt-auto">
-            <button 
-              onClick={startMonitoring}
-              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
-            >
-              INICIAR
-            </button>
-            <button 
-              onClick={stopMonitoring}
-              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
-            >
-              RESET
-            </button>
-          </div>
+        <div className="relative z-10">
+          <PPGSignalMeter 
+            value={heartRate}
+            quality={vitalSigns.spo2}
+            isFingerDetected={lastSignal?.fingerDetected || false}
+            onStartMeasurement={startMonitoring}
+            onReset={stopMonitoring}
+            arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
+          />
         </div>
       </div>
     </div>
