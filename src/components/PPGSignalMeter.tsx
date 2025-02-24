@@ -2,6 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Progress } from "@/components/ui/progress";
 import VitalSign from '@/components/VitalSign';
+import { Fingerprint } from 'lucide-react';
 
 interface PPGSignalMeterProps {
   value: number;
@@ -85,15 +86,14 @@ const PPGSignalMeter = ({
     const isWaveStart = lastValueRef.current < 0 && normalizedValue >= 0;
     lastValueRef.current = normalizedValue;
     
-    // Detectar si es una arritmia basado en el status
-    const isArrhythmia = arrhythmiaStatus?.includes('ARRITMIA DETECTADA') || false;
-    lastArrhythmiaRef.current = isArrhythmia;
+    // La arritmia se detecta para cada punto individual
+    const isCurrentPointArrhythmic = arrhythmiaStatus?.includes('ARRITMIA DETECTADA') || false;
     
     dataRef.current.push({
       time: currentTime,
       value: normalizedValue,
       isWaveStart,
-      isArrhythmia
+      isArrhythmia: isCurrentPointArrhythmic
     });
 
     const cutoffTime = currentTime - WINDOW_WIDTH_MS;
@@ -140,41 +140,36 @@ const PPGSignalMeter = ({
     // Dibujar las ondas PPG
     if (dataRef.current.length > 1) {
       ctx.lineWidth = 3;
-      
-      let waveStartIndex = 0;
-      let currentWaveIsArrhythmia = false;
+      let lastX = 0;
+      let lastY = 0;
+      let isFirstPoint = true;
 
       dataRef.current.forEach((point, index) => {
-        if (point.isWaveStart || index === dataRef.current.length - 1) {
-          if (index > waveStartIndex) {
-            // Determinar si esta onda es una arritmia
-            currentWaveIsArrhythmia = dataRef.current
-              .slice(waveStartIndex, index)
-              .some(p => p.isArrhythmia);
+        const x = canvas.width - ((currentTime - point.time) * canvas.width / WINDOW_WIDTH_MS);
+        const y = canvas.height / 2 + point.value;
 
-            ctx.beginPath();
-            // Color azul para latidos normales, rojo para arritmias
-            ctx.strokeStyle = currentWaveIsArrhythmia ? '#FF2E2E' : '#0ea5e9';
-            
-            const startPoint = dataRef.current[waveStartIndex];
-            ctx.moveTo(
-              canvas.width - ((currentTime - startPoint.time) * canvas.width / WINDOW_WIDTH_MS),
-              canvas.height / 2 + startPoint.value
-            );
-
-            for (let i = waveStartIndex + 1; i <= index; i++) {
-              const p = dataRef.current[i];
-              ctx.lineTo(
-                canvas.width - ((currentTime - p.time) * canvas.width / WINDOW_WIDTH_MS),
-                canvas.height / 2 + p.value
-              );
-            }
-            
+        if (isFirstPoint) {
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          isFirstPoint = false;
+        } else {
+          // Comenzar un nuevo trazo si cambia el estado de arritmia
+          if (point.isArrhythmia !== dataRef.current[index - 1]?.isArrhythmia) {
             ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(lastX, lastY);
           }
-          waveStartIndex = index;
+          
+          // Color basado en el punto actual
+          ctx.strokeStyle = point.isArrhythmia ? '#FF2E2E' : '#0ea5e9';
+          ctx.lineTo(x, y);
         }
+
+        lastX = x;
+        lastY = y;
       });
+
+      ctx.stroke();
     }
 
   }, [value, quality, isFingerDetected, arrhythmiaStatus]);
@@ -182,7 +177,7 @@ const PPGSignalMeter = ({
   return (
     <div className="fixed inset-0 bg-gradient-to-b from-white to-slate-50/30">
       <div className="absolute top-0 left-0 right-0 p-2 flex justify-between items-center bg-white/60 backdrop-blur-sm border-b border-slate-100 shadow-sm">
-        <div className="flex items-center gap-3 flex-1">
+        <div className="flex items-center gap-3">
           <span className="text-xl font-bold text-slate-700">PPG</span>
           <div className="flex flex-col flex-1">
             <div className={`h-1.5 w-[80%] mx-auto rounded-full bg-gradient-to-r ${getQualityColor(quality)} transition-all duration-1000 ease-in-out`}>
@@ -196,6 +191,22 @@ const PPGSignalMeter = ({
               {getQualityText(quality)}
             </span>
           </div>
+        </div>
+
+        <div className="flex flex-col items-center">
+          <Fingerprint
+            size={48}
+            className={`transition-colors duration-300 ${
+              !isFingerDetected ? 'text-gray-400' :
+              quality > 75 ? 'text-green-500' :
+              quality > 50 ? 'text-yellow-500' :
+              'text-red-500'
+            }`}
+            strokeWidth={1.5}
+          />
+          <span className="text-[10px] text-center mt-0.5 font-medium text-slate-600">
+            {isFingerDetected ? "Dedo detectado" : "Ubique su dedo"}
+          </span>
         </div>
       </div>
 
