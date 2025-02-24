@@ -123,6 +123,7 @@ const PPGSignalMeter = ({
     ctx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
     ctx.lineWidth = 0.5;
     
+    // Dibujar líneas de grid
     for (let i = 0; i < 40; i++) {
       const x = canvas.width - (canvas.width * (i / 40));
       ctx.beginPath();

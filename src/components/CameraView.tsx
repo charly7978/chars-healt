@@ -1,3 +1,4 @@
+
 import React, { useRef, useEffect, useState } from 'react';
 
 interface CameraViewProps {
@@ -36,14 +37,12 @@ const CameraView = ({
 
       const isAndroid = /android/i.test(navigator.userAgent);
 
-      // Configuración base de video
       const baseVideoConstraints: MediaTrackConstraints = {
         facingMode: 'environment',
         width: { ideal: 720 },
         height: { ideal: 480 }
       };
 
-      // Agregar configuraciones específicas para Android
       if (isAndroid) {
         Object.assign(baseVideoConstraints, {
           frameRate: { ideal: 25 },
@@ -51,7 +50,6 @@ const CameraView = ({
         });
       }
 
-      // Construir constraints finales
       const constraints: MediaStreamConstraints = {
         video: baseVideoConstraints
       };
@@ -61,11 +59,9 @@ const CameraView = ({
 
       if (videoTrack && isAndroid) {
         try {
-          // Intentar aplicar configuraciones avanzadas de manera segura
           const capabilities = videoTrack.getCapabilities();
           const advancedConstraints: MediaTrackConstraintSet[] = [];
           
-          // Solo agregar las restricciones si el dispositivo las soporta
           if (capabilities.exposureMode) {
             advancedConstraints.push({ exposureMode: 'continuous' });
           }
@@ -82,7 +78,6 @@ const CameraView = ({
             });
           }
 
-          // Optimizaciones de renderizado para Android
           if (videoRef.current) {
             videoRef.current.style.transform = 'translateZ(0)';
             videoRef.current.style.backfaceVisibility = 'hidden';
@@ -122,20 +117,18 @@ const CameraView = ({
   }, [isMonitoring]);
 
   return (
-    <>
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        muted
-        className="absolute top-0 left-0 min-w-full min-h-full w-auto h-auto z-0 object-cover"
-        style={{
-          willChange: 'transform',
-          transform: 'translateZ(0)',
-          backfaceVisibility: 'hidden'
-        }}
-      />
-    </>
+    <video
+      ref={videoRef}
+      autoPlay
+      playsInline
+      muted
+      className="absolute top-0 left-0 min-w-full min-h-full w-auto h-auto z-0 object-cover"
+      style={{
+        willChange: 'transform',
+        transform: 'translateZ(0)',
+        backfaceVisibility: 'hidden'
+      }}
+    />
   );
 };
 
