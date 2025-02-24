@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from "react";
 import CameraView from "@/components/CameraView";
 import { useSignalProcessor } from "@/hooks/useSignalProcessor";
@@ -187,11 +188,11 @@ const Index = () => {
 
         <div className="relative z-10">
           <PPGSignalMeter 
-            value={heartRate}
-            quality={vitalSigns.spo2}
+            signalValue={heartRate}
+            signalQuality={signalQuality}
             isFingerDetected={lastSignal?.fingerDetected || false}
             onStartMeasurement={startMonitoring}
-            onReset={stopMonitoring}
+            onStopMeasurement={stopMonitoring}
             arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
           />
         </div>
