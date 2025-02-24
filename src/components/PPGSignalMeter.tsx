@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -47,16 +46,18 @@ const PPGSignalMeter = ({
   }, []);
 
   const getQualityColor = useCallback((q: number) => {
+    if (!isFingerDetected) return 'from-gray-400 to-gray-500';
     if (q > 75) return 'from-green-500 to-emerald-500';
     if (q > 50) return 'from-yellow-500 to-orange-500';
     return 'from-red-500 to-rose-500';
-  }, []);
+  }, [isFingerDetected]);
 
   const getQualityText = useCallback((q: number) => {
+    if (!isFingerDetected) return 'Sin detección';
     if (q > 75) return 'Señal óptima';
     if (q > 50) return 'Señal aceptable';
     return 'Señal débil';
-  }, []);
+  }, [isFingerDetected]);
 
   const smoothValue = useCallback((currentValue: number, previousValue: number | null): number => {
     if (previousValue === null) return currentValue;
@@ -64,10 +65,9 @@ const PPGSignalMeter = ({
   }, []);
 
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
-    // Fondo sutilmente oscurecido con gradiente
     const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
-    gradient.addColorStop(0, '#f1f5f9');  // Gris muy claro
-    gradient.addColorStop(1, '#e2e8f0');  // Un poco más oscuro en la base
+    gradient.addColorStop(0, '#f1f5f9');
+    gradient.addColorStop(1, '#e2e8f0');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
@@ -160,11 +160,14 @@ const PPGSignalMeter = ({
     let isArrhythmia = false;
     if (arrhythmiaStatus?.includes("ARRITMIA DETECTADA") && rawArrhythmiaData?.rrIntervals?.length) {
       const lastRRInterval = rawArrhythmiaData.rrIntervals[rawArrhythmiaData.rrIntervals.length - 1];
-      const timeNow = Date.now();
       if ((lastRRInterval > 1000 || lastRRInterval < 700) &&
-          (timeNow - lastArrhythmiaTime.current > 500)) {
+          (now - lastArrhythmiaTime.current > 500)) {
         isArrhythmia = true;
-        lastArrhythmiaTime.current = timeNow;
+        lastArrhythmiaTime.current = now;
+        console.log('Arritmia detectada:', {
+          rrInterval: lastRRInterval,
+          timestamp: now
+        });
       }
     }
 
@@ -215,24 +218,30 @@ const PPGSignalMeter = ({
             ctx.textAlign = 'center';
             ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 10);
 
-            // Indicador de arritmia
+            // Indicador de arritmia (solo si es un pico arrítmico)
             if (point.isArrhythmia) {
               ctx.save();
-              // Línea vertical roja
+              
+              // Línea vertical punteada roja
               ctx.beginPath();
-              ctx.moveTo(x, y - 20);
-              ctx.lineTo(x, y + 20);
+              ctx.setLineDash([5, 5]);
+              ctx.moveTo(x, y - 40);
+              ctx.lineTo(x, y + 40);
               ctx.strokeStyle = '#DC2626';
               ctx.lineWidth = 1;
               ctx.stroke();
               
-              // Círculo rojo de advertencia
+              // Área sombreada roja alrededor del pico
+              ctx.beginPath();
+              ctx.fillStyle = 'rgba(220, 38, 38, 0.1)';
+              ctx.arc(x, y, 20, 0, Math.PI * 2);
+              ctx.fill();
+              
+              // Marcador de arritmia
               ctx.beginPath();
               ctx.arc(x, y - 25, 8, 0, Math.PI * 2);
               ctx.fillStyle = '#DC2626';
               ctx.fill();
-              
-              // Signo de exclamación
               ctx.font = 'bold 12px Inter';
               ctx.fillStyle = '#FFFFFF';
               ctx.fillText('!', x, y - 22);
@@ -270,6 +279,7 @@ const PPGSignalMeter = ({
     }
     baselineRef.current = null;
     lastValueRef.current = null;
+    lastArrhythmiaTime.current = 0;
     onReset();
   }, [onReset]);
 
@@ -282,7 +292,7 @@ const PPGSignalMeter = ({
             <div className={`h-1.5 w-full rounded-full bg-gradient-to-r ${getQualityColor(quality)} transition-all duration-1000 ease-in-out`}>
               <div
                 className="h-full rounded-full bg-white/20 animate-pulse transition-all duration-1000"
-                style={{ width: `${quality}%` }}
+                style={{ width: `${isFingerDetected ? quality : 0}%` }}
               />
             </div>
             <span className="text-[9px] text-center mt-0.5 font-medium transition-colors duration-700 block" 
