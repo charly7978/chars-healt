@@ -1,6 +1,6 @@
 
 import React, { useEffect, useRef, useCallback } from 'react';
-import { FingerPrintIcon as FingerprintIcon } from '@heroicons/react/24/outline';
+import { FingerPrintIcon } from '@heroicons/react/24/outline';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
 
 interface PPGSignalMeterProps {
@@ -97,15 +97,13 @@ const PPGSignalMeter = ({
     const scaledValue = normalizedValue * verticalScale;
     
     let isArrhythmia = false;
-    const arrhythmiaDetected = arrhythmiaStatus?.includes("ARRITMIA DETECTADA");
-    if (arrhythmiaDetected && rawArrhythmiaData?.rrIntervals?.length) {
+    if (arrhythmiaStatus?.includes("ARRITMIA DETECTADA") && rawArrhythmiaData?.rrIntervals?.length) {
       const lastRRInterval = rawArrhythmiaData.rrIntervals[rawArrhythmiaData.rrIntervals.length - 1];
       const timeNow = Date.now();
       if ((lastRRInterval > 1000 || lastRRInterval < 700) &&
           (timeNow - lastArrhythmiaTime.current > 500)) {
         isArrhythmia = true;
         lastArrhythmiaTime.current = timeNow;
-        console.log('Arritmia detectada en gráfico:', { lastRRInterval, timeNow });
       }
     }
 
@@ -151,16 +149,19 @@ const PPGSignalMeter = ({
             ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
             ctx.fill();
 
-            const displayValue = Math.abs(Math.round(point.value));
-            ctx.font = '12px Inter';
-            ctx.fillStyle = point.isArrhythmia ? 'rgba(220, 38, 38, 0.8)' : 'rgba(51, 65, 85, 0.8)';
-            ctx.textAlign = 'left';
-            ctx.fillText(`${displayValue}`, x + 8, y - 8);
-
             if (point.isArrhythmia) {
+              // Dibujar marca de arritmia
+              ctx.beginPath();
+              ctx.moveTo(x, y - 15);
+              ctx.lineTo(x, y + 15);
+              ctx.strokeStyle = '#DC2626';
+              ctx.lineWidth = 1;
+              ctx.stroke();
+              
               ctx.font = '10px Inter';
               ctx.fillStyle = '#DC2626';
-              ctx.fillText('⚠️', x + 8, y - 20);
+              ctx.textAlign = 'center';
+              ctx.fillText('!', x, y - 20);
             }
           }
         }

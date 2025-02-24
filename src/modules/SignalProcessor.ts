@@ -26,21 +26,24 @@ export class PPGSignalProcessor implements SignalProcessor {
   private kalmanFilter: KalmanFilter;
   private lastValues: number[] = [];
   private readonly DEFAULT_CONFIG = {
-    BUFFER_SIZE: 12,
-    MIN_RED_THRESHOLD: 90,
-    MAX_RED_THRESHOLD: 240,
-    STABILITY_WINDOW: 5,
-    MIN_STABILITY_COUNT: 4
+    BUFFER_SIZE: 15,
+    MIN_RED_THRESHOLD: 95,
+    MAX_RED_THRESHOLD: 235,
+    STABILITY_WINDOW: 8,
+    MIN_STABILITY_COUNT: 6
   };
   private currentConfig: typeof this.DEFAULT_CONFIG;
-  private readonly BUFFER_SIZE = 12;
-  private readonly MIN_RED_THRESHOLD = 90;
-  private readonly MAX_RED_THRESHOLD = 240;
-  private readonly STABILITY_WINDOW = 5;
-  private readonly MIN_STABILITY_COUNT = 4;
+  private readonly BUFFER_SIZE = 15;
+  private readonly MIN_RED_THRESHOLD = 95;
+  private readonly MAX_RED_THRESHOLD = 235;
+  private readonly STABILITY_WINDOW = 8;
+  private readonly MIN_STABILITY_COUNT = 6;
   private stableFrameCount: number = 0;
   private lastStableValue: number = 0;
-  private readonly PERFUSION_INDEX_THRESHOLD = 0.05;
+  private readonly PERFUSION_INDEX_THRESHOLD = 0.06;
+  private consecutiveStableFrames: number = 0;
+  private lastDetectionTime: number = 0;
+  private readonly MIN_DETECTION_INTERVAL = 500;
 
   constructor(
     public onSignalReady?: (signal: ProcessedSignal) => void,
@@ -175,10 +178,20 @@ export class PPGSignalProcessor implements SignalProcessor {
   }
 
   private analyzeSignal(filtered: number, rawValue: number): { isFingerDetected: boolean, quality: number } {
+    const currentTime = Date.now();
     const isInRange = rawValue >= this.MIN_RED_THRESHOLD && rawValue <= this.MAX_RED_THRESHOLD;
     
+    const timeSinceLastDetection = currentTime - this.lastDetectionTime;
+    if (timeSinceLastDetection < this.MIN_DETECTION_INTERVAL) {
+      return { 
+        isFingerDetected: this.consecutiveStableFrames >= this.MIN_STABILITY_COUNT, 
+        quality: this.calculateQuality(rawValue, filtered) 
+      };
+    }
+
     if (!isInRange) {
-      this.stableFrameCount = Math.max(0, this.stableFrameCount - 1);
+      this.consecutiveStableFrames = 0;
+      this.stableFrameCount = Math.max(0, this.stableFrameCount - 2);
       return { isFingerDetected: false, quality: 0 };
     }
 
@@ -196,30 +209,49 @@ export class PPGSignalProcessor implements SignalProcessor {
 
     const maxVariation = Math.max(...variations);
     const avgVariation = variations.reduce((sum, val) => sum + val, 0) / variations.length;
+    const stdDeviation = Math.sqrt(
+      variations.reduce((sum, val) => sum + Math.pow(val - avgVariation, 2), 0) / variations.length
+    );
     
-    const adaptiveThreshold = Math.max(2.0, avgValue * 0.025);
-    const isStable = maxVariation < adaptiveThreshold * 2 && avgVariation < adaptiveThreshold;
+    const adaptiveThreshold = Math.max(2.5, avgValue * 0.03);
+    const isStable = maxVariation < adaptiveThreshold * 1.8 && 
+                    avgVariation < adaptiveThreshold &&
+                    stdDeviation < adaptiveThreshold * 0.5;
 
     if (isStable) {
-      this.stableFrameCount = Math.min(this.stableFrameCount + 1, this.MIN_STABILITY_COUNT * 2);
+      this.consecutiveStableFrames++;
+      this.stableFrameCount = Math.min(this.stableFrameCount + 0.5, this.MIN_STABILITY_COUNT * 2);
       this.lastStableValue = filtered;
     } else {
-      this.stableFrameCount = Math.max(0, this.stableFrameCount - 0.5);
+      this.consecutiveStableFrames = Math.max(0, this.consecutiveStableFrames - 1);
+      this.stableFrameCount = Math.max(0, this.stableFrameCount - 1);
     }
 
-    const isFingerDetected = this.stableFrameCount >= this.MIN_STABILITY_COUNT;
+    const isFingerDetected = this.consecutiveStableFrames >= this.MIN_STABILITY_COUNT;
     
-    let quality = 0;
     if (isFingerDetected) {
-      const stabilityScore = Math.min(this.stableFrameCount / (this.MIN_STABILITY_COUNT * 2), 1);
-      const intensityScore = Math.min((rawValue - this.MIN_RED_THRESHOLD) / 
-                                    (this.MAX_RED_THRESHOLD - this.MIN_RED_THRESHOLD), 1);
-      const variationScore = Math.max(0, 1 - (avgVariation / (adaptiveThreshold * 3)));
-      
-      quality = Math.round((stabilityScore * 0.5 + intensityScore * 0.2 + variationScore * 0.3) * 100);
+      this.lastDetectionTime = currentTime;
     }
 
+    const quality = this.calculateQuality(rawValue, filtered);
     return { isFingerDetected, quality };
+  }
+
+  private calculateQuality(rawValue: number, filtered: number): number {
+    if (this.consecutiveStableFrames < this.MIN_STABILITY_COUNT) return 0;
+
+    const stabilityScore = Math.min(this.consecutiveStableFrames / (this.MIN_STABILITY_COUNT * 2), 1);
+    const intensityScore = Math.min(
+      (rawValue - this.MIN_RED_THRESHOLD) / (this.MAX_RED_THRESHOLD - this.MIN_RED_THRESHOLD), 
+      1
+    );
+    const variationScore = Math.max(0, 1 - (Math.abs(filtered - this.lastStableValue) / 10));
+
+    return Math.round((
+      stabilityScore * 0.6 + 
+      intensityScore * 0.2 + 
+      variationScore * 0.2
+    ) * 100);
   }
 
   private detectROI(redValue: number): ProcessedSignal['roi'] {
