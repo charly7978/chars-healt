@@ -4,11 +4,11 @@ import { Fingerprint } from 'lucide-react';
 import VitalSign from '@/components/VitalSign';
 
 interface PPGSignalMeterProps {
-  value: number;
-  quality: number;
+  signalValue: number;
+  signalQuality: number;
   isFingerDetected: boolean;
   onStartMeasurement: () => void;
-  onReset: () => void;
+  onStopMeasurement: () => void;
   arrhythmiaStatus?: string;
 }
 
@@ -20,11 +20,11 @@ interface PPGDataPoint {
 }
 
 const PPGSignalMeter = ({ 
-  value, 
-  quality, 
+  signalValue, 
+  signalQuality, 
   isFingerDetected,
   onStartMeasurement,
-  onReset,
+  onStopMeasurement,
   arrhythmiaStatus
 }: PPGSignalMeterProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -39,12 +39,12 @@ const PPGSignalMeter = ({
   const baselineRef = useRef<number | null>(null);
   const lastValueRef = useRef<number>(0);
 
-  const handleReset = () => {
+  const handleStop = () => {
     dataRef.current = [];
     baselineRef.current = null;
     lastValueRef.current = 0;
     setStartTime(Date.now());
-    onReset();
+    onStopMeasurement();
   };
 
   const getQualityColor = (quality: number) => {
@@ -73,13 +73,13 @@ const PPGSignalMeter = ({
     const currentTime = Date.now();
 
     if (baselineRef.current === null) {
-      baselineRef.current = value;
+      baselineRef.current = signalValue;
     } else {
       const alpha = 0.02;
-      baselineRef.current = baselineRef.current * (1 - alpha) + value * alpha;
+      baselineRef.current = baselineRef.current * (1 - alpha) + signalValue * alpha;
     }
 
-    const normalizedValue = (value - (baselineRef.current || 0)) * verticalScale;
+    const normalizedValue = (signalValue - (baselineRef.current || 0)) * verticalScale;
     
     dataRef.current.push({
       time: currentTime,
@@ -163,22 +163,22 @@ const PPGSignalMeter = ({
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [value, isFingerDetected]);
+  }, [signalValue, isFingerDetected]);
 
   return (
     <div className="h-full flex flex-col">
       <div className="p-4 flex justify-between items-center bg-white/60 backdrop-blur-sm border-b border-slate-100 shadow-sm">
         <span className="text-xl font-bold text-slate-700">PPG</span>
         <div className="flex flex-col items-center flex-1 mx-4">
-          <div className={`h-1.5 w-[80%] rounded-full bg-gradient-to-r ${getQualityColor(quality)} transition-all duration-1000 ease-in-out`}>
+          <div className={`h-1.5 w-[80%] rounded-full bg-gradient-to-r ${getQualityColor(signalQuality)} transition-all duration-1000 ease-in-out`}>
             <div
               className="h-full rounded-full bg-white/20 animate-pulse transition-all duration-1000"
-              style={{ width: `${quality}%` }}
+              style={{ width: `${signalQuality}%` }}
             />
           </div>
           <span className="text-xs text-center mt-1 font-medium" 
-                style={{ color: quality > 60 ? '#0EA5E9' : '#F59E0B' }}>
-            {getQualityText(quality)}
+                style={{ color: signalQuality > 60 ? '#0EA5E9' : '#F59E0B' }}>
+            {getQualityText(signalQuality)}
           </span>
         </div>
         <div className="flex flex-col items-center">
@@ -208,12 +208,12 @@ const PPGSignalMeter = ({
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <VitalSign 
               label="FRECUENCIA CARDÍACA"
-              value={value || "--"}
+              value={signalValue || "--"}
               unit="BPM"
             />
             <VitalSign 
               label="SPO2"
-              value={quality || "--"}
+              value={signalQuality || "--"}
               unit="%"
             />
             <VitalSign 
@@ -236,10 +236,10 @@ const PPGSignalMeter = ({
             INICIAR
           </button>
           <button 
-            onClick={onReset}
+            onClick={handleStop}
             className="w-full h-full bg-white/80 hover:bg-slate-50/80 text-xl font-bold text-slate-700 transition-all duration-300"
           >
-            RESET
+            DETENER
           </button>
         </div>
       </div>
