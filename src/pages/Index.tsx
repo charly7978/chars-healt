@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -63,6 +64,10 @@ const Index = () => {
       setIsCameraOn(true);
       startProcessing();
       setElapsedTime(0);
+      setVitalSigns(prev => ({
+        ...prev,
+        arrhythmiaStatus: "SIN ARRITMIAS|0"
+      }));
       
       if (measurementTimerRef.current) {
         clearInterval(measurementTimerRef.current);
@@ -154,11 +159,18 @@ const Index = () => {
       
       const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
       if (vitals) {
-        setVitalSigns(vitals);
+        setVitalSigns(prev => ({
+          ...vitals,
+          arrhythmiaStatus: vitals.arrhythmiaStatus || prev.arrhythmiaStatus
+        }));
         if (vitals.lastArrhythmiaData) {
           setLastArrhythmiaData(vitals.lastArrhythmiaData);
         }
-        setArrhythmiaCount(vitals.arrhythmiaStatus.split('|')[1] || "--");
+        
+        const [status, count] = vitals.arrhythmiaStatus.split('|');
+        if (status === "ARRITMIA DETECTADA") {
+          setArrhythmiaCount(count || "0");
+        }
       }
       
       setSignalQuality(lastSignal.quality);
@@ -193,6 +205,7 @@ const Index = () => {
               onStartMeasurement={startMonitoring}
               onReset={handleReset}
               arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
+              rawArrhythmiaData={lastArrhythmiaData}
             />
           </div>
 
