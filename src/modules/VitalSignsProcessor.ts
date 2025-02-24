@@ -1,3 +1,4 @@
+
 export class VitalSignsProcessor {
   private readonly WINDOW_SIZE = 300;
   private readonly SPO2_CALIBRATION_FACTOR = 1.02;
@@ -62,7 +63,7 @@ export class VitalSignsProcessor {
       arrhythmiaStatus = "SIN ARRITMIAS|0";
     }
 
-    return {
+    const vitalSigns = {
       spo2: this.calculateSpO2(this.ppgValues.slice(-60)),
       pressure: `${this.calculateBloodPressure(this.ppgValues.slice(-60)).systolic}/${this.calculateBloodPressure(this.ppgValues.slice(-60)).diastolic}`,
       arrhythmiaStatus,
@@ -72,6 +73,15 @@ export class VitalSignsProcessor {
         rrVariation: this.lastRRVariation
       } : null
     };
+
+    console.log('Estado actual:', {
+      isLearningPhase: this.isLearningPhase,
+      arrhythmiaDetected: this.arrhythmiaDetected,
+      arrhythmiaCount: this.arrhythmiaCount,
+      status: arrhythmiaStatus
+    });
+
+    return vitalSigns;
   }
 
   private detectArrhythmia() {

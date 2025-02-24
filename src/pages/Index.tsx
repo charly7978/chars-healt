@@ -195,13 +195,12 @@ const Index = () => {
               quality={lastSignal?.quality || 0}
               isFingerDetected={lastSignal?.fingerDetected || false}
               onStartMeasurement={startMonitoring}
-              onReset={handleReset}
+              onReset={stopMonitoring}
               arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
-              rawArrhythmiaData={lastArrhythmiaData}
             />
           </div>
 
-          <div className="absolute bottom-[120px] left-0 right-0 px-4">
+          <div className="absolute bottom-[100px] left-0 right-0 px-4">
             <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4">
               <div className="grid grid-cols-2 gap-4">
                 <VitalSign 
@@ -221,17 +220,32 @@ const Index = () => {
                 />
                 <VitalSign 
                   label="ARRITMIAS"
-                  value={vitalSigns.arrhythmiaStatus || "--"}
+                  value={!isMonitoring ? "--" : vitalSigns.arrhythmiaStatus}
                 />
               </div>
             </div>
           </div>
 
           {isMonitoring && (
-            <div className="mb-4 text-center">
+            <div className="absolute bottom-16 left-0 right-0 text-center">
               <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 30s</span>
             </div>
           )}
+
+          <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 mt-auto">
+            <button 
+              onClick={startMonitoring}
+              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
+            >
+              INICIAR
+            </button>
+            <button 
+              onClick={stopMonitoring}
+              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
+            >
+              RESET
+            </button>
+          </div>
         </div>
       </div>
     </div>
