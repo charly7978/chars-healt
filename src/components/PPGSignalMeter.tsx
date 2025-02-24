@@ -26,10 +26,10 @@ const PPGSignalMeter = ({
   const baselineRef = useRef<number | null>(null);
   const dataBufferRef = useRef<CircularBuffer | null>(null);
   
-  const WINDOW_WIDTH_MS = 2000;
+  const WINDOW_WIDTH_MS = 1000;
   const CANVAS_WIDTH = 1000;
   const CANVAS_HEIGHT = 200;
-  const verticalScale = 28.0;
+  const verticalScale = 25.0;
 
   // Initialize buffer on mount
   useEffect(() => {
