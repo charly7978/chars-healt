@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -108,6 +109,7 @@ const PPGSignalMeter = ({
     offscreenCtx.fillStyle = '#F8FAFC';
     offscreenCtx.fillRect(0, 0, canvas.width, canvas.height);
 
+    // Dibujar grilla
     offscreenCtx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
     offscreenCtx.lineWidth = 0.5;
     offscreenCtx.font = '10px Inter';
@@ -133,7 +135,7 @@ const PPGSignalMeter = ({
       }
     }
 
-    const timeStep = 1000; // 1 segundo
+    const timeStep = 1000;
     offscreenCtx.textAlign = 'center';
     for (let t = 0; t <= WINDOW_WIDTH_MS; t += timeStep) {
       const x = canvas.width - (t * canvas.width / WINDOW_WIDTH_MS);
@@ -157,6 +159,7 @@ const PPGSignalMeter = ({
     const points = dataBufferRef.current.getPoints();
     
     if (points.length > 1) {
+      // Dibujar la línea de la señal
       offscreenCtx.lineWidth = 2;
       offscreenCtx.lineJoin = 'round';
       offscreenCtx.lineCap = 'round';
@@ -165,7 +168,7 @@ const PPGSignalMeter = ({
       let firstPoint = true;
       points.forEach((point) => {
         const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-        const y = canvas.height / 2 + point.value;
+        const y = canvas.height / 2 - point.value; // Invertimos el valor para que los picos vayan hacia arriba
         
         if (firstPoint) {
           offscreenCtx.moveTo(x, y);
@@ -178,6 +181,7 @@ const PPGSignalMeter = ({
       offscreenCtx.strokeStyle = '#0EA5E9';
       offscreenCtx.stroke();
       
+      // Marcar picos solo cuando coinciden con los beeps
       points.forEach((point, i) => {
         if (i > 0 && i < points.length - 1) {
           const prevValue = points[i-1].value;
@@ -185,17 +189,20 @@ const PPGSignalMeter = ({
           
           if (point.value > prevValue && point.value > nextValue) {
             const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-            const y = canvas.height / 2 + point.value;
+            const y = canvas.height / 2 - point.value; // Invertimos el valor para que coincida con la señal
             
-            offscreenCtx.beginPath();
-            offscreenCtx.arc(x, y, 4, 0, Math.PI * 2);
-            offscreenCtx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
-            offscreenCtx.fill();
-            
-            offscreenCtx.font = '10px Inter';
-            offscreenCtx.fillStyle = 'rgba(51, 65, 85, 0.8)';
-            offscreenCtx.textAlign = 'left';
-            offscreenCtx.fillText(`${Math.round(point.value)}`, x + 8, y - 8);
+            // Solo dibujamos el punto si coincide con un tiempo de pico real
+            if (lastPeakTime && Math.abs(point.time - lastPeakTime) < 100) {
+              offscreenCtx.beginPath();
+              offscreenCtx.arc(x, y, 4, 0, Math.PI * 2);
+              offscreenCtx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
+              offscreenCtx.fill();
+              
+              offscreenCtx.font = '10px Inter';
+              offscreenCtx.fillStyle = 'rgba(51, 65, 85, 0.8)';
+              offscreenCtx.textAlign = 'left';
+              offscreenCtx.fillText(`${Math.round(Math.abs(point.value))}`, x + 8, y - 8);
+            }
           }
         }
       });
