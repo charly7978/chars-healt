@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -18,21 +19,23 @@ const Index = () => {
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState("--");
   const [elapsedTime, setElapsedTime] = useState(0);
-  const [lastArrhythmiaData, setLastArrhythmiaData] = useState<{
-    timestamp: number;
-    rmssd: number;
-    rrVariation: number;
-  } | null>(null);
   const measurementTimerRef = useRef<number | null>(null);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
-  const requestFullScreen = async () => {
+  const enterFullScreen = async () => {
+    const elem = document.documentElement;
     try {
-      if (!document.fullscreenElement) {
-        await document.documentElement.requestFullscreen();
+      if (elem.requestFullscreen) {
+        await elem.requestFullscreen();
+      } else if (elem.webkitRequestFullscreen) {
+        await elem.webkitRequestFullscreen();
+      } else if (elem.mozRequestFullScreen) {
+        await elem.mozRequestFullScreen();
+      } else if (elem.msRequestFullscreen) {
+        await elem.msRequestFullscreen();
       }
     } catch (err) {
       console.log('Error al entrar en pantalla completa:', err);
@@ -40,87 +43,55 @@ const Index = () => {
   };
 
   useEffect(() => {
+    const preventScroll = (e) => e.preventDefault();
+    
     const lockOrientation = async () => {
       try {
         if (screen.orientation?.lock) {
           await screen.orientation.lock('portrait');
         }
       } catch (error) {
-        console.log('Error al bloquear orientación:', error);
+        console.log('No se pudo bloquear la orientación:', error);
       }
     };
-
-    const preventScroll = (e: Event) => {
-      e.preventDefault();
-    };
-
-    const preventContextMenu = (e: Event) => {
-      e.preventDefault();
-    };
-
+    
     lockOrientation();
     
-    document.body.style.overflow = 'hidden';
-    document.body.style.position = 'fixed';
-    document.body.style.touchAction = 'none';
-    
-    document.addEventListener('touchmove', preventScroll, { passive: false });
-    document.addEventListener('scroll', preventScroll, { passive: false });
-    document.addEventListener('contextmenu', preventContextMenu);
-    
-    requestFullScreen();
+    document.body.addEventListener('touchmove', preventScroll, { passive: false });
+    document.body.addEventListener('scroll', preventScroll, { passive: false });
 
     return () => {
-      document.removeEventListener('touchmove', preventScroll);
-      document.removeEventListener('scroll', preventScroll);
-      document.removeEventListener('contextmenu', preventContextMenu);
-      document.body.style.overflow = '';
-      document.body.style.position = '';
-      document.body.style.touchAction = '';
+      document.body.removeEventListener('touchmove', preventScroll);
+      document.body.removeEventListener('scroll', preventScroll);
     };
   }, []);
 
   const startMonitoring = () => {
-    if (isMonitoring) {
-      handleReset();
-    } else {
-      requestFullScreen();
-      setIsMonitoring(true);
-      setIsCameraOn(true);
-      startProcessing();
-      setElapsedTime(0);
-      setVitalSigns(prev => ({
-        ...prev,
-        arrhythmiaStatus: "SIN ARRITMIAS|0"
-      }));
-      setLastArrhythmiaData(null);
-      
-      if (measurementTimerRef.current) {
-        clearInterval(measurementTimerRef.current);
-      }
-      
-      measurementTimerRef.current = window.setInterval(() => {
-        setElapsedTime(prev => {
-          if (prev >= 30) {
-            handleReset();
-            return 30;
-          }
-          return prev + 1;
-        });
-      }, 1000);
-    }
-  };
-
-  const handleReset = () => {
-    setIsMonitoring(false);
-    setIsCameraOn(false);
-    stopProcessing();
+    enterFullScreen();
+    setIsMonitoring(true);
+    setIsCameraOn(true);
+    startProcessing();
+    setElapsedTime(0);
     
     if (measurementTimerRef.current) {
       clearInterval(measurementTimerRef.current);
-      measurementTimerRef.current = null;
     }
     
+    measurementTimerRef.current = window.setInterval(() => {
+      setElapsedTime(prev => {
+        if (prev >= 30) {
+          stopMonitoring();
+          return 30;
+        }
+        return prev + 1;
+      });
+    }, 1000);
+  };
+
+  const stopMonitoring = () => {
+    setIsMonitoring(false);
+    setIsCameraOn(false);
+    stopProcessing();
     resetVitalSigns();
     setElapsedTime(0);
     setHeartRate(0);
@@ -131,7 +102,11 @@ const Index = () => {
     });
     setArrhythmiaCount("--");
     setSignalQuality(0);
-    setLastArrhythmiaData(null);
+    
+    if (measurementTimerRef.current) {
+      clearInterval(measurementTimerRef.current);
+      measurementTimerRef.current = null;
+    }
   };
 
   const handleStreamReady = (stream: MediaStream) => {
@@ -185,19 +160,8 @@ const Index = () => {
       
       const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
       if (vitals) {
-        setVitalSigns(prevVitals => ({
-          ...prevVitals,
-          ...vitals
-        }));
-        
-        if (vitals.lastArrhythmiaData) {
-          setLastArrhythmiaData(vitals.lastArrhythmiaData);
-        }
-        
-        if (vitals.arrhythmiaStatus) {
-          const [status, count] = vitals.arrhythmiaStatus.split('|');
-          setArrhythmiaCount(count || "0");
-        }
+        setVitalSigns(vitals);
+        setArrhythmiaCount(vitals.arrhythmiaStatus.split('|')[1] || "--");
       }
       
       setSignalQuality(lastSignal.quality);
@@ -206,9 +170,9 @@ const Index = () => {
 
   return (
     <div 
-      className="fixed inset-0 flex flex-col bg-black select-none touch-none"
+      className="fixed inset-0 flex flex-col bg-black" 
       style={{ 
-        minHeight: '-webkit-fill-available',
+        height: 'calc(100vh + env(safe-area-inset-bottom))',
         paddingTop: 'env(safe-area-inset-top)',
         paddingBottom: 'env(safe-area-inset-bottom)'
       }}
@@ -230,15 +194,14 @@ const Index = () => {
               quality={lastSignal?.quality || 0}
               isFingerDetected={lastSignal?.fingerDetected || false}
               onStartMeasurement={startMonitoring}
-              onReset={handleReset}
+              onReset={stopMonitoring}
               arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
-              rawArrhythmiaData={lastArrhythmiaData}
             />
           </div>
 
-          <div className="absolute bottom-24 left-0 right-0 px-4">
+          <div className="absolute bottom-[200px] left-0 right-0 px-4">
             <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-4 gap-2">
                 <VitalSign 
                   label="FRECUENCIA CARDÍACA"
                   value={heartRate || "--"}
@@ -263,23 +226,21 @@ const Index = () => {
           </div>
 
           {isMonitoring && (
-            <div className="absolute bottom-16 left-0 right-0 text-center">
-              <span className="text-xl font-medium text-gray-300">
-                {elapsedTime}s / 30s
-              </span>
+            <div className="absolute bottom-40 left-0 right-0 text-center">
+              <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 30s</span>
             </div>
           )}
 
           <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 mt-auto">
             <button 
               onClick={startMonitoring}
-              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800 select-none"
+              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
             >
               INICIAR
             </button>
             <button 
-              onClick={handleReset}
-              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800 select-none"
+              onClick={stopMonitoring}
+              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
             >
               RESET
             </button>
