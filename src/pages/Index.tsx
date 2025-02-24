@@ -35,7 +35,7 @@ const Index = () => {
   const [elapsedTime, setElapsedTime] = useState(0);
   const measurementTimerRef = useRef<number | null>(null);
   
-  const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
+  const { startProcessing, stopProcessing, lastSignal, processFrame, calibrate } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
@@ -52,7 +52,7 @@ const Index = () => {
         await elem.msRequestFullscreen();
       }
     } catch (err) {
-      console.error('Error al entrar en pantalla completa:', err);
+      console.log('Error al entrar en pantalla completa:', err);
     }
   };
 
@@ -65,7 +65,7 @@ const Index = () => {
           await screen.orientation.lock('portrait');
         }
       } catch (error) {
-        console.error('No se pudo bloquear la orientación:', error);
+        console.log('No se pudo bloquear la orientación:', error);
       }
     };
     
@@ -80,31 +80,35 @@ const Index = () => {
     };
   }, []);
 
-  const startMonitoring = () => {
-    console.log('Iniciando monitoreo...');
-    enterFullScreen();
-    setIsMonitoring(true);
-    setIsCameraOn(true);
-    startProcessing();
-    setElapsedTime(0);
-    
-    if (measurementTimerRef.current) {
-      clearInterval(measurementTimerRef.current);
+  const startMonitoring = async () => {
+    try {
+      console.log("Iniciando monitoreo y calibración...");
+      await calibrate();
+      enterFullScreen();
+      setIsMonitoring(true);
+      setIsCameraOn(true);
+      startProcessing();
+      setElapsedTime(0);
+      
+      if (measurementTimerRef.current) {
+        clearInterval(measurementTimerRef.current);
+      }
+      
+      measurementTimerRef.current = window.setInterval(() => {
+        setElapsedTime(prev => {
+          if (prev >= 30) {
+            stopMonitoring();
+            return 30;
+          }
+          return prev + 1;
+        });
+      }, 1000);
+    } catch (error) {
+      console.error("Error al iniciar monitoreo:", error);
     }
-    
-    measurementTimerRef.current = window.setInterval(() => {
-      setElapsedTime(prev => {
-        if (prev >= 30) {
-          stopMonitoring();
-          return 30;
-        }
-        return prev + 1;
-      });
-    }, 1000);
   };
 
   const stopMonitoring = () => {
-    console.log('Deteniendo monitoreo...');
     setIsMonitoring(false);
     setIsCameraOn(false);
     stopProcessing();

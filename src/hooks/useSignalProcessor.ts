@@ -19,8 +19,7 @@ export const useSignalProcessor = () => {
       console.log("useSignalProcessor: Señal recibida:", {
         timestamp: signal.timestamp,
         quality: signal.quality,
-        filteredValue: signal.filteredValue,
-        fingerDetected: signal.fingerDetected
+        filteredValue: signal.filteredValue
       });
       setLastSignal(signal);
       setError(null);
@@ -52,12 +51,26 @@ export const useSignalProcessor = () => {
     console.log("useSignalProcessor: Deteniendo procesamiento");
     setIsProcessing(false);
     processor.stop();
-    setLastSignal(null);
+  }, [processor]);
+
+  const calibrate = useCallback(async () => {
+    try {
+      console.log("useSignalProcessor: Iniciando calibración");
+      await processor.calibrate();
+      console.log("useSignalProcessor: Calibración exitosa");
+      return true;
+    } catch (error) {
+      console.error("useSignalProcessor: Error de calibración:", error);
+      return false;
+    }
   }, [processor]);
 
   const processFrame = useCallback((imageData: ImageData) => {
     if (isProcessing) {
+      console.log("useSignalProcessor: Procesando nuevo frame");
       processor.processFrame(imageData);
+    } else {
+      console.log("useSignalProcessor: Frame ignorado (no está procesando)");
     }
   }, [isProcessing, processor]);
 
@@ -67,6 +80,7 @@ export const useSignalProcessor = () => {
     error,
     startProcessing,
     stopProcessing,
+    calibrate,
     processFrame
   };
 };
