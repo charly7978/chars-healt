@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { HeartBeatProcessor } from '../modules/HeartBeatProcessor';
 
@@ -15,8 +16,8 @@ interface HeartBeatResult {
 
 export const useHeartBeatProcessor = () => {
   const processorRef = useRef<HeartBeatProcessor | null>(null);
-  const [currentBPM, setCurrentBPM] = useState(0);
-  const [confidence, setConfidence] = useState(0);
+  const [currentBPM, setCurrentBPM] = useState<number>(0);
+  const [confidence, setConfidence] = useState<number>(0);
 
   useEffect(() => {
     console.log('useHeartBeatProcessor: Creando nueva instancia de HeartBeatProcessor');
