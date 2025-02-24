@@ -25,13 +25,15 @@ const PPGSignalMeter = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const baselineRef = useRef<number | null>(null);
   const dataBufferRef = useRef<CircularBuffer | null>(null);
+  const lastValueRef = useRef<number | null>(null);
   
-  const WINDOW_WIDTH_MS = 1200;
+  const WINDOW_WIDTH_MS = 5000;
   const CANVAS_WIDTH = 1000;
   const CANVAS_HEIGHT = 200;
   const verticalScale = 32.0;
+  const SMOOTHING_FACTOR_UP = 0.3; // Para subidas (más rápida respuesta)
+  const SMOOTHING_FACTOR_DOWN = 0.1; // Para bajadas (más suave)
 
-  // Initialize buffer on mount
   useEffect(() => {
     if (!dataBufferRef.current) {
       dataBufferRef.current = new CircularBuffer(1000);
@@ -50,6 +52,14 @@ const PPGSignalMeter = ({
     return 'Señal débil';
   }, []);
 
+  const smoothValue = useCallback((currentValue: number, previousValue: number | null): number => {
+    if (previousValue === null) return currentValue;
+    
+    // Usa diferente factor de suavizado según si la señal sube o baja
+    const smoothingFactor = currentValue > previousValue ? SMOOTHING_FACTOR_UP : SMOOTHING_FACTOR_DOWN;
+    return previousValue + smoothingFactor * (currentValue - previousValue);
+  }, []);
+
   useEffect(() => {
     if (!canvasRef.current || !isFingerDetected || !dataBufferRef.current) return;
 
@@ -65,7 +75,11 @@ const PPGSignalMeter = ({
       baselineRef.current = baselineRef.current * 0.95 + value * 0.05;
     }
 
-    const normalizedValue = (value - (baselineRef.current || 0)) * verticalScale;
+    // Aplicar suavizado adaptativo
+    const smoothedValue = smoothValue(value, lastValueRef.current);
+    lastValueRef.current = smoothedValue;
+
+    const normalizedValue = (smoothedValue - (baselineRef.current || 0)) * verticalScale;
     
     const isCurrentArrhythmia = arrhythmiaStatus?.includes('ARRITMIA DETECTADA') || false;
     const lastPeakTime = rawArrhythmiaData?.lastPeakTime;
@@ -119,13 +133,14 @@ const PPGSignalMeter = ({
       }
     }
 
-  }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus]);
+  }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus, smoothValue]);
 
   const handleReset = useCallback(() => {
     if (dataBufferRef.current) {
       dataBufferRef.current.clear();
     }
     baselineRef.current = null;
+    lastValueRef.current = null;
     onReset();
   }, [onReset]);
 
