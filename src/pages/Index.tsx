@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -205,7 +206,6 @@ const Index = () => {
     <div 
       className="fixed inset-0 flex flex-col bg-black select-none touch-none"
       style={{ 
-        minHeight: '100vh',
         minHeight: '-webkit-fill-available',
         paddingTop: 'env(safe-area-inset-top)',
         paddingBottom: 'env(safe-area-inset-bottom)'
