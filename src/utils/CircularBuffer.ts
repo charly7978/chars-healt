@@ -3,7 +3,6 @@ interface PPGDataPoint {
   time: number;
   value: number;
   isArrhythmia: boolean;
-  isPeak: boolean;
 }
 
 export class CircularBuffer {
