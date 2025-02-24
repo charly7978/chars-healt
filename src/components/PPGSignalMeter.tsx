@@ -62,7 +62,7 @@ const PPGSignalMeter = ({
   }, []);
 
   const isArrhythmicBeat = useCallback((): boolean => {
-    if (!rawArrhythmiaData?.rrIntervals.length) return false;
+    if (!rawArrhythmiaData?.rrIntervals?.length) return false;
     const lastInterval = rawArrhythmiaData.rrIntervals[rawArrhythmiaData.rrIntervals.length - 1];
     return lastInterval > 1000;
   }, [rawArrhythmiaData]);
@@ -93,16 +93,18 @@ const PPGSignalMeter = ({
     const smoothedValue = smoothValue(value, lastValueRef.current);
     lastValueRef.current = smoothedValue;
 
-    // Detectar si este punto es un pico
-    const isPeak = rawArrhythmiaData?.lastPeakTime !== null && 
-                  rawArrhythmiaData.lastPeakTime !== lastKnownPeakTime.current;
-    
-    if (isPeak && rawArrhythmiaData?.lastPeakTime) {
-      lastKnownPeakTime.current = rawArrhythmiaData.lastPeakTime;
-      console.log('Pico detectado:', {
-        time: rawArrhythmiaData.lastPeakTime,
-        isArrhythmic: isArrhythmicBeat()
-      });
+    // Detección segura de picos
+    let isPeak = false;
+    if (rawArrhythmiaData && typeof rawArrhythmiaData.lastPeakTime === 'number') {
+      isPeak = rawArrhythmiaData.lastPeakTime !== lastKnownPeakTime.current;
+      
+      if (isPeak) {
+        lastKnownPeakTime.current = rawArrhythmiaData.lastPeakTime;
+        console.log('Pico detectado:', {
+          time: rawArrhythmiaData.lastPeakTime,
+          isArrhythmic: isArrhythmicBeat()
+        });
+      }
     }
 
     const normalizedValue = (baselineRef.current || 0) - smoothedValue;
@@ -140,8 +142,9 @@ const PPGSignalMeter = ({
           ctx.stroke();
         }
 
-        // Dibujar punto y número solo si es un pico
-        if (Math.abs(point.time - (rawArrhythmiaData?.lastPeakTime || 0)) < 100) {
+        // Verificación segura para dibujar puntos y números
+        const currentPeakTime = rawArrhythmiaData?.lastPeakTime;
+        if (currentPeakTime && Math.abs(point.time - currentPeakTime) < 100) {
           // Dibujar círculo en el pico
           ctx.beginPath();
           ctx.arc(x, y, 4, 0, Math.PI * 2);
@@ -191,7 +194,9 @@ const PPGSignalMeter = ({
   }, [value, quality, isFingerDetected, rawArrhythmiaData, smoothValue, isArrhythmicBeat]);
 
   useEffect(() => {
-    renderSignal();
+    if (canvasRef.current) {  // Added safety check
+      renderSignal();
+    }
     return () => {
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
