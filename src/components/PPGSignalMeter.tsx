@@ -32,7 +32,7 @@ const PPGSignalMeter = ({
   const WINDOW_WIDTH_MS = 5000;
   const CANVAS_WIDTH = 1000;
   const CANVAS_HEIGHT = 200;
-  const verticalScale = 35.0;
+  const verticalScale = -35.0; // Invertido para que los picos vayan hacia arriba
   const SMOOTHING_FACTOR = 0.85;
   const TARGET_FPS = 60;
   const FRAME_TIME = 1000 / TARGET_FPS;
@@ -72,7 +72,7 @@ const PPGSignalMeter = ({
     }
 
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d', { alpha: false });
+    const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     const now = Date.now();
@@ -101,20 +101,15 @@ const PPGSignalMeter = ({
     
     dataBufferRef.current.push(dataPoint);
 
-    const offscreenCanvas = new OffscreenCanvas(canvas.width, canvas.height);
-    const offscreenCtx = offscreenCanvas.getContext('2d', { alpha: false });
-    
-    if (!offscreenCtx) return;
-
-    offscreenCtx.fillStyle = '#F8FAFC';
-    offscreenCtx.fillRect(0, 0, canvas.width, canvas.height);
+    // Limpiar el canvas
+    ctx.fillStyle = '#F8FAFC';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // Dibujar grilla
-    offscreenCtx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
-    offscreenCtx.lineWidth = 0.5;
-    offscreenCtx.font = '10px Inter';
-    offscreenCtx.fillStyle = 'rgba(51, 65, 85, 0.6)';
-    offscreenCtx.textAlign = 'right';
+    ctx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
+    ctx.lineWidth = 0.5;
+    ctx.font = '10px Inter';
+    ctx.fillStyle = 'rgba(51, 65, 85, 0.6)';
     
     // Grilla vertical (amplitud)
     const amplitudeStep = 50;
@@ -123,101 +118,96 @@ const PPGSignalMeter = ({
       const yPos = (canvas.height / 2) + y;
       const yNeg = (canvas.height / 2) - y;
       
-      offscreenCtx.beginPath();
-      offscreenCtx.moveTo(0, yPos);
-      offscreenCtx.lineTo(canvas.width, yPos);
-      offscreenCtx.moveTo(0, yNeg);
-      offscreenCtx.lineTo(canvas.width, yNeg);
-      offscreenCtx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0, yPos);
+      ctx.lineTo(canvas.width, yPos);
+      ctx.moveTo(0, yNeg);
+      ctx.lineTo(canvas.width, yNeg);
+      ctx.stroke();
       
+      // Numeración del eje Y
+      ctx.textAlign = 'right';
       if (y > 0) {
-        offscreenCtx.fillText(`${y}`, 25, yNeg + 4); // Invertimos los números
-        offscreenCtx.fillText(`-${y}`, 25, yPos + 4);
+        ctx.fillText(`${y}`, 25, yNeg + 4);
+        ctx.fillText(`-${y}`, 25, yPos + 4);
       }
     }
 
     // Grilla horizontal (tiempo)
+    ctx.textAlign = 'center';
     const timeStep = 1000;
-    offscreenCtx.textAlign = 'center';
     for (let t = 0; t <= WINDOW_WIDTH_MS; t += timeStep) {
       const x = canvas.width - (t * canvas.width / WINDOW_WIDTH_MS);
       
-      offscreenCtx.beginPath();
-      offscreenCtx.moveTo(x, 0);
-      offscreenCtx.lineTo(x, canvas.height);
-      offscreenCtx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, canvas.height);
+      ctx.stroke();
       
-      const seconds = t / 1000;
-      offscreenCtx.fillText(`${seconds}s`, x, canvas.height - 5);
+      ctx.fillText(`${t/1000}s`, x, canvas.height - 5);
     }
 
     // Línea central
-    offscreenCtx.strokeStyle = 'rgba(51, 65, 85, 0.3)';
-    offscreenCtx.lineWidth = 1;
-    offscreenCtx.beginPath();
-    offscreenCtx.moveTo(0, canvas.height / 2);
-    offscreenCtx.lineTo(canvas.width, canvas.height / 2);
-    offscreenCtx.stroke();
-    
+    ctx.strokeStyle = 'rgba(51, 65, 85, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, canvas.height / 2);
+    ctx.lineTo(canvas.width, canvas.height / 2);
+    ctx.stroke();
+
     const points = dataBufferRef.current.getPoints();
     
+    // Dibujar señal PPG
     if (points.length > 1) {
-      // Dibujar la señal PPG
-      offscreenCtx.lineWidth = 2;
-      offscreenCtx.lineJoin = 'round';
-      offscreenCtx.lineCap = 'round';
-      offscreenCtx.beginPath();
+      ctx.lineWidth = 2;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
       
-      let firstPoint = true;
       let lastX = 0;
       let lastY = 0;
-      
+      let firstPoint = true;
+
       points.forEach((point, index) => {
         const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-        const y = canvas.height / 2 - point.value; // Valor negativo para que los picos vayan hacia arriba
-        
+        const y = canvas.height / 2 + point.value;
+
         if (firstPoint) {
-          offscreenCtx.moveTo(x, y);
           firstPoint = false;
         } else {
-          // Cambiar color de la línea según si es arrítmico o no
-          offscreenCtx.strokeStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
-          offscreenCtx.beginPath();
-          offscreenCtx.moveTo(lastX, lastY);
-          offscreenCtx.lineTo(x, y);
-          offscreenCtx.stroke();
+          // Dibujar segmento de línea con color según arritmia
+          ctx.beginPath();
+          ctx.moveTo(lastX, lastY);
+          ctx.lineTo(x, y);
+          ctx.strokeStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
+          ctx.stroke();
         }
-        
+
         lastX = x;
         lastY = y;
 
-        // Detectar y marcar picos
+        // Marcar picos
         if (index > 0 && index < points.length - 1) {
           const prevValue = points[index-1].value;
           const nextValue = points[index+1].value;
           
-          if (point.value > prevValue && point.value > nextValue) {
-            // Solo marcar si coincide con un latido real
-            if (lastPeakTime && Math.abs(point.time - lastPeakTime) < 100) {
-              // Dibujar círculo en el pico
-              offscreenCtx.beginPath();
-              offscreenCtx.arc(x, y, 4, 0, Math.PI * 2);
-              offscreenCtx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
-              offscreenCtx.fill();
-              
-              // Mostrar valor del pico
-              offscreenCtx.font = '10px Inter';
-              offscreenCtx.fillStyle = 'rgba(51, 65, 85, 0.8)';
-              offscreenCtx.textAlign = 'left';
-              offscreenCtx.fillText(`${Math.round(Math.abs(point.value))}`, x + 8, y - 8);
-            }
+          if (point.value < prevValue && point.value < nextValue && 
+              lastPeakTime && Math.abs(point.time - lastPeakTime) < 100) {
+            // Dibujar marcador de pico
+            ctx.beginPath();
+            ctx.arc(x, y, 4, 0, Math.PI * 2);
+            ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
+            ctx.fill();
+
+            // Valor numérico del pico
+            ctx.font = '10px Inter';
+            ctx.fillStyle = 'rgba(51, 65, 85, 0.8)';
+            ctx.textAlign = 'left';
+            ctx.fillText(`${Math.round(Math.abs(point.value))}`, x + 8, y - 8);
           }
         }
       });
     }
 
-    ctx.drawImage(offscreenCanvas, 0, 0);
-    
     lastRenderTimeRef.current = currentTime;
     animationFrameRef.current = requestAnimationFrame(renderSignal);
   }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus, smoothValue]);
