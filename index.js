@@ -183,7 +183,6 @@ const Index = () => {
             isMonitoring={isCameraOn}
             isFingerDetected={lastSignal?.fingerDetected}
             signalQuality={signalQuality}
-            buttonPosition={document.querySelector('.measure-button')?.getBoundingClientRect()}
           />
         </div>
 
@@ -195,6 +194,7 @@ const Index = () => {
               isFingerDetected={lastSignal?.fingerDetected || false}
               onStartMeasurement={startMonitoring}
               onReset={stopMonitoring}
+              arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
             />
           </div>
 
@@ -250,4 +250,4 @@ const Index = () => {
   );
 };
 
-export default Index; 
+export default Index;
