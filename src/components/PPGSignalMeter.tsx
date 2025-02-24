@@ -1,9 +1,17 @@
-
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Progress } from "@/components/ui/progress";
 import VitalSign from '@/components/VitalSign';
 import { Fingerprint } from 'lucide-react';
-import { CircularBuffer, PPGDataPoint } from '@/utils/CircularBuffer';
+
+interface PPGDataPoint {
+  time: number;
+  value: number;
+  isArrhythmia: boolean;
+}
+
+class CircularBuffer {
+  // ... existing code ...
+}
 
 interface PPGSignalMeterProps {
   value: number;
@@ -25,35 +33,32 @@ const PPGSignalMeter = ({
   rawArrhythmiaData
 }: PPGSignalMeterProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const baselineRef = useRef<number | null>(null);
   const dataBufferRef = useRef<CircularBuffer>(new CircularBuffer(1000));
+  const baselineRef = useRef<number | null>(null);
   
-  const WINDOW_WIDTH_MS = 5000;
+  const WINDOW_WIDTH_MS = 6000;
   const CANVAS_WIDTH = 1000;
   const CANVAS_HEIGHT = 200;
-  const verticalScale = 32.0;
+  const verticalScale = 25.0;
 
   const getQualityColor = useCallback((quality: number) => {
-    if (quality > 75) return 'from-green-500 to-emerald-500';
-    if (quality > 50) return 'from-yellow-500 to-orange-500';
-    return 'from-red-500 to-rose-500';
+    if (quality > 90) return 'from-emerald-500/80 to-emerald-400/80';
+    if (quality > 75) return 'from-sky-500/80 to-sky-400/80';
+    if (quality > 60) return 'from-indigo-500/80 to-indigo-400/80';
+    if (quality > 40) return 'from-amber-500/80 to-amber-400/80';
+    return 'from-red-500/80 to-red-400/80';
   }, []);
 
   const getQualityText = useCallback((quality: number) => {
-    if (quality > 75) return 'Señal óptima';
-    if (quality > 50) return 'Señal aceptable';
-    return 'Señal débil';
+    if (quality > 90) return 'Excellent';
+    if (quality > 75) return 'Very Good';
+    if (quality > 60) return 'Good';
+    if (quality > 40) return 'Fair';
+    return 'Poor';
   }, []);
 
   useEffect(() => {
-    // Initialize buffer on mount if not already initialized
-    if (!dataBufferRef.current) {
-      dataBufferRef.current = new CircularBuffer(1000);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!canvasRef.current || !isFingerDetected || !dataBufferRef.current) return;
+    if (!canvasRef.current || !isFingerDetected) return;
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
@@ -70,67 +75,74 @@ const PPGSignalMeter = ({
     const normalizedValue = (value - (baselineRef.current || 0)) * verticalScale;
     
     const isCurrentArrhythmia = arrhythmiaStatus?.includes('ARRITMIA DETECTADA') || false;
+    
     const lastPeakTime = rawArrhythmiaData?.lastPeakTime;
     const timeSinceLastPeak = lastPeakTime ? currentTime - lastPeakTime : Infinity;
+    
     const isNearPeak = timeSinceLastPeak < 50;
+    const shouldMarkArrhythmia = isCurrentArrhythmia && isNearPeak;
 
-    const dataPoint: PPGDataPoint = {
+    dataBufferRef.current.push({
       time: currentTime,
       value: normalizedValue,
-      isArrhythmia: isCurrentArrhythmia && isNearPeak
-    };
+      isArrhythmia: shouldMarkArrhythmia
+    });
+
+    ctx.fillStyle = '#F8FAFC';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
+    ctx.lineWidth = 0.5;
     
-    try {
-      dataBufferRef.current.push(dataPoint);
+    for (let i = 0; i < 40; i++) {
+      const x = canvas.width - (canvas.width * (i / 40));
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, canvas.height);
+      ctx.stroke();
+    }
 
-      ctx.fillStyle = '#F8FAFC';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      ctx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
-      ctx.lineWidth = 0.5;
+    const points = dataBufferRef.current.getPoints();
+    
+    if (points.length > 1) {
+      ctx.lineWidth = 3;
       
-      for (let i = 0; i < 40; i++) {
-        const x = canvas.width - (canvas.width * (i / 40));
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, canvas.height);
-        ctx.stroke();
-      }
-
-      const points = dataBufferRef.current.getPoints();
-      
-      if (points.length > 1) {
-        ctx.lineWidth = 3;
+      for (let i = 0; i < points.length - 1; i++) {
+        const currentPoint = points[i];
+        const nextPoint = points[i + 1];
         
-        for (let i = 0; i < points.length - 1; i++) {
-          const currentPoint = points[i];
-          const nextPoint = points[i + 1];
-          
-          const x1 = canvas.width - ((currentTime - currentPoint.time) * canvas.width / WINDOW_WIDTH_MS);
-          const y1 = canvas.height / 2 + currentPoint.value;
-          const x2 = canvas.width - ((currentTime - nextPoint.time) * canvas.width / WINDOW_WIDTH_MS);
-          const y2 = canvas.height / 2 + nextPoint.value;
+        const x1 = canvas.width - ((currentTime - currentPoint.time) * canvas.width / WINDOW_WIDTH_MS);
+        const y1 = canvas.height / 2 + currentPoint.value;
+        const x2 = canvas.width - ((currentTime - nextPoint.time) * canvas.width / WINDOW_WIDTH_MS);
+        const y2 = canvas.height / 2 + nextPoint.value;
 
-          if (x1 >= 0 && x2 >= 0 && x1 <= canvas.width && x2 <= canvas.width) {
-            ctx.beginPath();
-            ctx.moveTo(x1, y1);
-            ctx.lineTo(x2, y2);
-            
-            ctx.strokeStyle = currentPoint.isArrhythmia ? '#DC2626' : '#0EA5E9';
-            ctx.stroke();
-          }
+        if (x1 >= 0 && x2 >= 0 && x1 <= canvas.width && x2 <= canvas.width) {
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          
+          ctx.strokeStyle = currentPoint.isArrhythmia ? '#DC2626' : '#0EA5E9';
+          ctx.stroke();
         }
       }
-    } catch (err) {
-      console.error('Error processing signal:', err);
+
+      // Draw arrhythmia points
+      points.forEach(point => {
+        if (point.isArrhythmia) {
+          const x = canvas.width - ((currentTime - point.time) * canvas.width / WINDOW_WIDTH_MS);
+          const y = canvas.height / 2 + point.value;
+          ctx.fillStyle = '#DC2626';
+          ctx.beginPath();
+          ctx.arc(x, y, 5, 0, 2 * Math.PI);
+          ctx.fill();
+        }
+      });
     }
 
   }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus]);
 
   const handleReset = useCallback(() => {
-    if (dataBufferRef.current) {
-      dataBufferRef.current.clear();
-    }
+    dataBufferRef.current.clear();
     baselineRef.current = null;
     onReset();
   }, [onReset]);
