@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Progress } from "@/components/ui/progress";
 import VitalSign from '@/components/VitalSign';
@@ -55,6 +56,7 @@ interface PPGSignalMeterProps {
   onStartMeasurement: () => void;
   onReset: () => void;
   arrhythmiaStatus?: string;
+  rawArrhythmiaData?: { rrIntervals: number[], lastPeakTime: number | null };
 }
 
 const PPGSignalMeter = ({ 
@@ -63,7 +65,8 @@ const PPGSignalMeter = ({
   isFingerDetected,
   onStartMeasurement,
   onReset,
-  arrhythmiaStatus
+  arrhythmiaStatus,
+  rawArrhythmiaData
 }: PPGSignalMeterProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dataBufferRef = useRef<CircularBuffer>(new CircularBuffer(1000));
@@ -106,7 +109,15 @@ const PPGSignalMeter = ({
     }
 
     const normalizedValue = (value - (baselineRef.current || 0)) * verticalScale;
-    const isCurrentArrhythmia = arrhythmiaStatus?.includes('ARRITMIA DETECTADA') || false;
+    
+    // Aquí el cambio importante: Detectar arritmia usando los datos crudos
+    let isCurrentArrhythmia = false;
+    if (rawArrhythmiaData?.rrIntervals.length >= 3) {
+      const recentRR = rawArrhythmiaData.rrIntervals.slice(-3);
+      const lastRR = recentRR[recentRR.length - 1];
+      const avgRR = recentRR.reduce((a, b) => a + b, 0) / recentRR.length;
+      isCurrentArrhythmia = Math.abs(lastRR - avgRR) > (avgRR * 0.25);
+    }
     
     dataBufferRef.current.push({
       time: currentTime,
@@ -132,7 +143,6 @@ const PPGSignalMeter = ({
     
     if (points.length > 1) {
       ctx.lineWidth = 3;
-      let pathStarted = false;
       
       for (let i = 0; i < points.length - 1; i++) {
         const currentPoint = points[i];
@@ -152,7 +162,7 @@ const PPGSignalMeter = ({
       }
     }
 
-  }, [value, quality, isFingerDetected, arrhythmiaStatus]);
+  }, [value, quality, isFingerDetected, rawArrhythmiaData]);
 
   const handleReset = useCallback(() => {
     dataBufferRef.current.clear();
@@ -164,10 +174,10 @@ const PPGSignalMeter = ({
   return (
     <div className="fixed inset-0 bg-gradient-to-b from-white to-slate-50/30">
       <div className="absolute top-0 left-0 right-0 p-2 flex justify-between items-center bg-white/60 backdrop-blur-sm border-b border-slate-100 shadow-sm">
-        <div className="flex items-center gap-3 flex-1">
+        <div className="flex items-center gap-3">
           <span className="text-xl font-bold text-slate-700">PPG</span>
-          <div className="flex-1">
-            <div className={`h-1.5 w-[400px] mx-auto rounded-full bg-gradient-to-r ${getQualityColor(quality)} transition-all duration-1000 ease-in-out`}>
+          <div className="w-[200px]">
+            <div className={`h-1.5 w-full rounded-full bg-gradient-to-r ${getQualityColor(quality)} transition-all duration-1000 ease-in-out`}>
               <div
                 className="h-full rounded-full bg-white/20 animate-pulse transition-all duration-1000"
                 style={{ width: `${quality}%` }}
@@ -180,7 +190,7 @@ const PPGSignalMeter = ({
           </div>
         </div>
 
-        <div className="flex flex-col items-center ml-4">
+        <div className="flex flex-col items-center">
           <Fingerprint
             size={48}
             className={`transition-colors duration-300 ${
