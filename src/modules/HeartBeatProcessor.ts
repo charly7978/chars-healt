@@ -4,8 +4,8 @@ export class HeartBeatProcessor {
   private readonly WINDOW_SIZE = 60;
   private readonly MIN_BPM = 40;
   private readonly MAX_BPM = 200; // Aumentado para permitir más latidos
-  private readonly SIGNAL_THRESHOLD = 0.90; // Reducido para ser más sensible
-  private readonly MIN_CONFIDENCE = 0.90; // Reducido para ser más permisivo
+  private readonly SIGNAL_THRESHOLD = 0.60; // Reducido para ser más sensible
+  private readonly MIN_CONFIDENCE = 0.50; // Reducido para ser más permisivo
   private readonly DERIVATIVE_THRESHOLD = -0.04; // Menos restrictivo
   private readonly MIN_PEAK_TIME_MS = 500; // Reducido para permitir latidos más cercanos
   private readonly WARMUP_TIME_MS = 3000; // Reducido para empezar antes
