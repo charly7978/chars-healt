@@ -1,6 +1,41 @@
+
 import React, { useEffect, useRef } from 'react';
 import { Fingerprint } from 'lucide-react';
-import { CircularBuffer, PPGDataPoint } from '@/utils/CircularBuffer';
+
+interface PPGDataPoint {
+  value: number;
+  quality: number;
+  timestamp: number;
+  time?: number;
+  isArrhythmia?: boolean;
+}
+
+class CircularBuffer<T> {
+  private buffer: T[];
+  private size: number;
+  private currentIndex: number = 0;
+  private isFull: boolean = false;
+
+  constructor(size: number) {
+    this.size = size;
+    this.buffer = new Array<T>(size);
+  }
+
+  push(item: T): void {
+    this.buffer[this.currentIndex] = item;
+    this.currentIndex = (this.currentIndex + 1) % this.size;
+    if (this.currentIndex === 0) {
+      this.isFull = true;
+    }
+  }
+
+  getPoints(): T[] {
+    if (!this.isFull) {
+      return this.buffer.slice(0, this.currentIndex);
+    }
+    return [...this.buffer.slice(this.currentIndex), ...this.buffer.slice(0, this.currentIndex)];
+  }
+}
 
 interface PPGSignalMeterProps {
   value: number;
@@ -9,15 +44,21 @@ interface PPGSignalMeterProps {
   onStartMeasurement: () => void;
   onReset: () => void;
   arrhythmiaStatus: string;
+  rawArrhythmiaData?: {
+    timestamp: number;
+    rmssd: number;
+    rrVariation: number;
+  } | null;
 }
 
-const PPGSignalMeter = ({ 
+const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({ 
   value, 
   quality, 
   isFingerDetected,
   onStartMeasurement,
   onReset,
-  arrhythmiaStatus
+  arrhythmiaStatus,
+  rawArrhythmiaData
 }: PPGSignalMeterProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dataBuffer = useRef<CircularBuffer<PPGDataPoint>>(new CircularBuffer<PPGDataPoint>(100));

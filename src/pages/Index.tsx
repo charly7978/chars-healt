@@ -44,6 +44,10 @@ const Index: React.FC = () => {
     }
   };
 
+  const onError = (error: Error): void => {
+    console.error("Error activando linterna:", error);
+  };
+
   useEffect(() => {
     const preventScroll = (e: Event) => e.preventDefault();
     document.body.addEventListener('touchmove', preventScroll, { passive: false });
