@@ -154,25 +154,19 @@ const Index = () => {
 
   useEffect(() => {
     if (lastSignal && lastSignal.fingerDetected && isMonitoring) {
-      // Procesar latidos cardíacos
       const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
       setHeartRate(heartBeatResult.bpm);
       
-      // Procesar signos vitales y arritmias
       const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
       if (vitals) {
-        // Actualizar estado de signos vitales de manera inmediata
         setVitalSigns(vitals);
         
-        // Si hay datos de arritmia nuevos, actualizar estado
         if (vitals.lastArrhythmiaData) {
           setLastArrhythmiaData(vitals.lastArrhythmiaData);
           
-          // Actualizar el contador y estado directamente del status
           const [status, count] = vitals.arrhythmiaStatus.split('|');
           setArrhythmiaCount(count || "0");
           
-          // Forzar actualización del display con el nuevo estado
           setVitalSigns(current => ({
             ...current,
             arrhythmiaStatus: vitals.arrhythmiaStatus
@@ -251,19 +245,9 @@ const Index = () => {
           <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 mt-auto">
             <button 
               onClick={startMonitoring}
-              className={`w-full h-full text-2xl font-bold active:bg-gray-800 ${
-                isMonitoring 
-                ? 'bg-gradient-to-b from-red-600 to-red-700 text-white shadow-inner' 
-                : 'bg-gradient-to-b from-blue-500 to-blue-600 text-white shadow-md'
-              }`}
-              style={{
-                textShadow: '0 1px 2px rgba(0,0,0,0.2)',
-                boxShadow: isMonitoring 
-                  ? 'inset 0 1px 3px rgba(0,0,0,0.3)' 
-                  : '0 1px 3px rgba(0,0,0,0.2)'
-              }}
+              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
             >
-              {isMonitoring ? 'DETENER' : 'INICIAR'}
+              INICIAR
             </button>
             <button 
               onClick={handleReset}
