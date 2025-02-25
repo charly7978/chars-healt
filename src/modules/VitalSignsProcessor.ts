@@ -47,8 +47,6 @@ export class VitalSignsProcessor {
   private spo2Buffer: number[] = [];
   private systolicBuffer: number[] = [];
   private diastolicBuffer: number[] = [];
-
-  // Seguimiento de ritmo cardíaco
   private lastPeakTime: number | null = null;
   private rrIntervals: number[] = [];
   private baselineRhythm = 0;
@@ -56,26 +54,17 @@ export class VitalSignsProcessor {
   private arrhythmiaDetected = false;
   private arrhythmiaType: string = '';
   private measurementStartTime: number = Date.now();
-  
-  // Relacionados con oxígeno en sangre
-  private lastValidSpO2 = 98;
-  private spO2Confidence = 0;
-  private perfusionIndex = 0;
-  
-  // Relacionados con presión arterial
-  private smoothedSystolic = this.SBP_BASELINE;
-  private smoothedDiastolic = this.DBP_BASELINE;
-  private lastValidBP = { systolic: this.SBP_BASELINE, diastolic: this.DBP_BASELINE };
-  private bpConfidence = 0;
-  
-  // Datos de análisis de arritmia
   private lastArrhythmiaCheckTime = 0;
   private lastArrhythmiaTime = 0;
   private arrhythmiaScore = 0;
   private currentRmssd = 0;
   private currentSdnn = 0;
   private beatVariability = 0;
-  
+  private perfusionIndex = 0;
+  private smoothedSystolic = 0;
+  private smoothedDiastolic = 0;
+  private lastValidBP = { systolic: 120, diastolic: 80 };
+
   /**
    * Procesa y analiza la señal PPG para extraer signos vitales
    */
@@ -442,7 +431,6 @@ export class VitalSignsProcessor {
     diastolic: number;
     confidence: number;
   } {
-    // Necesitamos datos suficientes para análisis
     if (values.length < 30) {
       return { 
         systolic: this.lastValidBP.systolic, 
@@ -450,11 +438,9 @@ export class VitalSignsProcessor {
         confidence: 0.3
       };
     }
-    
-    // Encontrar picos y valles para análisis de morfología
+
     const { peakIndices, valleyIndices } = this.findPeaksAndValleys(values);
     
-    // No hay suficientes picos detectados
     if (peakIndices.length < 2) {
       return { 
         systolic: this.SBP_BASELINE, 
@@ -462,24 +448,21 @@ export class VitalSignsProcessor {
         confidence: 0.4
       };
     }
-    
-    // Calcular tasa de muestra aproximada basada en longitud de datos y tiempo de colección asumido
-    const fps = 30; // Frames por segundo (asumido)
+
+    const fps = 30;
     const msPerSample = 1000 / fps;
     
-    // Calcular valores de tiempo de tránsito de pulso (PTT) de intervalos pico-a-pico
     const pttValues: number[] = [];
     for (let i = 1; i < peakIndices.length; i++) {
       const dt = (peakIndices[i] - peakIndices[i - 1]) * msPerSample;
       pttValues.push(dt);
     }
     
-    // Calcular promedio ponderado de valores PTT
     let weightedPTTSum = 0;
     let pttWeightSum = 0;
     
     for (let i = 0; i < pttValues.length; i++) {
-      const weight = i + 1; // Ponderación lineal
+      const weight = i + 1;
       weightedPTTSum += pttValues[i] * weight;
       pttWeightSum += weight;
     }
@@ -489,22 +472,18 @@ export class VitalSignsProcessor {
       Math.min(this.PTT_MAX, weightedPTTSum / pttWeightSum)
     );
     
-    // Calcular amplitud y factores de presión
     const amplitude = this.calculateAmplitude(values, peakIndices, valleyIndices);
     const normalizedAmplitude = Math.min(100, Math.max(0, amplitude * 6));
     
     const pttFactor = (600 - normalizedPTT) * this.SBP_FACTOR;
     const ampFactor = normalizedAmplitude * this.AMPLITUDE_SCALING;
     
-    // Calcular valores instantáneos de PA
     let instantSystolic = this.SBP_BASELINE + pttFactor + ampFactor;
     let instantDiastolic = this.DBP_BASELINE + (pttFactor * 0.4) + (ampFactor * 0.25);
     
-    // Restringir a rangos fisiológicos
     instantSystolic = Math.max(80, Math.min(200, instantSystolic));
     instantDiastolic = Math.max(50, Math.min(120, instantDiastolic));
     
-    // Asegurar presión de pulso razonable
     const differential = instantSystolic - instantDiastolic;
     if (differential < 20) {
       instantDiastolic = instantSystolic - 20;
@@ -512,7 +491,6 @@ export class VitalSignsProcessor {
       instantDiastolic = instantSystolic - 80;
     }
     
-    // Añadir a buffers de suavizado
     this.systolicBuffer.push(instantSystolic);
     this.diastolicBuffer.push(instantDiastolic);
     
@@ -521,7 +499,6 @@ export class VitalSignsProcessor {
       this.diastolicBuffer.shift();
     }
     
-    // Calcular PA suavizada usando promedio móvil ponderado exponencial
     let smoothedSystolic = 0;
     let smoothedDiastolic = 0;
     let weightSum = 0;
@@ -536,13 +513,11 @@ export class VitalSignsProcessor {
     smoothedSystolic = smoothedSystolic / weightSum;
     smoothedDiastolic = smoothedDiastolic / weightSum;
     
-    // Calcular puntuación de confianza
     const variability = this.calculateStandardDeviation(this.systolicBuffer) / smoothedSystolic;
     const stabilityFactor = Math.max(0, Math.min(1, 1 - (variability * 10)));
     const perfusionFactor = Math.min(1, this.perfusionIndex / 0.15);
     const confidence = Math.min(1, (stabilityFactor * 0.7) + (perfusionFactor * 0.3));
     
-    // Actualizar última PA válida si la confianza es razonable
     if (confidence > 0.5) {
       this.lastValidBP = {
         systolic: Math.round(smoothedSystolic),
@@ -553,7 +528,6 @@ export class VitalSignsProcessor {
       this.smoothedDiastolic = smoothedDiastolic;
     }
     
-    // Registrar cálculo para depuración
     if (this.ppgValues.length % 60 === 0) {
       console.log("VitalSignsProcessor: Cálculo de presión arterial", {
         instantaneo: {
