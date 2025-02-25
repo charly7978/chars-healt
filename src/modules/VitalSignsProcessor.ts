@@ -2,7 +2,7 @@ export class VitalSignsProcessor {
   private readonly SPO2_ALPHA = 0.3;
   private readonly BPM_ALPHA = 0.1;
   private readonly QUALITY_ALPHA = 0.2;
-  private readonly MIN_QUALITY_THRESHOLD = 40;
+  private readonly MIN_QUALITY_THRESHOLD = 1; //40
   private readonly CALIBRATION_SAMPLES = 100;
   private readonly ARRHYTHMIA_WINDOW = 10;
   private readonly RR_VARIATION_THRESHOLD = 0.2;
