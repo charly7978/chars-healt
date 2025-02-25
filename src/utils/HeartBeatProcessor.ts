@@ -1,3 +1,14 @@
+interface HeartBeatResult {
+  bpm: number;
+  confidence: number;
+  isPeak: boolean;
+  filteredValue: number;
+  arrhythmiaCount: number;
+  rrData?: {
+    intervals: number[];
+    lastPeakTime: number | null;
+  };
+}
 
 export class HeartBeatProcessor {
   // Optimización de parámetros para mejor detección
@@ -31,13 +42,59 @@ export class HeartBeatProcessor {
     console.log("HeartBeatProcessor: Inicializado con parámetros optimizados");
   }
 
-  public processSignal(value: number): {
-    bpm: number;
-    confidence: number;
-    isPeak: boolean;
-    filteredValue: number;
-    arrhythmiaCount: number;
-  } {
+  public async ensureAudioInitialized(): Promise<boolean> {
+    try {
+      const audioContext = new window.AudioContext();
+      await audioContext.resume();
+      return true;
+    } catch (error) {
+      console.error("Error initializing audio:", error);
+      return false;
+    }
+  }
+
+  public async requestManualBeep(): Promise<boolean> {
+    try {
+      const audioContext = new window.AudioContext();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+      
+      gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+      gainNode.gain.linearRampToValueAtTime(0.5, audioContext.currentTime + 0.01);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.07);
+      
+      oscillator.start();
+      oscillator.stop(audioContext.currentTime + 0.08);
+      
+      return true;
+    } catch (error) {
+      console.error("Error playing beep:", error);
+      return false;
+    }
+  }
+
+  public getSignalQuality(): number {
+    // Calculate signal quality based on recent measurements
+    const recentValues = this.signalBuffer.slice(-10);
+    if (recentValues.length === 0) return 0;
+    
+    const mean = recentValues.reduce((a, b) => a + b, 0) / recentValues.length;
+    const variance = recentValues.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / recentValues.length;
+    
+    return Math.max(0, Math.min(100, 100 * (1 - Math.sqrt(variance) / mean)));
+  }
+
+  public getFinalBPM(): number {
+    return this.calculateCurrentBPM();
+  }
+
+  public processSignal(value: number): HeartBeatResult {
     // Evitar valores inválidos
     if (isNaN(value) || value === 0) {
       console.log("HeartBeatProcessor: Valor inválido recibido");
@@ -90,7 +147,11 @@ export class HeartBeatProcessor {
       confidence,
       isPeak,
       filteredValue: smoothed,
-      arrhythmiaCount: 0
+      arrhythmiaCount: 0,
+      rrData: {
+        intervals: [],
+        lastPeakTime: this.lastPeakTime
+      }
     };
   }
 

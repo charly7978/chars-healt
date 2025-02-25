@@ -1,13 +1,15 @@
 
 import * as React from "react";
 import * as ToastPrimitives from "@radix-ui/react-toast";
-import { cn } from "../../lib/utils";
+import { cn } from "@/lib/utils";
 
-export interface ToastProps extends React.ComponentPropsWithoutRef<typeof ToastPrimitives.Root> {
+interface BaseToastProps {
   title?: React.ReactNode;
   description?: React.ReactNode;
   action?: React.ReactNode;
 }
+
+export type ToastProps = BaseToastProps & React.ComponentPropsWithoutRef<typeof ToastPrimitives.Root>;
 
 export const Toast = React.forwardRef<
   React.ElementRef<typeof ToastPrimitives.Root>,
