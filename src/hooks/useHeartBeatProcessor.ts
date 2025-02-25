@@ -15,6 +15,20 @@ export function useHeartBeatProcessor() {
     if (!processorRef.current) {
       processorRef.current = new HeartBeatProcessor();
       console.log("useHeartBeatProcessor: Procesador de latidos inicializado");
+      
+      // Intentar inicializar audio automáticamente
+      setTimeout(() => {
+        if (processorRef.current) {
+          processorRef.current.ensureAudioInitialized()
+            .then(success => {
+              console.log("useHeartBeatProcessor: Inicialización automática de audio:", success);
+              setAudioInitialized(success);
+            })
+            .catch(err => {
+              console.warn("useHeartBeatProcessor: Error en inicialización automática de audio:", err);
+            });
+        }
+      }, 1000);
     }
     
     return () => {
@@ -28,7 +42,7 @@ export function useHeartBeatProcessor() {
     if (!processorRef.current) return { bpm: 0, confidence: 0, isPeak: false, filteredValue: value, arrhythmiaCount: 0 };
     
     // Evitar procesamiento de valores duplicados o inválidos
-    if (value === lastProcessedValueRef.current || isNaN(value)) {
+    if (value === lastProcessedValueRef.current || isNaN(value) || value === 0) {
       return { 
         bpm, 
         confidence, 
@@ -40,6 +54,18 @@ export function useHeartBeatProcessor() {
     
     lastProcessedValueRef.current = value;
     
+    // Asegurar que el audio esté inicializado
+    if (!audioInitialized) {
+      processorRef.current.ensureAudioInitialized()
+        .then(success => {
+          if (success) {
+            console.log("useHeartBeatProcessor: Audio inicializado durante procesamiento");
+            setAudioInitialized(true);
+          }
+        })
+        .catch(() => {});
+    }
+    
     // Procesar señal usando el procesador
     const result = processorRef.current.processSignal(value);
     
@@ -49,15 +75,37 @@ export function useHeartBeatProcessor() {
     setIsPeak(result.isPeak);
     setArrhythmiaCount(result.arrhythmiaCount);
     
+    // Log adicional para depuración
+    if (result.isPeak) {
+      console.log("useHeartBeatProcessor: PICO DETECTADO", {
+        bpm: result.bpm,
+        confidence: result.confidence,
+        filteredValue: result.filteredValue
+      });
+    }
+    
     return result;
-  }, [bpm, confidence, arrhythmiaCount]);
+  }, [bpm, confidence, arrhythmiaCount, audioInitialized]);
   
   // Función para inicializar audio (debe llamarse después de interacción del usuario)
   const initializeAudio = useCallback(async () => {
     if (processorRef.current) {
       try {
         console.log("useHeartBeatProcessor: Intentando inicializar audio...");
-        const success = await processorRef.current.ensureAudioInitialized();
+        
+        // Intentar varias veces si falla
+        let attempts = 0;
+        let success = false;
+        
+        while (attempts < 3 && !success) {
+          success = await processorRef.current.ensureAudioInitialized();
+          if (!success) {
+            console.log(`useHeartBeatProcessor: Intento ${attempts + 1} fallido, reintentando...`);
+            await new Promise(resolve => setTimeout(resolve, 300));
+          }
+          attempts++;
+        }
+        
         console.log("useHeartBeatProcessor: Inicialización de audio completada:", success);
         setAudioInitialized(success);
         return success;
@@ -75,6 +123,17 @@ export function useHeartBeatProcessor() {
     if (processorRef.current) {
       try {
         console.log("useHeartBeatProcessor: Solicitando beep manual...");
+        
+        // Asegurar que el audio esté inicializado primero
+        if (!audioInitialized) {
+          const initialized = await initializeAudio();
+          if (!initialized) {
+            console.warn("useHeartBeatProcessor: No se pudo inicializar audio para beep manual");
+            return false;
+          }
+        }
+        
+        // Solicitar beep con volumen alto
         const success = await processorRef.current.requestManualBeep();
         console.log("useHeartBeatProcessor: Beep manual completado:", success);
         return success;
@@ -84,7 +143,7 @@ export function useHeartBeatProcessor() {
       }
     }
     return false;
-  }, []);
+  }, [audioInitialized, initializeAudio]);
   
   // Función para resetear el procesador
   const reset = useCallback(() => {

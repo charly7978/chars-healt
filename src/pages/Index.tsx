@@ -67,9 +67,15 @@ const Index = () => {
       console.log("Contexto de audio inicializado:", audioInitialized);
       
       // Solicitar un beep manual para probar el audio
-      setTimeout(() => {
+      setTimeout(async () => {
         console.log("Solicitando beep de prueba...");
-        requestBeep();
+        await requestBeep();
+        
+        // Solicitar un segundo beep después de un momento para asegurar que el audio funciona
+        setTimeout(async () => {
+          console.log("Solicitando segundo beep de prueba...");
+          await requestBeep();
+        }, 1000);
       }, 500);
       
       setIsMonitoring(true);
@@ -165,17 +171,25 @@ const Index = () => {
   };
 
   useEffect(() => {
-    if (lastSignal && lastSignal.fingerDetected && isMonitoring) {
-      const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
+    if (lastSignal && isMonitoring) {
+      // Procesar incluso si no se detecta el dedo, pero con un valor bajo
+      const valueToProcess = lastSignal.fingerDetected ? lastSignal.filteredValue : lastSignal.filteredValue * 0.1;
+      
+      const heartBeatResult = processHeartBeat(valueToProcess);
       
       // Añadir log para depuración
       if (heartBeatResult.isPeak) {
         console.log("PICO DETECTADO - BPM:", heartBeatResult.bpm, "Confianza:", heartBeatResult.confidence);
+        
+        // Solicitar beep cuando se detecta un pico
+        requestBeep().catch(err => {
+          console.warn("Error al reproducir beep:", err);
+        });
       }
       
       setHeartRate(heartBeatResult.bpm);
       
-      const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
+      const vitals = processVitalSigns(valueToProcess, heartBeatResult.rrData);
       if (vitals) {
         setVitalSigns(vitals);
         

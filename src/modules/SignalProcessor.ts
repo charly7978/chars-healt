@@ -1,4 +1,3 @@
-
 import { ProcessedSignal, ProcessingError, SignalProcessor } from '../types/signal';
 
 class KalmanFilter {
@@ -28,12 +27,12 @@ export class PPGSignalProcessor implements SignalProcessor {
   private lastValues: number[] = [];
   private readonly DEFAULT_CONFIG = {
     BUFFER_SIZE: 4,           // Aumentado para mejor estabilidad
-    MIN_RED_THRESHOLD: 100,     // Ajustado para mejor detección
-    MAX_RED_THRESHOLD: 288,    // Aumentado para captar señales más intensas
-    STABILITY_WINDOW: 20,       // Ventana más grande para mejor estabilidad
-    MIN_STABILITY_COUNT: 6,    // Más muestras para confirmar estabilidad 6
-    HYSTERESIS: 5,            // Nuevo: histéresis para evitar fluctuaciones 4
-    MIN_CONSECUTIVE_DETECTIONS: 1  // Nuevo: mínimo de detecciones consecutivas
+    MIN_RED_THRESHOLD: 50,     // Reducido para mejorar detección
+    MAX_RED_THRESHOLD: 350,    // Aumentado para captar señales más intensas
+    STABILITY_WINDOW: 15,       // Reducido para respuesta más rápida
+    MIN_STABILITY_COUNT: 3,    // Reducido para confirmar estabilidad más rápido
+    HYSTERESIS: 10,            // Aumentado para evitar fluctuaciones
+    MIN_CONSECUTIVE_DETECTIONS: 1  // Mantener en 1 para detección inmediata
   };
 
   private currentConfig: typeof this.DEFAULT_CONFIG;
@@ -149,10 +148,11 @@ export class PPGSignalProcessor implements SignalProcessor {
     let blueSum = 0;
     let count = 0;
     
-    const startX = Math.floor(imageData.width * 0.375);
-    const endX = Math.floor(imageData.width * 0.625);
-    const startY = Math.floor(imageData.height * 0.375);
-    const endY = Math.floor(imageData.height * 0.625);
+    // Ampliar la región de interés para capturar más área del dedo
+    const startX = Math.floor(imageData.width * 0.3);
+    const endX = Math.floor(imageData.width * 0.7);
+    const startY = Math.floor(imageData.height * 0.3);
+    const endY = Math.floor(imageData.height * 0.7);
     
     for (let y = startY; y < endY; y++) {
       for (let x = startX; x < endX; x++) {
@@ -168,8 +168,17 @@ export class PPGSignalProcessor implements SignalProcessor {
     const avgGreen = greenSum / count;
     const avgBlue = blueSum / count;
 
-    // Verificar dominancia del canal rojo (característico de la detección del dedo)
-    const isRedDominant = avgRed > (avgGreen * 1.2) && avgRed > (avgBlue * 1.2);
+    // Reducir el umbral de dominancia del rojo para mejorar detección
+    const isRedDominant = avgRed > (avgGreen * 1.1) && avgRed > (avgBlue * 1.1);
+    
+    // Añadir log para depuración
+    console.log("PPGSignalProcessor: Valores RGB", { 
+      avgRed, 
+      avgGreen, 
+      avgBlue, 
+      isRedDominant,
+      threshold: this.currentConfig.MIN_RED_THRESHOLD
+    });
     
     return isRedDominant ? avgRed : 0;
   }

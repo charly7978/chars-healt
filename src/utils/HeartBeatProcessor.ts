@@ -7,15 +7,15 @@ export class HeartBeatProcessor {
   private readonly MAX_BPM = 220; // Frecuencia cardíaca fisiológica máxima
   
   // Parámetros de calidad de señal
-  private readonly MIN_CONFIDENCE = 0.3; // Reducido para facilitar detección
-  private readonly SIGNAL_THRESHOLD = 0.15; // Umbral más bajo para mejor detección
+  private readonly MIN_CONFIDENCE = 0.2; // Reducido aún más para facilitar detección
+  private readonly SIGNAL_THRESHOLD = 0.1; // Umbral más bajo para mejor detección
   private readonly NOISE_THRESHOLD = 0.1; // Para detectar señales ruidosas
   
   // Parámetros de detección de picos
-  private readonly DERIVATIVE_THRESHOLD = -0.02; // Menos restrictivo para mejor detección
-  private readonly MIN_PEAK_TIME_MS = 200; // Reducido para detectar ritmos más rápidos
-  private readonly WARMUP_TIME_MS = 1000; // Reducido para iniciar más rápido
-  private readonly PEAK_AGE_WEIGHT = 0.7; // Mayor peso a picos recientes
+  private readonly DERIVATIVE_THRESHOLD = -0.01; // Menos restrictivo para mejor detección
+  private readonly MIN_PEAK_TIME_MS = 150; // Reducido para detectar ritmos más rápidos
+  private readonly WARMUP_TIME_MS = 500; // Reducido para iniciar más rápido
+  private readonly PEAK_AGE_WEIGHT = 0.8; // Mayor peso a picos recientes
   
   // Parámetros de filtrado
   private readonly MEDIAN_FILTER_WINDOW = 5; // Elimina ruido impulsivo
@@ -230,12 +230,6 @@ export class HeartBeatProcessor {
         this.manualBeepRequest = false;
         return;
       }
-    }
-    
-    if (this.isInWarmup() && !this.manualBeepRequest) {
-      console.log("HeartBeatProcessor: Beep ignorado - en periodo de calentamiento");
-      this.manualBeepRequest = false;
-      return;
     }
     
     const now = Date.now();
@@ -683,16 +677,16 @@ export class HeartBeatProcessor {
     // Criterios simplificados para facilitar detección
     const isOverThreshold =
       derivative < this.DERIVATIVE_THRESHOLD &&
-      normalizedValue > this.adaptiveThreshold * 0.6; // Reducido para mejor detección
+      normalizedValue > this.adaptiveThreshold * 0.5; // Reducido aún más para mejor detección
     
     // Calcular confianza basada en múltiples factores
     const amplitudeConfidence = Math.min(
-      Math.max(Math.abs(normalizedValue) / (this.adaptiveThreshold * 1.1), 0),
+      Math.max(Math.abs(normalizedValue) / (this.adaptiveThreshold * 0.9), 0),
       1
     );
     
     const derivativeConfidence = Math.min(
-      Math.max(Math.abs(derivative) / Math.abs(this.DERIVATIVE_THRESHOLD * 0.5), 0),
+      Math.max(Math.abs(derivative) / Math.abs(this.DERIVATIVE_THRESHOLD * 0.4), 0),
       1
     );
     
@@ -709,16 +703,16 @@ export class HeartBeatProcessor {
     
     // Puntuación de confianza ponderada
     const confidence = 
-      (amplitudeConfidence * 0.6) + 
-      (derivativeConfidence * 0.3) + 
+      (amplitudeConfidence * 0.7) + 
+      (derivativeConfidence * 0.2) + 
       (timingConfidence * 0.1);
     
     // Log para depuración
-    if (isOverThreshold) {
+    if (isOverThreshold || confidence > 0.3) {
       console.log("HeartBeatProcessor: Posible pico detectado", {
         normalizedValue,
         derivative,
-        threshold: this.adaptiveThreshold * 0.6,
+        threshold: this.adaptiveThreshold * 0.5,
         derivativeThreshold: this.DERIVATIVE_THRESHOLD,
         confidence,
         timeSinceLastPeak
@@ -744,14 +738,11 @@ export class HeartBeatProcessor {
     
     // Criterios simplificados de confirmación
     if (isPeak && !this.lastConfirmedPeak && confidence >= this.MIN_CONFIDENCE) {
-      if (this.peakConfirmationBuffer.length >= 3) { // Reducido de 4 a 3 para mejor detección
+      if (this.peakConfirmationBuffer.length >= 2) { // Reducido a 2 para mejor detección
         const len = this.peakConfirmationBuffer.length;
         
         // Verificar que el valor actual sea mayor que valores anteriores
-        const isHighestRecent = normalizedValue > Math.max(
-          this.peakConfirmationBuffer[len-2], 
-          this.peakConfirmationBuffer[len-3]
-        );
+        const isHighestRecent = normalizedValue > this.peakConfirmationBuffer[len-2];
         
         console.log("HeartBeatProcessor: Evaluando confirmación de pico", {
           normalizedValue,
@@ -762,7 +753,7 @@ export class HeartBeatProcessor {
           buffer: [...this.peakConfirmationBuffer]
         });
         
-        if (isHighestRecent) {
+        if (isHighestRecent || confidence > 0.5) { // Añadido OR para permitir picos con alta confianza
           this.lastConfirmedPeak = true;
           console.log("HeartBeatProcessor: PICO CONFIRMADO");
           return true;
