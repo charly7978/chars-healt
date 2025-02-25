@@ -53,7 +53,7 @@ export class PPGSignalProcessor implements SignalProcessor {
     console.log("PPGSignalProcessor: Instancia creada con configuración:", this.currentConfig);
   }
 
-  async initialize(): Promise<void> {
+  async initialize(): Promise<boolean> {
     try {
       this.lastValues = [];
       this.redValues = [];
@@ -64,9 +64,11 @@ export class PPGSignalProcessor implements SignalProcessor {
       this.lastDetectionTime = 0;
       this.kalmanFilter.reset();
       console.log("PPGSignalProcessor: Inicializado");
+      return true;
     } catch (error) {
       console.error("PPGSignalProcessor: Error de inicialización", error);
       this.handleError("INIT_ERROR", "Error al inicializar el procesador");
+      return false;
     }
   }
 

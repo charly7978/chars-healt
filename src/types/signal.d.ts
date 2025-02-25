@@ -1,4 +1,16 @@
-import { HeartBeatProcessor } from '../modules/HeartBeatProcessor';
+
+export interface ArrhythmiaData {
+  timestamp: number;
+  rmssd: number;
+  rrVariation: number;
+}
+
+export interface VitalSigns {
+  spo2: number;
+  pressure: string;
+  arrhythmiaStatus: string;
+  lastArrhythmiaData?: ArrhythmiaData;
+}
 
 export interface ProcessedSignal {
   timestamp: number;

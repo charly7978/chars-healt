@@ -1,100 +1,125 @@
 import * as React from "react"
 import { Slot } from "@radix-ui/react-slot"
-import { Controller, ControllerProps, FieldPath, FieldValues, FormProvider } from "react-hook-form"
+import { Controller, ControllerProps, FieldPath, FieldValues, FormProvider as FormProviderType } from "react-hook-form"
 import { cn } from "../../lib/utils"
 import { Label } from "../ui/label"
 
 type FormFieldContextValue<
-  TFieldValues extends FieldValues,
-  TFieldName extends FieldPath<TFieldValues>
+  TFieldValues extends FieldValues = FieldValues,
+  TName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>
 > = {
-  label: string
-  field: {
-    name: TFieldName
-    value: TFieldValues[TFieldName]
-    onChange: (value: TFieldValues[TFieldName]) => void
-    onBlur: () => void
-  }
+  name: TName
 }
 
-const FormFieldContext = React.createContext<
-  FormFieldContextValue<any, any>
->({} as FormFieldContextValue<any, any>)
+type FormItemContextValue = {
+  id: string
+}
 
-export function Form<TFieldValues extends FieldValues>({
-  ...props
-}: React.PropsWithChildren<{
-  methods: FormProvider<TFieldValues>
-}>) {
+const FormFieldContext = React.createContext<FormFieldContextValue>(
+  {} as FormFieldContextValue
+)
+
+const FormItemContext = React.createContext<FormItemContextValue>(
+  {} as FormItemContextValue
+)
+
+// Use typeof FormProviderType instead of FormProvider
+const Form = FormProviderType as unknown as React.FC<React.ComponentProps<typeof FormProviderType>>
+
+const FormItem = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => {
+  const id = React.useId()
   return (
-    <FormProvider {...props.methods}>
-      {props.children}
-    </FormProvider>
+    <FormItemContext.Provider value={{ id }}>
+      <div ref={ref} className={cn("space-y-2", className)} {...props} />
+    </FormItemContext.Provider>
   )
-}
+})
+FormItem.displayName = "FormItem"
 
-type FormLabelProps = React.HTMLAttributes<HTMLLabelElement>
+const FormLabel = React.forwardRef<
+  React.ElementRef<typeof Label>,
+  React.ComponentPropsWithoutRef<typeof Label>
+>(({ className, ...props }, ref) => {
+  const { id } = React.useContext(FormItemContext)
 
-export function FormLabel({ ...props }: FormLabelProps) {
+  return <Label ref={ref} className={cn("text-sm font-semibold leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70", className)} htmlFor={id} {...props} />
+})
+FormLabel.displayName = "FormLabel"
+
+const FormControl = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, children, ...props }, ref) => {
+  const { id } = React.useContext(FormItemContext)
+
   return (
-    <Label {...props} />
+    <FormFieldContext.Provider value={{ name: id as any }}>
+      <div ref={ref} className={cn("relative", className)} {...props}>
+        {children}
+      </div>
+    </FormFieldContext.Provider>
   )
-}
+})
+FormControl.displayName = "FormControl"
 
-type FormDescriptionProps = React.HTMLAttributes<HTMLParagraphElement>
-
-export function FormDescription({ className, ...props }: FormDescriptionProps) {
+const FormDescription = React.forwardRef<
+  HTMLParagraphElement,
+  React.HTMLAttributes<HTMLParagraphElement>
+>(({ className, ...props }, ref) => {
   return (
     <p
+      ref={ref}
       className={cn("text-sm text-muted-foreground", className)}
       {...props}
     />
   )
-}
+})
+FormDescription.displayName = "FormDescription"
 
-type FormMessageProps = React.HTMLAttributes<HTMLParagraphElement>
-
-export function FormMessage({ className, ...props }: FormMessageProps) {
+const FormMessage = React.forwardRef<
+  HTMLParagraphElement,
+  React.HTMLAttributes<HTMLParagraphElement>
+>(({ className, ...props }, ref) => {
   return (
     <p
+      ref={ref}
       className={cn("text-sm font-medium text-destructive", className)}
       {...props}
     />
   )
-}
+})
+FormMessage.displayName = "FormMessage"
 
-type FormFieldProps<
-  TFieldValues extends FieldValues,
-  TFieldName extends FieldPath<TFieldValues>
-> = {
-  control: any
-  name: TFieldName
-  children: (props: FormFieldContextValue<TFieldValues, TFieldName>) => React.ReactNode
-}
-
-export function FormField<
-  TFieldValues extends FieldValues,
-  TFieldName extends FieldPath<TFieldValues>
+const FormField = <
+  TFieldValues extends FieldValues = FieldValues,
+  TName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>
 >({
   ...props
-}: FormFieldProps<TFieldValues, TFieldName>) {
+}: ControllerProps<TFieldValues, TName>) => {
   return (
-    <Controller
-      control={props.control}
-      name={props.name}
-      render={({ field }) => (
-        <FormFieldContext.Provider value={{ field, label: props.name as string }}>
-          {props.children({ field, label: props.name as string })}
-        </FormFieldContext.Provider>
+    <FormFieldContext.Consumer>
+      {({ name }) => (
+        <Controller
+          {...props}
+          name={name}
+          render={({ field }) => {
+            return props.render({ ...field })
+          }}
+        />
       )}
-    />
+    </FormFieldContext.Consumer>
   )
 }
 
-type FormControlProps = React.HTMLAttributes<HTMLDivElement>
-
-export function FormControl({ className, ...props }: FormControlProps) {
-  return (
-    <Slot className={cn("flex flex-col gap-1.5", className)} {...props} />
-  )
+export {
+  Form,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormControl,
+  FormDescription,
+  FormMessage,
 }
