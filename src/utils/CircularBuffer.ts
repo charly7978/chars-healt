@@ -30,7 +30,6 @@ export class CircularBuffer<T> {
     if (!this.isFull) {
       return this.buffer.slice(0, this.currentIndex);
     }
-    const points = [...this.buffer.slice(this.currentIndex), ...this.buffer.slice(0, this.currentIndex)];
-    return points;
+    return [...this.buffer.slice(this.currentIndex), ...this.buffer.slice(0, this.currentIndex)];
   }
 }

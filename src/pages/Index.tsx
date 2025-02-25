@@ -13,7 +13,7 @@ interface VitalSigns {
   arrhythmiaStatus: string;
 }
 
-const Index = () => {
+const Index: React.FC = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [signalQuality, setSignalQuality] = useState(0);
@@ -132,7 +132,7 @@ const Index = () => {
     if (videoTrack.getCapabilities()?.torch) {
       videoTrack.applyConstraints({
         advanced: [{ torch: true }]
-      }).catch((error: unknown) => console.error("Error activando linterna:", error));
+      }).catch((error: Error) => console.error("Error activando linterna:", error));
     }
     
     const tempCanvas = document.createElement('canvas');
