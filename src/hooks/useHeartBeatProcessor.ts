@@ -9,6 +9,7 @@ export function useHeartBeatProcessor() {
   const [arrhythmiaCount, setArrhythmiaCount] = useState<number>(0);
   const lastProcessedValueRef = useRef<number>(0);
   const [audioInitialized, setAudioInitialized] = useState<boolean>(false);
+  const initializationAttempts = useRef<number>(0);
   
   // Inicializar procesador
   useEffect(() => {
@@ -16,24 +17,45 @@ export function useHeartBeatProcessor() {
       processorRef.current = new HeartBeatProcessor();
       console.log("useHeartBeatProcessor: Procesador de latidos inicializado");
       
-      // Intentar inicializar audio automáticamente
-      setTimeout(() => {
-        if (processorRef.current) {
+      // Intentar inicializar audio automáticamente con múltiples intentos
+      const tryInitAudio = () => {
+        if (processorRef.current && initializationAttempts.current < 5) {
+          initializationAttempts.current++;
+          console.log(`useHeartBeatProcessor: Intento de inicialización de audio #${initializationAttempts.current}`);
+          
           processorRef.current.ensureAudioInitialized()
             .then(success => {
               console.log("useHeartBeatProcessor: Inicialización automática de audio:", success);
-              setAudioInitialized(success);
+              if (success) {
+                setAudioInitialized(true);
+                // Reproducir un beep de prueba para verificar
+                processorRef.current?.requestManualBeep()
+                  .then(beepSuccess => {
+                    console.log("useHeartBeatProcessor: Beep de prueba:", beepSuccess);
+                  });
+              } else if (initializationAttempts.current < 5) {
+                // Reintentar después de un breve retraso
+                setTimeout(tryInitAudio, 1000);
+              }
             })
             .catch(err => {
               console.warn("useHeartBeatProcessor: Error en inicialización automática de audio:", err);
+              if (initializationAttempts.current < 5) {
+                setTimeout(tryInitAudio, 1000);
+              }
             });
         }
-      }, 1000);
+      };
+      
+      // Iniciar intentos después de un breve retraso
+      setTimeout(tryInitAudio, 500);
     }
     
     return () => {
-      // No es necesario limpiar nada aquí, pero podríamos pausar el audio
-      // si fuera necesario
+      // Limpiar recursos si es necesario
+      if (processorRef.current) {
+        console.log("useHeartBeatProcessor: Limpiando recursos");
+      }
     };
   }, []);
   
@@ -41,8 +63,8 @@ export function useHeartBeatProcessor() {
   const processSignal = useCallback((value: number) => {
     if (!processorRef.current) return { bpm: 0, confidence: 0, isPeak: false, filteredValue: value, arrhythmiaCount: 0 };
     
-    // Evitar procesamiento de valores duplicados o inválidos
-    if (value === lastProcessedValueRef.current || isNaN(value) || value === 0) {
+    // Evitar procesamiento de valores inválidos pero permitir valores cercanos a cero
+    if (value === lastProcessedValueRef.current || isNaN(value)) {
       return { 
         bpm, 
         confidence, 
@@ -55,7 +77,8 @@ export function useHeartBeatProcessor() {
     lastProcessedValueRef.current = value;
     
     // Asegurar que el audio esté inicializado
-    if (!audioInitialized) {
+    if (!audioInitialized && initializationAttempts.current < 10) {
+      initializationAttempts.current++;
       processorRef.current.ensureAudioInitialized()
         .then(success => {
           if (success) {
@@ -70,7 +93,9 @@ export function useHeartBeatProcessor() {
     const result = processorRef.current.processSignal(value);
     
     // Actualizar estado con los resultados
-    setBpm(result.bpm);
+    if (result.bpm > 0) {
+      setBpm(result.bpm);
+    }
     setConfidence(result.confidence);
     setIsPeak(result.isPeak);
     setArrhythmiaCount(result.arrhythmiaCount);
@@ -80,7 +105,8 @@ export function useHeartBeatProcessor() {
       console.log("useHeartBeatProcessor: PICO DETECTADO", {
         bpm: result.bpm,
         confidence: result.confidence,
-        filteredValue: result.filteredValue
+        filteredValue: result.filteredValue,
+        value: value // Valor original para depuración
       });
     }
     
@@ -97,17 +123,26 @@ export function useHeartBeatProcessor() {
         let attempts = 0;
         let success = false;
         
-        while (attempts < 3 && !success) {
+        while (attempts < 5 && !success) {
           success = await processorRef.current.ensureAudioInitialized();
           if (!success) {
             console.log(`useHeartBeatProcessor: Intento ${attempts + 1} fallido, reintentando...`);
-            await new Promise(resolve => setTimeout(resolve, 300));
+            await new Promise(resolve => setTimeout(resolve, 500));
           }
           attempts++;
         }
         
         console.log("useHeartBeatProcessor: Inicialización de audio completada:", success);
         setAudioInitialized(success);
+        
+        // Si se inicializó correctamente, reproducir un beep de prueba
+        if (success) {
+          setTimeout(async () => {
+            await processorRef.current?.requestManualBeep();
+            console.log("useHeartBeatProcessor: Beep de prueba reproducido");
+          }, 300);
+        }
+        
         return success;
       } catch (error) {
         console.error("useHeartBeatProcessor: Error inicializando audio", error);
@@ -153,6 +188,8 @@ export function useHeartBeatProcessor() {
       setConfidence(0);
       setIsPeak(false);
       setArrhythmiaCount(0);
+      lastProcessedValueRef.current = 0;
+      initializationAttempts.current = 0;
       console.log("useHeartBeatProcessor: Procesador reseteado");
     }
   }, []);
