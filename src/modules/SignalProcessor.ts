@@ -33,7 +33,7 @@ export class PPGSignalProcessor implements SignalProcessor {
     STABILITY_WINDOW: 15,       // Ventana más grande para mejor estabilidad
     MIN_STABILITY_COUNT: 6,    // Más muestras para confirmar estabilidad 6
     HYSTERESIS: 5,            // Nuevo: histéresis para evitar fluctuaciones 4
-    MIN_CONSECUTIVE_DETECTIONS: 2  // Nuevo: mínimo de detecciones consecutivas
+    MIN_CONSECUTIVE_DETECTIONS: 1  // Nuevo: mínimo de detecciones consecutivas
   };
 
   private currentConfig: typeof this.DEFAULT_CONFIG;
