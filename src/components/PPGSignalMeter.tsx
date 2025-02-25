@@ -37,13 +37,13 @@ const PPGSignalMeter = ({
   const WINDOW_WIDTH_MS = 3000; // Reducido para mejor rendimiento
   const CANVAS_WIDTH = 700;
   const CANVAS_HEIGHT = 200;
-  const GRID_SIZE_X = 50;
-  const GRID_SIZE_Y = 25;
+  const GRID_SIZE_X = 100;
+  const GRID_SIZE_Y = 50;
   const verticalScale = 18.0;
   const SMOOTHING_FACTOR = 0.75; // Ajustado para menor latencia
   const TARGET_FPS = 60;
   const FRAME_TIME = 1000 / TARGET_FPS;
-  const BUFFER_SIZE = 600; // Reducido para mejor rendimiento
+  const BUFFER_SIZE = 800; // Reducido para mejor rendimiento
 
   useEffect(() => {
     if (!dataBufferRef.current) {
