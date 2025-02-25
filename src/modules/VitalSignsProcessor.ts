@@ -12,7 +12,7 @@ export class VitalSignsProcessor {
   private readonly PERFUSION_INDEX_THRESHOLD = 0.06;
   private readonly AC_DC_MIN_RATIO = 0.03; // Relación mínima aceptable
   private readonly SPO2_OFFSET = 1.5; // Pequeño offset de calibración
-  private readonly SPO2_ALPHA: number = 0.3; // Factor de suavizado
+  private readonly SPO2_ALPHA: number = 0.3 as const; // Factor de suavizado
   
   // Parámetros de estimación de presión arterial
   private readonly PTT_MIN = 300; // Tiempo mínimo de tránsito de pulso (ms)
