@@ -1,53 +1,70 @@
+import React, { useState, FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { supabase } from '../integrations/supabase/client';
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { useToast } from "../hooks/use-toast";
 
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { useToast } from "@/hooks/use-toast";
-
-const Auth = () => {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+const Auth: React.FC = () => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const handleAuth = async (e: React.FormEvent) => {
+  const handleSignIn = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      if (isSignUp) {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-        });
-        if (error) throw error;
-        
-        toast({
-          title: "Registro exitoso",
-          description: "Por favor, revisa tu email para confirmar tu cuenta.",
-        });
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (error) throw error;
-        
-        navigate("/");
-      }
-    } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message,
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       });
+      if (error) throw error;
+      
+      handleSuccess();
+    } catch (error: any) {
+      handleError();
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSignUp = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+      if (error) throw error;
+      
+      handleSuccess();
+    } catch (error: any) {
+      handleError();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSuccess = () => {
+    toast({
+      title: "Success",
+      description: "Login successful",
+      className: "bg-green-500"
+    });
+  };
+
+  const handleError = () => {
+    toast({
+      title: "Error",
+      description: "Authentication failed",
+      className: "bg-red-500"
+    });
   };
 
   return (
@@ -55,10 +72,10 @@ const Auth = () => {
       <div className="w-full max-w-md space-y-8 bg-gray-800 p-6 rounded-lg">
         <div>
           <h2 className="text-2xl font-bold text-center text-white">
-            {isSignUp ? "Crear cuenta" : "Iniciar sesión"}
+            {isSignUp ? "Create account" : "Sign in"}
           </h2>
         </div>
-        <form onSubmit={handleAuth} className="space-y-4">
+        <form onSubmit={isSignUp ? handleSignUp : handleSignIn} className="space-y-4">
           <div>
             <Input
               type="email"
@@ -72,7 +89,7 @@ const Auth = () => {
           <div>
             <Input
               type="password"
-              placeholder="Contraseña"
+              placeholder="Password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full bg-gray-700 text-white"
@@ -85,10 +102,10 @@ const Auth = () => {
             disabled={loading}
           >
             {loading
-              ? "Cargando..."
+              ? "Loading..."
               : isSignUp
-              ? "Registrarse"
-              : "Iniciar sesión"}
+              ? "Sign up"
+              : "Sign in"}
           </Button>
         </form>
         <div className="text-center">
@@ -97,8 +114,8 @@ const Auth = () => {
             className="text-medical-blue hover:underline"
           >
             {isSignUp
-              ? "¿Ya tienes cuenta? Inicia sesión"
-              : "¿No tienes cuenta? Regístrate"}
+              ? "Already have an account? Sign in"
+              : "Don't have an account? Sign up"}
           </button>
         </div>
       </div>

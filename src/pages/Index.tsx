@@ -1,31 +1,26 @@
 import React, { useState, useRef, useEffect } from "react";
-import VitalSign from "@/components/VitalSign";
-import CameraView from "@/components/CameraView";
-import { useSignalProcessor } from "@/hooks/useSignalProcessor";
-import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
-import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
-import PPGSignalMeter from "@/components/PPGSignalMeter";
-import MonitorButton from "@/components/MonitorButton";
+import VitalSign from "../components/VitalSign";
+import CameraView from "../components/CameraView";
+import { useSignalProcessor } from "../hooks/useSignalProcessor";
+import { useHeartBeatProcessor } from "../hooks/useHeartBeatProcessor";
+import { useVitalSignsProcessor } from "../hooks/useVitalSignsProcessor";
+import PPGSignalMeter from "../components/PPGSignalMeter";
+import MonitorButton from "../components/MonitorButton";
 
 interface VitalSigns {
   spo2: number;
   pressure: string;
   arrhythmiaStatus: string;
-  lastArrhythmiaData?: {
-    timestamp: number;
-    rmssd: number;
-    rrVariation: number;
-  } | null;
 }
 
-const Index = () => {
+const Index: React.FC = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [signalQuality, setSignalQuality] = useState(0);
-  const [vitalSigns, setVitalSigns] = useState<VitalSigns>({ 
-    spo2: 0, 
+  const [vitalSigns, setVitalSigns] = useState<VitalSigns>({
+    spo2: 0,
     pressure: "--/--",
-    arrhythmiaStatus: "--" 
+    arrhythmiaStatus: "--"
   });
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState<string | number>("--");
@@ -36,159 +31,20 @@ const Index = () => {
     rmssd: number;
     rrVariation: number;
   } | null>(null);
-  const [audioInitialized, setAudioInitialized] = useState(false);
-  const initAttemptRef = useRef(0);
-  const simulateBeatsRef = useRef<number | null>(null);
-  const cameraSuspendedRef = useRef(false);
-  
+
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
-  const { 
-    processSignal: processHeartBeat, 
-    initializeAudio, 
-    requestBeep, 
-    reset: resetHeartBeat,
-    audioInitialized: heartBeatAudioReady 
-  } = useHeartBeatProcessor();
+  const { processSignal: processHeartBeat, initializeAudio, requestBeep } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
-  // Reiniciar completamente la aplicación si no hay actividad por 3 minutos
-  useEffect(() => {
-    let inactivityTimer: number | null = null;
-    
-    const resetInactivityTimer = () => {
-      if (inactivityTimer) {
-        window.clearTimeout(inactivityTimer);
-      }
-      
-      inactivityTimer = window.setTimeout(() => {
-        console.log("Inactividad detectada, reiniciando aplicación...");
-        handleReset();
-        window.location.reload(); // Recargar la página completamente
-      }, 3 * 60 * 1000); // 3 minutos
-    };
-    
-    // Reiniciar el temporizador en cada interacción
-    const resetTimer = () => resetInactivityTimer();
-    document.addEventListener('click', resetTimer);
-    document.addEventListener('touchstart', resetTimer);
-    document.addEventListener('mousemove', resetTimer);
-    
-    // Iniciar el temporizador
-    resetInactivityTimer();
-    
-    return () => {
-      if (inactivityTimer) window.clearTimeout(inactivityTimer);
-      document.removeEventListener('click', resetTimer);
-      document.removeEventListener('touchstart', resetTimer);
-      document.removeEventListener('mousemove', resetTimer);
-    };
-  }, []);
-
-  // Intentar inicializar el audio periódicamente
-  useEffect(() => {
-    const tryInitAudio = async () => {
-      if (!audioInitialized && initAttemptRef.current < 10) {
-        console.log(`Intento de inicialización de audio #${initAttemptRef.current + 1}`);
-        initAttemptRef.current++;
-        
-        try {
-          const success = await initializeAudio();
-          if (success) {
-            console.log("Audio inicializado correctamente");
-            setAudioInitialized(true);
-            
-            // Reproducir beep de prueba
-            setTimeout(() => {
-              requestBeep().catch(err => console.warn("Error en beep de prueba:", err));
-            }, 500);
-          } else if (initAttemptRef.current < 10) {
-            setTimeout(tryInitAudio, 2000);
-          }
-        } catch (error) {
-          console.warn("Error inicializando audio:", error);
-          if (initAttemptRef.current < 10) {
-            setTimeout(tryInitAudio, 2000);
-          }
-        }
-      }
-    };
-    
-    // Iniciar intentos después de cargar la página
-    setTimeout(tryInitAudio, 1000);
-    
-    // Agregar listener para interacción del usuario
-    const handleUserInteraction = () => {
-      if (!audioInitialized) {
-        console.log("Interacción de usuario detectada, intentando inicializar audio");
-        tryInitAudio();
-      }
-    };
-    
-    document.addEventListener('click', handleUserInteraction);
-    document.addEventListener('touchstart', handleUserInteraction);
-    
-    return () => {
-      document.removeEventListener('click', handleUserInteraction);
-      document.removeEventListener('touchstart', handleUserInteraction);
-    };
-  }, [audioInitialized, initializeAudio, requestBeep]);
-
-  // Actualizar estado de audio cuando cambia en el hook
-  useEffect(() => {
-    setAudioInitialized(heartBeatAudioReady);
-  }, [heartBeatAudioReady]);
-
-  // Efecto para generar latidos simulados si la cámara no está funcionando
-  useEffect(() => {
-    if (!isMonitoring) {
-      if (simulateBeatsRef.current) {
-        clearInterval(simulateBeatsRef.current);
-        simulateBeatsRef.current = null;
-      }
-      return;
-    }
-    
-    // Si después de 5 segundos no hay señal de calidad, simular latidos
-    const checkCameraSignal = setTimeout(() => {
-      if (isMonitoring && (!lastSignal || signalQuality < 20)) {
-        console.log("Señal de cámara débil, activando simulación de latidos");
-        cameraSuspendedRef.current = true;
-        
-        if (!simulateBeatsRef.current) {
-          simulateBeatsRef.current = window.setInterval(() => {
-            const simulatedValue = 100 + Math.sin(Date.now() / 1000) * 50;
-            
-            // Procesar el valor simulado
-            const heartBeatResult = processHeartBeat(simulatedValue);
-            setHeartRate(70 + Math.floor(Math.random() * 10));
-            
-            if (Math.random() < 0.1) {
-              // Solicitar beep ocasionalmente
-              requestBeep().catch(err => {
-                console.warn("Error al reproducir beep simulado:", err);
-              });
-            }
-            
-            // Procesar signos vitales
-            const vitals = processVitalSigns(simulatedValue, heartBeatResult.rrData);
-            if (vitals) {
-              setVitalSigns(vitals);
-            }
-          }, 100);
-        }
-      }
-    }, 5000);
-    
-    return () => {
-      clearTimeout(checkCameraSignal);
-    };
-  }, [isMonitoring, lastSignal, signalQuality, processHeartBeat, processVitalSigns, requestBeep]);
+  const handleError = (error: Error): void => {
+    console.error("Error activando linterna:", error);
+  };
 
   const enterFullScreen = async () => {
     try {
       await document.documentElement.requestFullscreen();
-    } catch (err) {
-      console.log('Error al entrar en pantalla completa:', err);
+    } catch (error: unknown) {
+      console.log('Error al entrar en pantalla completa:', error);
     }
   };
 
@@ -209,27 +65,19 @@ const Index = () => {
     } else {
       enterFullScreen();
       
-      // Inicializar audio antes de comenzar el monitoreo
       console.log("Inicializando contexto de audio...");
       const audioInitialized = await initializeAudio();
       console.log("Contexto de audio inicializado:", audioInitialized);
       
-      // Solicitar un beep manual para probar el audio
       setTimeout(async () => {
         console.log("Solicitando beep de prueba...");
         await requestBeep();
         
-        // Solicitar un segundo beep después de un momento para asegurar que el audio funciona
         setTimeout(async () => {
           console.log("Solicitando segundo beep de prueba...");
           await requestBeep();
         }, 1000);
       }, 500);
-      
-      // Resetear procesadores antes de comenzar
-      resetHeartBeat();
-      resetVitalSigns();
-      cameraSuspendedRef.current = false;
       
       setIsMonitoring(true);
       setIsCameraOn(true);
@@ -246,9 +94,9 @@ const Index = () => {
       
       measurementTimerRef.current = window.setInterval(() => {
         setElapsedTime(prev => {
-          if (prev >= 300) { // Aumentado a 5 minutos
+          if (prev >= 30) {
             handleReset();
-            return 300;
+            return 30;
           }
           return prev + 1;
         });
@@ -266,14 +114,7 @@ const Index = () => {
       measurementTimerRef.current = null;
     }
     
-    if (simulateBeatsRef.current) {
-      clearInterval(simulateBeatsRef.current);
-      simulateBeatsRef.current = null;
-    }
-    
     resetVitalSigns();
-    resetHeartBeat();
-    cameraSuspendedRef.current = false;
     setElapsedTime(0);
     setHeartRate(0);
     setVitalSigns({ 
@@ -295,7 +136,7 @@ const Index = () => {
     if (videoTrack.getCapabilities()?.torch) {
       videoTrack.applyConstraints({
         advanced: [{ torch: true }]
-      }).catch(err => console.error("Error activando linterna:", err));
+      }).catch(handleError);
     }
     
     const tempCanvas = document.createElement('canvas');
@@ -306,7 +147,7 @@ const Index = () => {
     }
     
     const processImage = async () => {
-      if (!isMonitoring || cameraSuspendedRef.current) return;
+      if (!isMonitoring) return;
       
       try {
         const frame = await imageCapture.grabFrame();
@@ -316,12 +157,12 @@ const Index = () => {
         const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
         processFrame(imageData);
         
-        if (isMonitoring && !cameraSuspendedRef.current) {
+        if (isMonitoring) {
           requestAnimationFrame(processImage);
         }
       } catch (error) {
         console.error("Error capturando frame:", error);
-        if (isMonitoring && !cameraSuspendedRef.current) {
+        if (isMonitoring) {
           requestAnimationFrame(processImage);
         }
       }
@@ -332,33 +173,19 @@ const Index = () => {
 
   useEffect(() => {
     if (lastSignal && isMonitoring) {
-      // Procesar incluso si no se detecta el dedo, pero con un valor mínimo
-      const valueToProcess = lastSignal.fingerDetected ? lastSignal.filteredValue : 1;
-      
-      // Añadir log para depuración de valores
-      if (lastSignal.fingerDetected && lastSignal.quality > 30) {
-        console.log("Procesando señal:", {
-          filteredValue: lastSignal.filteredValue,
-          quality: lastSignal.quality,
-          redValue: lastSignal.redValue
-        });
-      }
+      const valueToProcess = lastSignal.fingerDetected ? lastSignal.filteredValue : lastSignal.filteredValue * 0.1;
       
       const heartBeatResult = processHeartBeat(valueToProcess);
       
-      // Añadir log para depuración
       if (heartBeatResult.isPeak) {
         console.log("PICO DETECTADO - BPM:", heartBeatResult.bpm, "Confianza:", heartBeatResult.confidence);
         
-        // Solicitar beep cuando se detecta un pico
         requestBeep().catch(err => {
           console.warn("Error al reproducir beep:", err);
         });
       }
       
-      if (heartBeatResult.bpm > 0) {
-        setHeartRate(heartBeatResult.bpm);
-      }
+      setHeartRate(heartBeatResult.bpm);
       
       const vitals = processVitalSigns(valueToProcess, heartBeatResult.rrData);
       if (vitals) {
@@ -380,13 +207,6 @@ const Index = () => {
       setSignalQuality(lastSignal.quality);
     }
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns, requestBeep]);
-
-  // Mostrar mensaje si no se ha inicializado el audio
-  useEffect(() => {
-    if (isMonitoring && !audioInitialized && initAttemptRef.current >= 3) {
-      alert("Para que funcionen los beeps, por favor haga clic en cualquier parte de la pantalla");
-    }
-  }, [isMonitoring, audioInitialized]);
 
   return (
     <div 
@@ -427,38 +247,42 @@ const Index = () => {
                   label="FRECUENCIA CARDÍACA"
                   value={heartRate || "--"}
                   unit="BPM"
-                  icon="heart-pulse"
                 />
                 <VitalSign 
-                  label="SATURACIÓN"
+                  label="SPO2"
                   value={vitalSigns.spo2 || "--"}
                   unit="%"
-                  icon="activity"
                 />
                 <VitalSign 
                   label="PRESIÓN ARTERIAL"
                   value={vitalSigns.pressure}
-                  unit=""
-                  icon="gauge"
+                  unit="mmHg"
                 />
                 <VitalSign 
                   label="ARRITMIAS"
-                  value={arrhythmiaCount}
-                  unit=""
-                  icon="heart-off"
-                  status={vitalSigns.arrhythmiaStatus?.split('|')[0] || ""}
+                  value={vitalSigns.arrhythmiaStatus}
                 />
               </div>
             </div>
           </div>
 
-          <div className="p-4 pb-8">
+          {isMonitoring && (
+            <div className="absolute bottom-16 left-0 right-0 text-center">
+              <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 30s</span>
+            </div>
+          )}
+
+          <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 mt-auto">
             <MonitorButton 
-              isMonitoring={isMonitoring} 
-              onToggle={startMonitoring}
-              elapsedTime={elapsedTime}
-              maxTime={300} // Aumentado a 5 minutos
+              isMonitoring={isMonitoring}
+              onClick={startMonitoring}
             />
+            <button 
+              onClick={handleReset}
+              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
+            >
+              RESET
+            </button>
           </div>
         </div>
       </div>
