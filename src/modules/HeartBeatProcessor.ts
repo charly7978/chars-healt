@@ -4,12 +4,12 @@ import { ProcessedSignal, ProcessingError, SignalProcessor } from '../types/sign
 export class HeartBeatProcessor {
   // ────────── CONFIGURACIÓN AVANZADA ──────────
   private readonly SAMPLE_RATE = 30;
-  private readonly WINDOW_SIZE = 90;
+  private readonly WINDOW_SIZE = 60; //90
   private readonly MIN_BPM = 40;
   private readonly MAX_BPM = 220;
   private readonly MIN_CONFIDENCE = 0.5;
   private readonly SIGNAL_THRESHOLD = 0.25;
-  private readonly NOISE_THRESHOLD = 0.2;
+  private readonly NOISE_THRESHOLD = 0.0001; //0.2
   private readonly DERIVATIVE_THRESHOLD = -0.002;
   private readonly MIN_PEAK_TIME_MS = 250;
   private readonly WARMUP_TIME_MS = 1500;
