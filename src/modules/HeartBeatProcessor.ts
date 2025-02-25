@@ -11,7 +11,7 @@ export class HeartBeatProcessor {
   private readonly WARMUP_TIME_MS = 3000; 
 
   // Parámetros de filtrado
-  private readonly MEDIAN_FILTER_WINDOW = 3; 
+  private readonly MEDIAN_FILTER_WINDOW = 9; 
   private readonly MOVING_AVERAGE_WINDOW = 3; 
   private readonly EMA_ALPHA = 0.4; 
   private readonly BASELINE_FACTOR = 1.0; 
