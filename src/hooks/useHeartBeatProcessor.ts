@@ -1,100 +1,121 @@
+<<<<<<< Updated upstream
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { HeartBeatProcessor } from '../modules/HeartBeatProcessor';
+=======
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { HeartBeatProcessor } from '../utils/HeartBeatProcessor';
+>>>>>>> Stashed changes
 
-interface HeartBeatResult {
-  bpm: number;
-  confidence: number;
-  isPeak: boolean;
-  filteredValue?: number;
-  arrhythmiaCount: number;
-  rrData?: {
-    intervals: number[];
-    lastPeakTime: number | null;
-  };
-}
-
-export const useHeartBeatProcessor = () => {
+export function useHeartBeatProcessor() {
   const processorRef = useRef<HeartBeatProcessor | null>(null);
+<<<<<<< Updated upstream
   const [currentBPM, setCurrentBPM] = useState<number>(0);
   const [confidence, setConfidence] = useState<number>(0);
 
+=======
+  const [bpm, setBpm] = useState<number>(0);
+  const [confidence, setConfidence] = useState<number>(0);
+  const [isPeak, setIsPeak] = useState<boolean>(false);
+  const [arrhythmiaCount, setArrhythmiaCount] = useState<number>(0);
+  const lastProcessedValueRef = useRef<number>(0);
+  
+  // Inicializar procesador
+>>>>>>> Stashed changes
   useEffect(() => {
-    console.log('useHeartBeatProcessor: Creando nueva instancia de HeartBeatProcessor');
-    processorRef.current = new HeartBeatProcessor();
-    
-    if (typeof window !== 'undefined') {
-      (window as any).heartBeatProcessor = processorRef.current;
+    if (!processorRef.current) {
+      processorRef.current = new HeartBeatProcessor();
+      console.log("useHeartBeatProcessor: Procesador de latidos inicializado");
     }
-
+    
     return () => {
-      console.log('useHeartBeatProcessor: Limpiando processor');
-      if (processorRef.current) {
-        processorRef.current = null;
-      }
-      if (typeof window !== 'undefined') {
-        (window as any).heartBeatProcessor = undefined;
-      }
+      // No es necesario limpiar nada aquí, pero podríamos pausar el audio
+      // si fuera necesario
     };
   }, []);
-
-  const processSignal = useCallback((value: number): HeartBeatResult => {
-    if (!processorRef.current) {
-      console.warn('useHeartBeatProcessor: Processor no inicializado');
-      return {
-        bpm: 0,
-        confidence: 0,
-        isPeak: false,
-        arrhythmiaCount: 0,
-        rrData: {
-          intervals: [],
-          lastPeakTime: null
-        }
+  
+  // Función para procesar nueva señal
+  const processSignal = useCallback((value: number) => {
+    if (!processorRef.current) return { bpm: 0, confidence: 0, isPeak: false, filteredValue: value, arrhythmiaCount: 0 };
+    
+    // Evitar procesamiento de valores duplicados o inválidos
+    if (value === lastProcessedValueRef.current || isNaN(value)) {
+      return { 
+        bpm, 
+        confidence, 
+        isPeak: false, 
+        filteredValue: value,
+        arrhythmiaCount
       };
     }
-
-    console.log('useHeartBeatProcessor - processSignal:', {
-      inputValue: value,
-      currentProcessor: !!processorRef.current,
-      timestamp: new Date().toISOString()
-    });
-
-    const result = processorRef.current.processSignal(value);
-    const rrData = processorRef.current.getRRIntervals();
-
-    console.log('useHeartBeatProcessor - result:', {
-      bpm: result.bpm,
-      confidence: result.confidence,
-      isPeak: result.isPeak,
-      arrhythmiaCount: result.arrhythmiaCount,
-      rrIntervals: rrData.intervals,
-      timestamp: new Date().toISOString()
-    });
     
-    if (result.bpm > 0) {
-      setCurrentBPM(result.bpm);
-      setConfidence(result.confidence);
+    lastProcessedValueRef.current = value;
+    
+    // Procesar señal usando el procesador
+    const result = processorRef.current.processSignal(value);
+    
+    // Actualizar estado con los resultados
+    setBpm(result.bpm);
+    setConfidence(result.confidence);
+    setIsPeak(result.isPeak);
+    setArrhythmiaCount(result.arrhythmiaCount);
+    
+    return result;
+  }, [bpm, confidence, arrhythmiaCount]);
+  
+  // Función para inicializar audio (debe llamarse después de interacción del usuario)
+  const initializeAudio = useCallback(async () => {
+    if (processorRef.current) {
+      return await processorRef.current.ensureAudioInitialized();
     }
-
-    return {
-      ...result,
-      rrData
-    };
+    return false;
   }, []);
-
+  
+  // Función para solicitar un beep manual
+  const requestBeep = useCallback(() => {
+    if (processorRef.current) {
+      processorRef.current.requestManualBeep();
+    }
+  }, []);
+  
+  // Función para resetear el procesador
   const reset = useCallback(() => {
-    console.log('useHeartBeatProcessor: Reseteando processor');
     if (processorRef.current) {
       processorRef.current.reset();
+      setBpm(0);
+      setConfidence(0);
+      setIsPeak(false);
+      setArrhythmiaCount(0);
+      console.log("useHeartBeatProcessor: Procesador reseteado");
     }
-    setCurrentBPM(0);
-    setConfidence(0);
   }, []);
-
+  
+  // Función para obtener la calidad de señal
+  const getSignalQuality = useCallback(() => {
+    if (processorRef.current) {
+      return processorRef.current.getSignalQuality();
+    }
+    return 0;
+  }, []);
+  
+  // Función para obtener BPM final (después de medición)
+  const getFinalBPM = useCallback(() => {
+    if (processorRef.current) {
+      return processorRef.current.getFinalBPM();
+    }
+    return 0;
+  }, []);
+  
   return {
-    currentBPM,
-    confidence,
     processSignal,
-    reset
+    bpm,
+    confidence,
+    isPeak,
+    arrhythmiaCount,
+    initializeAudio,
+    requestBeep,
+    reset,
+    getSignalQuality,
+    getFinalBPM
   };
-};
+}
