@@ -251,9 +251,19 @@ const Index = () => {
           <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 mt-auto">
             <button 
               onClick={startMonitoring}
-              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
+              className={`w-full h-full text-2xl font-bold active:bg-gray-800 ${
+                isMonitoring 
+                ? 'bg-gradient-to-b from-red-600 to-red-700 text-white shadow-inner' 
+                : 'bg-gradient-to-b from-blue-500 to-blue-600 text-white shadow-md'
+              }`}
+              style={{
+                textShadow: '0 1px 2px rgba(0,0,0,0.2)',
+                boxShadow: isMonitoring 
+                  ? 'inset 0 1px 3px rgba(0,0,0,0.3)' 
+                  : '0 1px 3px rgba(0,0,0,0.2)'
+              }}
             >
-              INICIAR
+              {isMonitoring ? 'DETENER' : 'INICIAR'}
             </button>
             <button 
               onClick={handleReset}
