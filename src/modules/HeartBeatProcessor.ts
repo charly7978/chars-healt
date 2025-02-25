@@ -1,3 +1,27 @@
+<lov-code>
+import { ProcessedSignal, ProcessingError, SignalProcessor } from '../types/signal';
+
+class KalmanFilter {
+  private R: number = 0.01;
+  private Q: number = 0.1;
+  private P: number = 1;
+  private X: number = 0;
+  private K: number = 0;
+
+  filter(measurement: number): number {
+    this.P = this.P + this.Q;
+    this.K = this.P / (this.P + this.R);
+    this.X = this.X + this.K * (measurement - this.X);
+    this.P = (1 - this.K) * this.P;
+    return this.X;
+  }
+
+  reset() {
+    this.X = 0;
+    this.P = 1;
+  }
+}
+
 export class HeartBeatProcessor {
   // ────────── CONFIGURACIÓN AVANZADA ──────────
   // Basado en las últimas investigaciones de procesamiento de señales PPG
@@ -9,14 +33,14 @@ export class HeartBeatProcessor {
   private readonly MAX_BPM = 220; // Frecuencia cardíaca fisiológica máxima
   
   // Parámetros de calidad de señal
-  private readonly MIN_CONFIDENCE = 0.65; // Umbral más alto para detección confiable
-  private readonly SIGNAL_THRESHOLD = 0.35; // Umbral adaptativo basado en fuerza de señal
+  private readonly MIN_CONFIDENCE = 0.5; // Umbral más alto para detección confiable
+  private readonly SIGNAL_THRESHOLD = 0.25; // Umbral adaptativo basado en fuerza de señal
   private readonly NOISE_THRESHOLD = 0.15; // Para detectar señales ruidosas
   
   // Parámetros de detección de picos - implementando conceptos del algoritmo Pan-Tompkins
-  private readonly DERIVATIVE_THRESHOLD = -0.004; // Umbral para primera derivada
-  private readonly MIN_PEAK_TIME_MS = 300; // Tiempo mínimo fisiológico entre picos
-  private readonly WARMUP_TIME_MS = 2500; // Tiempo de estabilización del sistema
+  private readonly DERIVATIVE_THRESHOLD = -0.002; // Umbral para primera derivada
+  private readonly MIN_PEAK_TIME_MS = 250; // Tiempo mínimo fisiológico entre picos
+  private readonly WARMUP_TIME_MS = 1500; // Tiempo de estabilización del sistema
   private readonly PEAK_AGE_WEIGHT = 0.7; // Mayor peso a picos recientes
   
   // Parámetros de filtrado - enfoque de filtrado multi-etapa
@@ -535,17 +559,17 @@ export class HeartBeatProcessor {
     // Pendientes negativas (derivada < umbral) con señal sobre umbral
     const isOverThreshold =
       derivative < this.DERIVATIVE_THRESHOLD &&
-      normalizedValue > this.adaptiveThreshold &&
-      this.lastValue > this.baseline * 0.95;
+      normalizedValue > this.adaptiveThreshold * 0.8 &&
+      this.lastValue > this.baseline * 0.9;
     
     // Calcular confianza basada en múltiples factores
     const amplitudeConfidence = Math.min(
-      Math.max(Math.abs(normalizedValue) / (this.adaptiveThreshold * 1.5), 0),
+      Math.max(Math.abs(normalizedValue) / (this.adaptiveThreshold * 1.2), 0),
       1
     );
     
     const derivativeConfidence = Math.min(
-      Math.max(Math.abs(derivative) / Math.abs(this.DERIVATIVE_THRESHOLD * 0.7), 0),
+      Math.max(Math.abs(derivative) / Math.abs(this.DERIVATIVE_THRESHOLD * 0.6), 0),
       1
     );
     
@@ -562,9 +586,18 @@ export class HeartBeatProcessor {
     
     // Puntuación de confianza ponderada
     const confidence = 
-      (amplitudeConfidence * 0.5) + 
+      (amplitudeConfidence * 0.6) + 
       (derivativeConfidence * 0.3) + 
-      (timingConfidence * 0.2);
+      (timingConfidence * 0.1);
+    
+    if (isOverThreshold) {
+      console.log("HeartBeatProcessor: Posible pico detectado", {
+        normalizedValue,
+        derivative,
+        confidence,
+        timeSinceLastPeak
+      });
+    }
     
     return { isPeak: isOverThreshold, confidence };
   }
@@ -715,101 +748,4 @@ export class HeartBeatProcessor {
     
     // Omitir recorte si no tenemos suficientes muestras
     const trimmed = sorted.length > 5 ? 
-      sorted.slice(trimCount, sorted.length - trimCount) : 
-      sorted;
-    
-    if (!trimmed.length) return 0;
-    
-    // Calcular promedio ponderado (valores recientes cuentan más)
-    let weightedSum = 0;
-    let weightSum = 0;
-    
-    for (let i = 0; i < trimmed.length; i++) {
-      // Ponderación exponencial - valores más recientes tienen mayor peso
-      const weight = Math.pow(this.PEAK_AGE_WEIGHT, trimmed.length - 1 - i);
-      weightedSum += trimmed[i] * weight;
-      weightSum += weight;
-    }
-    
-    return weightedSum / weightSum;
-  }
-  
-  /**
-   * Obtener BPM final después de sesión de medición
-   */
-  public getFinalBPM(): number {
-    if (this.bpmHistory.length < 5) {
-      return 0;
-    }
-    
-    // Eliminación de valores atípicos más agresiva para resultado final
-    const sorted = [...this.bpmHistory].sort((a, b) => a - b);
-    const cut = Math.max(1, Math.round(sorted.length * 0.15)); // Eliminar 15% de cada extremo
-    const finalSet = sorted.slice(cut, sorted.length - cut);
-    
-    if (!finalSet.length) return 0;
-    
-    const sum = finalSet.reduce((acc, val) => acc + val, 0);
-    return Math.round(sum / finalSet.length);
-  }
-  
-  /**
-   * Reset completo del estado del procesador
-   */
-  public reset(): void {
-    this.signalBuffer = [];
-    this.medianBuffer = [];
-    this.movingAverageBuffer = [];
-    this.lowPassBuffer = [];
-    this.highPassBuffer = [];
-    this.peakConfirmationBuffer = [];
-    this.bpmHistory = [];
-    this.rrIntervals = [];
-    this.values = [];
-    this.smoothBPM = 0;
-    this.lastPeakTime = null;
-    this.previousPeakTime = null;
-    this.lastConfirmedPeak = false;
-    this.lastBeepTime = 0;
-    this.baseline = 0;
-    this.lastValue = 0;
-    this.smoothedValue = 0;
-    this.peakCandidateIndex = null;
-    this.peakCandidateValue = 0;
-    this.lowSignalCount = 0;
-    this.adaptiveThreshold = this.SIGNAL_THRESHOLD;
-    this.irregularBeatCount = 0;
-    this.consecutiveIrregularBeats = 0;
-    this.arrhythmiaDetected = false;
-    this.arrythmiaRiskScore = 0;
-    this.startTime = Date.now();
-    this.lastSignalTime = this.startTime;
-    this.signalQuality = 0;
-    
-    console.log("HeartBeatProcessor: Reseteo completo del sistema");
-  }
-  
-  /**
-   * Obtener intervalos RR para análisis de arritmia
-   */
-  public getRRIntervals(): { 
-    intervals: number[]; 
-    lastPeakTime: number | null;
-    arrhythmiaDetected: boolean;
-    arrhythmiaScore: number;
-  } {
-    return {
-      intervals: [...this.rrIntervals],
-      lastPeakTime: this.lastPeakTime,
-      arrhythmiaDetected: this.arrhythmiaDetected,
-      arrhythmiaScore: this.arrythmiaRiskScore
-    };
-  }
-  
-  /**
-   * Obtener métricas de calidad de señal
-   */
-  public getSignalQuality(): number {
-    return Math.round(this.signalQuality * 100);
-  }
-}
+      
