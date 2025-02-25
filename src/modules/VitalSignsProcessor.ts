@@ -1,3 +1,4 @@
+
 export class VitalSignsProcessor {
   private readonly WINDOW_SIZE = 300;
   private readonly SPO2_CALIBRATION_FACTOR = 1.02;
@@ -253,30 +254,43 @@ export class VitalSignsProcessor {
     const fps = 30;
     const msPerSample = 1000 / fps;
 
+    // Calculate PTT values
     const pttValues: number[] = [];
     for (let i = 1; i < peakIndices.length; i++) {
       const dt = (peakIndices[i] - peakIndices[i - 1]) * msPerSample;
       pttValues.push(dt);
     }
     
-    const weightedPTT = pttValues.reduce((acc, val, idx) => {
+    // Calculate weighted PTT
+    let weightSum = 0;
+    let weightedSum = 0;
+    
+    pttValues.forEach((val, idx) => {
       const weight = (idx + 1) / pttValues.length;
-      return acc + val * weight;
-    }, 0) / pttValues.reduce((acc, _, idx) => acc + (idx + 1) / pttValues.length, 0);
+      weightedSum += val * weight;
+      weightSum += weight;
+    });
 
+    const weightedPTT = weightSum > 0 ? weightedSum / weightSum : 600; // Default to 600ms if no valid values
     const normalizedPTT = Math.max(300, Math.min(1200, weightedPTT));
+    
+    // Calculate amplitude
     const amplitude = this.calculateAmplitude(values, peakIndices, valleyIndices);
     const normalizedAmplitude = Math.min(100, Math.max(0, amplitude * 5));
 
+    // Calculate pressure factors
     const pttFactor = (600 - normalizedPTT) * 0.08;
     const ampFactor = normalizedAmplitude * 0.3;
     
+    // Calculate initial pressure values
     let instantSystolic = 120 + pttFactor + ampFactor;
     let instantDiastolic = 80 + (pttFactor * 0.5) + (ampFactor * 0.2);
 
+    // Clamp values to physiological ranges
     instantSystolic = Math.max(90, Math.min(180, instantSystolic));
     instantDiastolic = Math.max(60, Math.min(110, instantDiastolic));
     
+    // Ensure reasonable differential
     const differential = instantSystolic - instantDiastolic;
     if (differential < 20) {
       instantDiastolic = instantSystolic - 20;
@@ -284,6 +298,7 @@ export class VitalSignsProcessor {
       instantDiastolic = instantSystolic - 80;
     }
 
+    // Update pressure buffers
     this.systolicBuffer.push(instantSystolic);
     this.diastolicBuffer.push(instantDiastolic);
     
@@ -292,6 +307,7 @@ export class VitalSignsProcessor {
       this.diastolicBuffer.shift();
     }
 
+    // Calculate final smoothed values
     let finalSystolic = 0;
     let finalDiastolic = 0;
     let weightSum = 0;
@@ -303,8 +319,8 @@ export class VitalSignsProcessor {
       weightSum += weight;
     }
 
-    finalSystolic = finalSystolic / weightSum;
-    finalDiastolic = finalDiastolic / weightSum;
+    finalSystolic = weightSum > 0 ? finalSystolic / weightSum : instantSystolic;
+    finalDiastolic = weightSum > 0 ? finalDiastolic / weightSum : instantDiastolic;
 
     return {
       systolic: Math.round(finalSystolic),

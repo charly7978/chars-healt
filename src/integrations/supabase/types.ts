@@ -12,6 +12,7 @@ export type Database = {
       calibration_settings: {
         Row: {
           created_at: string
+          diastolic_reference: number | null
           id: string
           is_active: boolean | null
           last_calibration_date: string | null
@@ -21,11 +22,13 @@ export type Database = {
           red_threshold_min: number | null
           stability_threshold: number | null
           status: Database["public"]["Enums"]["calibration_status"] | null
+          systolic_reference: number | null
           updated_at: string
           user_id: string
         }
         Insert: {
           created_at?: string
+          diastolic_reference?: number | null
           id?: string
           is_active?: boolean | null
           last_calibration_date?: string | null
@@ -35,11 +38,13 @@ export type Database = {
           red_threshold_min?: number | null
           stability_threshold?: number | null
           status?: Database["public"]["Enums"]["calibration_status"] | null
+          systolic_reference?: number | null
           updated_at?: string
           user_id: string
         }
         Update: {
           created_at?: string
+          diastolic_reference?: number | null
           id?: string
           is_active?: boolean | null
           last_calibration_date?: string | null
@@ -49,6 +54,7 @@ export type Database = {
           red_threshold_min?: number | null
           stability_threshold?: number | null
           status?: Database["public"]["Enums"]["calibration_status"] | null
+          systolic_reference?: number | null
           updated_at?: string
           user_id?: string
         }
@@ -61,6 +67,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      measurements: {
+        Row: {
+          arrhythmia_count: number
+          created_at: string
+          diastolic: number
+          heart_rate: number
+          id: string
+          measured_at: string
+          quality: number
+          spo2: number
+          systolic: number
+          user_id: string
+        }
+        Insert: {
+          arrhythmia_count: number
+          created_at?: string
+          diastolic: number
+          heart_rate: number
+          id?: string
+          measured_at?: string
+          quality: number
+          spo2: number
+          systolic: number
+          user_id: string
+        }
+        Update: {
+          arrhythmia_count?: number
+          created_at?: string
+          diastolic?: number
+          heart_rate?: number
+          id?: string
+          measured_at?: string
+          quality?: number
+          spo2?: number
+          systolic?: number
+          user_id?: string
+        }
+        Relationships: []
       }
       profiles: {
         Row: {
