@@ -1,39 +1,101 @@
 export class VitalSignsProcessor {
-  private readonly SPO2_ALPHA: number = 0.3;
-  private readonly BPM_ALPHA: number = 0.1;
-  private readonly QUALITY_ALPHA: number = 0.2;
-  private currentTimestamp: number = Date.now();
   private readonly WINDOW_SIZE = 300;
   private readonly SPO2_CALIBRATION_FACTOR = 1.02;
   private readonly PERFUSION_INDEX_THRESHOLD = 0.05;
   private readonly SPO2_WINDOW = 10;
   private readonly SMA_WINDOW = 3;
-
   private readonly RR_WINDOW_SIZE = 5;
   private readonly RMSSD_THRESHOLD = 25;
   private readonly ARRHYTHMIA_LEARNING_PERIOD = 3000;
   private readonly PEAK_THRESHOLD = 0.3;
 
   private ppgValues: number[] = [];
+  private spo2Buffer: number[] = [];
+  private systolicBuffer: number[] = [];
+  private diastolicBuffer: number[] = [];
+  private readonly SPO2_BUFFER_SIZE = 10;
+  private readonly BP_BUFFER_SIZE = 10;
+  private readonly BP_ALPHA = 0.7;
   private lastValue = 0;
   private lastPeakTime: number | null = null;
   private rrIntervals: number[] = [];
   private baselineRhythm = 0;
   private isLearningPhase = true;
+  private hasDetectedFirstArrhythmia = false;
   private arrhythmiaDetected = false;
   private measurementStartTime: number = Date.now();
+  private arrhythmiaCount = 0;
+  private lastRMSSD: number = 0;
+  private lastRRVariation: number = 0;
+  private lastArrhythmiaTime: number = 0;
 
-  private detectArrhythmia() {
-    if (this.rrIntervals.length < this.RR_WINDOW_SIZE) {
-      console.log("VitalSignsProcessor: Insuficientes intervalos RR para RMSSD", {
-        current: this.rrIntervals.length,
-        needed: this.RR_WINDOW_SIZE
-      });
-      return;
+  public processSignal(
+    ppgValue: number,
+    rrData?: { intervals: number[]; lastPeakTime: number | null }
+  ) {
+    const currentTime = Date.now();
+
+    // Actualizar RR intervals si están disponibles
+    if (rrData?.intervals && rrData.intervals.length > 0) {
+      this.rrIntervals = rrData.intervals;
+      this.lastPeakTime = rrData.lastPeakTime;
+      
+      if (!this.isLearningPhase && this.rrIntervals.length >= this.RR_WINDOW_SIZE) {
+        this.detectArrhythmia();
+      }
     }
 
+    // Procesar la señal PPG
+    const filtered = this.applySMAFilter(ppgValue);
+    this.ppgValues.push(filtered);
+    if (this.ppgValues.length > this.WINDOW_SIZE) {
+      this.ppgValues.shift();
+    }
+
+    // Verificar fase de aprendizaje
+    const timeSinceStart = currentTime - this.measurementStartTime;
+    if (timeSinceStart > this.ARRHYTHMIA_LEARNING_PERIOD) {
+      this.isLearningPhase = false;
+    }
+
+    // Determinar estado de arritmia
+    let arrhythmiaStatus;
+    if (this.isLearningPhase) {
+      arrhythmiaStatus = "CALIBRANDO...";
+    } else if (this.hasDetectedFirstArrhythmia) {
+      // Una vez detectada la primera arritmia, siempre mostramos este estado
+      arrhythmiaStatus = `ARRITMIA DETECTADA|${this.arrhythmiaCount}`;
+    } else {
+      arrhythmiaStatus = `SIN ARRITMIAS|${this.arrhythmiaCount}`;
+    }
+
+    // Calcular otros signos vitales
+    const spo2 = this.calculateSpO2(this.ppgValues.slice(-60));
+    const bp = this.calculateBloodPressure(this.ppgValues.slice(-60));
+    const pressure = `${bp.systolic}/${bp.diastolic}`;
+
+    // Preparar datos de arritmia si se detectó una
+    const lastArrhythmiaData = this.arrhythmiaDetected ? {
+      timestamp: currentTime,
+      rmssd: this.lastRMSSD,
+      rrVariation: this.lastRRVariation
+    } : null;
+
+    return {
+      spo2,
+      pressure,
+      arrhythmiaStatus,
+      lastArrhythmiaData
+    };
+  }
+
+  private detectArrhythmia() {
+    if (this.rrIntervals.length < this.RR_WINDOW_SIZE) return;
+
+    const currentTime = Date.now();
     const recentRR = this.rrIntervals.slice(-this.RR_WINDOW_SIZE);
     
+    // Calcular RMSSD
     let sumSquaredDiff = 0;
     for (let i = 1; i < recentRR.length; i++) {
       const diff = recentRR[i] - recentRR[i-1];
@@ -41,72 +103,53 @@ export class VitalSignsProcessor {
     }
     
     const rmssd = Math.sqrt(sumSquaredDiff / (recentRR.length - 1));
-    
     const avgRR = recentRR.reduce((a, b) => a + b, 0) / recentRR.length;
     const lastRR = recentRR[recentRR.length - 1];
-    const prematureBeat = Math.abs(lastRR - avgRR) > (avgRR * 0.25);
+    const rrVariation = Math.abs(lastRR - avgRR) / avgRR;
     
-    console.log("VitalSignsProcessor: Análisis RMSSD", {
-      timestamp: new Date().toISOString(),
-      rmssd,
-      threshold: this.RMSSD_THRESHOLD,
-      recentRR,
-      avgRR,
-      lastRR,
-      prematureBeat
-    });
-
-    const newArrhythmiaState = rmssd > this.RMSSD_THRESHOLD && prematureBeat;
-
-    if (newArrhythmiaState !== this.arrhythmiaDetected) {
-      this.arrhythmiaDetected = newArrhythmiaState;
-      console.log("VitalSignsProcessor: Cambio en estado de arritmia", {
-        previousState: !this.arrhythmiaDetected,
-        newState: this.arrhythmiaDetected,
-        cause: {
-          rmssdExceeded: rmssd > this.RMSSD_THRESHOLD,
-          prematureBeat,
-          rmssdValue: rmssd
-        }
+    this.lastRMSSD = rmssd;
+    this.lastRRVariation = rrVariation;
+    
+    // Detectar arritmia basada en umbrales
+    const newArrhythmiaState = rmssd > this.RMSSD_THRESHOLD && rrVariation > 0.20;
+    
+    // Si es una nueva arritmia y ha pasado suficiente tiempo desde la última
+    if (newArrhythmiaState && 
+        currentTime - this.lastArrhythmiaTime > 1000) { // Mínimo 1 segundo entre arritmias
+      this.arrhythmiaCount++;
+      this.lastArrhythmiaTime = currentTime;
+      
+      // Marcar que ya detectamos la primera arritmia
+      this.hasDetectedFirstArrhythmia = true;
+      
+      console.log('VitalSignsProcessor - Nueva arritmia detectada:', {
+        contador: this.arrhythmiaCount,
+        rmssd,
+        rrVariation,
+        timestamp: currentTime
       });
     }
+
+    this.arrhythmiaDetected = newArrhythmiaState;
   }
 
-  private updateTimestamp(): void {
-    this.currentTimestamp = Date.now();
-  }
-
-  public processSignal(value: number): {
-    bpm: number;
-    spo2: number;
-    pressure: string;
-    quality: number;
-    arrhythmia: {
-      status: string;
-      count: number;
-      data?: {
-        timestamp: number;
-        rmssd: number;
-        rrVariation: number;
-      };
-    };
-  } {
-    this.updateTimestamp();
-    return {
-      bpm: 0,
-      spo2: 0,
-      pressure: "--/--",
-      quality: 0,
-      arrhythmia: {
-        status: "CALIBRATING...",
-        count: 0,
-        data: {
-          timestamp: this.currentTimestamp,
-          rmssd: 0,
-          rrVariation: 0
-        }
-      }
-    };
+  public reset() {
+    this.ppgValues = [];
+    this.spo2Buffer = [];
+    this.systolicBuffer = [];
+    this.diastolicBuffer = [];
+    this.lastValue = 0;
+    this.lastPeakTime = null;
+    this.rrIntervals = [];
+    this.baselineRhythm = 0;
+    this.isLearningPhase = true;
+    this.hasDetectedFirstArrhythmia = false;
+    this.arrhythmiaDetected = false;
+    this.arrhythmiaCount = 0;
+    this.measurementStartTime = Date.now();
+    this.lastRMSSD = 0;
+    this.lastRRVariation = 0;
+    this.lastArrhythmiaTime = 0;
   }
 
   private processHeartBeat() {
@@ -126,24 +169,18 @@ export class VitalSignsProcessor {
       totalIntervals: this.rrIntervals.length
     });
 
+    // Mantener ventana móvil de intervalos
     if (this.rrIntervals.length > 20) {
       this.rrIntervals.shift();
     }
 
+    // Si tenemos suficientes intervalos, analizar arritmia
     if (!this.isLearningPhase && this.rrIntervals.length >= this.RR_WINDOW_SIZE) {
       this.detectArrhythmia();
     }
 
     this.lastPeakTime = currentTime;
   }
-
-  private spo2Buffer: number[] = [];
-  private readonly SPO2_BUFFER_SIZE = 10;
-
-  private systolicBuffer: number[] = [];
-  private diastolicBuffer: number[] = [];
-  private readonly BP_BUFFER_SIZE = 10;
-  private readonly BP_ALPHA = 0.7;
 
   private calculateSpO2(values: number[]): number {
     if (values.length < 30) {
@@ -193,19 +230,9 @@ export class VitalSignsProcessor {
     }
 
     if (this.spo2Buffer.length > 0) {
-      const sum = this.spo2Buffer.reduce((a, b) => a + b, 0) / this.spo2Buffer.length;
+      const sum = this.spo2Buffer.reduce((a, b) => a + b, 0);
       spO2 = Math.round(sum / this.spo2Buffer.length);
     }
-
-    console.log("VitalSignsProcessor: Cálculo SpO2", {
-      ac,
-      dc,
-      ratio: R,
-      perfusionIndex,
-      rawSpO2: spO2,
-      bufferSize: this.spo2Buffer.length,
-      smoothedSpO2: spO2
-    });
 
     return spO2;
   }
@@ -278,20 +305,6 @@ export class VitalSignsProcessor {
 
     finalSystolic = finalSystolic / weightSum;
     finalDiastolic = finalDiastolic / weightSum;
-
-    console.log("VitalSignsProcessor: Cálculo de presión arterial", {
-      instant: {
-        systolic: Math.round(instantSystolic),
-        diastolic: Math.round(instantDiastolic)
-      },
-      buffered: {
-        systolic: Math.round(finalSystolic),
-        diastolic: Math.round(finalDiastolic)
-      },
-      bufferSize: this.systolicBuffer.length,
-      ptt: normalizedPTT,
-      amplitude: normalizedAmplitude
-    });
 
     return {
       systolic: Math.round(finalSystolic),
@@ -383,28 +396,9 @@ export class VitalSignsProcessor {
     return values.reduce((a, b) => a + b, 0) / values.length;
   }
 
-  private smaBuffer: number[] = [];
   private applySMAFilter(value: number): number {
-    this.smaBuffer.push(value);
-    if (this.smaBuffer.length > this.SMA_WINDOW) {
-      this.smaBuffer.shift();
-    }
-    const sum = this.smaBuffer.reduce((a, b) => a + b, 0);
-    return sum / this.smaBuffer.length;
-  }
-
-  public reset(): void {
-    this.ppgValues = [];
-    this.smaBuffer = [];
-    this.spo2Buffer = [];
-    this.lastValue = 0;
-    this.lastPeakTime = null;
-    this.rrIntervals = [];
-    this.isLearningPhase = true;
-    this.arrhythmiaDetected = false;
-    this.measurementStartTime = Date.now();
-    this.systolicBuffer = [];
-    this.diastolicBuffer = [];
-    console.log("VitalSignsProcessor: Reset completo");
+    const smaBuffer = this.ppgValues.slice(-this.SMA_WINDOW);
+    smaBuffer.push(value);
+    return smaBuffer.reduce((a, b) => a + b, 0) / smaBuffer.length;
   }
 }

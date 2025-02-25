@@ -1,16 +1,5 @@
 
-export interface ArrhythmiaData {
-  timestamp: number;
-  rmssd: number;
-  rrVariation: number;
-}
-
-export interface VitalSigns {
-  spo2: number;
-  pressure: string;
-  arrhythmiaStatus: string;
-  lastArrhythmiaData?: ArrhythmiaData;
-}
+import { HeartBeatProcessor } from '../modules/HeartBeatProcessor';
 
 export interface ProcessedSignal {
   timestamp: number;
@@ -18,8 +7,7 @@ export interface ProcessedSignal {
   filteredValue: number;
   quality: number;
   fingerDetected: boolean;
-  redValue?: number;
-  roi?: {
+  roi: {
     x: number;
     y: number;
     width: number;
@@ -34,13 +22,12 @@ export interface ProcessingError {
 }
 
 export interface SignalProcessor {
-  initialize: () => Promise<boolean>;
+  initialize: () => Promise<void>;
   start: () => void;
   stop: () => void;
-  calibrate: () => void;
+  calibrate: () => Promise<boolean>;
   onSignalReady?: (signal: ProcessedSignal) => void;
-  onError?: (error: Error) => void;
-  processFrame(imageData: ImageData): void;
+  onError?: (error: ProcessingError) => void;
 }
 
 declare global {
