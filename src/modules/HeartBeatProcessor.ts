@@ -14,7 +14,7 @@ export class HeartBeatProcessor {
   private readonly NOISE_THRESHOLD = 0.15; // Para detectar señales ruidosas
   
   // Parámetros de detección de picos - implementando conceptos del algoritmo Pan-Tompkins
-  private readonly DERIVATIVE_THRESHOLD = -0.04; // Umbral para primera derivada
+  private readonly DERIVATIVE_THRESHOLD = -0.004; // Umbral para primera derivada
   private readonly MIN_PEAK_TIME_MS = 300; // Tiempo mínimo fisiológico entre picos
   private readonly WARMUP_TIME_MS = 2500; // Tiempo de estabilización del sistema
   private readonly PEAK_AGE_WEIGHT = 0.7; // Mayor peso a picos recientes
