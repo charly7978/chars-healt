@@ -39,8 +39,8 @@ const Index = () => {
   const enterFullScreen = async () => {
     try {
       await document.documentElement.requestFullscreen();
-    } catch (err) {
-      console.log('Error al entrar en pantalla completa:', err);
+    } catch (error: unknown) {
+      console.log('Error al entrar en pantalla completa:', error);
     }
   };
 
@@ -61,17 +61,14 @@ const Index = () => {
     } else {
       enterFullScreen();
       
-      // Inicializar audio antes de comenzar el monitoreo
       console.log("Inicializando contexto de audio...");
       const audioInitialized = await initializeAudio();
       console.log("Contexto de audio inicializado:", audioInitialized);
       
-      // Solicitar un beep manual para probar el audio
       setTimeout(async () => {
         console.log("Solicitando beep de prueba...");
         await requestBeep();
         
-        // Solicitar un segundo beep después de un momento para asegurar que el audio funciona
         setTimeout(async () => {
           console.log("Solicitando segundo beep de prueba...");
           await requestBeep();
@@ -172,16 +169,13 @@ const Index = () => {
 
   useEffect(() => {
     if (lastSignal && isMonitoring) {
-      // Procesar incluso si no se detecta el dedo, pero con un valor bajo
       const valueToProcess = lastSignal.fingerDetected ? lastSignal.filteredValue : lastSignal.filteredValue * 0.1;
       
       const heartBeatResult = processHeartBeat(valueToProcess);
       
-      // Añadir log para depuración
       if (heartBeatResult.isPeak) {
         console.log("PICO DETECTADO - BPM:", heartBeatResult.bpm, "Confianza:", heartBeatResult.confidence);
         
-        // Solicitar beep cuando se detecta un pico
         requestBeep().catch(err => {
           console.warn("Error al reproducir beep:", err);
         });
