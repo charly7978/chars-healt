@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -187,7 +188,8 @@ const Index = () => {
     <div 
       className="fixed inset-0 flex flex-col bg-black" 
       style={{ 
-        height: '100vh',
+        minHeight: '100vh',
+        minHeight: '100dvh',
         paddingTop: 'env(safe-area-inset-top)',
         paddingBottom: 'env(safe-area-inset-bottom)'
       }}
@@ -247,16 +249,16 @@ const Index = () => {
             </div>
           )}
 
-          <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 mt-auto">
+          <div className="sticky bottom-0 left-0 right-0 z-50 h-[80px] grid grid-cols-2 gap-px bg-gray-900">
             <button 
               onClick={startMonitoring}
-              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
+              className="w-full h-full bg-black/95 text-2xl font-bold text-white active:bg-gray-800 backdrop-blur-lg"
             >
               INICIAR
             </button>
             <button 
               onClick={handleReset}
-              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
+              className="w-full h-full bg-black/95 text-2xl font-bold text-white active:bg-gray-800 backdrop-blur-lg"
             >
               RESET
             </button>
