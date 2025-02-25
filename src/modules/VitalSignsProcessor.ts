@@ -3,7 +3,7 @@ export class VitalSignsProcessor {
   // Parámetros generales de procesamiento
   private readonly WINDOW_SIZE = 300; // 10 segundos a 30fps
   private readonly SMA_WINDOW = 5; // Suavizado de señal
-  private readonly HR_BASELINE_TIME = 10000; // 10 segundos para establecer línea base
+  private readonly HR_BASELINE_TIME = 100; // 10 segundos para establecer línea base 10000
   
   // Parámetros de cálculo de SpO2 - basados en investigación clínica
   private readonly SPO2_CALIBRATION_FACTOR = 1.03;
@@ -36,7 +36,7 @@ export class VitalSignsProcessor {
   private readonly TACHYCARDIA_THRESHOLD = 100; // Definición de taquicardia (BPM)
   
   // Parámetros de detección de picos
-  private readonly PEAK_THRESHOLD = 0.3;
+  private readonly PEAK_THRESHOLD = 2.3;    0.3
   private readonly PEAK_MIN_DISTANCE = 300; // ms
   
   // ─────────── VARIABLES DE ESTADO ───────────
