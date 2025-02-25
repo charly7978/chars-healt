@@ -64,6 +64,10 @@ export class VitalSignsProcessor {
   private smoothedSystolic = 0;
   private smoothedDiastolic = 0;
   private lastValidBP = { systolic: 120, diastolic: 80 };
+  
+  private lastValidSpO2 = 98;
+  private spO2Confidence = 0;
+  private bpConfidence = 0;
 
   /**
    * Procesa y analiza la señal PPG para extraer signos vitales
@@ -80,12 +84,6 @@ export class VitalSignsProcessor {
     spo2: number;
     pressure: string;
     arrhythmiaStatus: string;
-    rawArrhythmiaData: {
-      timestamp: number;
-      rmssd: number;
-      rrVariation: number;
-      type: string;
-    } | null;
   } {
     // Registrar cada 30ª muestra para depuración
     if (this.ppgValues.length % 30 === 0) {
@@ -161,19 +159,10 @@ export class VitalSignsProcessor {
       arrhythmiaStatus = "ANALIZANDO RITMO...";
     }
     
-    // Preparar datos de arritmia brutos para visualización
-    const rawArrhythmiaData = this.arrhythmiaDetected && this.currentRmssd > 0 ? {
-      timestamp: currentTime,
-      rmssd: this.currentRmssd,
-      rrVariation: this.beatVariability,
-      type: this.arrhythmiaType
-    } : null;
-    
     return {
       spo2,
       pressure: pressureString,
-      arrhythmiaStatus,
-      rawArrhythmiaData
+      arrhythmiaStatus
     };
   }
   
@@ -408,6 +397,7 @@ export class VitalSignsProcessor {
     // Actualizar último SpO2 válido si la confianza es razonable
     if (confidence > 0.5) {
       this.lastValidSpO2 = smoothedSpO2;
+      this.spO2Confidence = confidence;
     }
     
     console.log("VitalSignsProcessor: Cálculo SpO2", {
