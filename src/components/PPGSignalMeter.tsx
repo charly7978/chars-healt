@@ -51,7 +51,7 @@ const PPGSignalMeter = ({
   const FRAME_TIME = 1000 / TARGET_FPS;
   const BUFFER_SIZE = 800; // Buffer ampliado para mejor análisis
   const PEAK_HIGHLIGHT_DURATION = 500; // ms para resaltar un pico
-  const PEAK_THRESHOLD = 0.1; // Umbral mínimo para considerar un pico
+  const PEAK_THRESHOLD = 0.001; // Umbral mínimo para considerar un pico
   const MAX_AMPLITUDE_SAMPLES = 100;
   const SCALE_ADJUSTMENT_FACTOR = 0.05;
 
