@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { useToast } from "@/hooks/use-toast";
+import { supabase } from '../integrations/supabase/client';
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { useToast } from "../hooks/use-toast";
 
 const Auth: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -13,31 +13,47 @@ const Auth: React.FC = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const handleAuth = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSignIn = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      if (isSignUp) {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-        });
-        if (error) throw error;
-        
-        toast({
-          title: "Registro exitoso",
-          description: "Por favor, revisa tu email para confirmar tu cuenta.",
-        });
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (error) throw error;
-        
-        navigate("/");
-      }
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (error) throw error;
+      
+      toast({
+        title: "Inicio de sesión exitoso",
+        description: "¡Bienvenido!",
+      });
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSignUp = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+      if (error) throw error;
+      
+      toast({
+        title: "Registro exitoso",
+        description: "Por favor, revisa tu email para confirmar tu cuenta.",
+      });
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -57,7 +73,7 @@ const Auth: React.FC = () => {
             {isSignUp ? "Crear cuenta" : "Iniciar sesión"}
           </h2>
         </div>
-        <form onSubmit={handleAuth} className="space-y-4">
+        <form onSubmit={isSignUp ? handleSignUp : handleSignIn} className="space-y-4">
           <div>
             <Input
               type="email"

@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from "react";
-import VitalSign from "@/components/VitalSign";
-import CameraView from "@/components/CameraView";
-import { useSignalProcessor } from "@/hooks/useSignalProcessor";
-import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
-import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
-import PPGSignalMeter from "@/components/PPGSignalMeter";
-import MonitorButton from "@/components/MonitorButton";
+import VitalSign from "../components/VitalSign";
+import CameraView from "../components/CameraView";
+import { useSignalProcessor } from "../hooks/useSignalProcessor";
+import { useHeartBeatProcessor } from "../hooks/useHeartBeatProcessor";
+import { useVitalSignsProcessor } from "../hooks/useVitalSignsProcessor";
+import PPGSignalMeter from "../components/PPGSignalMeter";
+import MonitorButton from "../components/MonitorButton";
 
 interface VitalSigns {
   spo2: number;
@@ -132,7 +132,7 @@ const Index: React.FC = () => {
     if (videoTrack.getCapabilities()?.torch) {
       videoTrack.applyConstraints({
         advanced: [{ torch: true }]
-      }).catch((error: Error) => console.error("Error activando linterna:", error));
+      }).catch(onError);
     }
     
     const tempCanvas = document.createElement('canvas');
