@@ -3,6 +3,7 @@ export interface PPGDataPoint {
   value: number;
   quality: number;
   timestamp: number;
+  time?: number; // Added to support existing code
 }
 
 export class CircularBuffer<T> {

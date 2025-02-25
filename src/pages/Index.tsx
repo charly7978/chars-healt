@@ -39,7 +39,7 @@ const Index = () => {
   const enterFullScreen = async () => {
     try {
       await document.documentElement.requestFullscreen();
-    } catch (error: unknown) {
+    } catch (error: Error) {
       console.log('Error al entrar en pantalla completa:', error);
     }
   };
@@ -132,7 +132,7 @@ const Index = () => {
     if (videoTrack.getCapabilities()?.torch) {
       videoTrack.applyConstraints({
         advanced: [{ torch: true }]
-      }).catch(err => console.error("Error activando linterna:", err));
+      }).catch((error: Error) => console.error("Error activando linterna:", error));
     }
     
     const tempCanvas = document.createElement('canvas');
