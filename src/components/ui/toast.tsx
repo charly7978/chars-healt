@@ -1,15 +1,14 @@
+import * as React from "react"
+import * as ToastPrimitives from "@radix-ui/react-toast"
+import { Cross2Icon } from "@radix-ui/react-icons"
+import { cn } from "../../lib/utils"
 
-import * as React from "react";
-import * as ToastPrimitives from "@radix-ui/react-toast";
-import { cn } from "../../lib/utils";
-
-interface BaseToastProps {
-  title?: React.ReactNode;
-  description?: React.ReactNode;
-  action?: React.ReactNode;
+interface ToastProps extends React.ComponentPropsWithoutRef<typeof ToastPrimitives.Root> {
+  title?: string
+  description?: React.ReactNode
+  action?: React.ReactNode
+  className?: string
 }
-
-export type ToastProps = BaseToastProps & React.ComponentPropsWithoutRef<typeof ToastPrimitives.Root>;
 
 export const Toast = React.forwardRef<
   React.ElementRef<typeof ToastPrimitives.Root>,

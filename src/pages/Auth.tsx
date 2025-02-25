@@ -25,8 +25,9 @@ const Auth: React.FC = () => {
       if (error) throw error;
       
       toast({
-        title: "Inicio de sesión exitoso",
-        description: "¡Bienvenido!",
+        title: "Success",
+        description: "Login successful",
+        className: "bg-green-500"
       });
     } catch (error: any) {
       toast({
@@ -51,8 +52,9 @@ const Auth: React.FC = () => {
       if (error) throw error;
       
       toast({
-        title: "Registro exitoso",
-        description: "Por favor, revisa tu email para confirmar tu cuenta.",
+        title: "Success",
+        description: "Registration successful",
+        className: "bg-green-500"
       });
     } catch (error: any) {
       toast({
@@ -70,7 +72,7 @@ const Auth: React.FC = () => {
       <div className="w-full max-w-md space-y-8 bg-gray-800 p-6 rounded-lg">
         <div>
           <h2 className="text-2xl font-bold text-center text-white">
-            {isSignUp ? "Crear cuenta" : "Iniciar sesión"}
+            {isSignUp ? "Create account" : "Sign in"}
           </h2>
         </div>
         <form onSubmit={isSignUp ? handleSignUp : handleSignIn} className="space-y-4">
@@ -87,7 +89,7 @@ const Auth: React.FC = () => {
           <div>
             <Input
               type="password"
-              placeholder="Contraseña"
+              placeholder="Password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full bg-gray-700 text-white"
@@ -100,10 +102,10 @@ const Auth: React.FC = () => {
             disabled={loading}
           >
             {loading
-              ? "Cargando..."
+              ? "Loading..."
               : isSignUp
-              ? "Registrarse"
-              : "Iniciar sesión"}
+              ? "Sign up"
+              : "Sign in"}
           </Button>
         </form>
         <div className="text-center">
@@ -112,8 +114,8 @@ const Auth: React.FC = () => {
             className="text-medical-blue hover:underline"
           >
             {isSignUp
-              ? "¿Ya tienes cuenta? Inicia sesión"
-              : "¿No tienes cuenta? Regístrate"}
+              ? "Already have an account? Sign in"
+              : "Don't have an account? Sign up"}
           </button>
         </div>
       </div>
