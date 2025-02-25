@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -154,25 +153,19 @@ const Index = () => {
 
   useEffect(() => {
     if (lastSignal && lastSignal.fingerDetected && isMonitoring) {
-      // Procesar latidos cardíacos
       const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
       setHeartRate(heartBeatResult.bpm);
       
-      // Procesar signos vitales y arritmias
       const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
       if (vitals) {
-        // Actualizar estado de signos vitales de manera inmediata
         setVitalSigns(vitals);
         
-        // Si hay datos de arritmia nuevos, actualizar estado
         if (vitals.lastArrhythmiaData) {
           setLastArrhythmiaData(vitals.lastArrhythmiaData);
           
-          // Actualizar el contador y estado directamente del status
           const [status, count] = vitals.arrhythmiaStatus.split('|');
           setArrhythmiaCount(count || "0");
           
-          // Forzar actualización del display con el nuevo estado
           setVitalSigns(current => ({
             ...current,
             arrhythmiaStatus: vitals.arrhythmiaStatus
@@ -188,8 +181,7 @@ const Index = () => {
     <div 
       className="fixed inset-0 flex flex-col bg-black" 
       style={{ 
-        minHeight: '100vh',
-        minHeight: '100dvh',
+        height: '100dvh',
         paddingTop: 'env(safe-area-inset-top)',
         paddingBottom: 'env(safe-area-inset-bottom)'
       }}
