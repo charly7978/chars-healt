@@ -40,14 +40,14 @@ export class VitalSignsProcessor {
   private readonly PEAK_MIN_DISTANCE = 300; // ms
   
   // ─────────── VARIABLES DE ESTADO ───────────
-  // Buffers de señal
+  // Buffers de señal y Variables de estado - eliminar la duplicación de smaBuffer
   private ppgValues: number[] = [];
   private lastValue = 0;
-  private smaBuffer: number[] = [];
+  private readonly smaBuffer: number[] = []; // Convertido en readonly para evitar duplicación
   private spo2Buffer: number[] = [];
   private systolicBuffer: number[] = [];
   private diastolicBuffer: number[] = [];
-  
+
   // Seguimiento de ritmo cardíaco
   private lastPeakTime: number | null = null;
   private rrIntervals: number[] = [];
@@ -474,17 +474,17 @@ export class VitalSignsProcessor {
       pttValues.push(dt);
     }
     
-    // Calcular promedio ponderado de valores PTT (valores recientes importan más)
-    let weightedPTT = 0;
-    let weightSum = 0;
+    // Usar diferentes nombres para las variables de suma de pesos
+    let weightedPTTSum = 0;
+    let pttWeightSum = 0;
     
     for (let i = 0; i < pttValues.length; i++) {
       const weight = i + 1; // Ponderación lineal
-      weightedPTT += pttValues[i] * weight;
-      weightSum += weight;
+      weightedPTTSum += pttValues[i] * weight;
+      pttWeightSum += weight;
     }
     
-    weightedPTT = weightedPTT / weightSum;
+    weightedPTT = weightedPTTSum / pttWeightSum;
     
     // Restringir PTT a rango fisiológico
     const normalizedPTT = Math.max(this.PTT_MIN, Math.min(this.PTT_MAX, weightedPTT));
@@ -523,20 +523,19 @@ export class VitalSignsProcessor {
       this.diastolicBuffer.shift();
     }
     
-    // Calcular PA suavizada usando promedio móvil ponderado exponencial
-    let finalSystolic = 0;
-    let finalDiastolic = 0;
-    let weightSum = 0;
+    // Usar diferentes nombres para las variables de suma de pesos en PA
+    let bpWeightedSum = 0;
+    let bpWeightSum = 0;
     
     for (let i = 0; i < this.systolicBuffer.length; i++) {
       const weight = Math.pow(this.BP_ALPHA, this.systolicBuffer.length - 1 - i);
-      finalSystolic += this.systolicBuffer[i] * weight;
+      bpWeightedSum += this.systolicBuffer[i] * weight;
       finalDiastolic += this.diastolicBuffer[i] * weight;
-      weightSum += weight;
+      bpWeightSum += weight;
     }
     
-    finalSystolic = finalSystolic / weightSum;
-    finalDiastolic = finalDiastolic / weightSum;
+    finalSystolic = bpWeightedSum / bpWeightSum;
+    finalDiastolic = finalDiastolic / bpWeightSum;
     
     // Calcular puntuación de confianza basada en calidad de señal y estabilidad
     const variability = this.calculateStandardDeviation(this.systolicBuffer) / finalSystolic;
@@ -740,7 +739,6 @@ export class VitalSignsProcessor {
   /**
    * Aplicar filtro SMA (Simple Moving Average)
    */
-  private smaBuffer: number[] = [];
   private applySMAFilter(value: number): number {
     this.smaBuffer.push(value);
     if (this.smaBuffer.length > this.SMA_WINDOW) {
