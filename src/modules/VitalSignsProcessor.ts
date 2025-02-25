@@ -40,10 +40,10 @@ export class VitalSignsProcessor {
   private readonly PEAK_MIN_DISTANCE = 300; // ms
   
   // ─────────── VARIABLES DE ESTADO ───────────
-  // Buffers de señal y Variables de estado - eliminar la duplicación de smaBuffer
+  // Buffers de señal y Variables de estado
   private ppgValues: number[] = [];
   private lastValue = 0;
-  private readonly smaBuffer: number[] = []; // Convertido en readonly para evitar duplicación
+  private smaBuffer: number[] = [];
   private spo2Buffer: number[] = [];
   private systolicBuffer: number[] = [];
   private diastolicBuffer: number[] = [];
@@ -474,7 +474,7 @@ export class VitalSignsProcessor {
       pttValues.push(dt);
     }
     
-    // Usar diferentes nombres para las variables de suma de pesos
+    // Calcular promedio ponderado de valores PTT
     let weightedPTTSum = 0;
     let pttWeightSum = 0;
     
@@ -484,17 +484,15 @@ export class VitalSignsProcessor {
       pttWeightSum += weight;
     }
     
-    weightedPTT = weightedPTTSum / pttWeightSum;
+    const normalizedPTT = Math.max(
+      this.PTT_MIN, 
+      Math.min(this.PTT_MAX, weightedPTTSum / pttWeightSum)
+    );
     
-    // Restringir PTT a rango fisiológico
-    const normalizedPTT = Math.max(this.PTT_MIN, Math.min(this.PTT_MAX, weightedPTT));
-    
-    // Calcular amplitud - indicador de volumen sistólico
+    // Calcular amplitud y factores de presión
     const amplitude = this.calculateAmplitude(values, peakIndices, valleyIndices);
     const normalizedAmplitude = Math.min(100, Math.max(0, amplitude * 6));
     
-    // Calcular componentes de PA basados en PTT y amplitud
-    // Menor PTT y mayor amplitud generalmente correlacionan con PA más alta
     const pttFactor = (600 - normalizedPTT) * this.SBP_FACTOR;
     const ampFactor = normalizedAmplitude * this.AMPLITUDE_SCALING;
     
@@ -506,7 +504,7 @@ export class VitalSignsProcessor {
     instantSystolic = Math.max(80, Math.min(200, instantSystolic));
     instantDiastolic = Math.max(50, Math.min(120, instantDiastolic));
     
-    // Asegurar presión de pulso razonable (diferencia entre sistólica y diastólica)
+    // Asegurar presión de pulso razonable
     const differential = instantSystolic - instantDiastolic;
     if (differential < 20) {
       instantDiastolic = instantSystolic - 20;
@@ -523,38 +521,36 @@ export class VitalSignsProcessor {
       this.diastolicBuffer.shift();
     }
     
-    // Usar diferentes nombres para las variables de suma de pesos en PA
-    let bpWeightedSum = 0;
-    let bpWeightSum = 0;
+    // Calcular PA suavizada usando promedio móvil ponderado exponencial
+    let smoothedSystolic = 0;
+    let smoothedDiastolic = 0;
+    let weightSum = 0;
     
     for (let i = 0; i < this.systolicBuffer.length; i++) {
       const weight = Math.pow(this.BP_ALPHA, this.systolicBuffer.length - 1 - i);
-      bpWeightedSum += this.systolicBuffer[i] * weight;
-      finalDiastolic += this.diastolicBuffer[i] * weight;
-      bpWeightSum += weight;
+      smoothedSystolic += this.systolicBuffer[i] * weight;
+      smoothedDiastolic += this.diastolicBuffer[i] * weight;
+      weightSum += weight;
     }
     
-    finalSystolic = bpWeightedSum / bpWeightSum;
-    finalDiastolic = finalDiastolic / bpWeightSum;
+    smoothedSystolic = smoothedSystolic / weightSum;
+    smoothedDiastolic = smoothedDiastolic / weightSum;
     
-    // Calcular puntuación de confianza basada en calidad de señal y estabilidad
-    const variability = this.calculateStandardDeviation(this.systolicBuffer) / finalSystolic;
+    // Calcular puntuación de confianza
+    const variability = this.calculateStandardDeviation(this.systolicBuffer) / smoothedSystolic;
     const stabilityFactor = Math.max(0, Math.min(1, 1 - (variability * 10)));
-    
-    // Confianza también depende del índice de perfusión
     const perfusionFactor = Math.min(1, this.perfusionIndex / 0.15);
-    
     const confidence = Math.min(1, (stabilityFactor * 0.7) + (perfusionFactor * 0.3));
     
     // Actualizar última PA válida si la confianza es razonable
     if (confidence > 0.5) {
       this.lastValidBP = {
-        systolic: Math.round(finalSystolic),
-        diastolic: Math.round(finalDiastolic)
+        systolic: Math.round(smoothedSystolic),
+        diastolic: Math.round(smoothedDiastolic)
       };
       
-      this.smoothedSystolic = finalSystolic;
-      this.smoothedDiastolic = finalDiastolic;
+      this.smoothedSystolic = smoothedSystolic;
+      this.smoothedDiastolic = smoothedDiastolic;
     }
     
     // Registrar cálculo para depuración
@@ -565,8 +561,8 @@ export class VitalSignsProcessor {
           diastolica: Math.round(instantDiastolic)
         },
         suavizado: {
-          sistolica: Math.round(finalSystolic),
-          diastolica: Math.round(finalDiastolic)
+          sistolica: Math.round(smoothedSystolic),
+          diastolica: Math.round(smoothedDiastolic)
         },
         confianza: confidence,
         metricas: {
@@ -579,8 +575,8 @@ export class VitalSignsProcessor {
     }
     
     return {
-      systolic: Math.round(finalSystolic),
-      diastolic: Math.round(finalDiastolic),
+      systolic: Math.round(smoothedSystolic),
+      diastolic: Math.round(smoothedDiastolic),
       confidence
     };
   }
