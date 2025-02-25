@@ -3,7 +3,8 @@ export interface PPGDataPoint {
   value: number;
   quality: number;
   timestamp: number;
-  time?: number; // Added to support existing code
+  time?: number;
+  isArrhythmia?: boolean;
 }
 
 export class CircularBuffer<T> {
