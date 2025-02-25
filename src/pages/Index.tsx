@@ -33,7 +33,7 @@ const Index = () => {
   } | null>(null);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
-  const { processSignal: processHeartBeat } = useHeartBeatProcessor();
+  const { processSignal: processHeartBeat, initializeAudio, requestBeep } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
   const enterFullScreen = async () => {
@@ -55,11 +55,23 @@ const Index = () => {
     };
   }, []);
 
-  const startMonitoring = () => {
+  const startMonitoring = async () => {
     if (isMonitoring) {
       handleReset();
     } else {
       enterFullScreen();
+      
+      // Inicializar audio antes de comenzar el monitoreo
+      console.log("Inicializando contexto de audio...");
+      const audioInitialized = await initializeAudio();
+      console.log("Contexto de audio inicializado:", audioInitialized);
+      
+      // Solicitar un beep manual para probar el audio
+      setTimeout(() => {
+        console.log("Solicitando beep de prueba...");
+        requestBeep();
+      }, 500);
+      
       setIsMonitoring(true);
       setIsCameraOn(true);
       startProcessing();
@@ -155,6 +167,12 @@ const Index = () => {
   useEffect(() => {
     if (lastSignal && lastSignal.fingerDetected && isMonitoring) {
       const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
+      
+      // Añadir log para depuración
+      if (heartBeatResult.isPeak) {
+        console.log("PICO DETECTADO - BPM:", heartBeatResult.bpm, "Confianza:", heartBeatResult.confidence);
+      }
+      
       setHeartRate(heartBeatResult.bpm);
       
       const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
@@ -176,7 +194,7 @@ const Index = () => {
       
       setSignalQuality(lastSignal.quality);
     }
-  }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
+  }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns, requestBeep]);
 
   return (
     <div 

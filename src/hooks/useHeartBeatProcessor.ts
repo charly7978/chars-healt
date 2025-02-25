@@ -8,6 +8,7 @@ export function useHeartBeatProcessor() {
   const [isPeak, setIsPeak] = useState<boolean>(false);
   const [arrhythmiaCount, setArrhythmiaCount] = useState<number>(0);
   const lastProcessedValueRef = useRef<number>(0);
+  const [audioInitialized, setAudioInitialized] = useState<boolean>(false);
   
   // Inicializar procesador
   useEffect(() => {
@@ -54,16 +55,35 @@ export function useHeartBeatProcessor() {
   // Función para inicializar audio (debe llamarse después de interacción del usuario)
   const initializeAudio = useCallback(async () => {
     if (processorRef.current) {
-      return await processorRef.current.ensureAudioInitialized();
+      try {
+        console.log("useHeartBeatProcessor: Intentando inicializar audio...");
+        const success = await processorRef.current.ensureAudioInitialized();
+        console.log("useHeartBeatProcessor: Inicialización de audio completada:", success);
+        setAudioInitialized(success);
+        return success;
+      } catch (error) {
+        console.error("useHeartBeatProcessor: Error inicializando audio", error);
+        setAudioInitialized(false);
+        return false;
+      }
     }
     return false;
   }, []);
   
   // Función para solicitar un beep manual
-  const requestBeep = useCallback(() => {
+  const requestBeep = useCallback(async () => {
     if (processorRef.current) {
-      processorRef.current.requestManualBeep();
+      try {
+        console.log("useHeartBeatProcessor: Solicitando beep manual...");
+        const success = await processorRef.current.requestManualBeep();
+        console.log("useHeartBeatProcessor: Beep manual completado:", success);
+        return success;
+      } catch (error) {
+        console.error("useHeartBeatProcessor: Error solicitando beep manual", error);
+        return false;
+      }
     }
+    return false;
   }, []);
   
   // Función para resetear el procesador
@@ -104,6 +124,7 @@ export function useHeartBeatProcessor() {
     requestBeep,
     reset,
     getSignalQuality,
-    getFinalBPM
+    getFinalBPM,
+    audioInitialized
   };
 }

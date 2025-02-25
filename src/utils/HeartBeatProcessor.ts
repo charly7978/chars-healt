@@ -7,14 +7,14 @@ export class HeartBeatProcessor {
   private readonly MAX_BPM = 220; // Frecuencia cardíaca fisiológica máxima
   
   // Parámetros de calidad de señal
-  private readonly MIN_CONFIDENCE = 0.5; // Reducido para facilitar detección
-  private readonly SIGNAL_THRESHOLD = 0.2; // Umbral más bajo para mejor detección
+  private readonly MIN_CONFIDENCE = 0.3; // Reducido para facilitar detección
+  private readonly SIGNAL_THRESHOLD = 0.15; // Umbral más bajo para mejor detección
   private readonly NOISE_THRESHOLD = 0.1; // Para detectar señales ruidosas
   
   // Parámetros de detección de picos
-  private readonly DERIVATIVE_THRESHOLD = -0.03; // Menos restrictivo
-  private readonly MIN_PEAK_TIME_MS = 250; // Reducido para detectar ritmos más rápidos
-  private readonly WARMUP_TIME_MS = 1500; // Reducido para iniciar más rápido
+  private readonly DERIVATIVE_THRESHOLD = -0.02; // Menos restrictivo para mejor detección
+  private readonly MIN_PEAK_TIME_MS = 200; // Reducido para detectar ritmos más rápidos
+  private readonly WARMUP_TIME_MS = 1000; // Reducido para iniciar más rápido
   private readonly PEAK_AGE_WEIGHT = 0.7; // Mayor peso a picos recientes
   
   // Parámetros de filtrado
@@ -100,54 +100,147 @@ export class HeartBeatProcessor {
   private readonly HP_B = [0.9776399, -1.9552798, 0.9776399];
   
   constructor() {
-    this.initAudio();
+    // Inicializar el audio de forma asíncrona
+    this.initAudio().then(success => {
+      if (success) {
+        console.log("HeartBeatProcessor: Audio inicializado correctamente en el constructor");
+      } else {
+        console.warn("HeartBeatProcessor: No se pudo inicializar el audio en el constructor");
+      }
+    });
+    
     this.reset();
+    console.log("HeartBeatProcessor: Instancia creada y reseteada");
   }
   
   private async initAudio() {
     try {
+      console.log("HeartBeatProcessor: Intentando inicializar contexto de audio...");
+      
       if (typeof AudioContext !== 'undefined') {
-        this.audioContext = new AudioContext();
-        
-        if (this.audioContext.state === 'suspended') {
-          await this.audioContext.resume();
+        // Crear un nuevo contexto de audio si no existe o está cerrado
+        if (!this.audioContext || this.audioContext.state === 'closed') {
+          this.audioContext = new AudioContext();
+          console.log("HeartBeatProcessor: Nuevo contexto de audio creado");
         }
         
-        await this.playBeep(0.05);
+        // Intentar reanudar el contexto si está suspendido
+        if (this.audioContext.state === 'suspended') {
+          console.log("HeartBeatProcessor: Intentando reanudar contexto suspendido...");
+          await this.audioContext.resume();
+          console.log("HeartBeatProcessor: Contexto reanudado, estado:", this.audioContext.state);
+        }
+        
+        // Reproducir un beep de prueba con volumen bajo
+        try {
+          console.log("HeartBeatProcessor: Reproduciendo beep de prueba...");
+          await this.playBeep(0.1);
+          console.log("HeartBeatProcessor: Beep de prueba reproducido exitosamente");
+        } catch (beepError) {
+          console.warn("HeartBeatProcessor: No se pudo reproducir beep de prueba", beepError);
+        }
         
         console.log("HeartBeatProcessor: Audio Context Inicializado, estado:", this.audioContext.state);
+        return true;
       } else {
         console.error("HeartBeatProcessor: AudioContext no disponible en este navegador");
+        return false;
       }
     } catch (error) {
       console.error("HeartBeatProcessor: Error inicializando audio", error);
+      return false;
     }
   }
   
   public async ensureAudioInitialized() {
-    if (!this.audioContext || this.audioContext.state === 'suspended') {
-      await this.initAudio();
+    console.log("HeartBeatProcessor: Verificando inicialización de audio...");
+    
+    if (!this.audioContext || this.audioContext.state === 'closed') {
+      console.log("HeartBeatProcessor: Contexto de audio no existe o está cerrado, inicializando...");
+      return await this.initAudio();
     }
     
-    return !!this.audioContext && this.audioContext.state === 'running';
+    if (this.audioContext.state === 'suspended') {
+      console.log("HeartBeatProcessor: Contexto de audio suspendido, intentando reanudar...");
+      try {
+        await this.audioContext.resume();
+        console.log("HeartBeatProcessor: Contexto de audio reanudado exitosamente");
+        
+        // Reproducir un beep de prueba para verificar
+        await this.playBeep(0.1);
+        
+        return true;
+      } catch (error) {
+        console.error("HeartBeatProcessor: Error reanudando contexto de audio", error);
+        return false;
+      }
+    }
+    
+    console.log("HeartBeatProcessor: Contexto de audio ya inicializado y activo");
+    return true;
   }
   
-  public requestManualBeep() {
+  public async requestManualBeep() {
+    console.log("HeartBeatProcessor: Solicitud de beep manual recibida");
+    
+    // Asegurar que el audio esté inicializado
+    const audioReady = await this.ensureAudioInitialized();
+    if (!audioReady) {
+      console.warn("HeartBeatProcessor: No se pudo inicializar el audio para beep manual");
+      return false;
+    }
+    
     this.manualBeepRequest = true;
-    this.playBeep();
+    
+    // Reproducir beep con volumen alto
+    try {
+      await this.playBeep(0.9);
+      console.log("HeartBeatProcessor: Beep manual reproducido exitosamente");
+      return true;
+    } catch (error) {
+      console.error("HeartBeatProcessor: Error reproduciendo beep manual", error);
+      return false;
+    }
   }
   
   private async playBeep(volume: number = this.BEEP_VOLUME) {
-    if (!this.audioContext || (this.isInWarmup() && !this.manualBeepRequest)) {
-      if (this.DEBUG_MODE) {
-        console.log("HeartBeatProcessor: Beep ignorado - audio no inicializado o en warmup");
+    // Registrar intento de beep para depuración
+    console.log("HeartBeatProcessor: Intentando reproducir beep", {
+      audioContext: !!this.audioContext,
+      audioState: this.audioContext?.state,
+      inWarmup: this.isInWarmup(),
+      manualRequest: this.manualBeepRequest,
+      lastBeepTime: this.lastBeepTime,
+      timeSinceLastBeep: Date.now() - this.lastBeepTime
+    });
+    
+    if (!this.audioContext) {
+      console.warn("HeartBeatProcessor: No hay contexto de audio disponible");
+      this.manualBeepRequest = false;
+      return;
+    }
+    
+    if (this.audioContext.state === 'suspended') {
+      try {
+        console.log("HeartBeatProcessor: Intentando reanudar contexto de audio suspendido");
+        await this.audioContext.resume();
+        console.log("HeartBeatProcessor: Contexto de audio reanudado:", this.audioContext.state);
+      } catch (error) {
+        console.error("HeartBeatProcessor: Error reanudando contexto de audio", error);
+        this.manualBeepRequest = false;
+        return;
       }
+    }
+    
+    if (this.isInWarmup() && !this.manualBeepRequest) {
+      console.log("HeartBeatProcessor: Beep ignorado - en periodo de calentamiento");
       this.manualBeepRequest = false;
       return;
     }
     
     const now = Date.now();
     if (!this.manualBeepRequest && now - this.lastBeepTime < this.MIN_BEEP_INTERVAL_MS) {
+      console.log("HeartBeatProcessor: Beep ignorado - demasiado pronto desde el último beep");
       return;
     }
     
@@ -155,6 +248,7 @@ export class HeartBeatProcessor {
     
     try {
       if (this.audioContext.state !== 'running') {
+        console.warn("HeartBeatProcessor: Contexto de audio no está en ejecución:", this.audioContext.state);
         await this.audioContext.resume();
       }
       
@@ -212,9 +306,7 @@ export class HeartBeatProcessor {
       
       this.lastBeepTime = now;
       
-      if (this.DEBUG_MODE) {
-        console.log("HeartBeatProcessor: Beep reproducido, volumen:", volume);
-      }
+      console.log("HeartBeatProcessor: Beep reproducido exitosamente, volumen:", volume);
     } catch (error) {
       console.error("HeartBeatProcessor: Error reproduciendo beep", error);
     }
@@ -420,7 +512,7 @@ export class HeartBeatProcessor {
     const isConfirmedPeak = this.confirmPeak(isPeak, normalizedValue, confidence);
     
     // Procesar picos confirmados
-    if (isConfirmedPeak && !this.isInWarmup()) {
+    if (isConfirmedPeak) {
       const now = Date.now();
       const timeSinceLastPeak = this.lastPeakTime
         ? now - this.lastPeakTime
@@ -430,7 +522,7 @@ export class HeartBeatProcessor {
         this.previousPeakTime = this.lastPeakTime;
         this.lastPeakTime = now;
         
-        // Reproducir tono para latido
+        // Reproducir tono para latido - incluso durante el periodo de calentamiento
         this.playBeep(Math.min(1.0, confidence * 1.3));
         
         // Actualizar BPM y verificar arritmias
@@ -440,18 +532,21 @@ export class HeartBeatProcessor {
     }
     
     // Logging para depuración
-    if (this.DEBUG_MODE && this.getSmoothBPM() > 0 && this.bpmHistory.length % 5 === 0) {
-      console.log("HeartBeatProcessor - BPM actualizado:", {
+    if (this.DEBUG_MODE && this.signalBuffer.length % 30 === 0) {
+      console.log("HeartBeatProcessor - Estado actual:", {
         bpm: Math.round(this.getSmoothBPM()),
         confianza: Math.min(1, confidence * 1.2),
-        historialBPM: this.bpmHistory.slice(-5)
+        historialBPM: this.bpmHistory.slice(-3),
+        umbralAdaptativo: this.adaptiveThreshold,
+        calidadSeñal: this.signalQuality,
+        ultimoPico: this.lastPeakTime ? new Date(this.lastPeakTime).toISOString() : 'ninguno'
       });
     }
     
     return {
       bpm: Math.round(this.getSmoothBPM()),
       confidence: Math.min(1, confidence * 1.2),
-      isPeak: isConfirmedPeak && !this.isInWarmup(),
+      isPeak: isConfirmedPeak,
       filteredValue: smoothed,
       arrhythmiaCount: this.arrhythmiaDetected ? this.consecutiveIrregularBeats : 0,
       rrData: {
@@ -588,16 +683,16 @@ export class HeartBeatProcessor {
     // Criterios simplificados para facilitar detección
     const isOverThreshold =
       derivative < this.DERIVATIVE_THRESHOLD &&
-      normalizedValue > this.adaptiveThreshold * 0.7;
+      normalizedValue > this.adaptiveThreshold * 0.6; // Reducido para mejor detección
     
     // Calcular confianza basada en múltiples factores
     const amplitudeConfidence = Math.min(
-      Math.max(Math.abs(normalizedValue) / (this.adaptiveThreshold * 1.3), 0),
+      Math.max(Math.abs(normalizedValue) / (this.adaptiveThreshold * 1.1), 0),
       1
     );
     
     const derivativeConfidence = Math.min(
-      Math.max(Math.abs(derivative) / Math.abs(this.DERIVATIVE_THRESHOLD * 0.6), 0),
+      Math.max(Math.abs(derivative) / Math.abs(this.DERIVATIVE_THRESHOLD * 0.5), 0),
       1
     );
     
@@ -614,9 +709,21 @@ export class HeartBeatProcessor {
     
     // Puntuación de confianza ponderada
     const confidence = 
-      (amplitudeConfidence * 0.5) + 
+      (amplitudeConfidence * 0.6) + 
       (derivativeConfidence * 0.3) + 
-      (timingConfidence * 0.2);
+      (timingConfidence * 0.1);
+    
+    // Log para depuración
+    if (isOverThreshold) {
+      console.log("HeartBeatProcessor: Posible pico detectado", {
+        normalizedValue,
+        derivative,
+        threshold: this.adaptiveThreshold * 0.6,
+        derivativeThreshold: this.DERIVATIVE_THRESHOLD,
+        confidence,
+        timeSinceLastPeak
+      });
+    }
     
     return { isPeak: isOverThreshold, confidence };
   }
@@ -637,7 +744,7 @@ export class HeartBeatProcessor {
     
     // Criterios simplificados de confirmación
     if (isPeak && !this.lastConfirmedPeak && confidence >= this.MIN_CONFIDENCE) {
-      if (this.peakConfirmationBuffer.length >= 4) {
+      if (this.peakConfirmationBuffer.length >= 3) { // Reducido de 4 a 3 para mejor detección
         const len = this.peakConfirmationBuffer.length;
         
         // Verificar que el valor actual sea mayor que valores anteriores
@@ -646,8 +753,18 @@ export class HeartBeatProcessor {
           this.peakConfirmationBuffer[len-3]
         );
         
+        console.log("HeartBeatProcessor: Evaluando confirmación de pico", {
+          normalizedValue,
+          confidence,
+          bufferLength: this.peakConfirmationBuffer.length,
+          isHighestRecent,
+          minConfidence: this.MIN_CONFIDENCE,
+          buffer: [...this.peakConfirmationBuffer]
+        });
+        
         if (isHighestRecent) {
           this.lastConfirmedPeak = true;
+          console.log("HeartBeatProcessor: PICO CONFIRMADO");
           return true;
         }
       }
@@ -669,6 +786,13 @@ export class HeartBeatProcessor {
     
     const instantBPM = 60000 / interval;
     
+    console.log("HeartBeatProcessor: Nuevo intervalo RR detectado", {
+      interval,
+      instantBPM,
+      lastPeakTime: this.lastPeakTime,
+      previousPeakTime: this.previousPeakTime
+    });
+    
     // Solo aceptar frecuencias cardíacas fisiológicamente plausibles
     if (instantBPM >= this.MIN_BPM && instantBPM <= this.MAX_BPM) {
       this.bpmHistory.push(instantBPM);
@@ -684,6 +808,18 @@ export class HeartBeatProcessor {
       if (this.rrIntervals.length > this.RR_BUFFER_SIZE) {
         this.rrIntervals.shift();
       }
+      
+      console.log("HeartBeatProcessor: BPM actualizado", {
+        instantBPM,
+        bpmHistory: [...this.bpmHistory],
+        smoothBPM: this.getSmoothBPM()
+      });
+    } else {
+      console.log("HeartBeatProcessor: BPM fuera de rango fisiológico", {
+        instantBPM,
+        minBPM: this.MIN_BPM,
+        maxBPM: this.MAX_BPM
+      });
     }
   }
   
