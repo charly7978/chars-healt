@@ -1,13 +1,17 @@
 import * as React from "react"
 import { ChevronLeftIcon, ChevronRightIcon, DotsHorizontalIcon } from "@radix-ui/react-icons"
 import { cn } from "../../lib/utils"
-import { ButtonProps, buttonVariants } from "../ui/button"
+import { buttonVariants } from "../../components/ui/button"
 
-interface PaginationProps {
-  className?: string
+interface PaginationProps extends React.ComponentPropsWithoutRef<"nav"> {
+  className?: string;
 }
 
-const Pagination = ({ className, ...props }: React.ComponentProps<"nav">) => (
+interface PaginationButtonProps extends React.ComponentPropsWithoutRef<"button"> {
+  isActive?: boolean;
+}
+
+const Pagination = ({ className, ...props }: React.ComponentPropsWithoutRef<"nav">) => (
   <nav
     role="navigation"
     aria-label="pagination"
@@ -19,7 +23,7 @@ Pagination.displayName = "Pagination"
 
 const PaginationContent = React.forwardRef<
   HTMLUListElement,
-  React.ComponentProps<"ul">
+  React.ComponentPropsWithoutRef<"ul">
 >(({ className, ...props }, ref) => (
   <ul
     ref={ref}
@@ -31,24 +35,19 @@ PaginationContent.displayName = "PaginationContent"
 
 const PaginationItem = React.forwardRef<
   HTMLLIElement,
-  React.ComponentProps<"li">
+  React.ComponentPropsWithoutRef<"li">
 >(({ className, ...props }, ref) => (
   <li ref={ref} className={cn("", className)} {...props} />
 ))
 PaginationItem.displayName = "PaginationItem"
-
-type PaginationLinkProps = {
-  isActive?: boolean
-} & Pick<ButtonProps, "size"> &
-  React.ComponentProps<"a">
 
 const PaginationLink = ({
   className,
   isActive,
   size = "icon",
   ...props
-}: PaginationLinkProps) => (
-  <a
+}: PaginationButtonProps & { size?: "default" | "sm" | "lg" | "icon" }) => (
+  <button
     aria-current={isActive ? "page" : undefined}
     className={cn(
       buttonVariants({

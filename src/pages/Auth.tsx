@@ -24,17 +24,9 @@ const Auth: React.FC = () => {
       });
       if (error) throw error;
       
-      toast({
-        title: "Success",
-        description: "Login successful",
-        className: "bg-green-500"
-      });
+      handleSuccess();
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message,
-      });
+      handleError();
     } finally {
       setLoading(false);
     }
@@ -51,20 +43,28 @@ const Auth: React.FC = () => {
       });
       if (error) throw error;
       
-      toast({
-        title: "Success",
-        description: "Registration successful",
-        className: "bg-green-500"
-      });
+      handleSuccess();
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message,
-      });
+      handleError();
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSuccess = () => {
+    toast({
+      title: "Success",
+      description: "Login successful",
+      className: "bg-green-500"
+    });
+  };
+
+  const handleError = () => {
+    toast({
+      title: "Error",
+      description: "Authentication failed",
+      className: "bg-red-500"
+    });
   };
 
   return (

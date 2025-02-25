@@ -1,10 +1,11 @@
+
 import * as React from "react"
 import * as ToastPrimitives from "@radix-ui/react-toast"
 import { Cross2Icon } from "@radix-ui/react-icons"
 import { cn } from "../../lib/utils"
 
-interface ToastProps extends React.ComponentPropsWithoutRef<typeof ToastPrimitives.Root> {
-  title?: string
+export interface ToastProps extends React.ComponentPropsWithoutRef<typeof ToastPrimitives.Root> {
+  title?: React.ReactNode
   description?: React.ReactNode
   action?: React.ReactNode
   className?: string

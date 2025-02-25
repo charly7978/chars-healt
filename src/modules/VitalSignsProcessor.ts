@@ -99,7 +99,8 @@ export class VitalSignsProcessor {
     return { status: "SIN ARRITMIA", count: 0 };
   }
 
-  process(value: number, timestamp: number): {
+  // Add explicit type for process signal method
+  public processSignal(value: number): {
     bpm: number;
     spo2: number;
     quality: number;

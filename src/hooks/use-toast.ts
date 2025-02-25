@@ -1,25 +1,33 @@
-import * as React from "react";
-import { Toast, ToastActionElement, ToastProps } from "../components/ui/toast";
+import * as React from "react"
+import { Toast, ToastActionElement } from "../components/ui/toast"
 
-const TOAST_LIMIT = 1;
-const TOAST_REMOVE_DELAY = 1000000;
+export interface ToastProps extends React.ComponentPropsWithoutRef<typeof Toast> {
+  id: string
+  title?: React.ReactNode
+  description?: React.ReactNode
+  action?: ToastActionElement
+  className?: string
+}
+
+const TOAST_LIMIT = 1
+const TOAST_REMOVE_DELAY = 1000000
 
 type ToasterToast = ToastProps & {
-  id: string;
-  title?: React.ReactNode;
-  description?: React.ReactNode;
-  action?: ToastActionElement;
-};
+  id: string
+  title?: React.ReactNode
+  description?: React.ReactNode
+  action?: ToastActionElement
+}
 
 const actionTypes = {
   ADD_TOAST: "ADD_TOAST",
   UPDATE_TOAST: "UPDATE_TOAST",
   DISMISS_TOAST: "DISMISS_TOAST",
   REMOVE_TOAST: "REMOVE_TOAST",
-} as const;
+} as const
 
 interface State {
-  toasts: ToasterToast[];
+  toasts: ToasterToast[]
 }
 
 type Action =
