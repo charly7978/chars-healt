@@ -261,18 +261,18 @@ export class VitalSignsProcessor {
       pttValues.push(dt);
     }
     
-    // Calculate weighted PTT
-    let weightSum = 0;
-    let weightedSum = 0;
+    // Calculate weighted PTT using a single weightSum variable
+    let pttWeightSum = 0;
+    let pttWeightedSum = 0;
     
     pttValues.forEach((val, idx) => {
       const weight = (idx + 1) / pttValues.length;
-      weightedSum += val * weight;
-      weightSum += weight;
+      pttWeightedSum += val * weight;
+      pttWeightSum += weight;
     });
 
-    const weightedPTT = weightSum > 0 ? weightedSum / weightSum : 600; // Default to 600ms if no valid values
-    const normalizedPTT = Math.max(300, Math.min(1200, weightedPTT));
+    const calculatedPTT = pttWeightSum > 0 ? pttWeightedSum / pttWeightSum : 600;
+    const normalizedPTT = Math.max(300, Math.min(1200, calculatedPTT));
     
     // Calculate amplitude
     const amplitude = this.calculateAmplitude(values, peakIndices, valleyIndices);
@@ -307,20 +307,20 @@ export class VitalSignsProcessor {
       this.diastolicBuffer.shift();
     }
 
-    // Calculate final smoothed values
+    // Calculate final smoothed values using a different variable name for the sum
+    let finalWeightSum = 0;
     let finalSystolic = 0;
     let finalDiastolic = 0;
-    let weightSum = 0;
 
     for (let i = 0; i < this.systolicBuffer.length; i++) {
       const weight = Math.pow(this.BP_ALPHA, this.systolicBuffer.length - 1 - i);
       finalSystolic += this.systolicBuffer[i] * weight;
       finalDiastolic += this.diastolicBuffer[i] * weight;
-      weightSum += weight;
+      finalWeightSum += weight;
     }
 
-    finalSystolic = weightSum > 0 ? finalSystolic / weightSum : instantSystolic;
-    finalDiastolic = weightSum > 0 ? finalDiastolic / weightSum : instantDiastolic;
+    finalSystolic = finalWeightSum > 0 ? finalSystolic / finalWeightSum : instantSystolic;
+    finalDiastolic = finalWeightSum > 0 ? finalDiastolic / finalWeightSum : instantDiastolic;
 
     return {
       systolic: Math.round(finalSystolic),
