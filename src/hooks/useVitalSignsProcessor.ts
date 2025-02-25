@@ -1,6 +1,3 @@
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
 
 import { useState, useCallback, useRef } from 'react';
 import { VitalSignsProcessor } from '../modules/VitalSignsProcessor';
@@ -78,128 +75,12 @@ export const useVitalSignsProcessor = () => {
     return {
       spo2: result.spo2,
       pressure: result.pressure,
-      arrhythmiaStatus: `SIN ARRITMIAS|${arrhythmiaCounter}`
-=======
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { VitalSignsProcessor } from '../utils/VitalSignsProcessor';
-
-export function useVitalSignsProcessor() {
-  const processorRef = useRef<VitalSignsProcessor | null>(null);
-  const [spo2, setSpo2] = useState<number>(0);
-  const [pressure, setPressure] = useState<string>("--/--");
-  const [arrhythmiaStatus, setArrhythmiaStatus] = useState<string>("--");
-  const [lastArrhythmiaData, setLastArrhythmiaData] = useState<{
-    timestamp: number;
-    rmssd: number;
-    rrVariation: number;
-    type?: string;
-  } | null>(null);
-  
-  // Inicializar procesador
-  useEffect(() => {
-    if (!processorRef.current) {
-      processorRef.current = new VitalSignsProcessor();
-      console.log("useVitalSignsProcessor: Procesador de signos vitales inicializado");
-    }
-    
-    return () => {
-      // No hay recursos que limpiar para este procesador
->>>>>>> Stashed changes
-=======
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { VitalSignsProcessor } from '../utils/VitalSignsProcessor';
-
-export function useVitalSignsProcessor() {
-  const processorRef = useRef<VitalSignsProcessor | null>(null);
-  const [spo2, setSpo2] = useState<number>(0);
-  const [pressure, setPressure] = useState<string>("--/--");
-  const [arrhythmiaStatus, setArrhythmiaStatus] = useState<string>("--");
-  const [lastArrhythmiaData, setLastArrhythmiaData] = useState<{
-    timestamp: number;
-    rmssd: number;
-    rrVariation: number;
-    type?: string;
-  } | null>(null);
-  
-  // Inicializar procesador
-  useEffect(() => {
-    if (!processorRef.current) {
-      processorRef.current = new VitalSignsProcessor();
-      console.log("useVitalSignsProcessor: Procesador de signos vitales inicializado");
-    }
-    
-    return () => {
-      // No hay recursos que limpiar para este procesador
->>>>>>> Stashed changes
-=======
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { VitalSignsProcessor } from '../utils/VitalSignsProcessor';
-
-export function useVitalSignsProcessor() {
-  const processorRef = useRef<VitalSignsProcessor | null>(null);
-  const [spo2, setSpo2] = useState<number>(0);
-  const [pressure, setPressure] = useState<string>("--/--");
-  const [arrhythmiaStatus, setArrhythmiaStatus] = useState<string>("--");
-  const [lastArrhythmiaData, setLastArrhythmiaData] = useState<{
-    timestamp: number;
-    rmssd: number;
-    rrVariation: number;
-    type?: string;
-  } | null>(null);
-  
-  // Inicializar procesador
-  useEffect(() => {
-    if (!processorRef.current) {
-      processorRef.current = new VitalSignsProcessor();
-      console.log("useVitalSignsProcessor: Procesador de signos vitales inicializado");
-    }
-    
-    return () => {
-      // No hay recursos que limpiar para este procesador
->>>>>>> Stashed changes
+      arrhythmiaStatus: `SIN ARRITMIAS|${arrhythmiaCounter}`,
+      lastArrhythmiaData: null
     };
-  }, []);
-  
-  // Función para procesar nueva señal PPG y datos RR
-  const processSignal = useCallback((
-    ppgValue: number,
-    rrData?: { 
-      intervals: number[]; 
-      lastPeakTime: number | null;
-      arrhythmiaDetected?: boolean;
-      arrhythmiaScore?: number;
-      arrhythmiaType?: string;
-    }
-  ) => {
-    if (!processorRef.current) {
-      return {
-        spo2: 0,
-        pressure: "--/--",
-        arrhythmiaStatus: "--",
-        lastArrhythmiaData: null
-      };
-    }
-    
-    // Procesar señal usando el procesador
-    const result = processorRef.current.processSignal(ppgValue, rrData);
-    
-    // Actualizar estado con los resultados
-    setSpo2(result.spo2);
-    setPressure(result.pressure);
-    setArrhythmiaStatus(result.arrhythmiaStatus);
-    
-    if (result.lastArrhythmiaData) {
-      setLastArrhythmiaData(result.lastArrhythmiaData);
-    }
-    
-    return result;
-  }, []);
-  
-  // Función para resetear el procesador
+  }, [arrhythmiaCounter, processor]);
+
   const reset = useCallback(() => {
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
     processor.reset();
     setArrhythmiaCounter(0);
     lastArrhythmiaTime.current = 0;
@@ -207,34 +88,8 @@ export function useVitalSignsProcessor() {
     console.log("Reseteo de detección de arritmias");
   }, [processor]);
 
-=======
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-    if (processorRef.current) {
-      processorRef.current.reset();
-      setSpo2(0);
-      setPressure("--/--");
-      setArrhythmiaStatus("--");
-      setLastArrhythmiaData(null);
-      console.log("useVitalSignsProcessor: Procesador reseteado");
-    }
-  }, []);
-  
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
   return {
     processSignal,
-    spo2,
-    pressure,
-    arrhythmiaStatus,
-    lastArrhythmiaData,
     reset
   };
-}
+};
