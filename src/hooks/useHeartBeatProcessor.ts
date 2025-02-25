@@ -1,35 +1,8 @@
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { HeartBeatProcessor } from '../modules/HeartBeatProcessor';
-=======
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { HeartBeatProcessor } from '../utils/HeartBeatProcessor';
->>>>>>> Stashed changes
-
-export function useHeartBeatProcessor() {
-  const processorRef = useRef<HeartBeatProcessor | null>(null);
-<<<<<<< Updated upstream
-  const [currentBPM, setCurrentBPM] = useState<number>(0);
-  const [confidence, setConfidence] = useState<number>(0);
-
-=======
-=======
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { HeartBeatProcessor } from '../utils/HeartBeatProcessor';
 
 export function useHeartBeatProcessor() {
   const processorRef = useRef<HeartBeatProcessor | null>(null);
->>>>>>> Stashed changes
-=======
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { HeartBeatProcessor } from '../utils/HeartBeatProcessor';
-
-export function useHeartBeatProcessor() {
-  const processorRef = useRef<HeartBeatProcessor | null>(null);
->>>>>>> Stashed changes
   const [bpm, setBpm] = useState<number>(0);
   const [confidence, setConfidence] = useState<number>(0);
   const [isPeak, setIsPeak] = useState<boolean>(false);
@@ -37,13 +10,6 @@ export function useHeartBeatProcessor() {
   const lastProcessedValueRef = useRef<number>(0);
   
   // Inicializar procesador
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
   useEffect(() => {
     if (!processorRef.current) {
       processorRef.current = new HeartBeatProcessor();
