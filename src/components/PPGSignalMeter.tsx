@@ -1,40 +1,6 @@
+
 import React, { useEffect, useRef } from 'react';
 import { Fingerprint } from 'lucide-react';
-
-interface PPGDataPoint {
-  value: number;
-  quality: number;
-  timestamp: number;
-  time?: number;
-  isArrhythmia?: boolean;
-}
-
-class CircularBuffer<T> {
-  private buffer: T[];
-  private size: number;
-  private currentIndex: number = 0;
-  private isFull: boolean = false;
-
-  constructor(size: number) {
-    this.size = size;
-    this.buffer = new Array<T>(size);
-  }
-
-  push(item: T): void {
-    this.buffer[this.currentIndex] = item;
-    this.currentIndex = (this.currentIndex + 1) % this.size;
-    if (this.currentIndex === 0) {
-      this.isFull = true;
-    }
-  }
-
-  getPoints(): T[] {
-    if (!this.isFull) {
-      return this.buffer.slice(0, this.currentIndex);
-    }
-    return [...this.buffer.slice(this.currentIndex), ...this.buffer.slice(0, this.currentIndex)];
-  }
-}
 
 export interface PPGSignalMeterProps {
   value: number;
@@ -60,37 +26,13 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
   rawArrhythmiaData
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const dataBuffer = useRef<CircularBuffer<PPGDataPoint>>(new CircularBuffer<PPGDataPoint>(100));
   const baselineRef = useRef<number | null>(null);
   const lastValueRef = useRef<number>(0);
 
   const WINDOW_WIDTH_MS = 5000;
   const CANVAS_WIDTH = 1000;
   const CANVAS_HEIGHT = 200;
-  const verticalScale = 32.0;
-
-  const handleReset = () => {
-    dataBuffer.current = new CircularBuffer<PPGDataPoint>(100);
-    baselineRef.current = null;
-    lastValueRef.current = 0;
-    onReset();
-  };
-
-  const getQualityColor = (quality: number): string => {
-    if (quality > 90) return 'from-emerald-500/80 to-emerald-400/80';
-    if (quality > 75) return 'from-sky-500/80 to-sky-400/80';
-    if (quality > 60) return 'from-indigo-500/80 to-indigo-400/80';
-    if (quality > 40) return 'from-amber-500/80 to-amber-400/80';
-    return 'from-red-500/80 to-red-400/80';
-  };
-
-  const getQualityText = (quality: number): string => {
-    if (quality > 90) return 'Excellent';
-    if (quality > 75) return 'Very Good';
-    if (quality > 60) return 'Good';
-    if (quality > 40) return 'Fair';
-    return 'Poor';
-  };
+  const verticalScale = 64.0; // Aumentado para mejor visualización
 
   useEffect(() => {
     if (!canvasRef.current || !isFingerDetected) return;
@@ -108,44 +50,33 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
     }
 
     const normalizedValue = (value - (baselineRef.current ?? 0)) * verticalScale;
-    const isWaveStart = lastValueRef.current < 0 && normalizedValue >= 0;
     lastValueRef.current = normalizedValue;
-    
-    const newPoint: PPGDataPoint = {
-      value: normalizedValue,
-      quality,
-      timestamp: currentTime,
-      time: currentTime,
-      isArrhythmia: false
-    };
-    
-    dataBuffer.current.push(newPoint);
 
-    // Drawing logic
+    // Dibujar fondo
     ctx.fillStyle = '#F8FAFC';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    const points = dataBuffer.current.getPoints();
-    if (points.length > 1) {
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = '#0ea5e9';
-      ctx.beginPath();
+    // Dibujar línea central
+    ctx.strokeStyle = '#E2E8F0';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, canvas.height / 2);
+    ctx.lineTo(canvas.width, canvas.height / 2);
+    ctx.stroke();
 
-      points.forEach((point: PPGDataPoint, index: number) => {
-        const x = canvas.width - ((currentTime - point.timestamp) * canvas.width / WINDOW_WIDTH_MS);
-        const y = canvas.height / 2 + point.value;
+    // Dibujar señal
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#0ea5e9';
+    ctx.beginPath();
+    ctx.moveTo(canvas.width - 10, canvas.height / 2 + normalizedValue);
+    ctx.lineTo(canvas.width, canvas.height / 2 + normalizedValue);
+    ctx.stroke();
 
-        if (index === 0) {
-          ctx.moveTo(x, y);
-        } else {
-          ctx.lineTo(x, y);
-        }
-      });
+    // Efecto de desvanecimiento
+    ctx.fillStyle = 'rgba(248, 250, 252, 0.1)';
+    ctx.fillRect(0, 0, canvas.width - 10, canvas.height);
 
-      ctx.stroke();
-    }
-
-  }, [value, quality, isFingerDetected, arrhythmiaStatus]);
+  }, [value, quality, isFingerDetected]);
 
   return (
     <div className="fixed inset-0 bg-gradient-to-b from-white to-slate-50/30">
@@ -204,6 +135,22 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
       </div>
     </div>
   );
+};
+
+const getQualityColor = (quality: number): string => {
+  if (quality > 90) return 'from-emerald-500/80 to-emerald-400/80';
+  if (quality > 75) return 'from-sky-500/80 to-sky-400/80';
+  if (quality > 60) return 'from-indigo-500/80 to-indigo-400/80';
+  if (quality > 40) return 'from-amber-500/80 to-amber-400/80';
+  return 'from-red-500/80 to-red-400/80';
+};
+
+const getQualityText = (quality: number): string => {
+  if (quality > 90) return 'Excellent';
+  if (quality > 75) return 'Very Good';
+  if (quality > 60) return 'Good';
+  if (quality > 40) return 'Fair';
+  return 'Poor';
 };
 
 export default PPGSignalMeter;
