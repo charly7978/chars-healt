@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef } from 'react';
 import { Fingerprint } from 'lucide-react';
 
@@ -37,7 +36,7 @@ class CircularBuffer<T> {
   }
 }
 
-interface PPGSignalMeterProps {
+export interface PPGSignalMeterProps {
   value: number;
   quality: number;
   isFingerDetected: boolean;
@@ -51,15 +50,15 @@ interface PPGSignalMeterProps {
   } | null;
 }
 
-const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({ 
-  value, 
-  quality, 
+const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
+  value,
+  quality,
   isFingerDetected,
   onStartMeasurement,
   onReset,
   arrhythmiaStatus,
   rawArrhythmiaData
-}: PPGSignalMeterProps) => {
+}) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dataBuffer = useRef<CircularBuffer<PPGDataPoint>>(new CircularBuffer<PPGDataPoint>(100));
   const baselineRef = useRef<number | null>(null);

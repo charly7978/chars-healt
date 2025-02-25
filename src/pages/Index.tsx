@@ -17,10 +17,10 @@ const Index: React.FC = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [signalQuality, setSignalQuality] = useState(0);
-  const [vitalSigns, setVitalSigns] = useState<VitalSigns>({ 
-    spo2: 0, 
+  const [vitalSigns, setVitalSigns] = useState<VitalSigns>({
+    spo2: 0,
     pressure: "--/--",
-    arrhythmiaStatus: "--" 
+    arrhythmiaStatus: "--"
   });
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState<string | number>("--");
@@ -31,10 +31,14 @@ const Index: React.FC = () => {
     rmssd: number;
     rrVariation: number;
   } | null>(null);
-  
+
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat, initializeAudio, requestBeep } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
+
+  const handleError = (error: Error): void => {
+    console.error("Error activando linterna:", error);
+  };
 
   const enterFullScreen = async () => {
     try {
@@ -42,10 +46,6 @@ const Index: React.FC = () => {
     } catch (error: unknown) {
       console.log('Error al entrar en pantalla completa:', error);
     }
-  };
-
-  const onError = (error: Error): void => {
-    console.error("Error activando linterna:", error);
   };
 
   useEffect(() => {
@@ -136,7 +136,7 @@ const Index: React.FC = () => {
     if (videoTrack.getCapabilities()?.torch) {
       videoTrack.applyConstraints({
         advanced: [{ torch: true }]
-      }).catch(onError);
+      }).catch(handleError);
     }
     
     const tempCanvas = document.createElement('canvas');
