@@ -29,7 +29,7 @@ export class PPGSignalProcessor implements SignalProcessor {
   private readonly DEFAULT_CONFIG = {
     BUFFER_SIZE: 15,           // Aumentado para mejor estabilidad
     MIN_RED_THRESHOLD: 40,     // Ajustado para mejor detección
-    MAX_RED_THRESHOLD: 350,    // Aumentado para captar señales más intensas
+    MAX_RED_THRESHOLD: 300,    // Aumentado para captar señales más intensas
     STABILITY_WINDOW: 7,       // Ventana más grande para mejor estabilidad
     MIN_STABILITY_COUNT: 2,    // Más muestras para confirmar estabilidad 6
     HYSTERESIS: 5,            // Nuevo: histéresis para evitar fluctuaciones 4
