@@ -1,4 +1,5 @@
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 
 import { useState, useCallback, useRef } from 'react';
 import { VitalSignsProcessor } from '../modules/VitalSignsProcessor';
@@ -103,6 +104,32 @@ export function useVitalSignsProcessor() {
     return () => {
       // No hay recursos que limpiar para este procesador
 >>>>>>> Stashed changes
+=======
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { VitalSignsProcessor } from '../utils/VitalSignsProcessor';
+
+export function useVitalSignsProcessor() {
+  const processorRef = useRef<VitalSignsProcessor | null>(null);
+  const [spo2, setSpo2] = useState<number>(0);
+  const [pressure, setPressure] = useState<string>("--/--");
+  const [arrhythmiaStatus, setArrhythmiaStatus] = useState<string>("--");
+  const [lastArrhythmiaData, setLastArrhythmiaData] = useState<{
+    timestamp: number;
+    rmssd: number;
+    rrVariation: number;
+    type?: string;
+  } | null>(null);
+  
+  // Inicializar procesador
+  useEffect(() => {
+    if (!processorRef.current) {
+      processorRef.current = new VitalSignsProcessor();
+      console.log("useVitalSignsProcessor: Procesador de signos vitales inicializado");
+    }
+    
+    return () => {
+      // No hay recursos que limpiar para este procesador
+>>>>>>> Stashed changes
     };
   }, []);
   
@@ -144,6 +171,7 @@ export function useVitalSignsProcessor() {
   // Función para resetear el procesador
   const reset = useCallback(() => {
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
     processor.reset();
     setArrhythmiaCounter(0);
     lastArrhythmiaTime.current = 0;
@@ -152,6 +180,8 @@ export function useVitalSignsProcessor() {
   }, [processor]);
 
 =======
+=======
+>>>>>>> Stashed changes
     if (processorRef.current) {
       processorRef.current.reset();
       setSpo2(0);
@@ -162,6 +192,9 @@ export function useVitalSignsProcessor() {
     }
   }, []);
   
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
   return {
     processSignal,
