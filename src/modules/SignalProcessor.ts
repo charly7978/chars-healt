@@ -31,9 +31,9 @@ export class PPGSignalProcessor implements SignalProcessor {
     MIN_RED_THRESHOLD: 100,     // Ajustado para mejor detección
     MAX_RED_THRESHOLD: 268,    // Aumentado para captar señales más intensas
     STABILITY_WINDOW: 15,       // Ventana más grande para mejor estabilidad
-    MIN_STABILITY_COUNT: 2,    // Más muestras para confirmar estabilidad 6
+    MIN_STABILITY_COUNT: 6,    // Más muestras para confirmar estabilidad 6
     HYSTERESIS: 5,            // Nuevo: histéresis para evitar fluctuaciones 4
-    MIN_CONSECUTIVE_DETECTIONS: 3  // Nuevo: mínimo de detecciones consecutivas
+    MIN_CONSECUTIVE_DETECTIONS: 2  // Nuevo: mínimo de detecciones consecutivas
   };
 
   private currentConfig: typeof this.DEFAULT_CONFIG;
