@@ -5,7 +5,6 @@ import { useSignalProcessor } from "@/hooks/useSignalProcessor";
 import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
-import MonitorButton from "@/components/MonitorButton";
 
 interface VitalSigns {
   spo2: number;
@@ -154,19 +153,25 @@ const Index = () => {
 
   useEffect(() => {
     if (lastSignal && lastSignal.fingerDetected && isMonitoring) {
+      // Procesar latidos cardíacos
       const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
       setHeartRate(heartBeatResult.bpm);
       
+      // Procesar signos vitales y arritmias
       const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
       if (vitals) {
+        // Actualizar estado de signos vitales de manera inmediata
         setVitalSigns(vitals);
         
+        // Si hay datos de arritmia nuevos, actualizar estado
         if (vitals.lastArrhythmiaData) {
           setLastArrhythmiaData(vitals.lastArrhythmiaData);
           
+          // Actualizar el contador y estado directamente del status
           const [status, count] = vitals.arrhythmiaStatus.split('|');
           setArrhythmiaCount(count || "0");
           
+          // Forzar actualización del display con el nuevo estado
           setVitalSigns(current => ({
             ...current,
             arrhythmiaStatus: vitals.arrhythmiaStatus
@@ -210,7 +215,7 @@ const Index = () => {
             />
           </div>
 
-          <div className="absolute bottom-[90px] left-0 right-0 px-4">
+          <div className="absolute bottom-[100px] left-0 right-0 px-4">
             <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4">
               <div className="grid grid-cols-2 gap-4">
                 <VitalSign 
@@ -243,10 +248,12 @@ const Index = () => {
           )}
 
           <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 mt-auto">
-            <MonitorButton 
-              isMonitoring={isMonitoring}
+            <button 
               onClick={startMonitoring}
-            />
+              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
+            >
+              INICIAR
+            </button>
             <button 
               onClick={handleReset}
               className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"

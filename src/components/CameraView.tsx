@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, useState } from 'react';
 
 interface CameraViewProps {
@@ -16,8 +15,6 @@ const CameraView = ({
 }: CameraViewProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
-  const frameIntervalRef = useRef<number>(1000 / 30); // 30 FPS
-  const lastFrameTimeRef = useRef<number>(0);
 
   const stopCamera = async () => {
     if (stream) {
@@ -48,7 +45,7 @@ const CameraView = ({
       if (isAndroid) {
         // Ajustes para mejorar la extracción de señal en Android
         Object.assign(baseVideoConstraints, {
-          frameRate: { ideal: 30, max: 30 }, // Limitamos explícitamente a 30 FPS
+          frameRate: { ideal: 25 },
           resizeMode: 'crop-and-scale'
         });
       }
