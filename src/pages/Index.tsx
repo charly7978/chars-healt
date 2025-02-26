@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -58,6 +59,8 @@ const Index = () => {
       }
     };
 
+    // Entrar en modo inmersivo al cargar
+    enterFullScreen();
     lockOrientation();
 
     return () => {
@@ -70,7 +73,6 @@ const Index = () => {
     if (isMonitoring) {
       handleReset();
     } else {
-      enterFullScreen();
       setIsMonitoring(true);
       setIsCameraOn(true);
       startProcessing();
