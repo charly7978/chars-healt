@@ -261,7 +261,7 @@ export class VitalSignsProcessor {
       pttValues.push(dt);
     }
     
-    // Calculate weighted PTT with unique variable names
+    // Calculate weighted PTT using specific variable names
     let pttWeightSum = 0;
     let pttWeightedSum = 0;
     
@@ -307,10 +307,10 @@ export class VitalSignsProcessor {
       this.diastolicBuffer.shift();
     }
 
-    // Calculate final smoothed values with uniquely named variables
+    // Calculate final smoothed values with specific variable names
     let finalSystolic = 0;
     let finalDiastolic = 0;
-    let smoothingWeightSum = 0;  // Renamed from weightSum to avoid conflict
+    let smoothingWeightSum = 0;
 
     for (let i = 0; i < this.systolicBuffer.length; i++) {
       const weight = Math.pow(this.BP_ALPHA, this.systolicBuffer.length - 1 - i);
