@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -213,8 +214,8 @@ const Index = () => {
         {/* Empty space between PPG and vital signs */}
         <div className="flex-1" />
 
-        {/* Vital signs grid NOW in the bottom part */}
-        <div className="px-4 pb-8">
+        {/* Vital signs grid NOW in the bottom part - SOLO cambié pb-8 a pb-12 */}
+        <div className="px-4 pb-12">
           <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4 mb-4">
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <VitalSign 
