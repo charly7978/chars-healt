@@ -54,7 +54,8 @@ const Index = () => {
 
       // En iOS, simplemente añadimos al homescreen
       if (navigator.userAgent.includes("iPhone") || navigator.userAgent.includes("iPad")) {
-        if (!window.navigator.standalone) {
+        const isInStandaloneMode = window.matchMedia('(display-mode: standalone)').matches;
+        if (!isInStandaloneMode) {
           console.log("Por favor, añade esta aplicación a tu pantalla de inicio para modo inmersivo");
         }
       }
@@ -92,6 +93,12 @@ const Index = () => {
     document.addEventListener('click', handleUserInteraction);
 
     lockOrientation();
+
+    // Agregar meta viewport para asegurar que cubra toda la pantalla
+    const viewport = document.querySelector('meta[name=viewport]');
+    if (viewport) {
+      viewport.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover');
+    }
 
     return () => {
       document.body.removeEventListener('touchmove', preventScroll);
@@ -228,7 +235,8 @@ const Index = () => {
       className="fixed inset-0 flex flex-col bg-black/90" 
       style={{ 
         height: '100dvh',
-        minHeight: '-webkit-fill-available'
+        minHeight: '-webkit-fill-available',
+        touchAction: 'none'
       }}
     >
       <div className="absolute inset-0 z-0">
