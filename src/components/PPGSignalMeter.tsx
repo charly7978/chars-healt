@@ -183,6 +183,10 @@ const PPGSignalMeter = ({
 
     const points = dataBufferRef.current.getPoints();
     if (points.length > 1) {
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.lineWidth = 2;
+
       for (let i = 1; i < points.length; i++) {
         const prevPoint = points[i - 1];
         const point = points[i];
@@ -192,36 +196,21 @@ const PPGSignalMeter = ({
         const x2 = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
         const y2 = canvas.height / 2 - point.value;
 
+        // Dibujar línea de señal
         ctx.beginPath();
         ctx.strokeStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
-        ctx.lineWidth = 2;
-        ctx.lineJoin = 'round';
-        ctx.lineCap = 'round';
         ctx.moveTo(x1, y1);
         ctx.lineTo(x2, y2);
         ctx.stroke();
-      }
 
-      points.forEach((point, index) => {
-        if (index > 0 && index < points.length - 1) {
-          const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-          const y = canvas.height / 2 - point.value;
-          const prevPoint = points[index - 1];
-          const nextPoint = points[index + 1];
-          
-          if (point.value > prevPoint.value && point.value > nextPoint.value) {
-            ctx.beginPath();
-            ctx.arc(x, y, 4, 0, Math.PI * 2);
-            ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
-            ctx.fill();
-
-            ctx.font = 'bold 12px Inter';
-            ctx.fillStyle = '#000000';
-            ctx.textAlign = 'center';
-            ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 20);
-          }
+        // Si es un punto de arritmia, dibujamos un círculo rojo
+        if (point.isArrhythmia) {
+          ctx.beginPath();
+          ctx.fillStyle = '#DC2626';
+          ctx.arc(x2, y2, 4, 0, Math.PI * 2);
+          ctx.fill();
         }
-      });
+      }
     }
 
     lastRenderTimeRef.current = currentTime;
