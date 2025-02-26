@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -40,33 +39,36 @@ const Index = () => {
     try {
       const elem = document.documentElement;
       
-      // Intentar todas las variantes de fullscreen disponibles
-      if ((elem as any).requestFullscreen) {
-        await (elem as any).requestFullscreen();
-      } else if ((elem as any).webkitRequestFullscreen) {
-        await (elem as any).webkitRequestFullscreen();
-      } else if ((elem as any).webkitEnterFullscreen) { // iOS Safari
-        await (elem as any).webkitEnterFullscreen();
-      } else if ((elem as any).mozRequestFullScreen) {
-        await (elem as any).mozRequestFullScreen();
-      } else if ((elem as any).msRequestFullscreen) {
-        await (elem as any).msRequestFullscreen();
-      }
-
-      // Intentar modo inmersivo en Android
       if (navigator.userAgent.includes("Android")) {
-        // Intentar ocultar la barra de sistema
         if ((window as any).AndroidFullScreen) {
-          (window as any).AndroidFullScreen.immersiveMode();
+          await (window as any).AndroidFullScreen.immersiveMode();
         }
         
-        // Intentar ocultar la barra de navegación
-        if (document.body.requestFullscreen) {
-          await document.body.requestFullscreen();
+        try {
+          if (document.body.requestFullscreen) {
+            await document.body.requestFullscreen();
+          }
+        } catch (e) {
+          console.log('Error en fullscreen secundario:', e);
         }
       }
+      
+      try {
+        if (elem.requestFullscreen) {
+          await elem.requestFullscreen();
+        } else if ((elem as any).webkitRequestFullscreen) {
+          await (elem as any).webkitRequestFullscreen();
+        } else if ((elem as any).webkitEnterFullscreen) {
+          await (elem as any).webkitEnterFullscreen();
+        } else if ((elem as any).mozRequestFullScreen) {
+          await (elem as any).mozRequestFullScreen();
+        } else if ((elem as any).msRequestFullscreen) {
+          await (elem as any).msRequestFullscreen();
+        }
+      } catch (e) {
+        console.log('Error en fullscreen primario:', e);
+      }
 
-      // En iOS, detectar modo standalone usando window.matchMedia
       if (navigator.userAgent.includes("iPhone") || navigator.userAgent.includes("iPad")) {
         const isInStandaloneMode = ('standalone' in window.navigator) || window.matchMedia('(display-mode: standalone)').matches;
         if (!isInStandaloneMode) {
@@ -79,15 +81,15 @@ const Index = () => {
   };
 
   useEffect(() => {
-    // Prevenir scroll y rebote
     const preventScroll = (e: Event) => e.preventDefault();
     document.body.addEventListener('touchmove', preventScroll, { passive: false });
     document.body.addEventListener('scroll', preventScroll, { passive: false });
     
-    // Configurar viewport
     const viewport = document.querySelector('meta[name=viewport]');
     if (viewport) {
-      viewport.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, minimal-ui');
+      viewport.setAttribute('content', 
+        'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, minimal-ui, interactive-widget=resizes-content'
+      );
     }
 
     const lockOrientation = async () => {
@@ -100,35 +102,35 @@ const Index = () => {
       }
     };
 
-    // Intentar entrar en modo inmersivo inmediatamente y con cada interacción
-    const tryEnterFullscreen = () => {
-      enterFullScreen();
-      lockOrientation();
+    const activateImmersiveMode = async () => {
+      await enterFullScreen();
+      await lockOrientation();
+      
+      document.body.style.display = 'none';
+      document.body.offsetHeight; // Force reflow
+      document.body.style.display = '';
     };
 
-    // Intentar inmediatamente
-    tryEnterFullscreen();
+    activateImmersiveMode();
 
-    // Intentar con interacción del usuario
-    document.addEventListener('touchstart', tryEnterFullscreen, { once: true });
-    document.addEventListener('click', tryEnterFullscreen, { once: true });
+    const handleUserInteraction = () => {
+      activateImmersiveMode();
+    };
 
-    // Reintentar periódicamente
-    const fullscreenInterval = setInterval(tryEnterFullscreen, 1000);
+    document.addEventListener('touchstart', handleUserInteraction, { once: true });
+    document.addEventListener('click', handleUserInteraction, { once: true });
+
+    const quickRetryInterval = setInterval(activateImmersiveMode, 500);
+    setTimeout(() => clearInterval(quickRetryInterval), 2000);
+
+    const fullscreenInterval = setInterval(activateImmersiveMode, 3000);
     
-    // Intentar cuando el documento esté completamente cargado
-    if (document.readyState === 'complete') {
-      tryEnterFullscreen();
-    } else {
-      window.addEventListener('load', tryEnterFullscreen);
-    }
-
     return () => {
       document.body.removeEventListener('touchmove', preventScroll);
       document.body.removeEventListener('scroll', preventScroll);
-      document.removeEventListener('touchstart', tryEnterFullscreen);
-      document.removeEventListener('click', tryEnterFullscreen);
-      window.removeEventListener('load', tryEnterFullscreen);
+      document.removeEventListener('touchstart', handleUserInteraction);
+      document.removeEventListener('click', handleUserInteraction);
+      clearInterval(quickRetryInterval);
       clearInterval(fullscreenInterval);
     };
   }, []);
