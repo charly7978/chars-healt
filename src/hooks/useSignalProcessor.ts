@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from 'react';
 import { PPGSignalProcessor } from '../modules/SignalProcessor';
 import { ProcessedSignal, ProcessingError } from '../types/signal';
@@ -16,21 +15,12 @@ export const useSignalProcessor = () => {
     console.log("useSignalProcessor: Configurando callbacks");
     
     processor.onSignalReady = (signal: ProcessedSignal) => {
-      // Lógica simplificada: dedo detectado si el valor está en el rango negro-rojo
-      const normalizedValue = signal.filteredValue;
-      const isFingerDetected = normalizedValue >= 0 && normalizedValue <= 255;
-      
       console.log("useSignalProcessor: Señal recibida:", {
         timestamp: signal.timestamp,
         quality: signal.quality,
-        filteredValue: signal.filteredValue,
-        isFingerDetected
+        filteredValue: signal.filteredValue
       });
-      
-      setLastSignal({
-        ...signal,
-        fingerDetected: isFingerDetected
-      });
+      setLastSignal(signal);
       setError(null);
     };
 
