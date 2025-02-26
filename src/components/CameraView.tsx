@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, useState } from 'react';
 
 interface CameraViewProps {
@@ -16,40 +15,6 @@ const CameraView = ({
 }: CameraViewProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
-  const [batteryLevel, setBatteryLevel] = useState<number>(100);
-  const wakeLockRef = useRef<any>(null);
-  const torchTimeoutRef = useRef<number | null>(null);
-
-  const getBatteryLevel = async () => {
-    try {
-      if ('getBattery' in navigator) {
-        const battery: any = await (navigator as any).getBattery();
-        setBatteryLevel(battery.level * 100);
-        battery.addEventListener('levelchange', () => {
-          setBatteryLevel(battery.level * 100);
-        });
-      }
-    } catch (error) {
-      console.log('Error al obtener nivel de batería:', error);
-    }
-  };
-
-  const acquireWakeLock = async () => {
-    try {
-      if ('wakeLock' in navigator) {
-        wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
-      }
-    } catch (err) {
-      console.log('Error al adquirir wake lock:', err);
-    }
-  };
-
-  const releaseWakeLock = () => {
-    if (wakeLockRef.current) {
-      wakeLockRef.current.release();
-      wakeLockRef.current = null;
-    }
-  };
 
   const stopCamera = async () => {
     if (stream) {
@@ -61,11 +26,6 @@ const CameraView = ({
       });
       setStream(null);
     }
-    if (torchTimeoutRef.current) {
-      clearTimeout(torchTimeoutRef.current);
-      torchTimeoutRef.current = null;
-    }
-    releaseWakeLock();
   };
 
   const startCamera = async () => {
@@ -75,18 +35,17 @@ const CameraView = ({
       }
 
       const isAndroid = /android/i.test(navigator.userAgent);
-      
-      // Configuración base optimizada para batería baja
+
       const baseVideoConstraints: MediaTrackConstraints = {
         facingMode: 'environment',
-        width: { ideal: batteryLevel < 20 ? 480 : 720 },
-        height: { ideal: batteryLevel < 20 ? 320 : 480 }
+        width: { ideal: 720 },
+        height: { ideal: 480 }
       };
 
       if (isAndroid) {
-        // Ajustes específicos para Android
+        // Ajustes para mejorar la extracción de señal en Android
         Object.assign(baseVideoConstraints, {
-          frameRate: { ideal: batteryLevel < 20 ? 20 : 25 },
+          frameRate: { ideal: 25 },
           resizeMode: 'crop-and-scale'
         });
       }
@@ -103,48 +62,20 @@ const CameraView = ({
           const capabilities = videoTrack.getCapabilities();
           const advancedConstraints: MediaTrackConstraintSet[] = [];
           
-          // Optimizaciones de cámara basadas en el nivel de batería
           if (capabilities.exposureMode) {
-            advancedConstraints.push({ 
-              exposureMode: batteryLevel < 20 ? 'manual' : 'continuous'
-            });
+            advancedConstraints.push({ exposureMode: 'continuous' });
           }
           if (capabilities.focusMode) {
-            advancedConstraints.push({ 
-              focusMode: 'continuous'
-            });
+            advancedConstraints.push({ focusMode: 'continuous' });
           }
           if (capabilities.whiteBalanceMode) {
-            advancedConstraints.push({ 
-              whiteBalanceMode: batteryLevel < 20 ? 'manual' : 'continuous'
-            });
+            advancedConstraints.push({ whiteBalanceMode: 'continuous' });
           }
 
           if (advancedConstraints.length > 0) {
             await videoTrack.applyConstraints({
               advanced: advancedConstraints
             });
-          }
-
-          // Control automático de la linterna
-          if (videoTrack.getCapabilities()?.torch) {
-            const manageTorch = async () => {
-              if (!isFingerDetected) {
-                await videoTrack.applyConstraints({
-                  advanced: [{ torch: false }]
-                });
-              } else {
-                await videoTrack.applyConstraints({
-                  advanced: [{ torch: true }]
-                });
-              }
-            };
-
-            // Gestión eficiente de la linterna
-            if (torchTimeoutRef.current) {
-              clearTimeout(torchTimeoutRef.current);
-            }
-            torchTimeoutRef.current = window.setTimeout(manageTorch, 1000);
           }
 
           if (videoRef.current) {
@@ -165,7 +96,6 @@ const CameraView = ({
       }
 
       setStream(newStream);
-      acquireWakeLock();
       
       if (onStreamReady) {
         onStreamReady(newStream);
@@ -176,14 +106,11 @@ const CameraView = ({
   };
 
   useEffect(() => {
-    getBatteryLevel();
-    
     if (isMonitoring && !stream) {
       startCamera();
     } else if (!isMonitoring && stream) {
       stopCamera();
     }
-    
     return () => {
       stopCamera();
     };
