@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -198,24 +197,8 @@ const Index = () => {
       </div>
 
       <div className="relative z-10 flex flex-col h-full">
-        {/* PPG Signal NOW at the top */}
-        <div className="relative h-[50vh]">
-          <PPGSignalMeter 
-            value={lastSignal?.filteredValue || 0}
-            quality={lastSignal?.quality || 0}
-            isFingerDetected={lastSignal?.fingerDetected || false}
-            onStartMeasurement={startMonitoring}
-            onReset={handleReset}
-            arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
-            rawArrhythmiaData={lastArrhythmiaData}
-          />
-        </div>
-
-        {/* Empty space between PPG and vital signs */}
-        <div className="flex-1" />
-
-        {/* Vital signs grid NOW in the bottom part */}
-        <div className="px-4 pb-4">
+        {/* DISPLAYS NOW AT THE TOP */}
+        <div className="px-4 pt-4">
           <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4 mb-4">
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <VitalSign 
@@ -241,26 +224,27 @@ const Index = () => {
           </div>
         </div>
 
+        {/* Empty space between displays and PPG */}
+        <div className="flex-1" />
+
+        {/* PPG Signal NOW at the bottom */}
+        <div className="relative h-[50vh]">
+          <PPGSignalMeter 
+            value={lastSignal?.filteredValue || 0}
+            quality={lastSignal?.quality || 0}
+            isFingerDetected={lastSignal?.fingerDetected || false}
+            onStartMeasurement={startMonitoring}
+            onReset={handleReset}
+            arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
+            rawArrhythmiaData={lastArrhythmiaData}
+          />
+        </div>
+
         {isMonitoring && (
           <div className="absolute bottom-20 left-0 right-0 text-center z-20">
             <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 30s</span>
           </div>
         )}
-
-        <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 mt-auto">
-          <button 
-            onClick={startMonitoring}
-            className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
-          >
-            INICIAR
-          </button>
-          <button 
-            onClick={handleReset}
-            className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
-          >
-            RESET
-          </button>
-        </div>
       </div>
     </div>
   );
