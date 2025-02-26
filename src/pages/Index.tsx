@@ -180,8 +180,12 @@ const Index = () => {
 
   return (
     <div 
-      className="fixed inset-0 flex flex-col bg-black safe-top safe-bottom" 
-      style={{ height: '100vh' }}
+      className="fixed inset-0 flex flex-col bg-black" 
+      style={{ 
+        height: '100vh',
+        paddingTop: 'env(safe-area-inset-top)',
+        paddingBottom: 'env(safe-area-inset-bottom)'
+      }}
     >
       <div className="flex-1 relative">
         <div className="absolute inset-0">
@@ -194,8 +198,20 @@ const Index = () => {
         </div>
 
         <div className="relative z-10 h-full flex flex-col">
-          <div className="px-4 pt-4 vital-signs-container">
-            <div className="vital-sign-card">
+          <div className="flex-1 relative">
+            <PPGSignalMeter 
+              value={lastSignal?.filteredValue || 0}
+              quality={lastSignal?.quality || 0}
+              isFingerDetected={lastSignal?.fingerDetected || false}
+              onStartMeasurement={startMonitoring}
+              onReset={handleReset}
+              arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
+              rawArrhythmiaData={lastArrhythmiaData}
+            />
+          </div>
+
+          <div className="px-4 mb-[90px]">
+            <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4">
               <div className="grid grid-cols-2 gap-4">
                 <VitalSign 
                   label="FRECUENCIA CARDÍACA"
@@ -217,20 +233,6 @@ const Index = () => {
                   value={vitalSigns.arrhythmiaStatus}
                 />
               </div>
-            </div>
-          </div>
-
-          <div className="flex-1 ppg-container">
-            <div className="absolute inset-x-0 bottom-[90px] h-[calc(100%-200px)]">
-              <PPGSignalMeter 
-                value={lastSignal?.filteredValue || 0}
-                quality={lastSignal?.quality || 0}
-                isFingerDetected={lastSignal?.fingerDetected || false}
-                onStartMeasurement={startMonitoring}
-                onReset={handleReset}
-                arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
-                rawArrhythmiaData={lastArrhythmiaData}
-              />
             </div>
           </div>
 
