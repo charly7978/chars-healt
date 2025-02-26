@@ -38,7 +38,26 @@ const Index = () => {
 
   const enterFullScreen = async () => {
     try {
-      await document.documentElement.requestFullscreen();
+      // Intentar primero el modo inmersivo si está disponible
+      if (navigator.userAgent.includes("Android")) {
+        const elem = document.documentElement;
+        if (elem.requestFullscreen) {
+          await elem.requestFullscreen();
+        } else if ((elem as any).webkitRequestFullscreen) {
+          await (elem as any).webkitRequestFullscreen();
+        } else if ((elem as any).mozRequestFullScreen) {
+          await (elem as any).mozRequestFullScreen();
+        } else if ((elem as any).msRequestFullscreen) {
+          await (elem as any).msRequestFullscreen();
+        }
+      }
+
+      // En iOS, simplemente añadimos al homescreen
+      if (navigator.userAgent.includes("iPhone") || navigator.userAgent.includes("iPad")) {
+        if (!window.navigator.standalone) {
+          console.log("Por favor, añade esta aplicación a tu pantalla de inicio para modo inmersivo");
+        }
+      }
     } catch (err) {
       console.log('Error al entrar en pantalla completa:', err);
     }
@@ -59,13 +78,26 @@ const Index = () => {
       }
     };
 
-    // Entrar en modo inmersivo al cargar
+    // Intentar entrar en modo inmersivo inmediatamente
     enterFullScreen();
+    
+    // También intentar cuando haya una interacción del usuario
+    const handleUserInteraction = () => {
+      enterFullScreen();
+      document.removeEventListener('touchstart', handleUserInteraction);
+      document.removeEventListener('click', handleUserInteraction);
+    };
+
+    document.addEventListener('touchstart', handleUserInteraction);
+    document.addEventListener('click', handleUserInteraction);
+
     lockOrientation();
 
     return () => {
       document.body.removeEventListener('touchmove', preventScroll);
       document.body.removeEventListener('scroll', preventScroll);
+      document.removeEventListener('touchstart', handleUserInteraction);
+      document.removeEventListener('click', handleUserInteraction);
     };
   }, []);
 
