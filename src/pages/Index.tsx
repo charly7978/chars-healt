@@ -198,8 +198,24 @@ const Index = () => {
       </div>
 
       <div className="relative z-10 flex flex-col h-full">
-        {/* Vital signs grid moved to top */}
-        <div className="px-4 pt-4">
+        {/* PPG Signal NOW at the top */}
+        <div className="relative h-[50vh]">
+          <PPGSignalMeter 
+            value={lastSignal?.filteredValue || 0}
+            quality={lastSignal?.quality || 0}
+            isFingerDetected={lastSignal?.fingerDetected || false}
+            onStartMeasurement={startMonitoring}
+            onReset={handleReset}
+            arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
+            rawArrhythmiaData={lastArrhythmiaData}
+          />
+        </div>
+
+        {/* Empty space between PPG and vital signs */}
+        <div className="flex-1" />
+
+        {/* Vital signs grid NOW in the bottom part */}
+        <div className="px-4 pb-4">
           <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4 mb-4">
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <VitalSign 
@@ -223,22 +239,6 @@ const Index = () => {
               />
             </div>
           </div>
-        </div>
-
-        {/* Empty space between vital signs and PPG */}
-        <div className="flex-1" />
-
-        {/* PPG Signal in the lower part */}
-        <div className="relative h-[50vh]">
-          <PPGSignalMeter 
-            value={lastSignal?.filteredValue || 0}
-            quality={lastSignal?.quality || 0}
-            isFingerDetected={lastSignal?.fingerDetected || false}
-            onStartMeasurement={startMonitoring}
-            onReset={handleReset}
-            arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
-            rawArrhythmiaData={lastArrhythmiaData}
-          />
         </div>
 
         {isMonitoring && (
