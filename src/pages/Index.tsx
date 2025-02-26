@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -198,7 +197,7 @@ const Index = () => {
       </div>
 
       <div className="relative z-10 flex flex-col h-full">
-        {/* PPG Signal - sin tocar su altura */}
+        {/* PPG Signal section - fixed height */}
         <div className="relative h-[45vh]">
           <PPGSignalMeter 
             value={lastSignal?.filteredValue || 0}
@@ -211,11 +210,11 @@ const Index = () => {
           />
         </div>
 
-        {/* Empty space between PPG and vital signs - aumentando a mt-24 para bajar más los displays */}
-        <div className="flex-1 mt-24" />
+        {/* Flexible space that pushes vital signs down */}
+        <div className="flex-1 mt-28" />
 
-        {/* Vital signs grid */}
-        <div className="px-4 pb-8 mt-auto">
+        {/* Vital signs grid - now with fixed bottom positioning */}
+        <div className="w-full px-4 pb-8">
           <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4 mb-4">
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <VitalSign 
@@ -242,12 +241,13 @@ const Index = () => {
         </div>
 
         {isMonitoring && (
-          <div className="absolute bottom-20 left-0 right-0 text-center z-20">
+          <div className="fixed bottom-20 left-0 right-0 text-center z-20">
             <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 30s</span>
           </div>
         )}
 
-        <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 mt-auto">
+        {/* Fixed bottom buttons */}
+        <div className="w-full h-[80px] grid grid-cols-2 gap-px bg-gray-900">
           <button 
             onClick={startMonitoring}
             className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
