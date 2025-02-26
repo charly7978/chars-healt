@@ -198,9 +198,9 @@ const Index = () => {
       </div>
 
       <div className="relative z-10 flex flex-col h-full">
-        {/* DISPLAYS con efecto glass y padding superior ajustado */}
+        {/* DISPLAYS con mejor visibilidad */}
         <div className="px-4 pt-8">
-          <div className="bg-white/10 backdrop-blur-lg border border-white/20 rounded-xl p-4 mb-4 shadow-lg">
+          <div className="bg-black/70 backdrop-blur-md rounded-xl p-4 mb-4 shadow-lg border border-gray-800">
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <VitalSign 
                 label="FRECUENCIA CARDÍACA"
