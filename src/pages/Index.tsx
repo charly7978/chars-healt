@@ -198,8 +198,8 @@ const Index = () => {
       </div>
 
       <div className="relative z-10 flex flex-col h-full">
-        {/* PPG Signal - ahora con altura reducida a 40vh para bajar la línea base */}
-        <div className="relative h-[40vh]">
+        {/* PPG Signal */}
+        <div className="relative h-[45vh]">
           <PPGSignalMeter 
             value={lastSignal?.filteredValue || 0}
             quality={lastSignal?.quality || 0}
@@ -211,7 +211,7 @@ const Index = () => {
           />
         </div>
 
-        {/* Empty space between PPG and vital signs */}
+        {/* Empty space between PPG and vital signs - ahora con mt-auto para empujar los displays hacia abajo */}
         <div className="flex-1 mt-20" />
 
         {/* Vital signs grid */}
