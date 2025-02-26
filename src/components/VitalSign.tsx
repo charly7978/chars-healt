@@ -1,59 +1,38 @@
-
-import React from 'react';
-
 interface VitalSignProps {
   label: string;
   value: string | number;
   unit?: string;
 }
 
-const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit }) => {
+const VitalSign = ({ label, value, unit }: VitalSignProps) => {
   const isArrhythmiaDisplay = label === "ARRITMIAS";
   
   const getArrhythmiaDisplay = () => {
     if (!isArrhythmiaDisplay) return { text: value, color: "" };
     
-    if (value === "--") {
-      return { 
-        text: "--/--", 
-        color: "text-white" 
-      };
-    }
-    
     const [status, count] = String(value).split('|');
-    console.log('Procesando display de arritmias:', { status, count, value });
     
     if (status === "ARRITMIA DETECTADA") {
       return {
-        text: count ? `ARRITMIA DETECTADA (${count})` : "ARRITMIA DETECTADA",
-        color: "text-red-500"
-      };
-    }
-    
-    if (status === "CALIBRANDO...") {
-      return {
-        text: status,
-        color: "text-yellow-500"
+        text: count ? `ARRITMIA (${count})` : "ARRITMIA DETECTADA",
+        color: "text-medical-red"
       };
     }
     
     return {
-      text: "SIN ARRITMIA DETECTADA",
-      color: "text-cyan-500"
+      text: "SIN ARRITMIAS",
+      color: "text-[#0FA0CE]"
     };
   };
 
   const { text, color } = getArrhythmiaDisplay();
 
   return (
-    <div className="relative overflow-hidden group bg-gradient-to-br from-gray-800/30 to-gray-900/30 backdrop-blur-md rounded-lg p-4 transition-all duration-300 hover:from-gray-800/40 hover:to-gray-900/40">
-      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent animate-[progress_2s_ease-in-out_infinite] opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-      <h3 className="text-gray-400/90 text-xs mb-2">{label}</h3>
+    <div className="bg-gray-800/20 backdrop-blur-md rounded p-2.5 min-w-[140px]">
+      <h3 className="text-gray-400/90 text-xs mb-1">{label}</h3>
       <div className="flex items-baseline gap-1 justify-center">
-        <span 
-          className={`${isArrhythmiaDisplay ? 'text-sm' : 'text-lg'} font-bold ${color || 'text-white'} transition-colors duration-300`}
-        >
-          {text}
+        <span className={`${isArrhythmiaDisplay ? 'text-sm' : 'text-xl'} font-bold ${color || 'text-white/90'}`}>
+          {isArrhythmiaDisplay ? text : value}
         </span>
         {!isArrhythmiaDisplay && unit && (
           <span className="text-gray-400/90 text-xs">{unit}</span>
