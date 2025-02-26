@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -39,60 +40,65 @@ const Index = () => {
     try {
       const elem = document.documentElement;
       
+      // Primero intentar el modo inmersivo de Android
       if (navigator.userAgent.includes("Android")) {
         if ((window as any).AndroidFullScreen) {
           await (window as any).AndroidFullScreen.immersiveMode();
         }
         
+        // Forzar pantalla completa en el body como respaldo
         try {
-          if (document.body.requestFullscreen) {
-            await document.body.requestFullscreen();
-          }
+          await document.body.requestFullscreen();
         } catch (e) {
           console.log('Error en fullscreen secundario:', e);
         }
       }
-      
-      try {
-        if (elem.requestFullscreen) {
-          await elem.requestFullscreen();
-        } else if ((elem as any).webkitRequestFullscreen) {
-          await (elem as any).webkitRequestFullscreen();
-        } else if ((elem as any).webkitEnterFullscreen) {
-          await (elem as any).webkitEnterFullscreen();
-        } else if ((elem as any).mozRequestFullScreen) {
-          await (elem as any).mozRequestFullScreen();
-        } else if ((elem as any).msRequestFullscreen) {
-          await (elem as any).msRequestFullscreen();
+
+      // Intentar todos los métodos de pantalla completa conocidos
+      const fullscreenMethods = [
+        () => elem.requestFullscreen(),
+        () => (elem as any).webkitRequestFullscreen(),
+        () => (elem as any).webkitEnterFullscreen(),
+        () => (elem as any).mozRequestFullScreen(),
+        () => (elem as any).msRequestFullscreen()
+      ];
+
+      // Intentar cada método hasta que uno funcione
+      for (const method of fullscreenMethods) {
+        try {
+          await method();
+          break; // Si tiene éxito, salir del bucle
+        } catch (e) {
+          continue; // Si falla, intentar el siguiente método
         }
-      } catch (e) {
-        console.log('Error en fullscreen primario:', e);
       }
 
-      if (navigator.userAgent.includes("iPhone") || navigator.userAgent.includes("iPad")) {
-        const isInStandaloneMode = ('standalone' in window.navigator) || window.matchMedia('(display-mode: standalone)').matches;
-        if (!isInStandaloneMode) {
-          console.log("Por favor, añade esta aplicación a tu pantalla de inicio para modo inmersivo");
-        }
-      }
     } catch (err) {
       console.log('Error al entrar en pantalla completa:', err);
     }
   };
 
   useEffect(() => {
+    let mounted = true;
+    
+    // Prevenir scroll y rebote
     const preventScroll = (e: Event) => e.preventDefault();
     document.body.addEventListener('touchmove', preventScroll, { passive: false });
     document.body.addEventListener('scroll', preventScroll, { passive: false });
     
+    // Configurar viewport
     const viewport = document.querySelector('meta[name=viewport]');
     if (viewport) {
       viewport.setAttribute('content', 
-        'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, minimal-ui, interactive-widget=resizes-content'
+        'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, minimal-ui'
       );
     }
 
-    const lockOrientation = async () => {
+    // Función para activar modo inmersivo
+    const activateImmersiveMode = async () => {
+      if (!mounted) return;
+      
+      // Intentar bloquear orientación
       try {
         if (screen.orientation?.lock) {
           await screen.orientation.lock('portrait');
@@ -100,38 +106,41 @@ const Index = () => {
       } catch (error) {
         console.error('Error locking orientation:', error);
       }
-    };
 
-    const activateImmersiveMode = async () => {
+      // Intentar modo inmersivo
       await enterFullScreen();
-      await lockOrientation();
-      
+
+      // Forzar reflow
+      const tempDisplay = document.body.style.display;
       document.body.style.display = 'none';
-      document.body.offsetHeight; // Force reflow
-      document.body.style.display = '';
+      void document.body.offsetHeight;
+      document.body.style.display = tempDisplay;
     };
 
+    // Activar inmediatamente
     activateImmersiveMode();
 
-    const handleUserInteraction = () => {
-      activateImmersiveMode();
-    };
+    // Intentos rápidos iniciales (cada 100ms durante el primer segundo)
+    const quickAttempts = Array.from({ length: 10 }, (_, i) => 
+      setTimeout(activateImmersiveMode, i * 100)
+    );
 
-    document.addEventListener('touchstart', handleUserInteraction, { once: true });
-    document.addEventListener('click', handleUserInteraction, { once: true });
+    // Intentos más espaciados (cada segundo durante los siguientes 5 segundos)
+    const regularAttempts = Array.from({ length: 5 }, (_, i) => 
+      setTimeout(activateImmersiveMode, 1000 + i * 1000)
+    );
 
-    const quickRetryInterval = setInterval(activateImmersiveMode, 500);
-    setTimeout(() => clearInterval(quickRetryInterval), 2000);
+    // Backup de intentos cada 3 segundos
+    const backupInterval = setInterval(activateImmersiveMode, 3000);
 
-    const fullscreenInterval = setInterval(activateImmersiveMode, 3000);
-    
+    // Limpiar
     return () => {
+      mounted = false;
       document.body.removeEventListener('touchmove', preventScroll);
       document.body.removeEventListener('scroll', preventScroll);
-      document.removeEventListener('touchstart', handleUserInteraction);
-      document.removeEventListener('click', handleUserInteraction);
-      clearInterval(quickRetryInterval);
-      clearInterval(fullscreenInterval);
+      quickAttempts.forEach(clearTimeout);
+      regularAttempts.forEach(clearTimeout);
+      clearInterval(backupInterval);
     };
   }, []);
 
