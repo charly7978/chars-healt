@@ -46,16 +46,18 @@ const PPGSignalMeter = ({
   }, []);
 
   const getQualityColor = useCallback((q: number) => {
+    if (!isFingerDetected) return 'from-gray-400 to-gray-500';
     if (q > 75) return 'from-green-500 to-emerald-500';
     if (q > 50) return 'from-yellow-500 to-orange-500';
     return 'from-red-500 to-rose-500';
-  }, []);
+  }, [isFingerDetected]);
 
   const getQualityText = useCallback((q: number) => {
+    if (!isFingerDetected) return 'Sin detección';
     if (q > 75) return 'Señal óptima';
     if (q > 50) return 'Señal aceptable';
     return 'Señal débil';
-  }, []);
+  }, [isFingerDetected]);
 
   const smoothValue = useCallback((currentValue: number, previousValue: number | null): number => {
     if (previousValue === null) return currentValue;
@@ -63,6 +65,12 @@ const PPGSignalMeter = ({
   }, []);
 
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
+    const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+    gradient.addColorStop(0, '#f1f5f9');
+    gradient.addColorStop(1, '#e2e8f0');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
     ctx.beginPath();
     ctx.strokeStyle = 'rgba(51, 65, 85, 0.1)';
     ctx.lineWidth = 0.5;
@@ -150,13 +158,22 @@ const PPGSignalMeter = ({
     const scaledValue = normalizedValue * verticalScale;
     
     let isArrhythmia = false;
-    if (arrhythmiaStatus?.includes("ARRITMIA DETECTADA") && rawArrhythmiaData?.rrIntervals?.length) {
-      const lastRRInterval = rawArrhythmiaData.rrIntervals[rawArrhythmiaData.rrIntervals.length - 1];
-      const timeNow = Date.now();
-      if ((lastRRInterval > 1000 || lastRRInterval < 700) &&
-          (timeNow - lastArrhythmiaTime.current > 500)) {
+    if (arrhythmiaStatus?.includes("ARRITMIA") && rawArrhythmiaData?.rrIntervals?.length >= 3) {
+      const lastThreeIntervals = rawArrhythmiaData.rrIntervals.slice(-3);
+      const avgRR = lastThreeIntervals.reduce((a, b) => a + b, 0) / lastThreeIntervals.length;
+      const lastRR = lastThreeIntervals[lastThreeIntervals.length - 1];
+      const rrVariation = Math.abs(lastRR - avgRR) / avgRR;
+      
+      if (rrVariation > 0.20 && (now - lastArrhythmiaTime.current > 1000)) {
         isArrhythmia = true;
-        lastArrhythmiaTime.current = timeNow;
+        lastArrhythmiaTime.current = now;
+        
+        console.log('Marcando arritmia en gráfico:', {
+          lastRR,
+          avgRR,
+          variation: (rrVariation * 100).toFixed(1) + '%',
+          timestamp: now
+        });
       }
     }
 
@@ -167,9 +184,6 @@ const PPGSignalMeter = ({
     };
     
     dataBufferRef.current.push(dataPoint);
-
-    ctx.fillStyle = '#F8FAFC';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     drawGrid(ctx);
 
@@ -190,37 +204,54 @@ const PPGSignalMeter = ({
         } else {
           ctx.lineTo(x, y);
         }
+      });
+      ctx.stroke();
 
+      points.forEach((point, index) => {
         if (index > 0 && index < points.length - 1) {
+          const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
+          const y = canvas.height / 2 - point.value;
           const prevPoint = points[index - 1];
           const nextPoint = points[index + 1];
           
           if (point.value > prevPoint.value && point.value > nextPoint.value) {
-            ctx.stroke();
             ctx.beginPath();
             ctx.arc(x, y, 4, 0, Math.PI * 2);
             ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
             ctx.fill();
 
-            const peakValue = Math.abs(point.value / verticalScale).toFixed(2);
-            ctx.font = '10px Inter';
-            ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
+            ctx.font = 'bold 12px Inter';
+            ctx.fillStyle = '#000000';
             ctx.textAlign = 'center';
-            ctx.fillText(peakValue, x, y - 10);
+            ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 10);
 
             if (point.isArrhythmia) {
               ctx.save();
+              
               ctx.beginPath();
-              ctx.moveTo(x, y - 20);
-              ctx.lineTo(x, y + 20);
+              ctx.setLineDash([5, 5]);
+              ctx.moveTo(x, y - 40);
+              ctx.lineTo(x, y + 40);
               ctx.strokeStyle = '#DC2626';
               ctx.lineWidth = 1;
               ctx.stroke();
               
-              ctx.font = '12px Inter';
+              ctx.beginPath();
+              ctx.fillStyle = 'rgba(220, 38, 38, 0.1)';
+              const radius = 30;
+              ctx.arc(x, y, radius, 0, Math.PI * 2);
+              ctx.fill();
+              
+              ctx.beginPath();
+              ctx.setLineDash([]);
+              ctx.arc(x, y - radius - 10, 8, 0, Math.PI * 2);
               ctx.fillStyle = '#DC2626';
+              ctx.fill();
+              ctx.font = 'bold 12px Inter';
+              ctx.fillStyle = '#FFFFFF';
               ctx.textAlign = 'center';
-              ctx.fillText('!', x, y - 25);
+              ctx.fillText('!', x, y - radius - 7);
+              
               ctx.restore();
             }
 
@@ -231,8 +262,6 @@ const PPGSignalMeter = ({
           }
         }
       });
-
-      ctx.stroke();
     }
 
     lastRenderTimeRef.current = currentTime;
@@ -254,6 +283,7 @@ const PPGSignalMeter = ({
     }
     baselineRef.current = null;
     lastValueRef.current = null;
+    lastArrhythmiaTime.current = 0;
     onReset();
   }, [onReset]);
 
@@ -266,7 +296,7 @@ const PPGSignalMeter = ({
             <div className={`h-1.5 w-full rounded-full bg-gradient-to-r ${getQualityColor(quality)} transition-all duration-1000 ease-in-out`}>
               <div
                 className="h-full rounded-full bg-white/20 animate-pulse transition-all duration-1000"
-                style={{ width: `${quality}%` }}
+                style={{ width: `${isFingerDetected ? quality : 0}%` }}
               />
             </div>
             <span className="text-[9px] text-center mt-0.5 font-medium transition-colors duration-700 block" 
