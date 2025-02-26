@@ -66,9 +66,9 @@ const Index = () => {
         }
       }
 
-      // En iOS, mostrar mensaje para añadir al homescreen
+      // En iOS, detectar modo standalone usando window.matchMedia
       if (navigator.userAgent.includes("iPhone") || navigator.userAgent.includes("iPad")) {
-        const isInStandaloneMode = window.matchMedia('(display-mode: standalone)').matches;
+        const isInStandaloneMode = ('standalone' in window.navigator) || window.matchMedia('(display-mode: standalone)').matches;
         if (!isInStandaloneMode) {
           console.log("Por favor, añade esta aplicación a tu pantalla de inicio para modo inmersivo");
         }
