@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -5,7 +6,6 @@ import { useSignalProcessor } from "@/hooks/useSignalProcessor";
 import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
-import MonitorButton from "@/components/MonitorButton";
 
 interface VitalSigns {
   spo2: number;
@@ -25,12 +25,12 @@ const Index = () => {
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState<string | number>("--");
   const [elapsedTime, setElapsedTime] = useState(0);
-  const measurementTimerRef = useRef<number | null>(null);
   const [lastArrhythmiaData, setLastArrhythmiaData] = useState<{
     timestamp: number;
     rmssd: number;
     rrVariation: number;
   } | null>(null);
+  const measurementTimerRef = useRef<number | null>(null);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
@@ -187,73 +187,76 @@ const Index = () => {
         paddingBottom: 'env(safe-area-inset-bottom)'
       }}
     >
-      <div className="flex-1 relative">
-        <div className="absolute inset-0">
-          <CameraView 
-            onStreamReady={handleStreamReady}
-            isMonitoring={isCameraOn}
-            isFingerDetected={lastSignal?.fingerDetected}
-            signalQuality={signalQuality}
+      {/* Camera view as background */}
+      <div className="absolute inset-0 z-0">
+        <CameraView 
+          onStreamReady={handleStreamReady}
+          isMonitoring={isCameraOn}
+          isFingerDetected={lastSignal?.fingerDetected}
+          signalQuality={signalQuality}
+        />
+      </div>
+
+      <div className="relative z-10 flex flex-col h-full">
+        {/* Vital signs grid at the top */}
+        <div className="px-4 pt-4 pb-2">
+          <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <VitalSign 
+                label="FRECUENCIA CARDÍACA"
+                value={heartRate || "--"}
+                unit="BPM"
+              />
+              <VitalSign 
+                label="SPO2"
+                value={vitalSigns.spo2 || "--"}
+                unit="%"
+              />
+              <VitalSign 
+                label="PRESIÓN ARTERIAL"
+                value={vitalSigns.pressure}
+                unit="mmHg"
+              />
+              <VitalSign 
+                label="ARRITMIAS"
+                value={vitalSigns.arrhythmiaStatus}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* PPG Signal in the middle-bottom */}
+        <div className="flex-1 relative mt-4">
+          <PPGSignalMeter 
+            value={lastSignal?.filteredValue || 0}
+            quality={lastSignal?.quality || 0}
+            isFingerDetected={lastSignal?.fingerDetected || false}
+            onStartMeasurement={startMonitoring}
+            onReset={handleReset}
+            arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
+            rawArrhythmiaData={lastArrhythmiaData}
           />
         </div>
 
-        <div className="relative z-10 h-full flex flex-col">
-          <div className="flex-1">
-            <PPGSignalMeter 
-              value={lastSignal?.filteredValue || 0}
-              quality={lastSignal?.quality || 0}
-              isFingerDetected={lastSignal?.fingerDetected || false}
-              onStartMeasurement={startMonitoring}
-              onReset={handleReset}
-              arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
-              rawArrhythmiaData={lastArrhythmiaData}
-            />
+        {isMonitoring && (
+          <div className="absolute bottom-20 left-0 right-0 text-center z-20">
+            <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 30s</span>
           </div>
+        )}
 
-          <div className="absolute bottom-[90px] left-0 right-0 px-4">
-            <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4">
-              <div className="grid grid-cols-2 gap-4">
-                <VitalSign 
-                  label="FRECUENCIA CARDÍACA"
-                  value={heartRate || "--"}
-                  unit="BPM"
-                />
-                <VitalSign 
-                  label="SPO2"
-                  value={vitalSigns.spo2 || "--"}
-                  unit="%"
-                />
-                <VitalSign 
-                  label="PRESIÓN ARTERIAL"
-                  value={vitalSigns.pressure}
-                  unit="mmHg"
-                />
-                <VitalSign 
-                  label="ARRITMIAS"
-                  value={vitalSigns.arrhythmiaStatus}
-                />
-              </div>
-            </div>
-          </div>
-
-          {isMonitoring && (
-            <div className="absolute bottom-16 left-0 right-0 text-center">
-              <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 30s</span>
-            </div>
-          )}
-
-          <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 mt-auto">
-            <MonitorButton 
-              isMonitoring={isMonitoring}
-              onClick={startMonitoring}
-            />
-            <button 
-              onClick={handleReset}
-              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
-            >
-              RESET
-            </button>
-          </div>
+        <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 mt-auto">
+          <button 
+            onClick={startMonitoring}
+            className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
+          >
+            INICIAR
+          </button>
+          <button 
+            onClick={handleReset}
+            className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
+          >
+            RESET
+          </button>
         </div>
       </div>
     </div>
