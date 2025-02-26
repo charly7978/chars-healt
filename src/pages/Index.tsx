@@ -1,11 +1,11 @@
 
 import React, { useState, useRef, useEffect } from "react";
-import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
+import VitalSignsDisplay from "@/components/VitalSignsDisplay";
+import PPGSignalMeter from "@/components/PPGSignalMeter";
 import { useSignalProcessor } from "@/hooks/useSignalProcessor";
 import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
-import PPGSignalMeter from "@/components/PPGSignalMeter";
 
 interface VitalSigns {
   spo2: number;
@@ -23,26 +23,18 @@ const Index = () => {
     arrhythmiaStatus: "--" 
   });
   const [heartRate, setHeartRate] = useState(0);
-  const [arrhythmiaCount, setArrhythmiaCount] = useState<string | number>("--");
   const [elapsedTime, setElapsedTime] = useState(0);
   const [lastArrhythmiaData, setLastArrhythmiaData] = useState<{
     timestamp: number;
     rmssd: number;
     rrVariation: number;
   } | null>(null);
+  
   const measurementTimerRef = useRef<number | null>(null);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
-
-  const enterFullScreen = async () => {
-    try {
-      await document.documentElement.requestFullscreen();
-    } catch (err) {
-      console.log('Error al entrar en pantalla completa:', err);
-    }
-  };
 
   useEffect(() => {
     const preventScroll = (e: Event) => e.preventDefault();
@@ -55,19 +47,13 @@ const Index = () => {
     };
   }, []);
 
-  const startMonitoring = () => {
-    if (isMonitoring) {
-      handleReset();
-    } else {
-      enterFullScreen();
+  const startMonitoring = async () => {
+    try {
+      await document.documentElement.requestFullscreen();
       setIsMonitoring(true);
       setIsCameraOn(true);
       startProcessing();
       setElapsedTime(0);
-      setVitalSigns(prev => ({
-        ...prev,
-        arrhythmiaStatus: "SIN ARRITMIAS|0"
-      }));
       
       if (measurementTimerRef.current) {
         clearInterval(measurementTimerRef.current);
@@ -82,6 +68,8 @@ const Index = () => {
           return prev + 1;
         });
       }, 1000);
+    } catch (err) {
+      console.log('Error al iniciar monitoreo:', err);
     }
   };
 
@@ -89,13 +77,13 @@ const Index = () => {
     setIsMonitoring(false);
     setIsCameraOn(false);
     stopProcessing();
+    resetVitalSigns();
     
     if (measurementTimerRef.current) {
       clearInterval(measurementTimerRef.current);
       measurementTimerRef.current = null;
     }
     
-    resetVitalSigns();
     setElapsedTime(0);
     setHeartRate(0);
     setVitalSigns({ 
@@ -103,9 +91,8 @@ const Index = () => {
       pressure: "--/--",
       arrhythmiaStatus: "--" 
     });
-    setArrhythmiaCount("--");
-    setSignalQuality(0);
     setLastArrhythmiaData(null);
+    setSignalQuality(0);
   };
 
   const handleStreamReady = (stream: MediaStream) => {
@@ -120,23 +107,20 @@ const Index = () => {
       }).catch(err => console.error("Error activando linterna:", err));
     }
     
-    const tempCanvas = document.createElement('canvas');
-    const tempCtx = tempCanvas.getContext('2d');
-    if (!tempCtx) {
-      console.error("No se pudo obtener el contexto 2D");
-      return;
-    }
-    
     const processImage = async () => {
       if (!isMonitoring) return;
       
       try {
         const frame = await imageCapture.grabFrame();
+        const tempCanvas = document.createElement('canvas');
+        const tempCtx = tempCanvas.getContext('2d');
+        
+        if (!tempCtx) return;
+        
         tempCanvas.width = frame.width;
         tempCanvas.height = frame.height;
         tempCtx.drawImage(frame, 0, 0);
-        const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
-        processFrame(imageData);
+        processFrame(tempCtx.getImageData(0, 0, frame.width, frame.height));
         
         if (isMonitoring) {
           requestAnimationFrame(processImage);
@@ -153,25 +137,14 @@ const Index = () => {
   };
 
   useEffect(() => {
-    if (lastSignal && lastSignal.fingerDetected && isMonitoring) {
+    if (lastSignal?.fingerDetected && isMonitoring) {
       const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
       setHeartRate(heartBeatResult.bpm);
       
       const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
       if (vitals) {
         setVitalSigns(vitals);
-        
-        if (vitals.lastArrhythmiaData) {
-          setLastArrhythmiaData(vitals.lastArrhythmiaData);
-          
-          const [status, count] = vitals.arrhythmiaStatus.split('|');
-          setArrhythmiaCount(count || "0");
-          
-          setVitalSigns(current => ({
-            ...current,
-            arrhythmiaStatus: vitals.arrhythmiaStatus
-          }));
-        }
+        setLastArrhythmiaData(vitals.lastArrhythmiaData || null);
       }
       
       setSignalQuality(lastSignal.quality);
@@ -187,48 +160,24 @@ const Index = () => {
         paddingBottom: 'env(safe-area-inset-bottom)'
       }}
     >
-      {/* Camera view as background */}
-      <div className="absolute inset-0 z-0">
-        <CameraView 
-          onStreamReady={handleStreamReady}
-          isMonitoring={isCameraOn}
-          isFingerDetected={lastSignal?.fingerDetected}
-          signalQuality={signalQuality}
-        />
-      </div>
+      <CameraView 
+        onStreamReady={handleStreamReady}
+        isMonitoring={isCameraOn}
+        isFingerDetected={lastSignal?.fingerDetected}
+        signalQuality={signalQuality}
+        className="absolute inset-0 z-0"
+      />
 
       <div className="relative z-10 flex flex-col h-full">
-        {/* DISPLAYS sin efecto blur */}
-        <div className="px-4 pt-8">
-          <div className="bg-black/90 rounded-xl p-4 mb-4 shadow-xl border border-gray-700">
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <VitalSign 
-                label="FRECUENCIA CARDÍACA"
-                value={heartRate || "--"}
-                unit="BPM"
-              />
-              <VitalSign 
-                label="SPO2"
-                value={vitalSigns.spo2 || "--"}
-                unit="%"
-              />
-              <VitalSign 
-                label="PRESIÓN ARTERIAL"
-                value={vitalSigns.pressure}
-                unit="mmHg"
-              />
-              <VitalSign 
-                label="ARRITMIAS"
-                value={vitalSigns.arrhythmiaStatus}
-              />
-            </div>
-          </div>
-        </div>
+        <VitalSignsDisplay 
+          heartRate={heartRate}
+          spo2={vitalSigns.spo2}
+          pressure={vitalSigns.pressure}
+          arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
+        />
 
-        {/* Empty space between displays and PPG */}
         <div className="flex-1" />
 
-        {/* PPG Signal NOW at the bottom */}
         <div className="relative h-[50vh]">
           <PPGSignalMeter 
             value={lastSignal?.filteredValue || 0}
