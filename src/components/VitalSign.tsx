@@ -46,19 +46,17 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit }) => {
   const { text, color } = getArrhythmiaDisplay();
 
   return (
-    <div className="bg-black rounded-lg p-4">
-      <div className="relative">
-        <h3 className="text-gray-400/90 text-xs mb-2">{label}</h3>
-        <div className="flex items-baseline gap-1 justify-center">
-          <span 
-            className={`${isArrhythmiaDisplay ? 'text-sm' : 'text-lg'} font-bold ${color || 'text-white'}`}
-          >
-            {text}
-          </span>
-          {!isArrhythmiaDisplay && unit && (
-            <span className="text-gray-400 text-xs">{unit}</span>
-          )}
-        </div>
+    <div className="bg-black shadow-lg rounded-lg p-4">
+      <h3 className="text-gray-400 text-xs mb-2">{label}</h3>
+      <div className="flex items-baseline gap-1 justify-center">
+        <span 
+          className={`${isArrhythmiaDisplay ? 'text-sm' : 'text-lg'} font-bold ${color || 'text-white'}`}
+        >
+          {text}
+        </span>
+        {!isArrhythmiaDisplay && unit && (
+          <span className="text-gray-400 text-xs">{unit}</span>
+        )}
       </div>
     </div>
   );
