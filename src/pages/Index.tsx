@@ -197,7 +197,6 @@ const Index = () => {
         minHeight: '-webkit-fill-available'
       }}
     >
-      {/* Camera view as background */}
       <div className="absolute inset-0 z-0">
         <CameraView 
           onStreamReady={handleStreamReady}
@@ -214,7 +213,6 @@ const Index = () => {
           paddingBottom: 'env(safe-area-inset-bottom)'
         }}
       >
-        {/* PPG Signal section */}
         <div className="h-[45dvh]">
           <PPGSignalMeter 
             value={lastSignal?.filteredValue || 0}
@@ -227,10 +225,8 @@ const Index = () => {
           />
         </div>
 
-        {/* Flexible space */}
         <div className="flex-1 mt-28" />
 
-        {/* Vital signs grid */}
         <div className="w-full px-4 pb-8">
           <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4">
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -263,17 +259,20 @@ const Index = () => {
           </div>
         )}
 
-        {/* Bottom buttons */}
-        <div className="relative w-full h-[80px] grid grid-cols-2 gap-px bg-gray-900">
+        <div className="relative w-full h-[80px] grid grid-cols-2 gap-px">
           <button 
             onClick={startMonitoring}
-            className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
+            className={`w-full h-full text-2xl font-bold text-white transition-colors duration-200 ${
+              isMonitoring
+                ? 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 active:from-red-700 active:to-red-800'
+                : 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 active:from-blue-700 active:to-blue-800'
+            }`}
           >
-            INICIAR
+            {isMonitoring ? 'DETENER' : 'INICIAR'}
           </button>
           <button 
             onClick={handleReset}
-            className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
+            className="w-full h-full text-2xl font-bold text-white bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800 active:from-gray-800 active:to-gray-900 transition-colors duration-200"
           >
             RESET
           </button>
