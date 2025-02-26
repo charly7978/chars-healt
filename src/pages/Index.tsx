@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -36,57 +35,66 @@ const Index = () => {
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
-  const enterFullScreen = async () => {
-    try {
-      const elem = document.documentElement;
-      
-      // Primero intentar el modo inmersivo de Android
-      if (navigator.userAgent.includes("Android")) {
-        if ((window as any).AndroidFullScreen) {
+  const requestFullscreen = async (element: Element) => {
+    const methods = [
+      'requestFullscreen',
+      'webkitRequestFullscreen',
+      'webkitEnterFullscreen',
+      'mozRequestFullScreen',
+      'msRequestFullscreen'
+    ];
+
+    for (const method of methods) {
+      if (element[method]) {
+        try {
+          await element[method]();
+          return true;
+        } catch (e) {
+          console.log(`Error with ${method}:`, e);
+        }
+      }
+    }
+    return false;
+  };
+
+  const enterImmersiveMode = async () => {
+    if (navigator.userAgent.includes("Android")) {
+      try {
+        if ((window as any).AndroidFullScreen?.immersiveMode) {
           await (window as any).AndroidFullScreen.immersiveMode();
         }
-        
-        // Forzar pantalla completa en el body como respaldo
-        try {
-          await document.body.requestFullscreen();
-        } catch (e) {
-          console.log('Error en fullscreen secundario:', e);
-        }
+      } catch (e) {
+        console.log('Error Android immersive:', e);
       }
-
-      // Intentar todos los métodos de pantalla completa conocidos
-      const fullscreenMethods = [
-        () => elem.requestFullscreen(),
-        () => (elem as any).webkitRequestFullscreen(),
-        () => (elem as any).webkitEnterFullscreen(),
-        () => (elem as any).mozRequestFullScreen(),
-        () => (elem as any).msRequestFullscreen()
-      ];
-
-      // Intentar cada método hasta que uno funcione
-      for (const method of fullscreenMethods) {
-        try {
-          await method();
-          break; // Si tiene éxito, salir del bucle
-        } catch (e) {
-          continue; // Si falla, intentar el siguiente método
-        }
-      }
-
-    } catch (err) {
-      console.log('Error al entrar en pantalla completa:', err);
     }
+
+    const elements = [
+      document.documentElement,
+      document.body,
+      document.getElementById('root')
+    ].filter(Boolean);
+
+    for (const element of elements) {
+      if (await requestFullscreen(element)) {
+        break;
+      }
+    }
+
+    try {
+      if (screen.orientation?.lock) {
+        await screen.orientation.lock('portrait');
+      }
+    } catch (e) {
+      console.log('Error orientation lock:', e);
+    }
+
+    const tempDisplay = document.body.style.display;
+    document.body.style.display = 'none';
+    void document.body.offsetHeight;
+    document.body.style.display = tempDisplay;
   };
 
   useEffect(() => {
-    let mounted = true;
-    
-    // Prevenir scroll y rebote
-    const preventScroll = (e: Event) => e.preventDefault();
-    document.body.addEventListener('touchmove', preventScroll, { passive: false });
-    document.body.addEventListener('scroll', preventScroll, { passive: false });
-    
-    // Configurar viewport
     const viewport = document.querySelector('meta[name=viewport]');
     if (viewport) {
       viewport.setAttribute('content', 
@@ -94,53 +102,41 @@ const Index = () => {
       );
     }
 
-    // Función para activar modo inmersivo
-    const activateImmersiveMode = async () => {
-      if (!mounted) return;
-      
-      // Intentar bloquear orientación
-      try {
-        if (screen.orientation?.lock) {
-          await screen.orientation.lock('portrait');
-        }
-      } catch (error) {
-        console.error('Error locking orientation:', error);
-      }
+    const preventScroll = (e: Event) => e.preventDefault();
+    document.body.addEventListener('touchmove', preventScroll, { passive: false });
+    document.body.addEventListener('scroll', preventScroll, { passive: false });
 
-      // Intentar modo inmersivo
-      await enterFullScreen();
+    document.documentElement.style.height = '100vh';
+    document.body.style.height = '100vh';
+    document.body.style.overflow = 'hidden';
 
-      // Forzar reflow
-      const tempDisplay = document.body.style.display;
-      document.body.style.display = 'none';
-      void document.body.offsetHeight;
-      document.body.style.display = tempDisplay;
+    enterImmersiveMode();
+    requestAnimationFrame(enterImmersiveMode);
+    setTimeout(enterImmersiveMode, 0);
+    setTimeout(enterImmersiveMode, 100);
+    setTimeout(enterImmersiveMode, 300);
+    setTimeout(enterImmersiveMode, 500);
+
+    const secondWaveAttempts = [1000, 2000, 3000, 4000, 5000].map(delay => 
+      setTimeout(enterImmersiveMode, delay)
+    );
+
+    const continuousInterval = setInterval(enterImmersiveMode, 2000);
+
+    const activateOnInteraction = () => {
+      enterImmersiveMode();
     };
 
-    // Activar inmediatamente
-    activateImmersiveMode();
+    document.addEventListener('touchend', activateOnInteraction);
+    document.addEventListener('click', activateOnInteraction);
 
-    // Intentos rápidos iniciales (cada 100ms durante el primer segundo)
-    const quickAttempts = Array.from({ length: 10 }, (_, i) => 
-      setTimeout(activateImmersiveMode, i * 100)
-    );
-
-    // Intentos más espaciados (cada segundo durante los siguientes 5 segundos)
-    const regularAttempts = Array.from({ length: 5 }, (_, i) => 
-      setTimeout(activateImmersiveMode, 1000 + i * 1000)
-    );
-
-    // Backup de intentos cada 3 segundos
-    const backupInterval = setInterval(activateImmersiveMode, 3000);
-
-    // Limpiar
     return () => {
-      mounted = false;
       document.body.removeEventListener('touchmove', preventScroll);
       document.body.removeEventListener('scroll', preventScroll);
-      quickAttempts.forEach(clearTimeout);
-      regularAttempts.forEach(clearTimeout);
-      clearInterval(backupInterval);
+      document.removeEventListener('touchend', activateOnInteraction);
+      document.removeEventListener('click', activateOnInteraction);
+      secondWaveAttempts.forEach(clearTimeout);
+      clearInterval(continuousInterval);
     };
   }, []);
 
@@ -277,6 +273,7 @@ const Index = () => {
         WebkitUserSelect: 'none',
         overscrollBehavior: 'none'
       }}
+      onClick={enterImmersiveMode}
     >
       <div className="absolute inset-0 z-0">
         <CameraView 
