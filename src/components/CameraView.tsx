@@ -6,7 +6,6 @@ interface CameraViewProps {
   isMonitoring: boolean;
   isFingerDetected?: boolean;
   signalQuality?: number;
-  className?: string;  // Agregamos la prop className
 }
 
 const CameraView = ({ 
@@ -14,7 +13,6 @@ const CameraView = ({
   isMonitoring, 
   isFingerDetected = false, 
   signalQuality = 0,
-  className = '', // Valor por defecto para className
 }: CameraViewProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
@@ -127,7 +125,7 @@ const CameraView = ({
       autoPlay
       playsInline
       muted
-      className={`absolute top-0 left-0 min-w-full min-h-full w-auto h-auto z-0 object-cover ${className}`}
+      className="absolute top-0 left-0 min-w-full min-h-full w-auto h-auto z-0 object-cover"
       style={{
         willChange: 'transform',
         transform: 'translateZ(0)',
