@@ -180,7 +180,7 @@ const Index = () => {
 
   return (
     <div 
-      className="fixed inset-0 flex flex-col bg-black" 
+      className="fixed inset-0 flex flex-col bg-black/90" 
       style={{ 
         height: '100vh',
         paddingTop: 'env(safe-area-inset-top)',
@@ -211,8 +211,8 @@ const Index = () => {
           />
         </div>
 
-        {/* Empty space between PPG and vital signs - agregando mt-20 para empujar los displays hacia abajo */}
-        <div className="flex-1 mt-20" />
+        {/* Empty space between PPG and vital signs - aumentando a mt-24 para bajar más los displays */}
+        <div className="flex-1 mt-24" />
 
         {/* Vital signs grid */}
         <div className="px-4 pb-8 mt-auto">
