@@ -48,6 +48,18 @@ const Index = () => {
     document.body.addEventListener('touchmove', preventScroll, { passive: false });
     document.body.addEventListener('scroll', preventScroll, { passive: false });
 
+    const lockOrientation = async () => {
+      try {
+        if (screen.orientation?.lock) {
+          await screen.orientation.lock('portrait');
+        }
+      } catch (error) {
+        console.error('Error locking orientation:', error);
+      }
+    };
+
+    lockOrientation();
+
     return () => {
       document.body.removeEventListener('touchmove', preventScroll);
       document.body.removeEventListener('scroll', preventScroll);
@@ -181,9 +193,8 @@ const Index = () => {
     <div 
       className="fixed inset-0 flex flex-col bg-black/90" 
       style={{ 
-        height: '100vh',
-        paddingTop: 'env(safe-area-inset-top)',
-        paddingBottom: 'env(safe-area-inset-bottom)'
+        height: '100dvh',
+        minHeight: '-webkit-fill-available'
       }}
     >
       {/* Camera view as background */}
@@ -196,9 +207,15 @@ const Index = () => {
         />
       </div>
 
-      <div className="relative z-10 flex flex-col h-full">
-        {/* PPG Signal section - fixed height */}
-        <div className="relative h-[45vh]">
+      <div 
+        className="relative z-10 flex flex-col h-full"
+        style={{
+          paddingTop: 'env(safe-area-inset-top)',
+          paddingBottom: 'env(safe-area-inset-bottom)'
+        }}
+      >
+        {/* PPG Signal section */}
+        <div className="h-[45dvh]">
           <PPGSignalMeter 
             value={lastSignal?.filteredValue || 0}
             quality={lastSignal?.quality || 0}
@@ -210,12 +227,12 @@ const Index = () => {
           />
         </div>
 
-        {/* Flexible space that pushes vital signs down */}
+        {/* Flexible space */}
         <div className="flex-1 mt-28" />
 
-        {/* Vital signs grid - now with fixed bottom positioning */}
+        {/* Vital signs grid */}
         <div className="w-full px-4 pb-8">
-          <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4 mb-4">
+          <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4">
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <VitalSign 
                 label="FRECUENCIA CARDÍACA"
@@ -246,8 +263,8 @@ const Index = () => {
           </div>
         )}
 
-        {/* Fixed bottom buttons */}
-        <div className="w-full h-[80px] grid grid-cols-2 gap-px bg-gray-900">
+        {/* Bottom buttons */}
+        <div className="relative w-full h-[80px] grid grid-cols-2 gap-px bg-gray-900">
           <button 
             onClick={startMonitoring}
             className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
