@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import CameraView from "@/components/CameraView";
 import VitalSignsDisplay from "@/components/VitalSignsDisplay";
@@ -160,13 +159,15 @@ const Index = () => {
         paddingBottom: 'env(safe-area-inset-bottom)'
       }}
     >
-      <CameraView 
-        onStreamReady={handleStreamReady}
-        isMonitoring={isCameraOn}
-        isFingerDetected={lastSignal?.fingerDetected}
-        signalQuality={signalQuality}
-        className="absolute inset-0 z-0"
-      />
+      <div className="absolute inset-0 z-0">
+        <CameraView 
+          onStreamReady={handleStreamReady}
+          isMonitoring={isCameraOn}
+          isFingerDetected={lastSignal?.fingerDetected}
+          signalQuality={signalQuality}
+          className="w-full h-full"
+        />
+      </div>
 
       <div className="relative z-10 flex flex-col h-full">
         <VitalSignsDisplay 
@@ -178,7 +179,7 @@ const Index = () => {
 
         <div className="flex-1" />
 
-        <div className="relative h-[50vh]">
+        <div className="relative h-[50vh] z-20">
           <PPGSignalMeter 
             value={lastSignal?.filteredValue || 0}
             quality={lastSignal?.quality || 0}
@@ -191,7 +192,7 @@ const Index = () => {
         </div>
 
         {isMonitoring && (
-          <div className="absolute bottom-20 left-0 right-0 text-center z-20">
+          <div className="absolute bottom-20 left-0 right-0 text-center z-30">
             <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 30s</span>
           </div>
         )}

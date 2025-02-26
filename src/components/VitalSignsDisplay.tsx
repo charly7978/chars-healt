@@ -16,8 +16,8 @@ const VitalSignsDisplay: React.FC<VitalSignsDisplayProps> = ({
   arrhythmiaStatus
 }) => {
   return (
-    <div className="fixed top-0 left-0 right-0 px-4 pt-4 z-50">
-      <div className="bg-gray-900 rounded-xl p-4 shadow-2xl border border-gray-800">
+    <div className="fixed top-12 left-0 right-0 px-4 z-50">
+      <div className="bg-gray-900/80 backdrop-blur-sm rounded-xl p-4 shadow-2xl border border-gray-800/50">
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <VitalSign 
             label="FRECUENCIA CARDÍACA"
