@@ -9,7 +9,11 @@ interface PPGSignalMeterProps {
   onStartMeasurement: () => void;
   onReset: () => void;
   arrhythmiaStatus?: string;
-  rawArrhythmiaData?: { rrIntervals: number[], lastPeakTime: number | null };
+  rawArrhythmiaData?: {
+    timestamp: number;
+    rmssd: number;
+    rrVariation: number;
+  } | null;
 }
 
 const PPGSignalMeter = ({ 
@@ -22,26 +26,28 @@ const PPGSignalMeter = ({
   rawArrhythmiaData
 }: PPGSignalMeterProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const baselineRef = useRef<number | null>(null);
   const dataBufferRef = useRef<CircularBuffer | null>(null);
+  const baselineRef = useRef<number | null>(null);
   const lastValueRef = useRef<number | null>(null);
   const animationFrameRef = useRef<number>();
   const lastRenderTimeRef = useRef<number>(0);
   const lastArrhythmiaTime = useRef<number>(0);
+  const arrhythmiaCountRef = useRef<number>(0);
   
-  const WINDOW_WIDTH_MS = 5000;
+  const WINDOW_WIDTH_MS = 3000; // Reducido para mejor rendimiento
   const CANVAS_WIDTH = 1000;
   const CANVAS_HEIGHT = 200;
   const GRID_SIZE_X = 50;
   const GRID_SIZE_Y = 25;
   const verticalScale = 28.0;
-  const SMOOTHING_FACTOR = 0.85;
+  const SMOOTHING_FACTOR = 0.75; // Ajustado para menor latencia
   const TARGET_FPS = 60;
   const FRAME_TIME = 1000 / TARGET_FPS;
+  const BUFFER_SIZE = 600; // Reducido para mejor rendimiento
 
   useEffect(() => {
     if (!dataBufferRef.current) {
-      dataBufferRef.current = new CircularBuffer(1000);
+      dataBufferRef.current = new CircularBuffer(BUFFER_SIZE);
     }
   }, []);
 
@@ -158,23 +164,11 @@ const PPGSignalMeter = ({
     const scaledValue = normalizedValue * verticalScale;
     
     let isArrhythmia = false;
-    if (arrhythmiaStatus?.includes("ARRITMIA") && rawArrhythmiaData?.rrIntervals?.length >= 3) {
-      const lastThreeIntervals = rawArrhythmiaData.rrIntervals.slice(-3);
-      const avgRR = lastThreeIntervals.reduce((a, b) => a + b, 0) / lastThreeIntervals.length;
-      const lastRR = lastThreeIntervals[lastThreeIntervals.length - 1];
-      const rrVariation = Math.abs(lastRR - avgRR) / avgRR;
-      
-      if (rrVariation > 0.20 && (now - lastArrhythmiaTime.current > 1000)) {
-        isArrhythmia = true;
-        lastArrhythmiaTime.current = now;
-        
-        console.log('Marcando arritmia en gráfico:', {
-          lastRR,
-          avgRR,
-          variation: (rrVariation * 100).toFixed(1) + '%',
-          timestamp: now
-        });
-      }
+    if (rawArrhythmiaData && 
+        arrhythmiaStatus?.includes("ARRITMIA") && 
+        now - rawArrhythmiaData.timestamp < 1000) {
+      isArrhythmia = true;
+      lastArrhythmiaTime.current = now;
     }
 
     const dataPoint: PPGDataPoint = {
@@ -189,23 +183,24 @@ const PPGSignalMeter = ({
 
     const points = dataBufferRef.current.getPoints();
     if (points.length > 1) {
-      ctx.beginPath();
-      ctx.strokeStyle = '#0EA5E9';
-      ctx.lineWidth = 2;
-      ctx.lineJoin = 'round';
-      ctx.lineCap = 'round';
+      for (let i = 1; i < points.length; i++) {
+        const prevPoint = points[i - 1];
+        const point = points[i];
+        
+        const x1 = canvas.width - ((now - prevPoint.time) * canvas.width / WINDOW_WIDTH_MS);
+        const y1 = canvas.height / 2 - prevPoint.value;
+        const x2 = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
+        const y2 = canvas.height / 2 - point.value;
 
-      points.forEach((point, index) => {
-        const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-        const y = canvas.height / 2 - point.value;
-
-        if (index === 0) {
-          ctx.moveTo(x, y);
-        } else {
-          ctx.lineTo(x, y);
-        }
-      });
-      ctx.stroke();
+        ctx.beginPath();
+        ctx.strokeStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
+        ctx.lineWidth = 2;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      }
 
       points.forEach((point, index) => {
         if (index > 0 && index < points.length - 1) {
@@ -223,42 +218,7 @@ const PPGSignalMeter = ({
             ctx.font = 'bold 12px Inter';
             ctx.fillStyle = '#000000';
             ctx.textAlign = 'center';
-            ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 10);
-
-            if (point.isArrhythmia) {
-              ctx.save();
-              
-              ctx.beginPath();
-              ctx.setLineDash([5, 5]);
-              ctx.moveTo(x, y - 40);
-              ctx.lineTo(x, y + 40);
-              ctx.strokeStyle = '#DC2626';
-              ctx.lineWidth = 1;
-              ctx.stroke();
-              
-              ctx.beginPath();
-              ctx.fillStyle = 'rgba(220, 38, 38, 0.1)';
-              const radius = 30;
-              ctx.arc(x, y, radius, 0, Math.PI * 2);
-              ctx.fill();
-              
-              ctx.beginPath();
-              ctx.setLineDash([]);
-              ctx.arc(x, y - radius - 10, 8, 0, Math.PI * 2);
-              ctx.fillStyle = '#DC2626';
-              ctx.fill();
-              ctx.font = 'bold 12px Inter';
-              ctx.fillStyle = '#FFFFFF';
-              ctx.textAlign = 'center';
-              ctx.fillText('!', x, y - radius - 7);
-              
-              ctx.restore();
-            }
-
-            ctx.beginPath();
-            ctx.strokeStyle = '#0EA5E9';
-            ctx.lineWidth = 2;
-            ctx.moveTo(x, y);
+            ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 20);
           }
         }
       });
@@ -266,7 +226,7 @@ const PPGSignalMeter = ({
 
     lastRenderTimeRef.current = currentTime;
     animationFrameRef.current = requestAnimationFrame(renderSignal);
-  }, [value, quality, isFingerDetected, rawArrhythmiaData, smoothValue, arrhythmiaStatus, drawGrid]);
+  }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus]);
 
   useEffect(() => {
     renderSignal();
@@ -276,16 +236,6 @@ const PPGSignalMeter = ({
       }
     };
   }, [renderSignal]);
-
-  const handleReset = useCallback(() => {
-    if (dataBufferRef.current) {
-      dataBufferRef.current.clear();
-    }
-    baselineRef.current = null;
-    lastValueRef.current = null;
-    lastArrhythmiaTime.current = 0;
-    onReset();
-  }, [onReset]);
 
   return (
     <div className="fixed inset-0 bg-gradient-to-b from-white to-slate-50/30">
@@ -329,45 +279,23 @@ const PPGSignalMeter = ({
         className="w-full h-[calc(40vh)] mt-20"
       />
 
-      <div className="fixed bottom-0 left-0 right-0 h-[80px] grid grid-cols-2 gap-px overflow-hidden">
+      <div className="fixed bottom-0 left-0 right-0 h-[80px] grid grid-cols-2 gap-px bg-gray-100">
         <button 
           onClick={onStartMeasurement}
-          className="relative group bg-gradient-to-b from-white/90 to-slate-50/90 
-                   hover:from-slate-50/90 hover:to-white/90 
-                   active:from-slate-100/90 active:to-slate-50/90
-                   transition-all duration-300"
+          className="bg-white text-slate-700 hover:bg-gray-50 active:bg-gray-100 transition-colors duration-200"
         >
-          <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/0 via-cyan-500/10 to-cyan-500/0 
-                        opacity-0 group-hover:opacity-100 transform translate-x-[-100%] 
-                        group-hover:translate-x-[100%] transition-all duration-1000" />
-          
-          <div className="relative flex flex-col items-center justify-center h-full">
-            <span className="text-2xl font-bold text-slate-700">INICIAR/DETENER</span>
-            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r 
-                          from-cyan-500/0 via-cyan-500/50 to-cyan-500/0 
-                          transform scale-x-0 group-hover:scale-x-100 
-                          transition-transform duration-300" />
-          </div>
+          <span className="text-lg font-semibold">
+            INICIAR/DETENER
+          </span>
         </button>
 
         <button 
           onClick={onReset}
-          className="relative group bg-gradient-to-b from-white/90 to-slate-50/90 
-                   hover:from-slate-50/90 hover:to-white/90 
-                   active:from-slate-100/90 active:to-slate-50/90
-                   transition-all duration-300"
+          className="bg-white text-slate-700 hover:bg-gray-50 active:bg-gray-100 transition-colors duration-200"
         >
-          <div className="absolute inset-0 bg-gradient-to-r from-rose-500/0 via-rose-500/10 to-rose-500/0 
-                        opacity-0 group-hover:opacity-100 transform translate-x-[-100%] 
-                        group-hover:translate-x-[100%] transition-all duration-1000" />
-          
-          <div className="relative flex flex-col items-center justify-center h-full">
-            <span className="text-2xl font-bold text-slate-700">RESETEAR</span>
-            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r 
-                          from-rose-500/0 via-rose-500/50 to-rose-500/0 
-                          transform scale-x-0 group-hover:scale-x-100 
-                          transition-transform duration-300" />
-          </div>
+          <span className="text-lg font-semibold">
+            RESETEAR
+          </span>
         </button>
       </div>
     </div>
