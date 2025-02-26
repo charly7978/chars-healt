@@ -35,32 +35,14 @@ const Index = () => {
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
-  const requestFullscreen = async (element: Element) => {
-    const methods = [
-      'requestFullscreen',
-      'webkitRequestFullscreen',
-      'webkitEnterFullscreen',
-      'mozRequestFullScreen',
-      'msRequestFullscreen'
-    ];
-
-    for (const method of methods) {
-      if (element[method]) {
-        try {
-          await element[method]();
-          return true;
-        } catch (e) {
-          console.log(`Error with ${method}:`, e);
-        }
-      }
-    }
-    return false;
-  };
-
   const enterImmersiveMode = async () => {
+    console.log('Intentando activar modo inmersivo...');
+    
+    // 1. Intentar modo inmersivo Android primero (prioridad máxima)
     if (navigator.userAgent.includes("Android")) {
       try {
         if ((window as any).AndroidFullScreen?.immersiveMode) {
+          console.log('Intentando modo inmersivo Android...');
           await (window as any).AndroidFullScreen.immersiveMode();
         }
       } catch (e) {
@@ -68,18 +50,29 @@ const Index = () => {
       }
     }
 
+    // 2. Intentar fullscreen en diferentes elementos inmediatamente después
     const elements = [
       document.documentElement,
       document.body,
       document.getElementById('root')
     ].filter(Boolean);
 
-    for (const element of elements) {
-      if (await requestFullscreen(element)) {
-        break;
+    for (const method of ['requestFullscreen', 'webkitRequestFullscreen', 'webkitEnterFullscreen', 'mozRequestFullScreen', 'msRequestFullscreen']) {
+      for (const element of elements) {
+        if (element[method]) {
+          try {
+            console.log(`Intentando ${method} en`, element);
+            await element[method]();
+            console.log(`Éxito con ${method}`);
+            break;
+          } catch (e) {
+            console.log(`Error con ${method}:`, e);
+          }
+        }
       }
     }
 
+    // 3. Bloquear orientación
     try {
       if (screen.orientation?.lock) {
         await screen.orientation.lock('portrait');
@@ -88,6 +81,7 @@ const Index = () => {
       console.log('Error orientation lock:', e);
     }
 
+    // 4. Forzar reflow al final
     const tempDisplay = document.body.style.display;
     document.body.style.display = 'none';
     void document.body.offsetHeight;
@@ -95,6 +89,18 @@ const Index = () => {
   };
 
   useEffect(() => {
+    console.log('Iniciando secuencia de inmersión...');
+    
+    // PRIMERA ACCIÓN: Intentar modo inmersivo inmediatamente
+    enterImmersiveMode();
+    
+    // Segundo intento inmediato usando requestAnimationFrame
+    requestAnimationFrame(() => {
+      console.log('Segundo intento inmediato...');
+      enterImmersiveMode();
+    });
+
+    // DESPUÉS configuramos el viewport y otros ajustes
     const viewport = document.querySelector('meta[name=viewport]');
     if (viewport) {
       viewport.setAttribute('content', 
@@ -102,43 +108,35 @@ const Index = () => {
       );
     }
 
-    const preventScroll = (e: Event) => e.preventDefault();
-    document.body.addEventListener('touchmove', preventScroll, { passive: false });
-    document.body.addEventListener('scroll', preventScroll, { passive: false });
-
+    // Configuración adicional
     document.documentElement.style.height = '100vh';
     document.body.style.height = '100vh';
     document.body.style.overflow = 'hidden';
 
-    enterImmersiveMode();
-    requestAnimationFrame(enterImmersiveMode);
-    setTimeout(enterImmersiveMode, 0);
-    setTimeout(enterImmersiveMode, 100);
-    setTimeout(enterImmersiveMode, 300);
-    setTimeout(enterImmersiveMode, 500);
+    // Prevenir scroll (se configura después del modo inmersivo)
+    const preventScroll = (e: Event) => e.preventDefault();
+    document.body.addEventListener('touchmove', preventScroll, { passive: false });
+    document.body.addEventListener('scroll', preventScroll, { passive: false });
 
-    const secondWaveAttempts = [1000, 2000, 3000, 4000, 5000].map(delay => 
-      setTimeout(enterImmersiveMode, delay)
-    );
+    // Intentos adicionales como respaldo
+    const attempts = [
+      setTimeout(() => enterImmersiveMode(), 100),
+      setTimeout(() => enterImmersiveMode(), 500),
+      setTimeout(() => enterImmersiveMode(), 1000),
+      setTimeout(() => enterImmersiveMode(), 2000)
+    ];
 
-    const continuousInterval = setInterval(enterImmersiveMode, 2000);
+    // Backup final: intentos periódicos
+    const intervalId = setInterval(() => enterImmersiveMode(), 3000);
 
-    const activateOnInteraction = () => {
-      enterImmersiveMode();
-    };
-
-    document.addEventListener('touchend', activateOnInteraction);
-    document.addEventListener('click', activateOnInteraction);
-
+    // Cleanup
     return () => {
       document.body.removeEventListener('touchmove', preventScroll);
       document.body.removeEventListener('scroll', preventScroll);
-      document.removeEventListener('touchend', activateOnInteraction);
-      document.removeEventListener('click', activateOnInteraction);
-      secondWaveAttempts.forEach(clearTimeout);
-      clearInterval(continuousInterval);
+      attempts.forEach(clearTimeout);
+      clearInterval(intervalId);
     };
-  }, []);
+  }, []); // Este useEffect tiene prioridad máxima al no depender de ninguna prop o estado
 
   const startMonitoring = () => {
     if (isMonitoring) {
