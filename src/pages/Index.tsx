@@ -306,7 +306,7 @@ const Index = () => {
 
         <div className="flex-1 mt-24" />
 
-        <div className="w-full px-4 mb-0">
+        <div className="w-full px-4 pb-8">
           <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4">
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <VitalSign 
@@ -337,7 +337,7 @@ const Index = () => {
         </div>
 
         {isMonitoring && (
-          <div className="fixed bottom-[80px] left-0 right-0 text-center z-20">
+          <div className="fixed bottom-20 left-0 right-0 text-center z-20">
             <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 40s</span>
           </div>
         )}
