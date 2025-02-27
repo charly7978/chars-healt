@@ -33,22 +33,19 @@ const Index = () => {
   const measurementTimerRef = useRef<number | null>(null);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
-  const { processSignal: processHeartBeat } = useHeartBeatProcessor();
+  const { processSignal: processHeartBeat, reset: resetHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
   const startMonitoring = () => {
     if (isMonitoring) {
-      handleReset();
+      handleMeasurementComplete();
     } else {
+      resetAllValues();
       setIsMonitoring(true);
       setIsCameraOn(true);
       startProcessing();
       setElapsedTime(0);
       setMeasurementComplete(false);
-      setVitalSigns(prev => ({
-        ...prev,
-        arrhythmiaStatus: "SIN ARRITMIAS|0"
-      }));
       
       if (measurementTimerRef.current) {
         clearInterval(measurementTimerRef.current);
@@ -56,9 +53,9 @@ const Index = () => {
       
       measurementTimerRef.current = window.setInterval(() => {
         setElapsedTime(prev => {
-          if (prev >= 60) {
+          if (prev >= 40) {
             handleMeasurementComplete();
-            return 60;
+            return 40;
           }
           return prev + 1;
         });
@@ -68,6 +65,7 @@ const Index = () => {
 
   const handleMeasurementComplete = () => {
     setIsMonitoring(false);
+    setIsCameraOn(false);
     stopProcessing();
     setMeasurementComplete(true);
     
@@ -75,6 +73,22 @@ const Index = () => {
       clearInterval(measurementTimerRef.current);
       measurementTimerRef.current = null;
     }
+  };
+
+  const resetAllValues = () => {
+    setHeartRate(0);
+    setVitalSigns({ 
+      spo2: 0, 
+      pressure: "--/--",
+      arrhythmiaStatus: "--" 
+    });
+    setArrhythmiaCount("--");
+    setSignalQuality(0);
+    setLastArrhythmiaData(null);
+    setElapsedTime(0);
+    setMeasurementComplete(false);
+    resetHeartBeat();
+    resetVitalSigns();
   };
 
   const handleReset = () => {
@@ -87,18 +101,7 @@ const Index = () => {
       measurementTimerRef.current = null;
     }
     
-    resetVitalSigns();
-    setElapsedTime(0);
-    setHeartRate(0);
-    setVitalSigns({ 
-      spo2: 0, 
-      pressure: "--/--",
-      arrhythmiaStatus: "--" 
-    });
-    setArrhythmiaCount("--");
-    setSignalQuality(0);
-    setLastArrhythmiaData(null);
-    setMeasurementComplete(false);
+    resetAllValues();
   };
 
   const handleStreamReady = (stream: MediaStream) => {
@@ -316,7 +319,7 @@ const Index = () => {
 
         {isMonitoring && (
           <div className="fixed bottom-20 left-0 right-0 text-center z-20">
-            <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 60s</span>
+            <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 40s</span>
           </div>
         )}
 
