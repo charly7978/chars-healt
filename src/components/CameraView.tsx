@@ -24,6 +24,12 @@ const CameraView = ({
     if (streamRef.current) {
       const tracks = streamRef.current.getTracks();
       tracks.forEach(track => {
+        // Asegurarse de apagar la linterna antes de detener
+        if (track.getCapabilities()?.torch) {
+          track.applyConstraints({
+            advanced: [{ torch: false }]
+          }).catch(err => console.error("Error desactivando linterna:", err));
+        }
         if (track.readyState === 'live') {
           track.stop();
         }

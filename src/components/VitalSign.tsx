@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { VitalSignsRisk } from '../utils/vitalSignsRisk';
 
 interface VitalSignProps {
   label: string;
@@ -9,6 +10,22 @@ interface VitalSignProps {
 
 const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit }) => {
   const isArrhythmiaDisplay = label === "ARRITMIAS";
+
+  const getValueColor = () => {
+    if (isArrhythmiaDisplay) {
+      return getArrhythmiaDisplay().color;
+    }
+
+    if (label === "FRECUENCIA CARDÍACA" && typeof value === 'number') {
+      return VitalSignsRisk.getBPMRisk(value).color;
+    }
+
+    if (label === "SPO2" && typeof value === 'number') {
+      return VitalSignsRisk.getSPO2Risk(value).color;
+    }
+
+    return '#FFFFFF';
+  };
   
   const getArrhythmiaDisplay = () => {
     if (!isArrhythmiaDisplay) return { text: value, color: "" };
@@ -16,34 +33,34 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit }) => {
     if (value === "--") {
       return { 
         text: "--/--", 
-        color: "text-white" 
+        color: "#FFFFFF"
       };
     }
     
     const [status, count] = String(value).split('|');
-    console.log('Procesando display de arritmias:', { status, count, value });
     
     if (status === "ARRITMIA DETECTADA") {
       return {
         text: count ? `ARRITMIA DETECTADA (${count})` : "ARRITMIA DETECTADA",
-        color: "text-red-500"
+        color: "#DC2626"
       };
     }
     
     if (status === "CALIBRANDO...") {
       return {
         text: status,
-        color: "text-yellow-500"
+        color: "#F97316"
       };
     }
     
     return {
       text: "SIN ARRITMIA DETECTADA",
-      color: "text-cyan-500"
+      color: "#0EA5E9"
     };
   };
 
   const { text, color } = getArrhythmiaDisplay();
+  const valueColor = isArrhythmiaDisplay ? color : getValueColor();
 
   return (
     <div className="relative overflow-hidden group bg-gradient-to-br from-gray-800/30 to-gray-900/30 backdrop-blur-md rounded-lg p-4 transition-all duration-300 hover:from-gray-800/40 hover:to-gray-900/40">
@@ -51,9 +68,10 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit }) => {
       <h3 className="text-gray-400/90 text-xs mb-2">{label}</h3>
       <div className="flex items-baseline gap-1 justify-center">
         <span 
-          className={`${isArrhythmiaDisplay ? 'text-sm' : 'text-lg'} font-bold ${color || 'text-white'} transition-colors duration-300`}
+          className={`${isArrhythmiaDisplay ? 'text-sm' : 'text-lg'} font-bold transition-colors duration-300`}
+          style={{ color: valueColor }}
         >
-          {text}
+          {isArrhythmiaDisplay ? text : value}
         </span>
         {!isArrhythmiaDisplay && unit && (
           <span className="text-gray-400/90 text-xs">{unit}</span>

@@ -5,6 +5,7 @@ import { useSignalProcessor } from "@/hooks/useSignalProcessor";
 import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
+import { VitalSignsRisk } from '@/utils/vitalSignsRisk';
 
 interface VitalSigns {
   spo2: number;
@@ -89,6 +90,7 @@ const Index = () => {
     setMeasurementComplete(false);
     resetHeartBeat();
     resetVitalSigns();
+    VitalSignsRisk.resetHistory();
   };
 
   const handleReset = () => {
