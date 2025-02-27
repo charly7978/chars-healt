@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -34,121 +35,6 @@ const Index = () => {
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
-
-  const enterImmersiveMode = async () => {
-    console.log('Intentando activar modo inmersivo...');
-    
-    // 1. Bloquear orientación primero
-    try {
-      if (screen.orientation?.lock) {
-        await screen.orientation.lock('portrait');
-      }
-    } catch (e) {
-      console.log('Error orientation lock:', e);
-    }
-
-    // 2. Intentar modo inmersivo Android
-    if (navigator.userAgent.includes("Android")) {
-      try {
-        if ((window as any).AndroidFullScreen?.immersiveMode) {
-          console.log('Intentando modo inmersivo Android...');
-          await (window as any).AndroidFullScreen.immersiveMode();
-        }
-      } catch (e) {
-        console.log('Error Android immersive:', e);
-      }
-    }
-
-    // 3. Intentar fullscreen en diferentes elementos
-    const elements = [
-      document.documentElement,
-      document.body,
-      document.getElementById('root')
-    ].filter(Boolean);
-
-    for (const method of ['requestFullscreen', 'webkitRequestFullscreen', 'webkitEnterFullscreen', 'mozRequestFullScreen', 'msRequestFullscreen']) {
-      for (const element of elements) {
-        if (element && element[method]) {
-          try {
-            console.log(`Intentando ${method} en`, element);
-            await element[method]();
-            console.log(`Éxito con ${method}`);
-            break;
-          } catch (e) {
-            console.log(`Error con ${method}:`, e);
-          }
-        }
-      }
-    }
-  };
-
-  useEffect(() => {
-    console.log('Iniciando secuencia de inmersión...');
-    
-    // Configuración inicial de orientación y viewport
-    const viewport = document.querySelector('meta[name=viewport]');
-    if (viewport) {
-      viewport.setAttribute('content', 
-        'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, minimal-ui, orientation=portrait'
-      );
-    }
-
-    // Estilos CSS para prevenir selección y zoom
-    const style = document.createElement('style');
-    style.textContent = `
-      * {
-        -webkit-touch-callout: none;
-        -webkit-user-select: none;
-        -khtml-user-select: none;
-        -moz-user-select: none;
-        -ms-user-select: none;
-        user-select: none;
-        -webkit-tap-highlight-color: transparent;
-      }
-      html, body {
-        touch-action: none;
-        overflow: hidden;
-        overscroll-behavior: none;
-        height: 100vh;
-        position: fixed;
-        width: 100%;
-      }
-    `;
-    document.head.appendChild(style);
-
-    // Prevenir scroll y gestos
-    const preventDefaultAndPropagation = (e: Event) => {
-      e.preventDefault();
-      e.stopPropagation();
-    };
-
-    const events = [
-      'touchmove', 'scroll', 'gesturestart', 'gesturechange', 'gestureend',
-      'touchstart', 'touchend', 'wheel', 'mousewheel'
-    ];
-
-    events.forEach(eventName => {
-      document.body.addEventListener(eventName, preventDefaultAndPropagation, { passive: false });
-    });
-
-    // Intentos de modo inmersivo
-    enterImmersiveMode();
-    requestAnimationFrame(enterImmersiveMode);
-    const attempts = [
-      setTimeout(() => enterImmersiveMode(), 100),
-      setTimeout(() => enterImmersiveMode(), 500),
-      setTimeout(() => enterImmersiveMode(), 1000)
-    ];
-
-    // Cleanup
-    return () => {
-      events.forEach(eventName => {
-        document.body.removeEventListener(eventName, preventDefaultAndPropagation);
-      });
-      attempts.forEach(clearTimeout);
-      document.head.removeChild(style);
-    };
-  }, []);
 
   const startMonitoring = () => {
     if (isMonitoring) {
@@ -279,11 +165,9 @@ const Index = () => {
         height: '100dvh',
         minHeight: '-webkit-fill-available',
         touchAction: 'none',
-        WebkitTouchCallout: 'none',
-        WebkitUserSelect: 'none',
         overscrollBehavior: 'none'
       }}
-      onClick={enterImmersiveMode}
+      translate="no"
     >
       <div className="absolute inset-0 z-0">
         <CameraView 
@@ -310,7 +194,6 @@ const Index = () => {
             onReset={handleReset}
             arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
             rawArrhythmiaData={lastArrhythmiaData}
-            fingerSize="lg"
           />
         </div>
 
