@@ -71,6 +71,17 @@ const Index = () => {
     stopProcessing();
     setMeasurementComplete(true);
     
+    // Al completar, hacer las evaluaciones finales
+    if (heartRate > 0) {
+      const finalBpmRisk = VitalSignsRisk.getBPMRisk(heartRate, true);
+      console.log("Evaluación final BPM:", finalBpmRisk);
+    }
+    
+    if (vitalSigns.pressure !== "--/--" && vitalSigns.pressure !== "0/0") {
+      const finalBPRisk = VitalSignsRisk.getBPRisk(vitalSigns.pressure, true);
+      console.log("Evaluación final BP:", finalBPRisk);
+    }
+    
     if (measurementTimerRef.current) {
       clearInterval(measurementTimerRef.current);
       measurementTimerRef.current = null;
@@ -265,7 +276,7 @@ const Index = () => {
       }}
     >
       {/* Cámara de fondo - estirada hasta los botones */}
-      <div className="absolute inset-0" style={{ bottom: '80px' }}>
+      <div className="absolute inset-0 bottom-[80px]">
         <CameraView 
           onStreamReady={handleStreamReady}
           isMonitoring={isCameraOn}
@@ -302,20 +313,24 @@ const Index = () => {
                 label="FRECUENCIA CARDÍACA"
                 value={heartRate || "--"}
                 unit="BPM"
+                isFinalReading={measurementComplete}
               />
               <VitalSign 
                 label="SPO2"
                 value={vitalSigns.spo2 || "--"}
                 unit="%"
+                isFinalReading={measurementComplete}
               />
               <VitalSign 
                 label="PRESIÓN ARTERIAL"
                 value={vitalSigns.pressure}
                 unit="mmHg"
+                isFinalReading={measurementComplete}
               />
               <VitalSign 
                 label="ARRITMIAS"
                 value={vitalSigns.arrhythmiaStatus}
+                isFinalReading={measurementComplete}
               />
             </div>
           </div>

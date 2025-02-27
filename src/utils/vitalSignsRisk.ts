@@ -132,7 +132,7 @@ export class VitalSignsRisk {
     } else if (this.isStableValue(this.bpmHistory, [100, 139])) {
       currentSegment = { color: '#F97316', label: 'TAQUICARDIA' };
     } else if (this.isStableValue(this.bpmHistory, [50, 89])) {
-      currentSegment = { color: '#FFFFFF', label: 'NORMAL' };
+      currentSegment = { color: '#0EA5E9', label: 'NORMAL' };
     } else if (this.isStableValue(this.bpmHistory, [40, 49])) {
       currentSegment = { color: '#F97316', label: 'BRADICARDIA' };
     } else {
@@ -144,7 +144,8 @@ export class VitalSignsRisk {
       this.bpmSegmentHistory.push(currentSegment);
     }
 
-    if (isFinalReading && currentSegment.label === 'EVALUANDO...') {
+    // Si es lectura final y estamos evaluando, mostrar el más frecuente
+    if (isFinalReading && (currentSegment.label === 'EVALUANDO...' || this.bpmSegmentHistory.length > 0)) {
       return this.getMostFrequentSegment(this.bpmSegmentHistory);
     }
 
@@ -163,7 +164,7 @@ export class VitalSignsRisk {
       return { color: '#F97316', label: 'LEVE INSUFICIENCIA RESPIRATORIA' };
     }
     if (this.isStableValue(this.spo2History, [93, 100])) {
-      return { color: '#FFFFFF', label: 'NORMAL' };
+      return { color: '#0EA5E9', label: 'NORMAL' };
     }
     
     return { color: '#FFFFFF', label: 'EVALUANDO...' };
@@ -197,7 +198,7 @@ export class VitalSignsRisk {
       systolic: [114, 126],
       diastolic: [76, 84]
     })) {
-      currentSegment = { color: '#FFFFFF', label: 'PRESIÓN NORMAL' };
+      currentSegment = { color: '#0EA5E9', label: 'PRESIÓN NORMAL' };
     } else if (this.isStableBP({ 
       systolic: [100, 110], 
       diastolic: [60, 70] 
@@ -212,7 +213,8 @@ export class VitalSignsRisk {
       this.bpSegmentHistory.push(currentSegment);
     }
 
-    if (isFinalReading && currentSegment.label === 'EVALUANDO...') {
+    // Si es lectura final y estamos evaluando, mostrar el más frecuente
+    if (isFinalReading && (currentSegment.label === 'EVALUANDO...' || this.bpSegmentHistory.length > 0)) {
       return this.getMostFrequentSegment(this.bpSegmentHistory);
     }
 

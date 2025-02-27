@@ -6,9 +6,10 @@ interface VitalSignProps {
   label: string;
   value: string | number;
   unit?: string;
+  isFinalReading?: boolean;
 }
 
-const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit }) => {
+const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReading = false }) => {
   const isArrhythmiaDisplay = label === "ARRITMIAS";
 
   const getRiskInfo = () => {
@@ -22,7 +23,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit }) => {
         return { color: '#FFFFFF', label: '' };
       }
       if (typeof value === 'number') {
-        return VitalSignsRisk.getBPMRisk(value);
+        return VitalSignsRisk.getBPMRisk(value, isFinalReading);
       }
     }
 
@@ -42,7 +43,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit }) => {
         return { color: '#FFFFFF', label: '' };
       }
       if (typeof value === 'string') {
-        return VitalSignsRisk.getBPRisk(value);
+        return VitalSignsRisk.getBPRisk(value, isFinalReading);
       }
     }
 
