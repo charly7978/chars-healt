@@ -38,7 +38,16 @@ const Index = () => {
   const enterImmersiveMode = async () => {
     console.log('Intentando activar modo inmersivo...');
     
-    // 1. Intentar modo inmersivo Android primero (prioridad máxima)
+    // 1. Bloquear orientación primero
+    try {
+      if (screen.orientation?.lock) {
+        await screen.orientation.lock('portrait');
+      }
+    } catch (e) {
+      console.log('Error orientation lock:', e);
+    }
+
+    // 2. Intentar modo inmersivo Android
     if (navigator.userAgent.includes("Android")) {
       try {
         if ((window as any).AndroidFullScreen?.immersiveMode) {
@@ -50,7 +59,7 @@ const Index = () => {
       }
     }
 
-    // 2. Intentar fullscreen en diferentes elementos inmediatamente después
+    // 3. Intentar fullscreen en diferentes elementos
     const elements = [
       document.documentElement,
       document.body,
@@ -59,7 +68,7 @@ const Index = () => {
 
     for (const method of ['requestFullscreen', 'webkitRequestFullscreen', 'webkitEnterFullscreen', 'mozRequestFullScreen', 'msRequestFullscreen']) {
       for (const element of elements) {
-        if (element[method]) {
+        if (element && element[method]) {
           try {
             console.log(`Intentando ${method} en`, element);
             await element[method]();
@@ -71,72 +80,75 @@ const Index = () => {
         }
       }
     }
-
-    // 3. Bloquear orientación
-    try {
-      if (screen.orientation?.lock) {
-        await screen.orientation.lock('portrait');
-      }
-    } catch (e) {
-      console.log('Error orientation lock:', e);
-    }
-
-    // 4. Forzar reflow al final
-    const tempDisplay = document.body.style.display;
-    document.body.style.display = 'none';
-    void document.body.offsetHeight;
-    document.body.style.display = tempDisplay;
   };
 
   useEffect(() => {
     console.log('Iniciando secuencia de inmersión...');
     
-    // PRIMERA ACCIÓN: Intentar modo inmersivo inmediatamente
-    enterImmersiveMode();
-    
-    // Segundo intento inmediato usando requestAnimationFrame
-    requestAnimationFrame(() => {
-      console.log('Segundo intento inmediato...');
-      enterImmersiveMode();
-    });
-
-    // DESPUÉS configuramos el viewport y otros ajustes
+    // Configuración inicial de orientación y viewport
     const viewport = document.querySelector('meta[name=viewport]');
     if (viewport) {
       viewport.setAttribute('content', 
-        'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, minimal-ui'
+        'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, minimal-ui, orientation=portrait'
       );
     }
 
-    // Configuración adicional
-    document.documentElement.style.height = '100vh';
-    document.body.style.height = '100vh';
-    document.body.style.overflow = 'hidden';
+    // Estilos CSS para prevenir selección y zoom
+    const style = document.createElement('style');
+    style.textContent = `
+      * {
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        -khtml-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      html, body {
+        touch-action: none;
+        overflow: hidden;
+        overscroll-behavior: none;
+        height: 100vh;
+        position: fixed;
+        width: 100%;
+      }
+    `;
+    document.head.appendChild(style);
 
-    // Prevenir scroll (se configura después del modo inmersivo)
-    const preventScroll = (e: Event) => e.preventDefault();
-    document.body.addEventListener('touchmove', preventScroll, { passive: false });
-    document.body.addEventListener('scroll', preventScroll, { passive: false });
+    // Prevenir scroll y gestos
+    const preventDefaultAndPropagation = (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
 
-    // Intentos adicionales como respaldo
+    const events = [
+      'touchmove', 'scroll', 'gesturestart', 'gesturechange', 'gestureend',
+      'touchstart', 'touchend', 'wheel', 'mousewheel'
+    ];
+
+    events.forEach(eventName => {
+      document.body.addEventListener(eventName, preventDefaultAndPropagation, { passive: false });
+    });
+
+    // Intentos de modo inmersivo
+    enterImmersiveMode();
+    requestAnimationFrame(enterImmersiveMode);
     const attempts = [
       setTimeout(() => enterImmersiveMode(), 100),
       setTimeout(() => enterImmersiveMode(), 500),
-      setTimeout(() => enterImmersiveMode(), 1000),
-      setTimeout(() => enterImmersiveMode(), 2000)
+      setTimeout(() => enterImmersiveMode(), 1000)
     ];
-
-    // Backup final: intentos periódicos
-    const intervalId = setInterval(() => enterImmersiveMode(), 3000);
 
     // Cleanup
     return () => {
-      document.body.removeEventListener('touchmove', preventScroll);
-      document.body.removeEventListener('scroll', preventScroll);
+      events.forEach(eventName => {
+        document.body.removeEventListener(eventName, preventDefaultAndPropagation);
+      });
       attempts.forEach(clearTimeout);
-      clearInterval(intervalId);
+      document.head.removeChild(style);
     };
-  }, []); // Este useEffect tiene prioridad máxima al no depender de ninguna prop o estado
+  }, []);
 
   const startMonitoring = () => {
     if (isMonitoring) {
@@ -289,7 +301,7 @@ const Index = () => {
           paddingBottom: 'env(safe-area-inset-bottom)'
         }}
       >
-        <div className="h-[45dvh]">
+        <div className="h-[50dvh]">
           <PPGSignalMeter 
             value={lastSignal?.filteredValue || 0}
             quality={lastSignal?.quality || 0}
@@ -298,10 +310,11 @@ const Index = () => {
             onReset={handleReset}
             arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
             rawArrhythmiaData={lastArrhythmiaData}
+            fingerSize="lg"
           />
         </div>
 
-        <div className="flex-1 mt-28" />
+        <div className="flex-1 mt-24" />
 
         <div className="w-full px-4 pb-8">
           <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4">
