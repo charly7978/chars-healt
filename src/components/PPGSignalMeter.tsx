@@ -35,15 +35,16 @@ const PPGSignalMeter = ({
   const arrhythmiaCountRef = useRef<number>(0);
   
   const WINDOW_WIDTH_MS = 3700;
-  const CANVAS_WIDTH = 300;
-  const CANVAS_HEIGHT = 250;
+  const CANVAS_WIDTH = 450;
+  const CANVAS_HEIGHT = 300;
   const GRID_SIZE_X = 80;
   const GRID_SIZE_Y = 6;
   const verticalScale = 20.0;
   const SMOOTHING_FACTOR = 0.55;
   const TARGET_FPS = 60;
   const FRAME_TIME = 1000 / TARGET_FPS;
-  const BUFFER_SIZE = 600;
+  const BUFFER_SIZE = 800;
+  const PEAK_THRESHOLD = 0.25;
 
   useEffect(() => {
     if (!dataBufferRef.current) {
@@ -128,6 +129,30 @@ const PPGSignalMeter = ({
     ctx.stroke();
   }, []);
 
+  const isPeakPoint = useCallback((points: PPGDataPoint[], index: number): boolean => {
+    if (index <= 0 || index >= points.length - 1) return false;
+
+    const current = points[index].value;
+    const prev = points[index - 1].value;
+    const next = points[index + 1].value;
+    const prevPrev = index > 1 ? points[index - 2].value : prev;
+    const nextNext = index < points.length - 2 ? points[index + 2].value : next;
+
+    const isPeak = current > prev && 
+                  current > next && 
+                  current > prevPrev && 
+                  current > nextNext;
+                  
+    const peakHeight = Math.min(
+      current - prev,
+      current - next,
+      current - prevPrev,
+      current - nextNext
+    );
+
+    return isPeak && peakHeight > PEAK_THRESHOLD;
+  }, []);
+
   const renderSignal = useCallback(() => {
     if (!canvasRef.current || !dataBufferRef.current) {
       animationFrameRef.current = requestAnimationFrame(renderSignal);
@@ -183,50 +208,46 @@ const PPGSignalMeter = ({
 
     const points = dataBufferRef.current.getPoints();
     if (points.length > 1) {
-      for (let i = 1; i < points.length; i++) {
-        const prevPoint = points[i - 1];
-        const point = points[i];
-        
-        const x1 = canvas.width - ((now - prevPoint.time) * canvas.width / WINDOW_WIDTH_MS);
-        const y1 = canvas.height / 2 - prevPoint.value;
-        const x2 = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-        const y2 = canvas.height / 2 - point.value;
+      ctx.beginPath();
+      ctx.lineWidth = 2;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
 
-        ctx.beginPath();
-        ctx.strokeStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
-        ctx.lineWidth = 2;
-        ctx.lineJoin = 'round';
-        ctx.lineCap = 'round';
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-        ctx.stroke();
-      }
+      points.forEach((point, i) => {
+        const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
+        const y = canvas.height / 2 - point.value;
+
+        if (i === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      });
+
+      ctx.strokeStyle = '#0EA5E9';
+      ctx.stroke();
 
       points.forEach((point, index) => {
-        if (index > 0 && index < points.length - 1) {
+        if (isPeakPoint(points, index)) {
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
           const y = canvas.height / 2 - point.value;
-          const prevPoint = points[index - 1];
-          const nextPoint = points[index + 1];
-          
-          if (point.value > prevPoint.value && point.value > nextPoint.value) {
-            ctx.beginPath();
-            ctx.arc(x, y, 4, 0, Math.PI * 2);
-            ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
-            ctx.fill();
 
-            ctx.font = 'bold 12px Inter';
-            ctx.fillStyle = '#000000';
-            ctx.textAlign = 'center';
-            ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 20);
-          }
+          ctx.beginPath();
+          ctx.arc(x, y, 4, 0, Math.PI * 2);
+          ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
+          ctx.fill();
+
+          ctx.font = 'bold 12px Inter';
+          ctx.fillStyle = '#334155';
+          ctx.textAlign = 'center';
+          ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 10);
         }
       });
     }
 
     lastRenderTimeRef.current = currentTime;
     animationFrameRef.current = requestAnimationFrame(renderSignal);
-  }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus]);
+  }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus, isPeakPoint]);
 
   useEffect(() => {
     renderSignal();
