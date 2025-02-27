@@ -308,7 +308,7 @@ const Index = () => {
 
         {/* Displays */}
         <div className="w-full px-4 mb-24">
-          <div className="bg-gray-900 rounded-xl p-4">
+          <div className="bg-black rounded-xl p-4">
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <VitalSign 
                 label="FRECUENCIA CARDÍACA"
