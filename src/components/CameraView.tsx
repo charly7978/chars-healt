@@ -16,68 +16,94 @@ const CameraView = ({
 }: CameraViewProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const mountedRef = useRef(true);
 
   const stopCamera = useCallback(() => {
+    if (!mountedRef.current) return;
+
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => {
-        track.stop();
+      const tracks = streamRef.current.getTracks();
+      tracks.forEach(track => {
+        if (track.readyState === 'live') {
+          track.stop();
+        }
       });
     }
 
     if (videoRef.current) {
-      videoRef.current.srcObject = null;
+      const video = videoRef.current;
+      if (video.srcObject) {
+        video.srcObject = null;
+      }
+      video.load();
     }
 
     streamRef.current = null;
   }, []);
 
   const startCamera = useCallback(async () => {
+    if (!mountedRef.current) return;
+    
     try {
-      stopCamera();
+      if (streamRef.current?.active) {
+        return; // Ya hay una cámara activa
+      }
 
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error('La cámara no está disponible');
       }
 
-      // Intenta primero con la cámara trasera
+      // Intenta obtener la cámara trasera primero
       let stream: MediaStream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
-            facingMode: 'environment'
+            facingMode: { exact: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            frameRate: { ideal: 30 }
           },
           audio: false
         });
       } catch (err) {
         // Si falla, intenta con cualquier cámara disponible
         stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
+          video: {
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            frameRate: { ideal: 30 }
+          },
           audio: false
         });
       }
 
-      const videoTrack = stream.getVideoTracks()[0];
-      
-      // Aplicar configuraciones básicas
-      try {
-        await videoTrack.applyConstraints({
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          frameRate: { ideal: 30 }
-        });
-      } catch (err) {
-        console.warn('No se pudieron aplicar las configuraciones ideales');
-      }
-
-      // Configurar el video element
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+      if (!mountedRef.current) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
       }
 
       streamRef.current = stream;
 
-      if (onStreamReady) {
+      if (videoRef.current) {
+        const video = videoRef.current;
+        video.srcObject = stream;
+        
+        // Esperar a que el video esté listo antes de reproducirlo
+        await new Promise<void>((resolve) => {
+          video.onloadedmetadata = () => {
+            if (mountedRef.current) {
+              video.play()
+                .then(() => resolve())
+                .catch(console.error);
+            } else {
+              resolve();
+            }
+          };
+        });
+      }
+
+      // Solo notificar si el componente sigue montado
+      if (mountedRef.current && onStreamReady) {
         onStreamReady(stream);
       }
 
@@ -88,16 +114,28 @@ const CameraView = ({
   }, [onStreamReady, stopCamera]);
 
   useEffect(() => {
-    if (isMonitoring && !streamRef.current) {
-      startCamera();
-    } else if (!isMonitoring && streamRef.current) {
-      stopCamera();
-    }
+    mountedRef.current = true;
+
+    const initializeCamera = async () => {
+      if (isMonitoring && !streamRef.current?.active) {
+        await startCamera();
+      }
+    };
+
+    initializeCamera();
 
     return () => {
+      mountedRef.current = false;
       stopCamera();
     };
   }, [isMonitoring, startCamera, stopCamera]);
+
+  // Manejar cambios en isMonitoring
+  useEffect(() => {
+    if (!isMonitoring && streamRef.current) {
+      stopCamera();
+    }
+  }, [isMonitoring, stopCamera]);
 
   return (
     <video
