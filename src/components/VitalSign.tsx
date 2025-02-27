@@ -24,6 +24,10 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit }) => {
       return VitalSignsRisk.getSPO2Risk(value);
     }
 
+    if (label === "PRESIÓN ARTERIAL" && typeof value === 'string') {
+      return VitalSignsRisk.getBPRisk(value);
+    }
+
     return { color: '#FFFFFF', label: '' };
   };
   
