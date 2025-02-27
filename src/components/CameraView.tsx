@@ -15,88 +15,89 @@ const CameraView = ({
   signalQuality = 0,
 }: CameraViewProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [stream, setStream] = useState<MediaStream | null>(null);
-  const streamRequestRef = useRef<ReturnType<typeof requestAnimationFrame>>();
+  const streamRef = useRef<MediaStream | null>(null);
 
-  const stopCamera = useCallback(async () => {
-    if (streamRequestRef.current) {
-      cancelAnimationFrame(streamRequestRef.current);
-      streamRequestRef.current = undefined;
-    }
-    
-    if (stream) {
-      stream.getTracks().forEach(track => {
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => {
         track.stop();
       });
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-      }
-      setStream(null);
     }
-  }, [stream]);
+
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+
+    streamRef.current = null;
+  }, []);
 
   const startCamera = useCallback(async () => {
     try {
+      stopCamera();
+
       if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error("getUserMedia no está soportado");
+        throw new Error('La cámara no está disponible');
       }
 
-      const isAndroid = /android/i.test(navigator.userAgent);
-      
-      // Mantener resolución más alta para SPO2
-      const videoConstraints: MediaTrackConstraints = {
-        facingMode: 'environment',
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
-        frameRate: { ideal: 30 }
-      };
-
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: videoConstraints,
-        audio: false
-      });
+      // Intenta primero con la cámara trasera
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: 'environment'
+          },
+          audio: false
+        });
+      } catch (err) {
+        // Si falla, intenta con cualquier cámara disponible
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false
+        });
+      }
 
       const videoTrack = stream.getVideoTracks()[0];
-
-      if (videoTrack && isAndroid) {
-        try {
-          await videoTrack.applyConstraints({
-            advanced: [
-              { exposureMode: 'continuous' },
-              { focusMode: 'continuous' },
-              { whiteBalanceMode: 'continuous' }
-            ]
-          });
-        } catch (err) {
-          console.log("Algunas optimizaciones no están disponibles");
-        }
+      
+      // Aplicar configuraciones básicas
+      try {
+        await videoTrack.applyConstraints({
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 30 }
+        });
+      } catch (err) {
+        console.warn('No se pudieron aplicar las configuraciones ideales');
       }
 
+      // Configurar el video element
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        await videoRef.current.play();
       }
 
-      setStream(stream);
-      
+      streamRef.current = stream;
+
       if (onStreamReady) {
         onStreamReady(stream);
       }
+
     } catch (err) {
-      console.error("Error al iniciar la cámara:", err);
+      console.error('Error al iniciar la cámara:', err);
+      stopCamera();
     }
-  }, [onStreamReady]);
+  }, [onStreamReady, stopCamera]);
 
   useEffect(() => {
-    if (isMonitoring && !stream) {
+    if (isMonitoring && !streamRef.current) {
       startCamera();
-    } else if (!isMonitoring && stream) {
+    } else if (!isMonitoring && streamRef.current) {
       stopCamera();
     }
 
     return () => {
       stopCamera();
     };
-  }, [isMonitoring, stream, startCamera, stopCamera]);
+  }, [isMonitoring, startCamera, stopCamera]);
 
   return (
     <video
