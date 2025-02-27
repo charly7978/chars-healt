@@ -37,8 +37,9 @@ const Index = () => {
     spo2: number,
     pressure: string
   } | null>(null);
-  const [firstMeasurement, setFirstMeasurement] = useState(true);
+  const [initialSetupDone, setInitialSetupDone] = useState(false);
   const measurementTimerRef = useRef<number | null>(null);
+  const processorsInitializedRef = useRef(false);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat, reset: resetHeartBeat } = useHeartBeatProcessor();
@@ -75,13 +76,17 @@ const Index = () => {
       handleMeasurementComplete();
     } else {
       // Iniciar una nueva medición
-      // Si es la primera medición, reseteamos todo
-      if (firstMeasurement) {
-        setFirstMeasurement(false);
+      // La primera vez, inicializamos todo, pero después solo preparamos para una nueva medición
+      if (!initialSetupDone) {
+        console.log("Primera inicialización - configurando todo");
+        setInitialSetupDone(true);
+        
+        // Solo la primera vez reseteamos los valores
         resetAllValues();
+        processorsInitializedRef.current = true;
       } else {
-        // Para mediciones subsecuentes, solo preparamos para una nueva medición
-        // SIN resetear los valores de los displays
+        console.log("Iniciando nueva medición - manteniendo valores");
+        // Solo reseteamos el timer y configuramos para nueva medición
         prepareForNewMeasurement();
       }
       
@@ -105,20 +110,20 @@ const Index = () => {
     }
   };
 
-  // Nueva función para preparar una nueva medición sin resetear los valores de displays
+  // Preparar para nueva medición sin resetear los valores de displays
   const prepareForNewMeasurement = () => {
-    // Resetear solo el temporizador y el estado de medición
+    console.log("Preparando para nueva medición - SIN resetear valores");
+    
+    // SOLO reseteamos el temporizador y el estado de medición
     setElapsedTime(0);
     setMeasurementComplete(false);
     
-    // No resetear los procesadores internos aquí para mantener el historial
-    // En su lugar, solo reiniciamos el módulo de VitalSignsRisk
-    VitalSignsRisk.resetHistory();
-    
-    console.log("Preparando para nueva medición manteniendo valores mostrados");
+    // NO RESETEAR NADA MÁS - mantenemos los valores en pantalla
   };
 
   const handleMeasurementComplete = () => {
+    console.log("Completando medición - manteniendo valores en pantalla");
+    
     // Primero calculamos los valores finales
     calculateFinalValues();
     
@@ -142,12 +147,13 @@ const Index = () => {
       measurementTimerRef.current = null;
     }
     
-    // No resetear nada más
-    console.log("Medición completada, manteniendo valores en pantalla");
+    // NO resetear NADA - los displays deben mantener sus valores
   };
 
-  // Resetea absolutamente todos los valores (solo para RESET explícito o primera inicialización)
+  // Resetea SOLO cuando se pide explícitamente con botón RESET
   const resetAllValues = () => {
+    console.log("RESET COMPLETO - limpiando todos los valores");
+    
     // Resetear valores de displays
     setHeartRate(0);
     setVitalSigns({ 
@@ -163,15 +169,15 @@ const Index = () => {
     setElapsedTime(0);
     setMeasurementComplete(false);
     
-    // Resetear procesadores
+    // Resetear procesadores - SOLO en caso de RESET completo
     resetHeartBeat();
     resetVitalSigns();
     VitalSignsRisk.resetHistory();
-    
-    console.log("Reset completo de todos los valores");
   };
 
   const handleReset = () => {
+    console.log("Botón RESET presionado - limpieza completa");
+    
     // Detener la monitorización
     setIsMonitoring(false);
     setIsCameraOn(false);
@@ -182,7 +188,7 @@ const Index = () => {
       measurementTimerRef.current = null;
     }
     
-    // Reset completo de todos los valores
+    // Reset completo de todos los valores SOLO cuando se presiona RESET
     resetAllValues();
   };
 
