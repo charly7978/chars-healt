@@ -16,33 +16,41 @@ export class VitalSignsRisk {
 
   static updateBPMHistory(value: number) {
     const now = Date.now();
-    this.bpmHistory = [
-      ...this.bpmHistory.filter(check => now - check.timestamp < this.STABILITY_WINDOW),
-      { value, timestamp: now }
-    ];
+    // Primero eliminar las lecturas antiguas
+    this.bpmHistory = this.bpmHistory.filter(check => now - check.timestamp < this.STABILITY_WINDOW);
+    // Luego añadir la nueva lectura
+    this.bpmHistory.push({ value, timestamp: now });
   }
 
   static updateSPO2History(value: number) {
     const now = Date.now();
-    this.spo2History = [
-      ...this.spo2History.filter(check => now - check.timestamp < this.STABILITY_WINDOW),
-      { value, timestamp: now }
-    ];
+    // Primero eliminar las lecturas antiguas
+    this.spo2History = this.spo2History.filter(check => now - check.timestamp < this.STABILITY_WINDOW);
+    // Luego añadir la nueva lectura
+    this.spo2History.push({ value, timestamp: now });
   }
 
   static isStableValue(history: StabilityCheck[], range: [number, number]): boolean {
-    if (history.length < 3) return false;
+    const now = Date.now();
+    // Asegurarse de que tenemos al menos 6 segundos de datos
+    const oldestAllowed = now - this.STABILITY_WINDOW;
+    const recentHistory = history.filter(check => check.timestamp >= oldestAllowed);
     
-    const stableChecks = history.filter(check => 
+    // Necesitamos al menos 3 lecturas en la ventana de 6 segundos
+    if (recentHistory.length < 3) return false;
+    
+    // Verificar que al menos el 75% de las lecturas están en el rango
+    const stableChecks = recentHistory.filter(check => 
       check.value >= range[0] && check.value <= range[1]
     );
 
-    return stableChecks.length >= Math.ceil(history.length * 0.75); // 75% de las lecturas en el rango
+    return stableChecks.length >= Math.ceil(recentHistory.length * 0.75);
   }
 
   static getBPMRisk(bpm: number): RiskSegment {
     this.updateBPMHistory(bpm);
 
+    // Verificar cada rango de BPM
     if (this.isStableValue(this.bpmHistory, [140, 300])) {
       return { color: '#ea384c', label: 'ALTA TAQUICARDIA' };
     }
@@ -56,20 +64,26 @@ export class VitalSignsRisk {
       return { color: '#F97316', label: 'BRADICARDIA' };
     }
     
+    // Si no hay estabilidad en ningún rango, mostrar "EVALUANDO..."
     return { color: '#FFFFFF', label: 'EVALUANDO...' };
   }
 
   static getSPO2Risk(spo2: number): RiskSegment {
     this.updateSPO2History(spo2);
 
+    // Verificar cada rango de SPO2
     if (this.isStableValue(this.spo2History, [0, 90])) {
       return { color: '#ea384c', label: 'INSUFICIENCIA RESPIRATORIA' };
     }
     if (this.isStableValue(this.spo2History, [90, 92])) {
       return { color: '#F97316', label: 'LEVE INSUFICIENCIA RESPIRATORIA' };
     }
+    if (this.isStableValue(this.spo2History, [93, 100])) {
+      return { color: '#FFFFFF', label: 'NORMAL' };
+    }
     
-    return { color: '#FFFFFF', label: 'NORMAL' };
+    // Si no hay estabilidad en ningún rango, mostrar "EVALUANDO..."
+    return { color: '#FFFFFF', label: 'EVALUANDO...' };
   }
 
   static resetHistory() {
