@@ -306,9 +306,9 @@ const Index = () => {
 
         <div className="flex-1 mt-4" />
 
-        {/* Subimos más los displays y eliminamos el difuminado */}
+        {/* Displays con fondo sólido sin difuminado */}
         <div className="w-full px-4 mb-24">
-          <div className="bg-gray-900/80 rounded-xl p-4">
+          <div className="bg-gray-900 rounded-xl p-4">
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <VitalSign 
                 label="FRECUENCIA CARDÍACA"
