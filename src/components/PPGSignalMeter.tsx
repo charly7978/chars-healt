@@ -242,39 +242,53 @@ const PPGSignalMeter = ({
 
     const points = dataBufferRef.current.getPoints();
     if (points.length > 1) {
-      // Dibujar la línea principal
-      ctx.beginPath();
-      ctx.lineWidth = 2;
-      ctx.lineJoin = 'round';
-      ctx.lineCap = 'round';
+      let currentSegment: PPGDataPoint[] = [];
+      let lastWasArrhythmia = points[0].isArrhythmia;
 
-      points.forEach((point, i) => {
-        const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-        const y = canvas.height / 2 - point.value;
+      // Dividir los puntos en segmentos basados en si son arritmia o no
+      points.forEach((point, index) => {
+        if (point.isArrhythmia !== lastWasArrhythmia || index === points.length - 1) {
+          // Dibujar el segmento acumulado
+          if (currentSegment.length > 0) {
+            ctx.beginPath();
+            ctx.lineWidth = 2;
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+            
+            currentSegment.forEach((segPoint, i) => {
+              const x = canvas.width - ((now - segPoint.time) * canvas.width / WINDOW_WIDTH_MS);
+              const y = canvas.height / 2 - segPoint.value;
 
-        if (i === 0) {
-          ctx.moveTo(x, y);
+              if (i === 0) {
+                ctx.moveTo(x, y);
+              } else {
+                ctx.lineTo(x, y);
+              }
+            });
+
+            ctx.strokeStyle = lastWasArrhythmia ? '#DC2626' : '#0EA5E9';
+            ctx.stroke();
+          }
+
+          // Comenzar nuevo segmento
+          currentSegment = [point];
+          lastWasArrhythmia = point.isArrhythmia;
         } else {
-          ctx.lineTo(x, y);
+          currentSegment.push(point);
         }
       });
 
-      ctx.strokeStyle = '#0EA5E9';
-      ctx.stroke();
-
-      // Marcar los picos y las arritmias
+      // Marcar los picos
       points.forEach((point, index) => {
         if (isPeakPoint(points, index)) {
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
           const y = canvas.height / 2 - point.value;
 
-          // Dibujar el punto del pico
           ctx.beginPath();
           ctx.arc(x, y, 4, 0, Math.PI * 2);
           ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
           ctx.fill();
 
-          // Mostrar el valor del pico
           ctx.font = 'bold 10px Inter';
           ctx.fillStyle = '#334155';
           ctx.textAlign = 'center';
