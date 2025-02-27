@@ -275,7 +275,7 @@ const Index = () => {
         overflow: 'hidden'
       }}
     >
-      {/* Cámara de fondo - visible en toda la pantalla y sin filtros */}
+      {/* Cámara de fondo - visible en toda la pantalla */}
       <div className="absolute inset-0 z-0">
         <CameraView 
           onStreamReady={handleStreamReady}
@@ -306,9 +306,9 @@ const Index = () => {
 
         <div className="flex-1 mt-4" />
 
-        {/* Displays con fondo simple */}
+        {/* Displays */}
         <div className="w-full px-4 mb-24">
-          <div className="bg-black/30 p-4 rounded-xl">
+          <div className="bg-black rounded-xl p-4">
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <VitalSign 
                 label="FRECUENCIA CARDÍACA"
@@ -339,7 +339,7 @@ const Index = () => {
 
         {isMonitoring && (
           <div className="fixed bottom-20 left-0 right-0 text-center z-20">
-            <span className="text-xl font-medium text-white">{elapsedTime}s / 40s</span>
+            <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 40s</span>
           </div>
         )}
 
