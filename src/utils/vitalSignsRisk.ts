@@ -20,7 +20,7 @@ interface SegmentCount {
 }
 
 export class VitalSignsRisk {
-  private static readonly STABILITY_WINDOW = 4000; // 4 segundos
+  private static readonly STABILITY_WINDOW = 3000; // Reducido de 4000 a 3000 (3 segundos)
   private static readonly MEASUREMENT_WINDOW = 40000; // 40 segundos para análisis final
   private static readonly SMOOTHING_FACTOR = 0.15; // Factor de suavizado (reducido para más suavidad)
   
@@ -188,7 +188,7 @@ export class VitalSignsRisk {
   }
 
   // Función para calcular el promedio del historial de BPM
-  private static getAverageBPM(): number {
+  static getAverageBPM(): number {
     if (this.bpmHistory.length === 0) return 0;
     
     // Usar solo los últimos 20 segundos de datos para el promedio
@@ -202,7 +202,7 @@ export class VitalSignsRisk {
   }
 
   // Función para calcular el promedio del historial de SpO2
-  private static getAverageSPO2(): number {
+  static getAverageSPO2(): number {
     if (this.spo2History.length === 0) return 0;
     
     // Usar solo los últimos 20 segundos de datos para el promedio
@@ -211,12 +211,19 @@ export class VitalSignsRisk {
     
     if (recentHistory.length === 0) return 0;
     
-    const sum = recentHistory.reduce((total, check) => total + check.value, 0);
-    return Math.round(sum / recentHistory.length);
+    // Calcular promedio real sin forzar valores máximos
+    const validReadings = recentHistory.filter(check => check.value > 0);
+    if (validReadings.length === 0) return 0;
+    
+    const sum = validReadings.reduce((total, check) => total + check.value, 0);
+    const avg = sum / validReadings.length;
+    
+    // Retornamos directamente el valor calculado sin forzar un máximo de 98
+    return Math.round(avg);
   }
 
   // Función para calcular el promedio del historial de presión arterial
-  private static getAverageBP(): { systolic: number, diastolic: number } {
+  static getAverageBP(): { systolic: number, diastolic: number } {
     if (this.bpHistory.length === 0) return { systolic: 0, diastolic: 0 };
     
     // Usar solo los últimos 20 segundos de datos para el promedio
