@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 
 interface CameraViewProps {
@@ -52,31 +51,44 @@ const CameraView = ({
     
     try {
       if (streamRef.current?.active) {
-        return; // Ya hay una cámara activa
+        return;
       }
 
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error('La cámara no está disponible');
       }
 
-      // Intenta obtener la cámara trasera primero
+      // Configuración optimizada para captura de rojo
       let stream: MediaStream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { exact: 'environment' },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-            frameRate: { ideal: 30 }
+            width: { ideal: 1920 }, // Aumentada resolución
+            height: { ideal: 1080 },
+            frameRate: { ideal: 30 },
+            // Configuraciones avanzadas para mejorar la captura de rojo
+            advanced: [{
+              exposureMode: 'manual',
+              exposureTime: 1000, // Tiempo de exposición más largo
+              whiteBalanceMode: 'manual',
+              colorTemperature: 3000, // Temperatura de color más cálida
+              brightness: 100,
+              contrast: 95,
+              saturation: 100,
+              sharpness: 100,
+              focusMode: 'manual',
+              focusDistance: 10 // Distancia focal corta para macro
+            }]
           },
           audio: false
         });
       } catch (err) {
-        // Si falla, intenta con cualquier cámara disponible
+        // Fallback con configuración básica mejorada
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
             frameRate: { ideal: 30 }
           },
           audio: false
@@ -88,13 +100,36 @@ const CameraView = ({
         return;
       }
 
+      // Aplicar configuraciones adicionales a los tracks
+      stream.getVideoTracks().forEach(track => {
+        const capabilities = track.getCapabilities();
+        if (capabilities.torch) {
+          track.applyConstraints({
+            advanced: [{ torch: true }]
+          }).catch(console.error);
+        }
+
+        // Intentar ajustar configuraciones avanzadas si están disponibles
+        const settings = {
+          exposureMode: 'manual',
+          exposureTime: 1000,
+          whiteBalanceMode: 'manual',
+          colorTemperature: 3000
+        };
+
+        track.applyConstraints({ advanced: [settings] })
+          .catch(console.error);
+      });
+
       streamRef.current = stream;
 
       if (videoRef.current) {
         const video = videoRef.current;
         video.srcObject = stream;
         
-        // Esperar a que el video esté listo antes de reproducirlo
+        // Ajustes de estilo para mejorar visualización
+        video.style.filter = 'saturate(1.2) contrast(1.1)';
+        
         await new Promise<void>((resolve) => {
           video.onloadedmetadata = () => {
             if (mountedRef.current) {
@@ -108,7 +143,6 @@ const CameraView = ({
         });
       }
 
-      // Solo notificar si el componente sigue montado
       if (mountedRef.current && onStreamReady) {
         onStreamReady(stream);
       }
@@ -150,6 +184,10 @@ const CameraView = ({
       playsInline
       muted
       className="absolute top-0 left-0 min-w-full min-h-full w-auto h-auto z-0 object-cover"
+      style={{
+        filter: 'saturate(1.2) contrast(1.1)', // Mejora la visualización del rojo
+        WebkitFilter: 'saturate(1.2) contrast(1.1)' // Para Safari
+      }}
     />
   );
 };

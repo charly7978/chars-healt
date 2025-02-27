@@ -274,8 +274,8 @@ const Index = () => {
         overflow: 'hidden'
       }}
     >
-      {/* Cámara de fondo - visible en toda la pantalla y sin filtros */}
-      <div className="absolute inset-0 z-0">
+      {/* Cámara de fondo - ajustada para mejor visualización */}
+      <div className="absolute inset-0 z-0 bg-black">
         <CameraView 
           onStreamReady={handleStreamReady}
           isMonitoring={isCameraOn}
@@ -288,7 +288,8 @@ const Index = () => {
         className="relative z-10 flex flex-col h-full"
         style={{
           paddingTop: 'env(safe-area-inset-top)',
-          paddingBottom: 'env(safe-area-inset-bottom)'
+          paddingBottom: 'env(safe-area-inset-bottom)',
+          background: 'transparent' // Aseguramos que no hay superposición
         }}
       >
         <div className="h-[50dvh]">
