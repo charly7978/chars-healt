@@ -33,6 +33,9 @@ const PPGSignalMeter = ({
   const lastRenderTimeRef = useRef<number>(0);
   const lastArrhythmiaTime = useRef<number>(0);
   const arrhythmiaCountRef = useRef<number>(0);
+  const lastPeakTimeRef = useRef<number>(0);
+  const avgPeakIntervalRef = useRef<number>(0);
+  const peakHistoryRef = useRef<number[]>([]);
   
   const WINDOW_WIDTH_MS = 3700;
   const CANVAS_WIDTH = 450;
@@ -44,13 +47,14 @@ const PPGSignalMeter = ({
   const TARGET_FPS = 60;
   const FRAME_TIME = 1000 / TARGET_FPS;
   const BUFFER_SIZE = 800;
-  const PEAK_THRESHOLD = 0.25;
 
-  useEffect(() => {
-    if (!dataBufferRef.current) {
-      dataBufferRef.current = new CircularBuffer(BUFFER_SIZE);
-    }
-  }, []);
+  const MIN_PEAK_INTERVAL_MS = 400;
+  const MAX_PEAK_INTERVAL_MS = 1500;
+  const PEAK_PROMINENCE_THRESHOLD = 0.25;
+  const MOVING_WINDOW_SIZE = 5;
+  const MIN_PEAK_WIDTH = 3;
+  const ADAPTIVE_THRESHOLD_FACTOR = 0.6;
+  const NOISE_THRESHOLD = 0.1;
 
   const getQualityColor = useCallback((q: number) => {
     if (!isFingerDetected) return 'from-gray-400 to-gray-500';
@@ -129,28 +133,60 @@ const PPGSignalMeter = ({
     ctx.stroke();
   }, []);
 
+  const calculateSignalQuality = useCallback((points: PPGDataPoint[], currentValue: number): number => {
+    if (points.length < MOVING_WINDOW_SIZE) return 0;
+
+    const recentPoints = points.slice(-MOVING_WINDOW_SIZE);
+    const mean = recentPoints.reduce((sum, p) => sum + p.value, 0) / MOVING_WINDOW_SIZE;
+    const variance = recentPoints.reduce((sum, p) => sum + Math.pow(p.value - mean, 2), 0) / MOVING_WINDOW_SIZE;
+
+    if (variance > NOISE_THRESHOLD) return 0;
+
+    const baselineStability = Math.abs((baselineRef.current || 0) - mean) / mean;
+    if (baselineStability > 0.3) return 0;
+
+    return Math.min(100, 100 * (1 - baselineStability) * (1 - variance / NOISE_THRESHOLD));
+  }, []);
+
   const isPeakPoint = useCallback((points: PPGDataPoint[], index: number): boolean => {
-    if (index <= 0 || index >= points.length - 1) return false;
+    if (index <= MIN_PEAK_WIDTH || index >= points.length - MIN_PEAK_WIDTH) return false;
 
     const current = points[index].value;
-    const prev = points[index - 1].value;
-    const next = points[index + 1].value;
-    const prevPrev = index > 1 ? points[index - 2].value : prev;
-    const nextNext = index < points.length - 2 ? points[index + 2].value : next;
+    const now = points[index].time;
 
-    const isPeak = current > prev && 
-                  current > next && 
-                  current > prevPrev && 
-                  current > nextNext;
-                  
-    const peakHeight = Math.min(
-      current - prev,
-      current - next,
-      current - prevPrev,
-      current - nextNext
-    );
+    if (lastPeakTimeRef.current) {
+      const timeSinceLastPeak = now - lastPeakTimeRef.current;
+      if (timeSinceLastPeak < MIN_PEAK_INTERVAL_MS) return false;
+      if (timeSinceLastPeak > MAX_PEAK_INTERVAL_MS && avgPeakIntervalRef.current > 0) return false;
+    }
 
-    return isPeak && peakHeight > PEAK_THRESHOLD;
+    const window = points.slice(index - MIN_PEAK_WIDTH, index + MIN_PEAK_WIDTH + 1);
+    const windowValues = window.map(p => p.value);
+    const maxInWindow = Math.max(...windowValues);
+    if (current !== maxInWindow) return false;
+
+    const leftMin = Math.min(...points.slice(index - MIN_PEAK_WIDTH, index).map(p => p.value));
+    const rightMin = Math.min(...points.slice(index + 1, index + MIN_PEAK_WIDTH + 1).map(p => p.value));
+    const prominence = Math.min(current - leftMin, current - rightMin);
+    
+    const recentPoints = points.slice(-20);
+    const meanAmplitude = recentPoints.reduce((sum, p) => sum + Math.abs(p.value), 0) / recentPoints.length;
+    const adaptiveThreshold = meanAmplitude * ADAPTIVE_THRESHOLD_FACTOR;
+
+    if (prominence > PEAK_PROMINENCE_THRESHOLD && prominence > adaptiveThreshold) {
+      const newInterval = lastPeakTimeRef.current ? now - lastPeakTimeRef.current : 0;
+      if (newInterval > 0) {
+        peakHistoryRef.current.push(newInterval);
+        if (peakHistoryRef.current.length > 10) peakHistoryRef.current.shift();
+        
+        avgPeakIntervalRef.current = peakHistoryRef.current.reduce((a, b) => a + b, 0) / peakHistoryRef.current.length;
+      }
+      
+      lastPeakTimeRef.current = now;
+      return true;
+    }
+
+    return false;
   }, []);
 
   const renderSignal = useCallback(() => {
@@ -237,10 +273,10 @@ const PPGSignalMeter = ({
           ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
           ctx.fill();
 
-          ctx.font = 'bold 12px Inter';
+          ctx.font = 'bold 10px Inter';
           ctx.fillStyle = '#334155';
           ctx.textAlign = 'center';
-          ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 10);
+          ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 8);
         }
       });
     }
