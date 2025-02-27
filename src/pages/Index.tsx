@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -274,8 +275,8 @@ const Index = () => {
         overflow: 'hidden'
       }}
     >
-      {/* Cámara de fondo - ajustada para mejor visualización */}
-      <div className="absolute inset-0 z-0 bg-black">
+      {/* Cámara de fondo - visible en toda la pantalla y sin filtros */}
+      <div className="absolute inset-0 z-0">
         <CameraView 
           onStreamReady={handleStreamReady}
           isMonitoring={isCameraOn}
@@ -288,8 +289,7 @@ const Index = () => {
         className="relative z-10 flex flex-col h-full"
         style={{
           paddingTop: 'env(safe-area-inset-top)',
-          paddingBottom: 'env(safe-area-inset-bottom)',
-          background: 'transparent' // Aseguramos que no hay superposición
+          paddingBottom: 'env(safe-area-inset-bottom)'
         }}
       >
         <div className="h-[50dvh]">
@@ -306,41 +306,33 @@ const Index = () => {
 
         <div className="flex-1 mt-4" />
 
-        {/* Displays con fondo simple - Ajustado tamaño y espaciado */}
-        <div className="w-full px-4 mb-16">
-          <div className="bg-gradient-to-b from-slate-900/90 to-black/90 backdrop-blur-sm p-4 rounded-xl border border-slate-800/30 shadow-2xl">
+        {/* Displays con fondo simple */}
+        <div className="w-full px-4 mb-24">
+          <div className="bg-black/30 p-4 rounded-xl">
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <div className="transform scale-95">
-                <VitalSign 
-                  label="FRECUENCIA CARDÍACA"
-                  value={heartRate || "--"}
-                  unit="BPM"
-                  isFinalReading={measurementComplete}
-                />
-              </div>
-              <div className="transform scale-95">
-                <VitalSign 
-                  label="SPO2"
-                  value={vitalSigns.spo2 || "--"}
-                  unit="%"
-                  isFinalReading={measurementComplete}
-                />
-              </div>
-              <div className="transform scale-95">
-                <VitalSign 
-                  label="PRESIÓN ARTERIAL"
-                  value={vitalSigns.pressure}
-                  unit="mmHg"
-                  isFinalReading={measurementComplete}
-                />
-              </div>
-              <div className="transform scale-95">
-                <VitalSign 
-                  label="ARRITMIAS"
-                  value={vitalSigns.arrhythmiaStatus}
-                  isFinalReading={measurementComplete}
-                />
-              </div>
+              <VitalSign 
+                label="FRECUENCIA CARDÍACA"
+                value={heartRate || "--"}
+                unit="BPM"
+                isFinalReading={measurementComplete}
+              />
+              <VitalSign 
+                label="SPO2"
+                value={vitalSigns.spo2 || "--"}
+                unit="%"
+                isFinalReading={measurementComplete}
+              />
+              <VitalSign 
+                label="PRESIÓN ARTERIAL"
+                value={vitalSigns.pressure}
+                unit="mmHg"
+                isFinalReading={measurementComplete}
+              />
+              <VitalSign 
+                label="ARRITMIAS"
+                value={vitalSigns.arrhythmiaStatus}
+                isFinalReading={measurementComplete}
+              />
             </div>
           </div>
         </div>
