@@ -17,7 +17,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
       return getArrhythmiaDisplay();
     }
 
-    // Para frecuencia cardíaca, solo mostrar riesgo si hay un valor
+    // Para frecuencia cardíaca, aplicar evaluación directa
     if (label === "FRECUENCIA CARDÍACA") {
       if (value === "--" || value === 0) {
         return { color: '#FFFFFF', label: '' };
@@ -27,7 +27,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
       }
     }
 
-    // Para SPO2, solo mostrar riesgo si hay un valor
+    // Para SPO2, aplicar evaluación directa
     if (label === "SPO2") {
       if (value === "--" || value === 0) {
         return { color: '#FFFFFF', label: '' };
@@ -37,7 +37,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
       }
     }
 
-    // Para presión arterial
+    // Para presión arterial, aplicar evaluación directa
     if (label === "PRESIÓN ARTERIAL") {
       if (value === "--/--" || value === "0/0") {
         return { color: '#FFFFFF', label: '' };
