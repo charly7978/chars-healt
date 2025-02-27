@@ -180,8 +180,10 @@ const Index = () => {
       }
     };
 
+    // Llamar inmediatamente al iniciar
     enterImmersiveMode();
 
+    // También activar cuando se toca la pantalla
     const handleTouch = () => {
       enterImmersiveMode();
     };
