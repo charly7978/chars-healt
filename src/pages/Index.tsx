@@ -265,7 +265,7 @@ const Index = () => {
 
   return (
     <div 
-      className="fixed inset-0 flex flex-col bg-black" 
+      className="fixed inset-0 flex flex-col bg-black/90" 
       style={{ 
         height: '100dvh',
         minHeight: '100vh',
@@ -306,9 +306,9 @@ const Index = () => {
 
         <div className="flex-1 mt-4" />
 
-        {/* Displays */}
-        <div className="w-full px-4 mb-24">
-          <div className="bg-gray-900 rounded-xl p-4">
+        {/* Subimos los displays ligeramente */}
+        <div className="w-full px-4 mb-12">
+          <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4">
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <VitalSign 
                 label="FRECUENCIA CARDÍACA"
