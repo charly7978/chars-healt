@@ -111,11 +111,10 @@ const Index = () => {
     setElapsedTime(0);
     setMeasurementComplete(false);
     
-    // Resetear solo los procesadores internos para preparar para una nueva medición
-    resetHeartBeat();
-    resetVitalSigns();
+    // No resetear los procesadores internos aquí para mantener el historial
+    // En su lugar, solo reiniciamos el módulo de VitalSignsRisk
+    VitalSignsRisk.resetHistory();
     
-    // No resetear ningún valor de display
     console.log("Preparando para nueva medición manteniendo valores mostrados");
   };
 
@@ -142,10 +141,9 @@ const Index = () => {
       clearInterval(measurementTimerRef.current);
       measurementTimerRef.current = null;
     }
-
-    // Resetear solo los procesadores internos
-    resetHeartBeat();
-    resetVitalSigns();
+    
+    // No resetear nada más
+    console.log("Medición completada, manteniendo valores en pantalla");
   };
 
   // Resetea absolutamente todos los valores (solo para RESET explícito o primera inicialización)
