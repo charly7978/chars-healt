@@ -1,4 +1,3 @@
-
 interface RiskSegment {
   color: string;
   label: string;
@@ -170,12 +169,8 @@ export class VitalSignsRisk {
   }
 
   static getBPRisk(pressure: string, isFinalReading: boolean = false): RiskSegment {
-    if (pressure === "0/0") {
+    if (pressure === "0/0" || pressure === "--/--") {
       return { color: '#FFFFFF', label: '' };
-    }
-    
-    if (pressure === "--/--") {
-      return { color: '#FFFFFF', label: 'EVALUANDO...' };
     }
 
     const [systolic, diastolic] = pressure.split('/').map(Number);

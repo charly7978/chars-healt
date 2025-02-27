@@ -54,9 +54,9 @@ const Index = () => {
       
       measurementTimerRef.current = window.setInterval(() => {
         setElapsedTime(prev => {
-          if (prev >= 40) {
+          if (prev >= 30) {
             handleMeasurementComplete();
-            return 40;
+            return 30;
           }
           return prev + 1;
         });
@@ -253,95 +253,82 @@ const Index = () => {
 
   return (
     <div 
-      className="fixed inset-0 flex flex-col bg-black/90" 
+      className="fixed inset-0 flex flex-col bg-black" 
       style={{ 
-        height: '100dvh',
-        minHeight: '100vh',
-        touchAction: 'none',
-        overscrollBehavior: 'none',
-        WebkitOverflowScrolling: 'touch',
-        overflow: 'hidden'
+        height: 'calc(100vh + env(safe-area-inset-bottom))',
+        paddingTop: 'env(safe-area-inset-top)',
+        paddingBottom: 'env(safe-area-inset-bottom)'
       }}
     >
-      <div className="absolute inset-0 z-0">
-        <CameraView 
-          onStreamReady={handleStreamReady}
-          isMonitoring={isCameraOn}
-          isFingerDetected={lastSignal?.fingerDetected}
-          signalQuality={signalQuality}
-        />
-      </div>
-
-      <div 
-        className="relative z-10 flex flex-col h-full"
-        style={{
-          paddingTop: 'env(safe-area-inset-top)',
-          paddingBottom: 'env(safe-area-inset-bottom)'
-        }}
-      >
-        <div className="h-[50dvh]">
-          <PPGSignalMeter 
-            value={lastSignal?.filteredValue || 0}
-            quality={lastSignal?.quality || 0}
-            isFingerDetected={lastSignal?.fingerDetected || false}
-            onStartMeasurement={startMonitoring}
-            onReset={handleReset}
-            arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
-            rawArrhythmiaData={lastArrhythmiaData}
+      <div className="flex-1 relative">
+        <div className="absolute inset-0">
+          <CameraView 
+            onStreamReady={handleStreamReady}
+            isMonitoring={isCameraOn}
+            isFingerDetected={lastSignal?.fingerDetected}
+            signalQuality={signalQuality}
           />
         </div>
 
-        <div className="flex-1 mt-24" />
+        <div className="relative z-10 h-full flex flex-col">
+          <div className="flex-1 bg-gradient-to-b from-black/95 to-black/90">
+            <PPGSignalMeter 
+              value={lastSignal?.filteredValue || 0}
+              quality={lastSignal?.quality || 0}
+              isFingerDetected={lastSignal?.fingerDetected || false}
+              onStartMeasurement={startMonitoring}
+              onReset={handleReset}
+              arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
+              rawArrhythmiaData={lastArrhythmiaData}
+            />
+          </div>
 
-        <div className="w-full px-4 pb-8">
-          <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4">
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <VitalSign 
-                label="FRECUENCIA CARDÍACA"
-                value={heartRate || "--"}
-                unit="BPM"
-              />
-              <VitalSign 
-                label="SPO2"
-                value={vitalSigns.spo2 || "--"}
-                unit="%"
-              />
-              <VitalSign 
-                label="PRESIÓN ARTERIAL"
-                value={vitalSigns.pressure}
-                unit="mmHg"
-              />
-              <VitalSign 
-                label="ARRITMIAS"
-                value={vitalSigns.arrhythmiaStatus}
-              />
+          <div className="absolute bottom-[200px] left-0 right-0 px-4">
+            <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4">
+              <div className="grid grid-cols-4 gap-2">
+                <VitalSign 
+                  label="FRECUENCIA CARDÍACA"
+                  value={heartRate || "--"}
+                  unit="BPM"
+                />
+                <VitalSign 
+                  label="SPO2"
+                  value={vitalSigns.spo2 || "--"}
+                  unit="%"
+                />
+                <VitalSign 
+                  label="PRESIÓN ARTERIAL"
+                  value={vitalSigns.pressure}
+                  unit="mmHg"
+                />
+                <VitalSign 
+                  label="ARRITMIAS"
+                  value={vitalSigns.arrhythmiaStatus}
+                />
+              </div>
             </div>
           </div>
-        </div>
 
-        {isMonitoring && (
-          <div className="fixed bottom-20 left-0 right-0 text-center z-20">
-            <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 40s</span>
+          {isMonitoring && (
+            <div className="absolute bottom-40 left-0 right-0 text-center">
+              <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 30s</span>
+            </div>
+          )}
+
+          <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 mt-auto">
+            <button 
+              onClick={startMonitoring}
+              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
+            >
+              INICIAR
+            </button>
+            <button 
+              onClick={handleReset}
+              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
+            >
+              RESET
+            </button>
           </div>
-        )}
-
-        <div className="relative w-full h-[80px] grid grid-cols-2 gap-px">
-          <button 
-            onClick={startMonitoring}
-            className={`w-full h-full text-2xl font-bold text-white transition-colors duration-200 ${
-              isMonitoring
-                ? 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 active:from-red-700 active:to-red-800'
-                : 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 active:from-blue-700 active:to-blue-800'
-            }`}
-          >
-            {isMonitoring ? 'DETENER' : 'INICIAR'}
-          </button>
-          <button 
-            onClick={handleReset}
-            className="w-full h-full text-2xl font-bold text-white bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800 active:from-gray-800 active:to-gray-900 transition-colors duration-200"
-          >
-            RESET
-          </button>
         </div>
       </div>
     </div>
