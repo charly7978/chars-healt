@@ -37,6 +37,7 @@ const Index = () => {
     spo2: number,
     pressure: string
   } | null>(null);
+  const [firstMeasurement, setFirstMeasurement] = useState(true);
   const measurementTimerRef = useRef<number | null>(null);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
@@ -70,15 +71,23 @@ const Index = () => {
 
   const startMonitoring = () => {
     if (isMonitoring) {
+      // Detener la medición
       handleMeasurementComplete();
     } else {
-      // Solo reseteamos los valores si estamos iniciando una nueva medición
-      resetMeasurementState(false);
+      // Iniciar una nueva medición
+      // Si es la primera medición, reseteamos todo
+      if (firstMeasurement) {
+        setFirstMeasurement(false);
+        resetAllValues();
+      } else {
+        // Para mediciones subsecuentes, solo preparamos para una nueva medición
+        // SIN resetear los valores de los displays
+        prepareForNewMeasurement();
+      }
+      
       setIsMonitoring(true);
       setIsCameraOn(true);
       startProcessing();
-      setElapsedTime(0);
-      setMeasurementComplete(false);
       
       if (measurementTimerRef.current) {
         clearInterval(measurementTimerRef.current);
@@ -94,6 +103,20 @@ const Index = () => {
         });
       }, 1000);
     }
+  };
+
+  // Nueva función para preparar una nueva medición sin resetear los valores de displays
+  const prepareForNewMeasurement = () => {
+    // Resetear solo el temporizador y el estado de medición
+    setElapsedTime(0);
+    setMeasurementComplete(false);
+    
+    // Resetear solo los procesadores internos para preparar para una nueva medición
+    resetHeartBeat();
+    resetVitalSigns();
+    
+    // No resetear ningún valor de display
+    console.log("Preparando para nueva medición manteniendo valores mostrados");
   };
 
   const handleMeasurementComplete = () => {
@@ -120,42 +143,38 @@ const Index = () => {
       measurementTimerRef.current = null;
     }
 
-    // No reseteamos los procesos internos, pero sí paramos la captura
-    resetSignalProcessorsOnly();
-  };
-
-  // Nueva función que solo resetea los procesadores de señal, pero mantiene los valores en pantalla
-  const resetSignalProcessorsOnly = () => {
+    // Resetear solo los procesadores internos
     resetHeartBeat();
     resetVitalSigns();
   };
 
-  // Función modificada para permitir reseteo parcial o completo
-  const resetMeasurementState = (fullReset: boolean = true) => {
-    if (fullReset) {
-      // Reseteo completo: todos los valores y procesadores
-      setHeartRate(0);
-      setVitalSigns({ 
-        spo2: 0, 
-        pressure: "--/--",
-        arrhythmiaStatus: "--" 
-      });
-      setArrhythmiaCount("--");
-      setLastArrhythmiaData(null);
-      setFinalValues(null);
-      VitalSignsRisk.resetHistory();
-    }
+  // Resetea absolutamente todos los valores (solo para RESET explícito o primera inicialización)
+  const resetAllValues = () => {
+    // Resetear valores de displays
+    setHeartRate(0);
+    setVitalSigns({ 
+      spo2: 0, 
+      pressure: "--/--",
+      arrhythmiaStatus: "--" 
+    });
+    setArrhythmiaCount("--");
+    setLastArrhythmiaData(null);
+    setFinalValues(null);
     
-    // Estos valores siempre se resetean tanto en parcial como en completo
+    // Resetear tiempo y estado
     setElapsedTime(0);
     setMeasurementComplete(false);
     
-    // Siempre reseteamos los procesadores internos
+    // Resetear procesadores
     resetHeartBeat();
     resetVitalSigns();
+    VitalSignsRisk.resetHistory();
+    
+    console.log("Reset completo de todos los valores");
   };
 
   const handleReset = () => {
+    // Detener la monitorización
     setIsMonitoring(false);
     setIsCameraOn(false);
     stopProcessing();
@@ -165,8 +184,8 @@ const Index = () => {
       measurementTimerRef.current = null;
     }
     
-    // Reseteo completo: todos los valores y procesadores
-    resetMeasurementState(true);
+    // Reset completo de todos los valores
+    resetAllValues();
   };
 
   const handleStreamReady = (stream: MediaStream) => {
