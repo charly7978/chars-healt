@@ -20,7 +20,7 @@ interface SegmentCount {
 }
 
 export class VitalSignsRisk {
-  private static readonly STABILITY_WINDOW = 4000; // 4 segundos (cambiado de 6 segundos)
+  private static readonly STABILITY_WINDOW = 6000; // 6 segundos
   private static readonly MEASUREMENT_WINDOW = 40000; // 40 segundos para análisis final
   private static readonly SMOOTHING_FACTOR = 0.25; // Factor de suavizado (25%)
   
@@ -121,18 +121,17 @@ export class VitalSignsRisk {
   }
 
   static getBPMRisk(bpm: number, isFinalReading: boolean = false): RiskSegment {
-    if (bpm <= 0) return { color: '#FFFFFF', label: '' };
+    if (bpm === 0) return { color: '#FFFFFF', label: '' };
     
     this.updateBPMHistory(bpm);
 
     let currentSegment: RiskSegment;
 
-    // Nuevos rangos de BPM
     if (this.isStableValue(this.bpmHistory, [140, 300])) {
-      currentSegment = { color: '#ea384c', label: 'TAQUICARDIA' };
-    } else if (this.isStableValue(this.bpmHistory, [110, 139])) {
-      currentSegment = { color: '#F97316', label: 'LEVE TAQUICARDIA' };
-    } else if (this.isStableValue(this.bpmHistory, [50, 110])) {
+      currentSegment = { color: '#ea384c', label: 'ALTA TAQUICARDIA' };
+    } else if (this.isStableValue(this.bpmHistory, [100, 139])) {
+      currentSegment = { color: '#F97316', label: 'TAQUICARDIA' };
+    } else if (this.isStableValue(this.bpmHistory, [50, 89])) {
       currentSegment = { color: '#FFFFFF', label: 'NORMAL' };
     } else if (this.isStableValue(this.bpmHistory, [40, 49])) {
       currentSegment = { color: '#F97316', label: 'BRADICARDIA' };
@@ -145,8 +144,7 @@ export class VitalSignsRisk {
       this.bpmSegmentHistory.push(currentSegment);
     }
 
-    // Si es lectura final y estamos evaluando, mostrar el más frecuente
-    if (isFinalReading && (currentSegment.label === 'EVALUANDO...' || this.bpmSegmentHistory.length > 0)) {
+    if (isFinalReading && currentSegment.label === 'EVALUANDO...') {
       return this.getMostFrequentSegment(this.bpmSegmentHistory);
     }
 
@@ -154,7 +152,7 @@ export class VitalSignsRisk {
   }
 
   static getSPO2Risk(spo2: number): RiskSegment {
-    if (spo2 <= 0) return { color: '#FFFFFF', label: '' };
+    if (spo2 === 0) return { color: '#FFFFFF', label: '' };
     
     this.updateSPO2History(spo2);
 
@@ -165,15 +163,19 @@ export class VitalSignsRisk {
       return { color: '#F97316', label: 'LEVE INSUFICIENCIA RESPIRATORIA' };
     }
     if (this.isStableValue(this.spo2History, [93, 100])) {
-      return { color: '#0EA5E9', label: 'NORMAL' };
+      return { color: '#FFFFFF', label: 'NORMAL' };
     }
     
     return { color: '#FFFFFF', label: 'EVALUANDO...' };
   }
 
   static getBPRisk(pressure: string, isFinalReading: boolean = false): RiskSegment {
-    if (pressure === "0/0" || pressure === "--/--") {
+    if (pressure === "0/0") {
       return { color: '#FFFFFF', label: '' };
+    }
+    
+    if (pressure === "--/--") {
+      return { color: '#FFFFFF', label: 'EVALUANDO...' };
     }
 
     const [systolic, diastolic] = pressure.split('/').map(Number);
@@ -199,7 +201,7 @@ export class VitalSignsRisk {
       systolic: [114, 126],
       diastolic: [76, 84]
     })) {
-      currentSegment = { color: '#0EA5E9', label: 'PRESIÓN NORMAL' };
+      currentSegment = { color: '#FFFFFF', label: 'PRESIÓN NORMAL' };
     } else if (this.isStableBP({ 
       systolic: [100, 110], 
       diastolic: [60, 70] 
@@ -214,8 +216,7 @@ export class VitalSignsRisk {
       this.bpSegmentHistory.push(currentSegment);
     }
 
-    // Si es lectura final y estamos evaluando, mostrar el más frecuente
-    if (isFinalReading && (currentSegment.label === 'EVALUANDO...' || this.bpSegmentHistory.length > 0)) {
+    if (isFinalReading && currentSegment.label === 'EVALUANDO...') {
       return this.getMostFrequentSegment(this.bpSegmentHistory);
     }
 

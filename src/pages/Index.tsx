@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -70,17 +69,6 @@ const Index = () => {
     setIsCameraOn(false);
     stopProcessing();
     setMeasurementComplete(true);
-    
-    // Al completar, hacer las evaluaciones finales
-    if (heartRate > 0) {
-      const finalBpmRisk = VitalSignsRisk.getBPMRisk(heartRate, true);
-      console.log("Evaluación final BPM:", finalBpmRisk);
-    }
-    
-    if (vitalSigns.pressure !== "--/--" && vitalSigns.pressure !== "0/0") {
-      const finalBPRisk = VitalSignsRisk.getBPRisk(vitalSigns.pressure, true);
-      console.log("Evaluación final BP:", finalBPRisk);
-    }
     
     if (measurementTimerRef.current) {
       clearInterval(measurementTimerRef.current);
@@ -275,8 +263,7 @@ const Index = () => {
         overflow: 'hidden'
       }}
     >
-      {/* Cámara de fondo - estirada hasta los botones */}
-      <div className="absolute top-0 left-0 right-0 bottom-[80px]">
+      <div className="absolute inset-0 z-0">
         <CameraView 
           onStreamReady={handleStreamReady}
           isMonitoring={isCameraOn}
@@ -313,24 +300,20 @@ const Index = () => {
                 label="FRECUENCIA CARDÍACA"
                 value={heartRate || "--"}
                 unit="BPM"
-                isFinalReading={measurementComplete}
               />
               <VitalSign 
                 label="SPO2"
                 value={vitalSigns.spo2 || "--"}
                 unit="%"
-                isFinalReading={measurementComplete}
               />
               <VitalSign 
                 label="PRESIÓN ARTERIAL"
                 value={vitalSigns.pressure}
                 unit="mmHg"
-                isFinalReading={measurementComplete}
               />
               <VitalSign 
                 label="ARRITMIAS"
                 value={vitalSigns.arrhythmiaStatus}
-                isFinalReading={measurementComplete}
               />
             </div>
           </div>
@@ -342,7 +325,7 @@ const Index = () => {
           </div>
         )}
 
-        <div className="absolute bottom-0 left-0 right-0 w-full h-[80px] grid grid-cols-2 gap-px">
+        <div className="relative w-full h-[80px] grid grid-cols-2 gap-px">
           <button 
             onClick={startMonitoring}
             className={`w-full h-full text-2xl font-bold text-white transition-colors duration-200 ${
