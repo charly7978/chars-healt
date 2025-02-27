@@ -275,8 +275,8 @@ const Index = () => {
         overflow: 'hidden'
       }}
     >
-      {/* Cámara de fondo - estirada hasta los botones */}
-      <div className="absolute top-0 left-0 right-0 bottom-[80px]">
+      {/* Cámara de fondo - visible en toda la pantalla */}
+      <div className="absolute inset-0 z-0">
         <CameraView 
           onStreamReady={handleStreamReady}
           isMonitoring={isCameraOn}
