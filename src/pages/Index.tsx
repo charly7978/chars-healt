@@ -32,22 +32,53 @@ const Index = () => {
     rrVariation: number;
   } | null>(null);
   const [measurementComplete, setMeasurementComplete] = useState(false);
+  const [finalValues, setFinalValues] = useState<{
+    heartRate: number,
+    spo2: number,
+    pressure: string
+  } | null>(null);
   const measurementTimerRef = useRef<number | null>(null);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat, reset: resetHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
+  const calculateFinalValues = () => {
+    // Calcular promedios basados en el historial reciente
+    const avgBPM = heartRate > 0 ? VitalSignsRisk.getAverageBPM() : 0;
+    const avgSPO2 = vitalSigns.spo2 > 0 ? VitalSignsRisk.getAverageSPO2() : 0;
+    const avgBP = vitalSigns.pressure !== "--/--" && vitalSigns.pressure !== "0/0" 
+      ? VitalSignsRisk.getAverageBP() 
+      : { systolic: 0, diastolic: 0 };
+
+    const finalBPString = avgBP.systolic > 0 && avgBP.diastolic > 0 
+      ? `${avgBP.systolic}/${avgBP.diastolic}` 
+      : vitalSigns.pressure;
+
+    setFinalValues({
+      heartRate: avgBPM > 0 ? avgBPM : heartRate,
+      spo2: avgSPO2 > 0 ? avgSPO2 : vitalSigns.spo2,
+      pressure: finalBPString
+    });
+
+    console.log("Valores finales calculados:", {
+      heartRate: avgBPM > 0 ? avgBPM : heartRate,
+      spo2: avgSPO2 > 0 ? avgSPO2 : vitalSigns.spo2,
+      pressure: finalBPString
+    });
+  };
+
   const startMonitoring = () => {
     if (isMonitoring) {
       handleMeasurementComplete();
     } else {
-      resetAllValues();
+      resetMeasurementState();
       setIsMonitoring(true);
       setIsCameraOn(true);
       startProcessing();
       setElapsedTime(0);
       setMeasurementComplete(false);
+      setFinalValues(null);
       
       if (measurementTimerRef.current) {
         clearInterval(measurementTimerRef.current);
@@ -66,6 +97,10 @@ const Index = () => {
   };
 
   const handleMeasurementComplete = () => {
+    // Primero calculamos los valores finales
+    calculateFinalValues();
+    
+    // Detener la monitorización pero mantener los valores
     setIsMonitoring(false);
     setIsCameraOn(false);
     stopProcessing();
@@ -73,13 +108,11 @@ const Index = () => {
     
     // Al completar, hacer las evaluaciones finales
     if (heartRate > 0) {
-      const finalBpmRisk = VitalSignsRisk.getBPMRisk(heartRate, true);
-      console.log("Evaluación final BPM:", finalBpmRisk);
+      VitalSignsRisk.getBPMRisk(heartRate, true);
     }
     
     if (vitalSigns.pressure !== "--/--" && vitalSigns.pressure !== "0/0") {
-      const finalBPRisk = VitalSignsRisk.getBPRisk(vitalSigns.pressure, true);
-      console.log("Evaluación final BP:", finalBPRisk);
+      VitalSignsRisk.getBPRisk(vitalSigns.pressure, true);
     }
     
     if (measurementTimerRef.current) {
@@ -88,7 +121,7 @@ const Index = () => {
     }
   };
 
-  const resetAllValues = () => {
+  const resetMeasurementState = () => {
     setHeartRate(0);
     setVitalSigns({ 
       spo2: 0, 
@@ -96,10 +129,10 @@ const Index = () => {
       arrhythmiaStatus: "--" 
     });
     setArrhythmiaCount("--");
-    setSignalQuality(0);
     setLastArrhythmiaData(null);
     setElapsedTime(0);
     setMeasurementComplete(false);
+    setFinalValues(null);
     resetHeartBeat();
     resetVitalSigns();
     VitalSignsRisk.resetHistory();
@@ -115,7 +148,7 @@ const Index = () => {
       measurementTimerRef.current = null;
     }
     
-    resetAllValues();
+    resetMeasurementState();
   };
 
   const handleStreamReady = (stream: MediaStream) => {
@@ -280,8 +313,8 @@ const Index = () => {
         <CameraView 
           onStreamReady={handleStreamReady}
           isMonitoring={isCameraOn}
-          isFingerDetected={lastSignal?.fingerDetected}
-          signalQuality={signalQuality}
+          isFingerDetected={isMonitoring ? lastSignal?.fingerDetected : false}
+          signalQuality={isMonitoring ? signalQuality : 0}
         />
       </div>
 
@@ -294,9 +327,9 @@ const Index = () => {
       >
         <div className="h-[50dvh]">
           <PPGSignalMeter 
-            value={lastSignal?.filteredValue || 0}
-            quality={lastSignal?.quality || 0}
-            isFingerDetected={lastSignal?.fingerDetected || false}
+            value={isMonitoring ? lastSignal?.filteredValue || 0 : 0}
+            quality={isMonitoring ? lastSignal?.quality || 0 : 0}
+            isFingerDetected={isMonitoring ? lastSignal?.fingerDetected || false : false}
             onStartMeasurement={startMonitoring}
             onReset={handleReset}
             arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
@@ -312,19 +345,19 @@ const Index = () => {
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <VitalSign 
                 label="FRECUENCIA CARDÍACA"
-                value={heartRate || "--"}
+                value={finalValues ? finalValues.heartRate : heartRate || "--"}
                 unit="BPM"
                 isFinalReading={measurementComplete}
               />
               <VitalSign 
                 label="SPO2"
-                value={vitalSigns.spo2 || "--"}
+                value={finalValues ? finalValues.spo2 : vitalSigns.spo2 || "--"}
                 unit="%"
                 isFinalReading={measurementComplete}
               />
               <VitalSign 
                 label="PRESIÓN ARTERIAL"
-                value={vitalSigns.pressure}
+                value={finalValues ? finalValues.pressure : vitalSigns.pressure}
                 unit="mmHg"
                 isFinalReading={measurementComplete}
               />

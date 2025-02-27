@@ -27,7 +27,7 @@ export class VitalSignsRisk {
   // Nuevos factores de suavizado para diferentes variables
   private static readonly BPM_SMOOTHING_ALPHA = 0.15;  // Más bajo = más suave
   private static readonly SPO2_SMOOTHING_ALPHA = 0.20; // Ligeramente más responsivo
-  private static readonly BP_SMOOTHING_ALPHA = 0.10;   // Muy suave para presión arterial
+  private static readonly BP_SMOOTHING_ALPHA = 0.05;   // Reducido a 0.05 para una suavidad extrema
   
   // Buffer para promedio móvil ponderado exponencialmente (EWMA)
   private static recentBpmValues: number[] = [];
