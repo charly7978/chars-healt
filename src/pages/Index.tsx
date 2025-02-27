@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -135,29 +134,6 @@ const Index = () => {
   useEffect(() => {
     const enterImmersiveMode = async () => {
       try {
-        // Lock orientation
-        if (screen.orientation?.lock) {
-          await screen.orientation.lock('portrait');
-        }
-
-        // Enter fullscreen
-        const elem = document.documentElement;
-        
-        try {
-          if (elem.requestFullscreen) {
-            await elem.requestFullscreen();
-          } else if (elem.webkitRequestFullscreen) {
-            await elem.webkitRequestFullscreen();
-          } else if (elem.mozRequestFullScreen) {
-            await elem.mozRequestFullScreen();
-          } else if (elem.msRequestFullscreen) {
-            await elem.msRequestFullscreen();
-          }
-        } catch (fullscreenError) {
-          console.warn('Fullscreen request failed:', fullscreenError);
-        }
-
-        // Set viewport
         const viewport = document.querySelector('meta[name=viewport]');
         if (viewport) {
           viewport.setAttribute('content', 
@@ -165,35 +141,65 @@ const Index = () => {
           );
         }
 
-        // Android specific fullscreen
-        if (navigator.userAgent.includes("Android")) {
+        if (screen.orientation?.lock) {
           try {
-            if ((window as any).AndroidFullScreen?.immersiveMode) {
-              await (window as any).AndroidFullScreen.immersiveMode();
-            }
+            await screen.orientation.lock('portrait');
           } catch (e) {
-            console.log('Android immersive mode error:', e);
+            console.warn('Orientation lock failed:', e);
+          }
+        }
+
+        const elem = document.documentElement;
+        const methods = [
+          elem.requestFullscreen?.bind(elem),
+          elem.webkitRequestFullscreen?.bind(elem),
+          elem.mozRequestFullScreen?.bind(elem),
+          elem.msRequestFullscreen?.bind(elem)
+        ];
+
+        for (const method of methods) {
+          if (method) {
+            try {
+              await method();
+              break;
+            } catch (e) {
+              console.warn('Fullscreen attempt failed:', e);
+              continue;
+            }
+          }
+        }
+
+        if (navigator.userAgent.includes("Android")) {
+          if ((window as any).AndroidFullScreen?.immersiveMode) {
+            try {
+              await (window as any).AndroidFullScreen.immersiveMode();
+            } catch (e) {
+              console.warn('Android immersive mode failed:', e);
+            }
           }
         }
       } catch (error) {
-        console.error('Error activando modo inmersivo:', error);
+        console.error('Immersive mode error:', error);
       }
     };
 
-    // Llamar inmediatamente al iniciar
     enterImmersiveMode();
+    
+    setTimeout(enterImmersiveMode, 500);
+    setTimeout(enterImmersiveMode, 1500);
 
-    // También activar cuando se toca la pantalla
-    const handleTouch = () => {
+    const handleInteraction = () => {
       enterImmersiveMode();
     };
 
-    document.addEventListener('touchstart', handleTouch);
-    document.addEventListener('click', handleTouch);
+    document.addEventListener('touchstart', handleInteraction);
+    document.addEventListener('click', handleInteraction);
+    document.addEventListener('touchend', handleInteraction);
 
     return () => {
-      document.removeEventListener('touchstart', handleTouch);
-      document.removeEventListener('click', handleTouch);
+      document.removeEventListener('touchstart', handleInteraction);
+      document.removeEventListener('click', handleInteraction);
+      document.removeEventListener('touchend', handleInteraction);
     };
   }, []);
 
@@ -228,9 +234,12 @@ const Index = () => {
       className="fixed inset-0 flex flex-col bg-black/90" 
       style={{ 
         height: '100dvh',
+        minHeight: '100vh',
         minHeight: '-webkit-fill-available',
         touchAction: 'none',
-        overscrollBehavior: 'none'
+        overscrollBehavior: 'none',
+        WebkitOverflowScrolling: 'touch',
+        overflow: 'hidden'
       }}
     >
       <div className="absolute inset-0 z-0">
