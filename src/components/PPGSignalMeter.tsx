@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -145,21 +146,6 @@ const PPGSignalMeter = ({
     ctx.stroke();
   }, []);
 
-  const calculateSignalQuality = useCallback((points: PPGDataPoint[], currentValue: number): number => {
-    if (points.length < MOVING_WINDOW_SIZE) return 0;
-
-    const recentPoints = points.slice(-MOVING_WINDOW_SIZE);
-    const mean = recentPoints.reduce((sum, p) => sum + p.value, 0) / MOVING_WINDOW_SIZE;
-    const variance = recentPoints.reduce((sum, p) => sum + Math.pow(p.value - mean, 2), 0) / MOVING_WINDOW_SIZE;
-
-    if (variance > NOISE_THRESHOLD) return 0;
-
-    const baselineStability = Math.abs((baselineRef.current || 0) - mean) / mean;
-    if (baselineStability > 0.3) return 0;
-
-    return Math.min(100, 100 * (1 - baselineStability) * (1 - variance / NOISE_THRESHOLD));
-  }, []);
-
   const isPeakPoint = useCallback((points: PPGDataPoint[], index: number): boolean => {
     if (index <= MIN_PEAK_WIDTH || index >= points.length - MIN_PEAK_WIDTH) return false;
 
@@ -256,6 +242,7 @@ const PPGSignalMeter = ({
 
     const points = dataBufferRef.current.getPoints();
     if (points.length > 1) {
+      // Dibujar la línea principal
       ctx.beginPath();
       ctx.lineWidth = 2;
       ctx.lineJoin = 'round';
@@ -275,16 +262,19 @@ const PPGSignalMeter = ({
       ctx.strokeStyle = '#0EA5E9';
       ctx.stroke();
 
+      // Marcar los picos y las arritmias
       points.forEach((point, index) => {
         if (isPeakPoint(points, index)) {
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
           const y = canvas.height / 2 - point.value;
 
+          // Dibujar el punto del pico
           ctx.beginPath();
           ctx.arc(x, y, 4, 0, Math.PI * 2);
           ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
           ctx.fill();
 
+          // Mostrar el valor del pico
           ctx.font = 'bold 10px Inter';
           ctx.fillStyle = '#334155';
           ctx.textAlign = 'center';
