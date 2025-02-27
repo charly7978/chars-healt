@@ -72,13 +72,13 @@ const Index = () => {
     if (isMonitoring) {
       handleMeasurementComplete();
     } else {
-      resetMeasurementState();
+      // Solo reseteamos los valores si estamos iniciando una nueva medición
+      resetMeasurementState(false);
       setIsMonitoring(true);
       setIsCameraOn(true);
       startProcessing();
       setElapsedTime(0);
       setMeasurementComplete(false);
-      setFinalValues(null);
       
       if (measurementTimerRef.current) {
         clearInterval(measurementTimerRef.current);
@@ -119,23 +119,40 @@ const Index = () => {
       clearInterval(measurementTimerRef.current);
       measurementTimerRef.current = null;
     }
+
+    // No reseteamos los procesos internos, pero sí paramos la captura
+    resetSignalProcessorsOnly();
   };
 
-  const resetMeasurementState = () => {
-    setHeartRate(0);
-    setVitalSigns({ 
-      spo2: 0, 
-      pressure: "--/--",
-      arrhythmiaStatus: "--" 
-    });
-    setArrhythmiaCount("--");
-    setLastArrhythmiaData(null);
-    setElapsedTime(0);
-    setMeasurementComplete(false);
-    setFinalValues(null);
+  // Nueva función que solo resetea los procesadores de señal, pero mantiene los valores en pantalla
+  const resetSignalProcessorsOnly = () => {
     resetHeartBeat();
     resetVitalSigns();
-    VitalSignsRisk.resetHistory();
+  };
+
+  // Función modificada para permitir reseteo parcial o completo
+  const resetMeasurementState = (fullReset: boolean = true) => {
+    if (fullReset) {
+      // Reseteo completo: todos los valores y procesadores
+      setHeartRate(0);
+      setVitalSigns({ 
+        spo2: 0, 
+        pressure: "--/--",
+        arrhythmiaStatus: "--" 
+      });
+      setArrhythmiaCount("--");
+      setLastArrhythmiaData(null);
+      setFinalValues(null);
+      VitalSignsRisk.resetHistory();
+    }
+    
+    // Estos valores siempre se resetean tanto en parcial como en completo
+    setElapsedTime(0);
+    setMeasurementComplete(false);
+    
+    // Siempre reseteamos los procesadores internos
+    resetHeartBeat();
+    resetVitalSigns();
   };
 
   const handleReset = () => {
@@ -148,7 +165,8 @@ const Index = () => {
       measurementTimerRef.current = null;
     }
     
-    resetMeasurementState();
+    // Reseteo completo: todos los valores y procesadores
+    resetMeasurementState(true);
   };
 
   const handleStreamReady = (stream: MediaStream) => {
