@@ -265,7 +265,7 @@ const Index = () => {
 
   return (
     <div 
-      className="fixed inset-0 flex flex-col bg-black/90" 
+      className="fixed inset-0 flex flex-col bg-black" 
       style={{ 
         height: '100dvh',
         minHeight: '100vh',
@@ -306,7 +306,7 @@ const Index = () => {
 
         <div className="flex-1 mt-4" />
 
-        {/* Displays con fondo sólido sin difuminado */}
+        {/* Displays */}
         <div className="w-full px-4 mb-24">
           <div className="bg-gray-900 rounded-xl p-4">
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
