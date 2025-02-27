@@ -120,6 +120,53 @@ export class VitalSignsRisk {
     return counts.sort((a, b) => b.count - a.count)[0].segment;
   }
 
+  // Función para calcular el promedio del historial de BPM
+  private static getAverageBPM(): number {
+    if (this.bpmHistory.length === 0) return 0;
+    
+    // Usar solo los últimos 20 segundos de datos para el promedio
+    const now = Date.now();
+    const recentHistory = this.bpmHistory.filter(check => now - check.timestamp < 20000);
+    
+    if (recentHistory.length === 0) return 0;
+    
+    const sum = recentHistory.reduce((total, check) => total + check.value, 0);
+    return Math.round(sum / recentHistory.length);
+  }
+
+  // Función para calcular el promedio del historial de SpO2
+  private static getAverageSPO2(): number {
+    if (this.spo2History.length === 0) return 0;
+    
+    // Usar solo los últimos 20 segundos de datos para el promedio
+    const now = Date.now();
+    const recentHistory = this.spo2History.filter(check => now - check.timestamp < 20000);
+    
+    if (recentHistory.length === 0) return 0;
+    
+    const sum = recentHistory.reduce((total, check) => total + check.value, 0);
+    return Math.round(sum / recentHistory.length);
+  }
+
+  // Función para calcular el promedio del historial de presión arterial
+  private static getAverageBP(): { systolic: number, diastolic: number } {
+    if (this.bpHistory.length === 0) return { systolic: 0, diastolic: 0 };
+    
+    // Usar solo los últimos 20 segundos de datos para el promedio
+    const now = Date.now();
+    const recentHistory = this.bpHistory.filter(check => now - check.timestamp < 20000);
+    
+    if (recentHistory.length === 0) return { systolic: 0, diastolic: 0 };
+    
+    const systolicSum = recentHistory.reduce((total, check) => total + check.systolic, 0);
+    const diastolicSum = recentHistory.reduce((total, check) => total + check.diastolic, 0);
+    
+    return {
+      systolic: Math.round(systolicSum / recentHistory.length),
+      diastolic: Math.round(diastolicSum / recentHistory.length)
+    };
+  }
+
   static getBPMRisk(bpm: number, isFinalReading: boolean = false): RiskSegment {
     if (bpm <= 0) return { color: '#FFFFFF', label: '' };
     
@@ -145,30 +192,71 @@ export class VitalSignsRisk {
       this.bpmSegmentHistory.push(currentSegment);
     }
 
-    // Si es lectura final y estamos evaluando, mostrar el más frecuente
-    if (isFinalReading && (currentSegment.label === 'EVALUANDO...' || this.bpmSegmentHistory.length > 0)) {
+    // Si es lectura final y estamos evaluando o no tenemos suficientes datos
+    if (isFinalReading && (currentSegment.label === 'EVALUANDO...' || this.bpmSegmentHistory.length === 0)) {
+      // Calcular un promedio basado en el historial
+      const avgBPM = this.getAverageBPM();
+      if (avgBPM > 0) {
+        // Determinar el riesgo basado en el promedio
+        if (avgBPM >= 140) {
+          return { color: '#ea384c', label: 'TAQUICARDIA' };
+        } else if (avgBPM >= 110) {
+          return { color: '#F97316', label: 'LEVE TAQUICARDIA' };
+        } else if (avgBPM >= 50) {
+          return { color: '#FFFFFF', label: 'NORMAL' };
+        } else if (avgBPM >= 40) {
+          return { color: '#F97316', label: 'BRADICARDIA' };
+        }
+      }
+      
+      // Si tenemos historial, usar el más frecuente
+      if (this.bpmSegmentHistory.length > 0) {
+        return this.getMostFrequentSegment(this.bpmSegmentHistory);
+      }
+    }
+    
+    // Si es lectura final y hay un historial, mostrar el más frecuente
+    if (isFinalReading && this.bpmSegmentHistory.length > 0) {
       return this.getMostFrequentSegment(this.bpmSegmentHistory);
     }
 
     return currentSegment;
   }
 
-  static getSPO2Risk(spo2: number): RiskSegment {
+  static getSPO2Risk(spo2: number, isFinalReading: boolean = false): RiskSegment {
     if (spo2 <= 0) return { color: '#FFFFFF', label: '' };
     
     this.updateSPO2History(spo2);
+    
+    let currentSegment: RiskSegment;
 
     if (this.isStableValue(this.spo2History, [0, 90])) {
-      return { color: '#ea384c', label: 'INSUFICIENCIA RESPIRATORIA' };
-    }
-    if (this.isStableValue(this.spo2History, [90, 92])) {
-      return { color: '#F97316', label: 'LEVE INSUFICIENCIA RESPIRATORIA' };
-    }
-    if (this.isStableValue(this.spo2History, [93, 100])) {
-      return { color: '#0EA5E9', label: 'NORMAL' };
+      currentSegment = { color: '#ea384c', label: 'INSUFICIENCIA RESPIRATORIA' };
+    } else if (this.isStableValue(this.spo2History, [90, 92])) {
+      currentSegment = { color: '#F97316', label: 'LEVE INSUFICIENCIA RESPIRATORIA' };
+    } else if (this.isStableValue(this.spo2History, [93, 100])) {
+      currentSegment = { color: '#0EA5E9', label: 'NORMAL' };
+    } else {
+      currentSegment = { color: '#FFFFFF', label: 'EVALUANDO...' };
     }
     
-    return { color: '#FFFFFF', label: 'EVALUANDO...' };
+    // Si es lectura final y estamos evaluando
+    if (isFinalReading && currentSegment.label === 'EVALUANDO...') {
+      // Calcular un promedio basado en el historial
+      const avgSPO2 = this.getAverageSPO2();
+      if (avgSPO2 > 0) {
+        // Determinar el riesgo basado en el promedio
+        if (avgSPO2 <= 90) {
+          return { color: '#ea384c', label: 'INSUFICIENCIA RESPIRATORIA' };
+        } else if (avgSPO2 <= 92) {
+          return { color: '#F97316', label: 'LEVE INSUFICIENCIA RESPIRATORIA' };
+        } else {
+          return { color: '#0EA5E9', label: 'NORMAL' };
+        }
+      }
+    }
+    
+    return currentSegment;
   }
 
   static getBPRisk(pressure: string, isFinalReading: boolean = false): RiskSegment {
@@ -214,8 +302,34 @@ export class VitalSignsRisk {
       this.bpSegmentHistory.push(currentSegment);
     }
 
-    // Si es lectura final y estamos evaluando, mostrar el más frecuente
-    if (isFinalReading && (currentSegment.label === 'EVALUANDO...' || this.bpSegmentHistory.length > 0)) {
+    // Si es lectura final y estamos evaluando o no tenemos suficientes datos
+    if (isFinalReading && (currentSegment.label === 'EVALUANDO...' || this.bpSegmentHistory.length === 0)) {
+      // Calcular un promedio basado en el historial
+      const avgBP = this.getAverageBP();
+      
+      if (avgBP.systolic > 0 && avgBP.diastolic > 0) {
+        // Determinar el riesgo basado en el promedio
+        if (avgBP.systolic >= 150 && avgBP.diastolic >= 100) {
+          return { color: '#ea384c', label: 'PRESIÓN ALTA' };
+        } else if (avgBP.systolic >= 140 && avgBP.diastolic >= 90) {
+          return { color: '#F97316', label: 'LEVE PRESIÓN ALTA' };
+        } else if (avgBP.systolic >= 114 && avgBP.systolic <= 126 && 
+                  avgBP.diastolic >= 76 && avgBP.diastolic <= 84) {
+          return { color: '#0EA5E9', label: 'PRESIÓN NORMAL' };
+        } else if (avgBP.systolic >= 100 && avgBP.systolic <= 110 && 
+                  avgBP.diastolic >= 60 && avgBP.diastolic <= 70) {
+          return { color: '#F97316', label: 'LEVE PRESIÓN BAJA' };
+        }
+      }
+      
+      // Si tenemos historial, usar el más frecuente
+      if (this.bpSegmentHistory.length > 0) {
+        return this.getMostFrequentSegment(this.bpSegmentHistory);
+      }
+    }
+    
+    // Si es lectura final y hay un historial, mostrar el más frecuente
+    if (isFinalReading && this.bpSegmentHistory.length > 0) {
       return this.getMostFrequentSegment(this.bpSegmentHistory);
     }
 

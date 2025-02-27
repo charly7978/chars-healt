@@ -33,7 +33,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
         return { color: '#FFFFFF', label: '' };
       }
       if (typeof value === 'number') {
-        return VitalSignsRisk.getSPO2Risk(value);
+        return VitalSignsRisk.getSPO2Risk(value, isFinalReading);
       }
     }
 
