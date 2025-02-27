@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -134,22 +135,29 @@ const Index = () => {
   useEffect(() => {
     const enterImmersiveMode = async () => {
       try {
+        // Lock orientation
         if (screen.orientation?.lock) {
           await screen.orientation.lock('portrait');
         }
 
+        // Enter fullscreen
         const elem = document.documentElement;
         
-        if (elem.requestFullscreen) {
-          await elem.requestFullscreen();
-        } else if (elem.webkitRequestFullscreen) {
-          await elem.webkitRequestFullscreen();
-        } else if (elem.mozRequestFullScreen) {
-          await elem.mozRequestFullScreen();
-        } else if (elem.msRequestFullscreen) {
-          await elem.msRequestFullscreen();
+        try {
+          if (elem.requestFullscreen) {
+            await elem.requestFullscreen();
+          } else if (elem.webkitRequestFullscreen) {
+            await elem.webkitRequestFullscreen();
+          } else if (elem.mozRequestFullScreen) {
+            await elem.mozRequestFullScreen();
+          } else if (elem.msRequestFullscreen) {
+            await elem.msRequestFullscreen();
+          }
+        } catch (fullscreenError) {
+          console.warn('Fullscreen request failed:', fullscreenError);
         }
 
+        // Set viewport
         const viewport = document.querySelector('meta[name=viewport]');
         if (viewport) {
           viewport.setAttribute('content', 
@@ -157,6 +165,7 @@ const Index = () => {
           );
         }
 
+        // Android specific fullscreen
         if (navigator.userAgent.includes("Android")) {
           try {
             if ((window as any).AndroidFullScreen?.immersiveMode) {
