@@ -17,131 +17,115 @@ const CameraView = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const streamRequestRef = useRef<ReturnType<typeof requestAnimationFrame>>();
 
-  const stopCamera = useCallback(async () => {
+  const stopCamera = useCallback(() => {
     try {
-      if (streamRequestRef.current) {
-        cancelAnimationFrame(streamRequestRef.current);
-        streamRequestRef.current = undefined;
-      }
-      
       if (stream) {
-        stream.getTracks().forEach(track => {
-          track.stop();
-        });
+        const tracks = stream.getTracks();
+        tracks.forEach(track => track.stop());
+        
         if (videoRef.current) {
           videoRef.current.srcObject = null;
         }
         setStream(null);
       }
     } catch (err) {
-      console.error('Error al detener la cámara:', err);
+      console.error('Error stopping camera:', err);
     }
   }, [stream]);
 
   const startCamera = useCallback(async () => {
     try {
-      await stopCamera(); // Aseguramos que no haya streams activos
+      // Primero detener cualquier stream existente
+      stopCamera();
 
+      // Verificar soporte
       if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error("getUserMedia no está soportado en este navegador");
+        throw new Error("La cámara no está soportada en este navegador");
       }
 
-      console.log('Solicitando acceso a la cámara...');
-
-      // Intentar primero con la cámara trasera
+      // Intentar obtener la cámara trasera primero
+      let cameraStream: MediaStream;
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
+        cameraStream = await navigator.mediaDevices.getUserMedia({
           video: {
-            facingMode: { ideal: 'environment' },
+            facingMode: 'environment',
             width: { ideal: 1280 },
             height: { ideal: 720 }
           },
           audio: false
         });
-
-        console.log('Stream obtenido con cámara trasera');
-        handleStreamSuccess(stream);
-      } catch (err) {
-        console.log('Fallback a cualquier cámara disponible:', err);
-        // Si falla, intentar con cualquier cámara disponible
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
+      } catch (backCameraError) {
+        console.log('Fallback a cámara frontal:', backCameraError);
+        // Si falla, intentar con cualquier cámara
+        cameraStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
           audio: false
         });
-        
-        handleStreamSuccess(stream);
+      }
+
+      // Verificar que tenemos un track de video
+      const videoTrack = cameraStream.getVideoTracks()[0];
+      if (!videoTrack) {
+        throw new Error("No se pudo obtener el video de la cámara");
+      }
+
+      // Configurar el elemento de video
+      if (videoRef.current) {
+        videoRef.current.srcObject = cameraStream;
+        await new Promise((resolve) => {
+          if (videoRef.current) {
+            videoRef.current.onloadedmetadata = resolve;
+          }
+        });
+        await videoRef.current.play();
+      }
+
+      // Guardar el stream y notificar
+      setStream(cameraStream);
+      setError(null);
+      
+      if (onStreamReady) {
+        onStreamReady(cameraStream);
       }
 
     } catch (err) {
-      console.error('Error al iniciar la cámara:', err);
-      setError(err instanceof Error ? err.message : 'Error al acceder a la cámara');
-    }
-  }, [onStreamReady]);
-
-  const handleStreamSuccess = async (stream: MediaStream) => {
-    const videoTrack = stream.getVideoTracks()[0];
-    console.log('Cámara activada:', videoTrack.label);
-
-    try {
-      // Intentar aplicar configuraciones avanzadas
-      if (videoTrack.getCapabilities) {
-        const capabilities = videoTrack.getCapabilities();
-        console.log('Capacidades de la cámara:', capabilities);
-
-        if (capabilities) {
-          const constraints: MediaTrackConstraints = {
-            advanced: []
-          };
-
-          if ('exposureMode' in capabilities) {
-            constraints.advanced?.push({ exposureMode: 'continuous' });
-          }
-          if ('focusMode' in capabilities) {
-            constraints.advanced?.push({ focusMode: 'continuous' });
-          }
-          if ('whiteBalanceMode' in capabilities) {
-            constraints.advanced?.push({ whiteBalanceMode: 'continuous' });
-          }
-
-          if (constraints.advanced?.length > 0) {
-            await videoTrack.applyConstraints(constraints);
-          }
-        }
-      }
-    } catch (err) {
-      console.log('Algunas configuraciones avanzadas no están disponibles:', err);
-    }
-
-    if (videoRef.current) {
-      videoRef.current.srcObject = stream;
-    }
-
-    setStream(stream);
-    setError(null);
-    
-    if (onStreamReady) {
-      onStreamReady(stream);
-    }
-  };
-
-  useEffect(() => {
-    if (isMonitoring && !stream) {
-      startCamera();
-    } else if (!isMonitoring && stream) {
+      console.error('Camera initialization error:', err);
+      setError(err instanceof Error ? err.message : 'Error al iniciar la cámara');
       stopCamera();
     }
+  }, [onStreamReady, stopCamera]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const initCamera = async () => {
+      if (isMonitoring && !stream && mounted) {
+        await startCamera();
+      }
+    };
+
+    initCamera();
 
     return () => {
+      mounted = false;
       stopCamera();
     };
   }, [isMonitoring, stream, startCamera, stopCamera]);
 
+  useEffect(() => {
+    if (!isMonitoring) {
+      stopCamera();
+    }
+  }, [isMonitoring, stopCamera]);
+
   if (error) {
     return (
       <div className="absolute inset-0 flex items-center justify-center bg-black text-white text-center p-4">
-        <p>Error: {error}</p>
+        <p>{error}</p>
       </div>
     );
   }
