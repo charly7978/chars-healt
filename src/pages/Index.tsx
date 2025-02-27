@@ -39,6 +39,9 @@ const Index = () => {
   } | null>(null);
   const measurementTimerRef = useRef<number | null>(null);
   
+  // Flag para saber si es la primera vez que se inicializa la app
+  const firstInitRef = useRef(true);
+  
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat, reset: resetHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
@@ -70,15 +73,29 @@ const Index = () => {
 
   const startMonitoring = () => {
     if (isMonitoring) {
+      // Si ya está monitorizando, detenemos la monitorización
       handleMeasurementComplete();
     } else {
-      resetMeasurementState();
+      // Iniciar una nueva monitorización
+      
+      // IMPORTANTE: Sólo reseteamos los procesadores pero NO los valores en pantalla
+      // Esto es crucial para mantener los valores de los displays
+      
+      // Si es la primera vez que se inicializa, inicializamos todo
+      if (firstInitRef.current) {
+        firstInitRef.current = false;
+        // NO reseteamos los valores en la primera inicialización porque ya están en sus valores iniciales
+      }
+      
+      // Reiniciar procesadores internos para nueva medición (sin afectar displays)
+      prepareForNewMeasurement();
+      
+      // Activar la monitorización
       setIsMonitoring(true);
       setIsCameraOn(true);
       startProcessing();
       setElapsedTime(0);
       setMeasurementComplete(false);
-      setFinalValues(null);
       
       if (measurementTimerRef.current) {
         clearInterval(measurementTimerRef.current);
@@ -96,17 +113,33 @@ const Index = () => {
     }
   };
 
+  // Prepara los procesadores para una nueva medición sin alterar los displays
+  const prepareForNewMeasurement = () => {
+    console.log("Preparando procesadores para nueva medición (manteniendo displays)");
+    
+    // Reiniciar solamente el temporizador
+    setElapsedTime(0);
+    
+    // Reiniciar los procesadores internos para nueva medición
+    // Esto no afecta a los valores en pantalla, solo prepara los procesadores
+    resetHeartBeat();
+    resetVitalSigns();
+    VitalSignsRisk.resetHistory();
+  };
+
   const handleMeasurementComplete = () => {
-    // Primero calculamos los valores finales
+    console.log("Completando medición - manteniendo valores en pantalla");
+    
+    // Calcular valores finales
     calculateFinalValues();
     
-    // Detener la monitorización pero mantener los valores
+    // Detener monitorización pero MANTENER valores
     setIsMonitoring(false);
     setIsCameraOn(false);
     stopProcessing();
     setMeasurementComplete(true);
     
-    // Al completar, hacer las evaluaciones finales
+    // Evaluar riesgos finales
     if (heartRate > 0) {
       VitalSignsRisk.getBPMRisk(heartRate, true);
     }
@@ -115,13 +148,27 @@ const Index = () => {
       VitalSignsRisk.getBPRisk(vitalSigns.pressure, true);
     }
     
+    // Limpiar timer
     if (measurementTimerRef.current) {
       clearInterval(measurementTimerRef.current);
       measurementTimerRef.current = null;
     }
   };
 
-  const resetMeasurementState = () => {
+  const handleReset = () => {
+    console.log("RESET COMPLETO solicitado");
+    
+    // Detener monitorización
+    setIsMonitoring(false);
+    setIsCameraOn(false);
+    stopProcessing();
+    
+    if (measurementTimerRef.current) {
+      clearInterval(measurementTimerRef.current);
+      measurementTimerRef.current = null;
+    }
+    
+    // Resetear todos los valores incluyendo displays - SOLO en reset explícito
     setHeartRate(0);
     setVitalSigns({ 
       spo2: 0, 
@@ -133,22 +180,11 @@ const Index = () => {
     setElapsedTime(0);
     setMeasurementComplete(false);
     setFinalValues(null);
+    
+    // Resetear procesadores
     resetHeartBeat();
     resetVitalSigns();
     VitalSignsRisk.resetHistory();
-  };
-
-  const handleReset = () => {
-    setIsMonitoring(false);
-    setIsCameraOn(false);
-    stopProcessing();
-    
-    if (measurementTimerRef.current) {
-      clearInterval(measurementTimerRef.current);
-      measurementTimerRef.current = null;
-    }
-    
-    resetMeasurementState();
   };
 
   const handleStreamReady = (stream: MediaStream) => {
