@@ -188,7 +188,7 @@ export class VitalSignsRisk {
   }
 
   // Función para calcular el promedio del historial de BPM
-  static getAverageBPM(): number {
+  private static getAverageBPM(): number {
     if (this.bpmHistory.length === 0) return 0;
     
     // Usar solo los últimos 20 segundos de datos para el promedio
@@ -202,7 +202,7 @@ export class VitalSignsRisk {
   }
 
   // Función para calcular el promedio del historial de SpO2
-  static getAverageSPO2(): number {
+  private static getAverageSPO2(): number {
     if (this.spo2History.length === 0) return 0;
     
     // Usar solo los últimos 20 segundos de datos para el promedio
@@ -216,7 +216,7 @@ export class VitalSignsRisk {
   }
 
   // Función para calcular el promedio del historial de presión arterial
-  static getAverageBP(): { systolic: number, diastolic: number } {
+  private static getAverageBP(): { systolic: number, diastolic: number } {
     if (this.bpHistory.length === 0) return { systolic: 0, diastolic: 0 };
     
     // Usar solo los últimos 20 segundos de datos para el promedio
