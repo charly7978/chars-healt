@@ -33,44 +33,22 @@ const PPGSignalMeter = ({
   const lastRenderTimeRef = useRef<number>(0);
   const lastArrhythmiaTime = useRef<number>(0);
   const arrhythmiaCountRef = useRef<number>(0);
-  const lastPeakTimeRef = useRef<number>(0);
-  const avgPeakIntervalRef = useRef<number>(0);
-  const peakHistoryRef = useRef<number[]>([]);
   
-  const WINDOW_WIDTH_MS = 3700;
-  const CANVAS_WIDTH = 450;
-  const CANVAS_HEIGHT = 300;
-  const GRID_SIZE_X = 80;
-  const GRID_SIZE_Y = 6;
-  const verticalScale = 20.0;
+  const WINDOW_WIDTH_MS = 3000;
+  const CANVAS_WIDTH = 1000;
+  const CANVAS_HEIGHT = 200;
+  const GRID_SIZE_X = 30;
+  const GRID_SIZE_Y = 15;
+  const verticalScale = 50.0;
   const SMOOTHING_FACTOR = 0.55;
   const TARGET_FPS = 60;
   const FRAME_TIME = 1000 / TARGET_FPS;
-  const BUFFER_SIZE = 800;
-
-  const MIN_PEAK_INTERVAL_MS = 400;
-  const MAX_PEAK_INTERVAL_MS = 1500;
-  const PEAK_PROMINENCE_THRESHOLD = 0.15;
-  const MOVING_WINDOW_SIZE = 5;
-  const MIN_PEAK_WIDTH = 3;
-  const ADAPTIVE_THRESHOLD_FACTOR = 0.4;
-  const NOISE_THRESHOLD = 0.1;
+  const BUFFER_SIZE = 600;
 
   useEffect(() => {
     if (!dataBufferRef.current) {
       dataBufferRef.current = new CircularBuffer(BUFFER_SIZE);
     }
-
-    return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-    };
-  }, []);
-
-  const smoothValue = useCallback((currentValue: number, previousValue: number | null): number => {
-    if (previousValue === null) return currentValue;
-    return previousValue + SMOOTHING_FACTOR * (currentValue - previousValue);
   }, []);
 
   const getQualityColor = useCallback((q: number) => {
@@ -86,6 +64,11 @@ const PPGSignalMeter = ({
     if (q > 50) return 'Señal aceptable';
     return 'Señal débil';
   }, [isFingerDetected]);
+
+  const smoothValue = useCallback((currentValue: number, previousValue: number | null): number => {
+    if (previousValue === null) return currentValue;
+    return previousValue + SMOOTHING_FACTOR * (currentValue - previousValue);
+  }, []);
 
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
     const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
@@ -145,47 +128,6 @@ const PPGSignalMeter = ({
     ctx.stroke();
   }, []);
 
-  const isPeakPoint = useCallback((points: PPGDataPoint[], index: number): boolean => {
-    if (index <= MIN_PEAK_WIDTH || index >= points.length - MIN_PEAK_WIDTH) return false;
-
-    const current = points[index].value;
-    const now = points[index].time;
-
-    if (lastPeakTimeRef.current) {
-      const timeSinceLastPeak = now - lastPeakTimeRef.current;
-      if (timeSinceLastPeak < MIN_PEAK_INTERVAL_MS) return false;
-      if (timeSinceLastPeak > MAX_PEAK_INTERVAL_MS && avgPeakIntervalRef.current > 0) return false;
-    }
-
-    const window = points.slice(index - MIN_PEAK_WIDTH, index + MIN_PEAK_WIDTH + 1);
-    const windowValues = window.map(p => p.value);
-    const maxInWindow = Math.max(...windowValues);
-    if (current !== maxInWindow) return false;
-
-    const leftMin = Math.min(...points.slice(index - MIN_PEAK_WIDTH, index).map(p => p.value));
-    const rightMin = Math.min(...points.slice(index + 1, index + MIN_PEAK_WIDTH + 1).map(p => p.value));
-    const prominence = Math.min(current - leftMin, current - rightMin);
-    
-    const recentPoints = points.slice(-20);
-    const meanAmplitude = recentPoints.reduce((sum, p) => sum + Math.abs(p.value), 0) / recentPoints.length;
-    const adaptiveThreshold = meanAmplitude * ADAPTIVE_THRESHOLD_FACTOR;
-
-    if (prominence > PEAK_PROMINENCE_THRESHOLD || prominence > adaptiveThreshold) {
-      const newInterval = lastPeakTimeRef.current ? now - lastPeakTimeRef.current : 0;
-      if (newInterval > 0) {
-        peakHistoryRef.current.push(newInterval);
-        if (peakHistoryRef.current.length > 10) peakHistoryRef.current.shift();
-        
-        avgPeakIntervalRef.current = peakHistoryRef.current.reduce((a, b) => a + b, 0) / peakHistoryRef.current.length;
-      }
-      
-      lastPeakTimeRef.current = now;
-      return true;
-    }
-
-    return false;
-  }, []);
-
   const renderSignal = useCallback(() => {
     if (!canvasRef.current || !dataBufferRef.current) {
       animationFrameRef.current = requestAnimationFrame(renderSignal);
@@ -241,60 +183,50 @@ const PPGSignalMeter = ({
 
     const points = dataBufferRef.current.getPoints();
     if (points.length > 1) {
-      let currentSegment: PPGDataPoint[] = [];
-      let lastWasArrhythmia = points[0].isArrhythmia;
+      for (let i = 1; i < points.length; i++) {
+        const prevPoint = points[i - 1];
+        const point = points[i];
+        
+        const x1 = canvas.width - ((now - prevPoint.time) * canvas.width / WINDOW_WIDTH_MS);
+        const y1 = canvas.height / 2 - prevPoint.value;
+        const x2 = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
+        const y2 = canvas.height / 2 - point.value;
+
+        ctx.beginPath();
+        ctx.strokeStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
+        ctx.lineWidth = 2;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      }
 
       points.forEach((point, index) => {
-        if (point.isArrhythmia !== lastWasArrhythmia || index === points.length - 1) {
-          if (currentSegment.length > 0) {
-            ctx.beginPath();
-            ctx.lineWidth = 2;
-            ctx.lineJoin = 'round';
-            ctx.lineCap = 'round';
-            
-            currentSegment.forEach((segPoint, i) => {
-              const x = canvas.width - ((now - segPoint.time) * canvas.width / WINDOW_WIDTH_MS);
-              const y = canvas.height / 2 - segPoint.value;
-
-              if (i === 0) {
-                ctx.moveTo(x, y);
-              } else {
-                ctx.lineTo(x, y);
-              }
-            });
-
-            ctx.strokeStyle = lastWasArrhythmia ? '#DC2626' : '#0EA5E9';
-            ctx.stroke();
-          }
-          currentSegment = [point];
-          lastWasArrhythmia = point.isArrhythmia;
-        } else {
-          currentSegment.push(point);
-        }
-      });
-
-      points.forEach((point, index) => {
-        if (isPeakPoint(points, index)) {
+        if (index > 0 && index < points.length - 1) {
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
           const y = canvas.height / 2 - point.value;
+          const prevPoint = points[index - 1];
+          const nextPoint = points[index + 1];
+          
+          if (point.value > prevPoint.value && point.value > nextPoint.value) {
+            ctx.beginPath();
+            ctx.arc(x, y, 4, 0, Math.PI * 2);
+            ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
+            ctx.fill();
 
-          ctx.beginPath();
-          ctx.arc(x, y, 4, 0, Math.PI * 2);
-          ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
-          ctx.fill();
-
-          ctx.font = '10px Inter';
-          ctx.fillStyle = '#334155';
-          ctx.textAlign = 'center';
-          const displayValue = Math.abs(point.value / verticalScale).toFixed(2);
-          ctx.fillText(displayValue, x, y - 8);
+            ctx.font = 'bold 12px Inter';
+            ctx.fillStyle = '#000000';
+            ctx.textAlign = 'center';
+            ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 20);
+          }
         }
       });
     }
 
     lastRenderTimeRef.current = currentTime;
     animationFrameRef.current = requestAnimationFrame(renderSignal);
-  }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus, isPeakPoint, drawGrid, smoothValue]);
+  }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus]);
 
   useEffect(() => {
     renderSignal();
