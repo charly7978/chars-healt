@@ -305,33 +305,41 @@ const Index = () => {
 
         <div className="flex-1 mt-4" />
 
-        {/* Displays con fondo simple - Ajustado el margen y padding */}
+        {/* Displays con fondo simple - Ajustado tamaño y espaciado */}
         <div className="w-full px-4 mb-16">
-          <div className="bg-black/30 backdrop-blur-sm p-5 rounded-xl">
-            <div className="grid grid-cols-2 gap-5 sm:grid-cols-4">
-              <VitalSign 
-                label="FRECUENCIA CARDÍACA"
-                value={heartRate || "--"}
-                unit="BPM"
-                isFinalReading={measurementComplete}
-              />
-              <VitalSign 
-                label="SPO2"
-                value={vitalSigns.spo2 || "--"}
-                unit="%"
-                isFinalReading={measurementComplete}
-              />
-              <VitalSign 
-                label="PRESIÓN ARTERIAL"
-                value={vitalSigns.pressure}
-                unit="mmHg"
-                isFinalReading={measurementComplete}
-              />
-              <VitalSign 
-                label="ARRITMIAS"
-                value={vitalSigns.arrhythmiaStatus}
-                isFinalReading={measurementComplete}
-              />
+          <div className="bg-gradient-to-b from-slate-900/90 to-black/90 backdrop-blur-sm p-4 rounded-xl border border-slate-800/30 shadow-2xl">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div className="transform scale-95">
+                <VitalSign 
+                  label="FRECUENCIA CARDÍACA"
+                  value={heartRate || "--"}
+                  unit="BPM"
+                  isFinalReading={measurementComplete}
+                />
+              </div>
+              <div className="transform scale-95">
+                <VitalSign 
+                  label="SPO2"
+                  value={vitalSigns.spo2 || "--"}
+                  unit="%"
+                  isFinalReading={measurementComplete}
+                />
+              </div>
+              <div className="transform scale-95">
+                <VitalSign 
+                  label="PRESIÓN ARTERIAL"
+                  value={vitalSigns.pressure}
+                  unit="mmHg"
+                  isFinalReading={measurementComplete}
+                />
+              </div>
+              <div className="transform scale-95">
+                <VitalSign 
+                  label="ARRITMIAS"
+                  value={vitalSigns.arrhythmiaStatus}
+                  isFinalReading={measurementComplete}
+                />
+              </div>
             </div>
           </div>
         </div>

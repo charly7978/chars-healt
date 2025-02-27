@@ -72,14 +72,24 @@ const PPGSignalMeter = ({
 
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
     const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
-    gradient.addColorStop(0, '#f1f5f9');
-    gradient.addColorStop(1, '#e2e8f0');
+    gradient.addColorStop(0, '#0f172a');
+    gradient.addColorStop(1, '#020617');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(51, 65, 85, 0.1)';
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.1)';
     ctx.lineWidth = 0.5;
+
+    const now = new Date();
+    ctx.font = '10px Inter';
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.5)';
+    ctx.textAlign = 'right';
+    ctx.fillText(`${now.toLocaleTimeString()}`, CANVAS_WIDTH - 10, 20);
+    
+    if (quality > 0) {
+      ctx.fillText(`Calidad: ${quality}%`, CANVAS_WIDTH - 10, 40);
+    }
 
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X) {
       ctx.moveTo(x, 0);
@@ -126,7 +136,7 @@ const PPGSignalMeter = ({
     ctx.moveTo(0, CANVAS_HEIGHT / 2);
     ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT / 2);
     ctx.stroke();
-  }, []);
+  }, [quality]);
 
   const renderSignal = useCallback(() => {
     if (!canvasRef.current || !dataBufferRef.current) {
