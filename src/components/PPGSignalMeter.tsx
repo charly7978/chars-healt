@@ -16,6 +16,34 @@ interface PPGSignalMeterProps {
   } | null;
 }
 
+interface PPGDataPoint {
+  time: number;
+  value: number;
+  isPeak: boolean;
+  isArrhythmia: boolean;
+}
+
+const ArrhythmiaDisplay: React.FC<{
+  status: string;
+  data: {
+    timestamp: number;
+    rmssd: number;
+    rrVariation: number;
+  } | null;
+}> = ({ status, data }) => {
+  return (
+    <div className="text-sm">
+      <div className="font-semibold text-white/90">{status}</div>
+      {data && (
+        <div className="text-xs text-gray-400">
+          <div>RMSSD: {data.rmssd.toFixed(2)}</div>
+          <div>Variación RR: {(data.rrVariation * 100).toFixed(1)}%</div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const PPGSignalMeter = ({ 
   value, 
   quality, 
@@ -26,9 +54,9 @@ const PPGSignalMeter = ({
   rawArrhythmiaData
 }: PPGSignalMeterProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const dataBufferRef = useRef<CircularBuffer | null>(null);
-  const baselineRef = useRef<number | null>(null);
-  const lastValueRef = useRef<number | null>(null);
+  const dataBufferRef = useRef<CircularBuffer>(new CircularBuffer(300));
+  const baselineRef = useRef<number>(0);
+  const lastValueRef = useRef<number>(0);
   const animationFrameRef = useRef<number>();
   const lastRenderTimeRef = useRef<number>(0);
   const lastArrhythmiaTime = useRef<number>(0);
@@ -36,22 +64,22 @@ const PPGSignalMeter = ({
   
   const DISPLAY_CONFIG = {
     CANVAS: {
-      WIDTH: 1000,
+      WIDTH: 800,
       HEIGHT: 200,
+      BACKGROUND: '#000000',
       GRID: {
-        MAJOR: { COLOR: 'rgba(255, 255, 255, 0.2)', SPACING: 50 },
-        MINOR: { COLOR: 'rgba(255, 255, 255, 0.1)', SPACING: 25 }
+        COLOR: 'rgba(255, 255, 255, 0.1)',
+        SPACING: 25
       }
     },
     SIGNAL: {
       COLOR: '#00ff00',
       PEAK_COLOR: '#ff0000',
-      LINE_WIDTH: 2,
-      PEAK_RADIUS: 3
+      WIDTH: 2
     },
-    TIME_WINDOW: 3000,
-    VERTICAL_SCALE: 22.0,
-    UPDATE_INTERVAL: 1000 / 30
+    TIME_WINDOW: 5000,
+    VERTICAL_SCALE: 100,
+    UPDATE_INTERVAL: 1000 / 60
   };
 
   const [technicalInfo, setTechnicalInfo] = useState({
@@ -264,12 +292,6 @@ const PPGSignalMeter = ({
     }
   }
 
-  useEffect(() => {
-    if (!dataBufferRef.current) {
-      dataBufferRef.current = new CircularBuffer(600);
-    }
-  }, []);
-
   const getQualityColor = useCallback((q: number) => {
     if (!isFingerDetected) return 'from-gray-400 to-gray-500';
     if (q > 75) return 'from-green-500 to-emerald-500';
@@ -289,261 +311,114 @@ const PPGSignalMeter = ({
     return previousValue + 1.2 * (currentValue - previousValue);
   }, []);
 
-  const drawGrid = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
-    ctx.strokeStyle = DISPLAY_CONFIG.CANVAS.GRID.MAJOR.COLOR;
+  const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
+    const { width, height } = ctx.canvas;
+
+    // Limpiar canvas
+    ctx.fillStyle = DISPLAY_CONFIG.CANVAS.BACKGROUND;
+    ctx.fillRect(0, 0, width, height);
+
+    // Dibujar cuadrícula
+    ctx.strokeStyle = DISPLAY_CONFIG.CANVAS.GRID.COLOR;
     ctx.lineWidth = 1;
-    
-    for (let x = 0; x < width; x += DISPLAY_CONFIG.CANVAS.GRID.MAJOR.SPACING) {
+
+    // Líneas verticales
+    for (let x = 0; x < width; x += DISPLAY_CONFIG.CANVAS.GRID.SPACING) {
       ctx.beginPath();
       ctx.moveTo(x, 0);
       ctx.lineTo(x, height);
       ctx.stroke();
     }
-    
-    for (let y = 0; y < height; y += DISPLAY_CONFIG.CANVAS.GRID.MAJOR.SPACING) {
+
+    // Líneas horizontales
+    for (let y = 0; y < height; y += DISPLAY_CONFIG.CANVAS.GRID.SPACING) {
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(width, y);
       ctx.stroke();
     }
-
-    ctx.strokeStyle = DISPLAY_CONFIG.CANVAS.GRID.MINOR.COLOR;
-    
-    for (let x = 0; x < width; x += DISPLAY_CONFIG.CANVAS.GRID.MINOR.SPACING) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, height);
-      ctx.stroke();
-    }
-    
-    for (let y = 0; y < height; y += DISPLAY_CONFIG.CANVAS.GRID.MINOR.SPACING) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(width, y);
-      ctx.stroke();
-    }
-  };
-
-  const drawSignal = useCallback(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx || !dataBufferRef.current) return;
-
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    drawGrid(ctx, canvas.width, canvas.height);
-
-    const points = dataBufferRef.current.getPoints();
-    if (points.length < 2) return;
-
-    ctx.beginPath();
-    ctx.strokeStyle = DISPLAY_CONFIG.SIGNAL.COLOR;
-    ctx.lineWidth = DISPLAY_CONFIG.SIGNAL.LINE_WIDTH;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-
-    points.forEach((point, index) => {
-      const x = (canvas.width * point.time) / DISPLAY_CONFIG.TIME_WINDOW;
-      const y = canvas.height / 2 + point.value * DISPLAY_CONFIG.VERTICAL_SCALE;
-      
-      if (index === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
-      }
-
-      if (point.isPeak) {
-        ctx.fillStyle = DISPLAY_CONFIG.SIGNAL.PEAK_COLOR;
-        ctx.beginPath();
-        ctx.arc(x, y, DISPLAY_CONFIG.SIGNAL.PEAK_RADIUS, 0, 2 * Math.PI);
-        ctx.fill();
-      }
-    });
-    ctx.stroke();
-
-    drawTechnicalInfo(ctx);
   }, []);
-
-  const drawTechnicalInfo = (ctx: CanvasRenderingContext2D) => {
-    ctx.font = '12px monospace';
-    ctx.fillStyle = '#ffffff';
-    ctx.textAlign = 'left';
-    
-    const info = [
-      `Calidad: ${quality}%`,
-      `SNR: ${technicalInfo.signalToNoise.toFixed(1)}`,
-      `Amplitud: ${technicalInfo.avgAmplitude.toFixed(1)}`,
-      `Picos: ${technicalInfo.peakCount}`,
-      `Último pico: ${Date.now() - technicalInfo.lastPeakTime}ms`
-    ];
-
-    info.forEach((text, i) => {
-      ctx.fillText(text, 10, 20 + i * 15);
-    });
-  };
-
-  useEffect(() => {
-    if (!dataBufferRef.current) return;
-    
-    const points = dataBufferRef.current.getPoints();
-    const peaks = points.filter(p => p.isPeak);
-    
-    setTechnicalInfo({
-      peakCount: peaks.length,
-      avgAmplitude: calculateAvgAmplitude(points),
-      signalToNoise: calculateSNR(points),
-      lastPeakTime: peaks.length > 0 ? peaks[peaks.length - 1].time : 0
-    });
-  }, [value]);
-
-  // Inicialización del sistema de audio
-  useEffect(() => {
-    const initAudio = async () => {
-      try {
-        audioContextRef.current = new AudioContext();
-        gainNodeRef.current = audioContextRef.current.createGain();
-        gainNodeRef.current.connect(audioContextRef.current.destination);
-        gainNodeRef.current.gain.value = 0;
-
-        // Preparar oscilador
-        oscillatorRef.current = audioContextRef.current.createOscillator();
-        oscillatorRef.current.type = 'sine';
-        oscillatorRef.current.frequency.value = PPG_CONFIG.BEEP.FREQUENCY;
-        oscillatorRef.current.connect(gainNodeRef.current);
-        oscillatorRef.current.start();
-
-        await audioContextRef.current.resume();
-      } catch (error) {
-        console.error('Error inicializando sistema de audio:', error);
-      }
-    };
-
-    initAudio();
-    return () => {
-      oscillatorRef.current?.stop();
-      audioContextRef.current?.close();
-    };
-  }, []);
-
-  // Nuevo: Sistema de beep cardíaco optimizado
-  const playHeartbeatBeep = useCallback((peakStrength: number) => {
-    if (!gainNodeRef.current || !audioContextRef.current) return;
-
-    const now = audioContextRef.current.currentTime;
-    const gain = gainNodeRef.current.gain;
-
-    // Normalizar la fuerza del pico para el volumen
-    const volume = Math.min(
-      PPG_CONFIG.BEEP.VOLUME * (peakStrength / PPG_CONFIG.SIGNAL.MIN_AMPLITUDE),
-      PPG_CONFIG.BEEP.VOLUME
-    );
-
-    // ADSR envelope para un sonido más natural
-    gain.cancelScheduledValues(now);
-    gain.setValueAtTime(0, now);
-    gain.linearRampToValueAtTime(volume, now + PPG_CONFIG.BEEP.ATTACK);
-    gain.linearRampToValueAtTime(0, now + PPG_CONFIG.BEEP.DURATION/1000);
-  }, []);
-
-  // Nuevo sistema de detección de picos mejorado
-  const peakDetector = createPeakDetector();
 
   const renderSignal = useCallback(() => {
-    if (!canvasRef.current || !dataBufferRef.current) {
-      animationFrameRef.current = requestAnimationFrame(renderSignal);
-      return;
-    }
-
-    const currentTime = performance.now();
-    const timeSinceLastRender = currentTime - lastRenderTimeRef.current;
-
-    if (timeSinceLastRender < DISPLAY_CONFIG.UPDATE_INTERVAL) {
-      animationFrameRef.current = requestAnimationFrame(renderSignal);
-      return;
-    }
-
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d', { alpha: false });
-    if (!ctx) {
+    const ctx = canvas?.getContext('2d');
+    
+    if (!canvas || !ctx || !dataBufferRef.current) {
       animationFrameRef.current = requestAnimationFrame(renderSignal);
       return;
     }
 
     const now = Date.now();
-    
-    if (baselineRef.current === null) {
-      baselineRef.current = value;
-    } else {
-      baselineRef.current = baselineRef.current * 0.95 + value * 0.05;
+    const timeSinceLastRender = now - lastRenderTimeRef.current;
+
+    // Control de FPS
+    if (timeSinceLastRender < DISPLAY_CONFIG.UPDATE_INTERVAL) {
+      animationFrameRef.current = requestAnimationFrame(renderSignal);
+      return;
     }
 
-    const smoothedValue = smoothValue(value, lastValueRef.current);
+    // Actualizar línea base
+    baselineRef.current = baselineRef.current * 0.95 + value * 0.05;
+
+    // Procesar nuevo valor
+    const normalizedValue = value - baselineRef.current;
+    const smoothedValue = lastValueRef.current * 0.7 + normalizedValue * 0.3;
     lastValueRef.current = smoothedValue;
 
-    const normalizedValue = (baselineRef.current || 0) - smoothedValue;
-    const isPeak = peakDetector.detectPeak(normalizedValue, now);
+    // Detectar pico (simplificado)
+    const isPeak = smoothedValue > 0.2 && smoothedValue > lastValueRef.current;
 
+    // Crear punto de datos
     const dataPoint: PPGDataPoint = {
       time: now,
-      value: normalizedValue * DISPLAY_CONFIG.VERTICAL_SCALE,
+      value: smoothedValue * DISPLAY_CONFIG.VERTICAL_SCALE,
       isPeak,
-      isArrhythmia: false // Se actualiza después si es necesario
+      isArrhythmia: false
     };
-    
+
+    // Agregar al buffer
     dataBufferRef.current.push(dataPoint);
 
-    drawGrid(ctx, canvas.width, canvas.height);
-
+    // Dibujar
+    drawGrid(ctx);
+    
+    // Dibujar señal
     const points = dataBufferRef.current.getPoints();
     if (points.length > 1) {
-      for (let i = 1; i < points.length; i++) {
-        const prevPoint = points[i - 1];
-        const point = points[i];
-        
-        const x1 = canvas.width - ((now - prevPoint.time) * canvas.width / DISPLAY_CONFIG.TIME_WINDOW);
-        const y1 = canvas.height / 2 - prevPoint.value;
-        const x2 = canvas.width - ((now - point.time) * canvas.width / DISPLAY_CONFIG.TIME_WINDOW);
-        const y2 = canvas.height / 2 - point.value;
-
-        ctx.beginPath();
-        ctx.strokeStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
-        ctx.lineWidth = 2;
-        ctx.lineJoin = 'round';
-        ctx.lineCap = 'round';
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-        ctx.stroke();
-      }
+      ctx.beginPath();
+      ctx.strokeStyle = DISPLAY_CONFIG.SIGNAL.COLOR;
+      ctx.lineWidth = DISPLAY_CONFIG.SIGNAL.WIDTH;
 
       points.forEach((point, index) => {
-        if (index > 0 && index < points.length - 1) {
-          const x = canvas.width - ((now - point.time) * canvas.width / DISPLAY_CONFIG.TIME_WINDOW);
-          const y = canvas.height / 2 - point.value;
-          const prevPoint = points[index - 1];
-          const nextPoint = points[index + 1];
-          
-          if (point.value > prevPoint.value && point.value > nextPoint.value) {
-            ctx.beginPath();
-            ctx.arc(x, y, 4, 0, Math.PI * 2);
-            ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
-            ctx.fill();
+        const x = canvas.width - ((now - point.time) * canvas.width / DISPLAY_CONFIG.TIME_WINDOW);
+        const y = canvas.height / 2 - point.value;
 
-            ctx.font = 'bold 12px Inter';
-            ctx.fillStyle = '#000000';
-            ctx.textAlign = 'center';
-            ctx.fillText(Math.abs(point.value / DISPLAY_CONFIG.VERTICAL_SCALE).toFixed(2), x, y - 20);
-          }
+        if (index === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
         }
       });
+
+      ctx.stroke();
     }
 
-    lastRenderTimeRef.current = currentTime;
+    lastRenderTimeRef.current = now;
     animationFrameRef.current = requestAnimationFrame(renderSignal);
-  }, [value, peakDetector]);
+  }, [value, drawGrid]);
 
+  // Inicialización y limpieza
   useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    // Configurar canvas
+    canvas.width = DISPLAY_CONFIG.CANVAS.WIDTH;
+    canvas.height = DISPLAY_CONFIG.CANVAS.HEIGHT;
+
+    // Iniciar renderizado
     renderSignal();
+
     return () => {
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
@@ -556,17 +431,11 @@ const PPGSignalMeter = ({
       <div className="absolute top-4 left-4 right-4 flex justify-between items-start z-10">
         <div className="bg-black/30 backdrop-blur-md rounded p-2">
           <div className="flex items-center gap-2">
-            <div className={`w-[200px]`}>
-              <div className={`h-1.5 w-full rounded-full bg-gradient-to-r ${getQualityColor(quality)} transition-all duration-1000 ease-in-out`}>
-                <div
-                  className="h-full rounded-full bg-white/20 animate-pulse transition-all duration-1000"
-                  style={{ width: `${isFingerDetected ? quality : 0}%` }}
-                />
-              </div>
-              <span className="text-[9px] text-center mt-0.5 font-medium transition-colors duration-700 block" 
-                    style={{ color: quality > 60 ? '#0EA5E9' : '#F59E0B' }}>
-                {getQualityText(quality)}
-              </span>
+            <Fingerprint 
+              className={`w-6 h-6 ${isFingerDetected ? 'text-green-500' : 'text-red-500'}`}
+            />
+            <div className="text-sm text-white/90">
+              {isFingerDetected ? 'Dedo detectado' : 'Coloque su dedo'}
             </div>
           </div>
         </div>
@@ -583,15 +452,13 @@ const PPGSignalMeter = ({
 
       <canvas
         ref={canvasRef}
-        width={DISPLAY_CONFIG.CANVAS.WIDTH}
-        height={DISPLAY_CONFIG.CANVAS.HEIGHT}
         className="w-full h-[calc(40vh)] mt-20"
       />
 
       <div className="fixed bottom-0 left-0 right-0 h-[80px] grid grid-cols-2 gap-px bg-gray-100">
         <button 
           onClick={onStartMeasurement}
-          className="bg-white text-slate-700 hover:bg-gray-50 active:bg-gray-100 transition-colors duration-200"
+          className="bg-white text-slate-700 hover:bg-gray-50 active:bg-gray-100"
         >
           <span className="text-lg font-semibold">
             INICIAR/DETENER
@@ -600,7 +467,7 @@ const PPGSignalMeter = ({
 
         <button 
           onClick={onReset}
-          className="bg-white text-slate-700 hover:bg-gray-50 active:bg-gray-100 transition-colors duration-200"
+          className="bg-white text-slate-700 hover:bg-gray-50 active:bg-gray-100"
         >
           <span className="text-lg font-semibold">
             RESETEAR
