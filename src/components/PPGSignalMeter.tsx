@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -73,20 +72,20 @@ const PPGSignalMeter = ({
 
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
     const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
-    gradient.addColorStop(0, '#e2e8f0');
-    gradient.addColorStop(1, '#cbd5e1');
+    gradient.addColorStop(0, '#f1f5f9');
+    gradient.addColorStop(1, '#e2e8f0');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
+    ctx.strokeStyle = 'rgba(51, 65, 85, 0.1)';
     ctx.lineWidth = 0.5;
 
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X) {
       ctx.moveTo(x, 0);
       ctx.lineTo(x, CANVAS_HEIGHT);
       if (x % (GRID_SIZE_X * 4) === 0) {
-        ctx.fillStyle = 'rgba(51, 65, 85, 0.6)';
+        ctx.fillStyle = 'rgba(51, 65, 85, 0.5)';
         ctx.font = '10px Inter';
         ctx.textAlign = 'center';
         ctx.fillText(`${x / 10}ms`, x, CANVAS_HEIGHT - 5);
@@ -98,7 +97,7 @@ const PPGSignalMeter = ({
       ctx.lineTo(CANVAS_WIDTH, y);
       if (y % (GRID_SIZE_Y * 4) === 0) {
         const amplitude = ((CANVAS_HEIGHT / 2) - y) / verticalScale;
-        ctx.fillStyle = 'rgba(51, 65, 85, 0.6)';
+        ctx.fillStyle = 'rgba(51, 65, 85, 0.5)';
         ctx.font = '10px Inter';
         ctx.textAlign = 'right';
         ctx.fillText(amplitude.toFixed(1), 25, y + 4);
@@ -107,7 +106,7 @@ const PPGSignalMeter = ({
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(51, 65, 85, 0.25)';
+    ctx.strokeStyle = 'rgba(51, 65, 85, 0.2)';
     ctx.lineWidth = 1;
 
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X * 4) {
@@ -122,7 +121,7 @@ const PPGSignalMeter = ({
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(51, 65, 85, 0.35)';
+    ctx.strokeStyle = 'rgba(51, 65, 85, 0.3)';
     ctx.lineWidth = 1.5;
     ctx.moveTo(0, CANVAS_HEIGHT / 2);
     ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT / 2);
@@ -184,6 +183,10 @@ const PPGSignalMeter = ({
 
     const points = dataBufferRef.current.getPoints();
     if (points.length > 1) {
+      ctx.shadowColor = 'rgba(14, 165, 233, 0.2)';
+      ctx.shadowBlur = 4;
+      ctx.shadowOffsetY = 2;
+
       for (let i = 1; i < points.length; i++) {
         const prevPoint = points[i - 1];
         const point = points[i];
@@ -202,6 +205,10 @@ const PPGSignalMeter = ({
         ctx.lineTo(x2, y2);
         ctx.stroke();
       }
+
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetY = 0;
 
       points.forEach((point, index) => {
         if (index > 0 && index < points.length - 1) {
