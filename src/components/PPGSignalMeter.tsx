@@ -244,6 +244,21 @@ const PPGSignalMeter = ({
     if (points.length > 1) {
       let currentSegment: PPGDataPoint[] = [];
       let lastWasArrhythmia = points[0].isArrhythmia;
+      let peakPoints: { x: number; y: number; value: number; isArrhythmia: boolean }[] = [];
+
+      // Primero identificamos todos los picos para dibujarlos después
+      points.forEach((point, index) => {
+        if (isPeakPoint(points, index)) {
+          const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
+          const y = canvas.height / 2 - point.value;
+          peakPoints.push({ 
+            x, 
+            y, 
+            value: point.value,
+            isArrhythmia: point.isArrhythmia 
+          });
+        }
+      });
 
       // Dividir los puntos en segmentos basados en si son arritmia o no
       points.forEach((point, index) => {
@@ -278,22 +293,20 @@ const PPGSignalMeter = ({
         }
       });
 
-      // Marcar los picos
-      points.forEach((point, index) => {
-        if (isPeakPoint(points, index)) {
-          const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-          const y = canvas.height / 2 - point.value;
+      // Dibujar todos los picos y sus valores numéricos
+      peakPoints.forEach(peak => {
+        // Dibujar el círculo del pico
+        ctx.beginPath();
+        ctx.arc(peak.x, peak.y, 4, 0, Math.PI * 2);
+        ctx.fillStyle = peak.isArrhythmia ? '#DC2626' : '#0EA5E9';
+        ctx.fill();
 
-          ctx.beginPath();
-          ctx.arc(x, y, 4, 0, Math.PI * 2);
-          ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
-          ctx.fill();
-
-          ctx.font = 'bold 10px Inter';
-          ctx.fillStyle = '#334155';
-          ctx.textAlign = 'center';
-          ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 8);
-        }
+        // Dibujar el valor numérico sobre el pico
+        ctx.font = '10px Inter';
+        ctx.fillStyle = '#334155';
+        ctx.textAlign = 'center';
+        const displayValue = Math.abs(peak.value / verticalScale).toFixed(2);
+        ctx.fillText(displayValue, peak.x, peak.y - 8);
       });
     }
 
