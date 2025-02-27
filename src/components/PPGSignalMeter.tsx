@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -51,10 +50,10 @@ const PPGSignalMeter = ({
 
   const MIN_PEAK_INTERVAL_MS = 400;
   const MAX_PEAK_INTERVAL_MS = 1500;
-  const PEAK_PROMINENCE_THRESHOLD = 0.25;
+  const PEAK_PROMINENCE_THRESHOLD = 0.15;
   const MOVING_WINDOW_SIZE = 5;
   const MIN_PEAK_WIDTH = 3;
-  const ADAPTIVE_THRESHOLD_FACTOR = 0.6;
+  const ADAPTIVE_THRESHOLD_FACTOR = 0.4;
   const NOISE_THRESHOLD = 0.1;
 
   useEffect(() => {
@@ -171,7 +170,7 @@ const PPGSignalMeter = ({
     const meanAmplitude = recentPoints.reduce((sum, p) => sum + Math.abs(p.value), 0) / recentPoints.length;
     const adaptiveThreshold = meanAmplitude * ADAPTIVE_THRESHOLD_FACTOR;
 
-    if (prominence > PEAK_PROMINENCE_THRESHOLD && prominence > adaptiveThreshold) {
+    if (prominence > PEAK_PROMINENCE_THRESHOLD || prominence > adaptiveThreshold) {
       const newInterval = lastPeakTimeRef.current ? now - lastPeakTimeRef.current : 0;
       if (newInterval > 0) {
         peakHistoryRef.current.push(newInterval);
@@ -246,7 +245,6 @@ const PPGSignalMeter = ({
       let lastWasArrhythmia = points[0].isArrhythmia;
       let peakPoints: { x: number; y: number; value: number; isArrhythmia: boolean }[] = [];
 
-      // Primero identificamos todos los picos para dibujarlos después
       points.forEach((point, index) => {
         if (isPeakPoint(points, index)) {
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
@@ -257,13 +255,12 @@ const PPGSignalMeter = ({
             value: point.value,
             isArrhythmia: point.isArrhythmia 
           });
+          console.log('Peak detected:', { x, y, value: point.value });
         }
       });
 
-      // Dividir los puntos en segmentos basados en si son arritmia o no
       points.forEach((point, index) => {
         if (point.isArrhythmia !== lastWasArrhythmia || index === points.length - 1) {
-          // Dibujar el segmento acumulado
           if (currentSegment.length > 0) {
             ctx.beginPath();
             ctx.lineWidth = 2;
@@ -284,8 +281,6 @@ const PPGSignalMeter = ({
             ctx.strokeStyle = lastWasArrhythmia ? '#DC2626' : '#0EA5E9';
             ctx.stroke();
           }
-
-          // Comenzar nuevo segmento
           currentSegment = [point];
           lastWasArrhythmia = point.isArrhythmia;
         } else {
@@ -293,15 +288,12 @@ const PPGSignalMeter = ({
         }
       });
 
-      // Dibujar todos los picos y sus valores numéricos
       peakPoints.forEach(peak => {
-        // Dibujar el círculo del pico
         ctx.beginPath();
         ctx.arc(peak.x, peak.y, 4, 0, Math.PI * 2);
         ctx.fillStyle = peak.isArrhythmia ? '#DC2626' : '#0EA5E9';
         ctx.fill();
 
-        // Dibujar el valor numérico sobre el pico
         ctx.font = '10px Inter';
         ctx.fillStyle = '#334155';
         ctx.textAlign = 'center';
