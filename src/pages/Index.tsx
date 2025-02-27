@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -263,7 +264,7 @@ const Index = () => {
         overflow: 'hidden'
       }}
     >
-      <div className="absolute inset-0 z-0">
+      <div className="absolute inset-0 bottom-[80px]">
         <CameraView 
           onStreamReady={handleStreamReady}
           isMonitoring={isCameraOn}
