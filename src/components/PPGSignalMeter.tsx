@@ -14,8 +14,6 @@ interface PPGSignalMeterProps {
     rmssd: number;
     rrVariation: number;
   } | null;
-  heartRate?: number;
-  spo2?: number;
 }
 
 const PPGSignalMeter = ({ 
@@ -25,32 +23,28 @@ const PPGSignalMeter = ({
   onStartMeasurement,
   onReset,
   arrhythmiaStatus,
-  rawArrhythmiaData,
-  heartRate,
-  spo2
+  rawArrhythmiaData
 }: PPGSignalMeterProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dataBufferRef = useRef<CircularBuffer | null>(null);
   const baselineRef = useRef<number | null>(null);
   const lastValueRef = useRef<number | null>(null);
-  const animationFrameRef = useRef<number | null>(null);
+  const animationFrameRef = useRef<number>();
   const lastRenderTimeRef = useRef<number>(0);
   const lastArrhythmiaTime = useRef<number>(0);
   const arrhythmiaCountRef = useRef<number>(0);
   
-  const BUFFER_SIZE = Math.floor((5000 / (1000/144)) * 1.2); // ~5 segundos de datos a 144fps
-  const TARGET_FPS = 144;
+  const WINDOW_WIDTH_MS = 3000; // Reducido para mejor rendimiento
+  const CANVAS_WIDTH = 1000;
+  const CANVAS_HEIGHT = 200;
+  const GRID_SIZE_X = 50;
+  const GRID_SIZE_Y = 25;
+  const verticalScale = 28.0;
+  const SMOOTHING_FACTOR = 0.75; // Ajustado para menor latencia
+  const TARGET_FPS = 60;
   const FRAME_TIME = 1000 / TARGET_FPS;
-  const WINDOW_WIDTH_MS = 5000;
-  const CANVAS_WIDTH = 1500;
-  const CANVAS_HEIGHT = 400;
-  const GRID_MAJOR = 100;
-  const GRID_MINOR = 20;
-  const PULSE_AMPLITUDE_SCALE = 40.0;
-  const SMOOTHING_FACTOR = 0.65;
+  const BUFFER_SIZE = 600; // Reducido para mejor rendimiento
 
-  const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
-  
   useEffect(() => {
     if (!dataBufferRef.current) {
       dataBufferRef.current = new CircularBuffer(BUFFER_SIZE);
@@ -77,127 +71,174 @@ const PPGSignalMeter = ({
   }, []);
 
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
-    const offscreen = new OffscreenCanvas(CANVAS_WIDTH, CANVAS_HEIGHT);
-    const offCtx = offscreen.getContext('2d')!;
+    const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+    gradient.addColorStop(0, '#f1f5f9');
+    gradient.addColorStop(1, '#e2e8f0');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    const gradient = offCtx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
-    gradient.addColorStop(0, '#0a0f1a');
-    gradient.addColorStop(1, '#000810');
-    offCtx.fillStyle = gradient;
-    offCtx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(51, 65, 85, 0.1)';
+    ctx.lineWidth = 0.5;
 
-    offCtx.beginPath();
-    for (let x = 0; x <= CANVAS_WIDTH; x += GRID_MINOR) {
-      const isMajor = x % GRID_MAJOR === 0;
-      offCtx.moveTo(x, 0);
-      offCtx.lineTo(x, CANVAS_HEIGHT);
-      if (isMajor) {
-        offCtx.fillStyle = 'rgba(76, 175, 80, 0.5)';
-        offCtx.fillText(`${x/GRID_MAJOR}s`, x, CANVAS_HEIGHT - 5);
+    for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X) {
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, CANVAS_HEIGHT);
+      if (x % (GRID_SIZE_X * 4) === 0) {
+        ctx.fillStyle = 'rgba(51, 65, 85, 0.5)';
+        ctx.font = '10px Inter';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${x / 10}ms`, x, CANVAS_HEIGHT - 5);
       }
     }
-    offCtx.strokeStyle = 'rgba(76, 175, 80, 0.1)';
-    offCtx.stroke();
 
-    offCtx.beginPath();
-    for (let x = 0; x <= CANVAS_WIDTH; x += GRID_MAJOR) {
-      offCtx.moveTo(x, 0);
-      offCtx.lineTo(x, CANVAS_HEIGHT);
+    for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y) {
+      ctx.moveTo(0, y);
+      ctx.lineTo(CANVAS_WIDTH, y);
+      if (y % (GRID_SIZE_Y * 4) === 0) {
+        const amplitude = ((CANVAS_HEIGHT / 2) - y) / verticalScale;
+        ctx.fillStyle = 'rgba(51, 65, 85, 0.5)';
+        ctx.font = '10px Inter';
+        ctx.textAlign = 'right';
+        ctx.fillText(amplitude.toFixed(1), 25, y + 4);
+      }
     }
-    offCtx.strokeStyle = 'rgba(76, 175, 80, 0.2)';
-    offCtx.stroke();
+    ctx.stroke();
 
-    createImageBitmap(offscreen).then(bitmap => {
-      ctx.drawImage(bitmap, 0, 0);
-    });
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(51, 65, 85, 0.2)';
+    ctx.lineWidth = 1;
 
-    ctx.font = '12px monospace';
-    ctx.fillStyle = 'rgba(76, 175, 80, 0.8)';
-    ctx.textAlign = 'right';
-    ctx.fillText(`HR: ${heartRate || '--'} BPM`, CANVAS_WIDTH - 10, 20);
-    ctx.fillText(`SpO2: ${spo2 || '--'}%`, CANVAS_WIDTH - 10, 40);
-    ctx.fillText(`Calidad: ${quality}%`, CANVAS_WIDTH - 10, 60);
-    
-    if (arrhythmiaStatus?.includes('ARRITMIA')) {
-      ctx.fillStyle = '#ff4444';
-      ctx.fillText('! ARRITMIA DETECTADA !', CANVAS_WIDTH - 10, 80);
+    for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X * 4) {
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, CANVAS_HEIGHT);
     }
-  }, [quality, heartRate, spo2, arrhythmiaStatus]);
+
+    for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y * 4) {
+      ctx.moveTo(0, y);
+      ctx.lineTo(CANVAS_WIDTH, y);
+    }
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(51, 65, 85, 0.3)';
+    ctx.lineWidth = 1.5;
+    ctx.moveTo(0, CANVAS_HEIGHT / 2);
+    ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT / 2);
+    ctx.stroke();
+  }, []);
 
   const renderSignal = useCallback(() => {
-    if (!canvasRef.current || !dataBufferRef.current) return;
-
-    const currentTime = performance.now();
-    if (currentTime - lastRenderTimeRef.current < FRAME_TIME) {
+    if (!canvasRef.current || !dataBufferRef.current) {
       animationFrameRef.current = requestAnimationFrame(renderSignal);
       return;
     }
 
-    const ctx = ctxRef.current;
-    if (!ctx) return;
+    const currentTime = performance.now();
+    const timeSinceLastRender = currentTime - lastRenderTimeRef.current;
 
-    ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    if (timeSinceLastRender < FRAME_TIME) {
+      animationFrameRef.current = requestAnimationFrame(renderSignal);
+      return;
+    }
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d', { alpha: false });
+    if (!ctx) {
+      animationFrameRef.current = requestAnimationFrame(renderSignal);
+      return;
+    }
+
+    const now = Date.now();
+    
+    if (baselineRef.current === null) {
+      baselineRef.current = value;
+    } else {
+      baselineRef.current = baselineRef.current * 0.95 + value * 0.05;
+    }
+
+    const smoothedValue = smoothValue(value, lastValueRef.current);
+    lastValueRef.current = smoothedValue;
+
+    const normalizedValue = (baselineRef.current || 0) - smoothedValue;
+    const scaledValue = normalizedValue * verticalScale;
+    
+    let isArrhythmia = false;
+    if (rawArrhythmiaData && 
+        arrhythmiaStatus?.includes("ARRITMIA") && 
+        now - rawArrhythmiaData.timestamp < 1000) {
+      isArrhythmia = true;
+      lastArrhythmiaTime.current = now;
+    }
+
+    const dataPoint: PPGDataPoint = {
+      time: now,
+      value: scaledValue,
+      isArrhythmia
+    };
+    
+    dataBufferRef.current.push(dataPoint);
+
     drawGrid(ctx);
 
     const points = dataBufferRef.current.getPoints();
     if (points.length > 1) {
-      const path = new Path2D();
-      const now = Date.now();
+      for (let i = 1; i < points.length; i++) {
+        const prevPoint = points[i - 1];
+        const point = points[i];
+        
+        const x1 = canvas.width - ((now - prevPoint.time) * canvas.width / WINDOW_WIDTH_MS);
+        const y1 = canvas.height / 2 - prevPoint.value;
+        const x2 = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
+        const y2 = canvas.height / 2 - point.value;
+
+        ctx.beginPath();
+        ctx.strokeStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
+        ctx.lineWidth = 2;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      }
 
       points.forEach((point, index) => {
-        const x = CANVAS_WIDTH - ((now - point.time) * CANVAS_WIDTH / WINDOW_WIDTH_MS);
-        const y = CANVAS_HEIGHT/2 - (point.value * PULSE_AMPLITUDE_SCALE);
-
-        if (index === 0) {
-          path.moveTo(x, y);
-        } else {
+        if (index > 0 && index < points.length - 1) {
+          const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
+          const y = canvas.height / 2 - point.value;
           const prevPoint = points[index - 1];
-          const prevX = CANVAS_WIDTH - ((now - prevPoint.time) * CANVAS_WIDTH / WINDOW_WIDTH_MS);
-          const prevY = CANVAS_HEIGHT/2 - (prevPoint.value * PULSE_AMPLITUDE_SCALE);
+          const nextPoint = points[index + 1];
           
-          const cp1x = (prevX + x) / 2;
-          path.bezierCurveTo(cp1x, prevY, cp1x, y, x, y);
+          if (point.value > prevPoint.value && point.value > nextPoint.value) {
+            ctx.beginPath();
+            ctx.arc(x, y, 4, 0, Math.PI * 2);
+            ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
+            ctx.fill();
+
+            ctx.font = 'bold 12px Inter';
+            ctx.fillStyle = '#000000';
+            ctx.textAlign = 'center';
+            ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 20);
+          }
         }
       });
-
-      ctx.save();
-      ctx.strokeStyle = isFingerDetected ? '#00ff00' : '#666666';
-      ctx.lineWidth = 2;
-      ctx.lineJoin = 'round';
-      ctx.stroke(path);
-      ctx.restore();
     }
 
     lastRenderTimeRef.current = currentTime;
     animationFrameRef.current = requestAnimationFrame(renderSignal);
-  }, [value, quality, isFingerDetected, drawGrid]);
+  }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus]);
 
   useEffect(() => {
-    if (!canvasRef.current) return;
-    
-    const ctx = canvasRef.current.getContext('2d', {
-      alpha: false,
-      desynchronized: true,
-      willReadFrequently: false
-    });
-    
-    if (!ctx) return;
-    
-    ctxRef.current = ctx;
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    
     renderSignal();
-    
     return () => {
-      if (animationFrameRef.current !== null) {
+      if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
   }, [renderSignal]);
 
   return (
-    <div className="fixed inset-0 bg-gradient-to-b from-white to-slate-100/40" translate="no">
+    <div className="fixed inset-0 bg-gradient-to-b from-white to-slate-50/30">
       <div className="absolute top-0 left-0 right-0 p-2 flex justify-between items-center bg-white/60 backdrop-blur-sm border-b border-slate-100 shadow-sm">
         <div className="flex items-center gap-3">
           <span className="text-xl font-bold text-slate-700">PPG</span>
@@ -217,7 +258,7 @@ const PPGSignalMeter = ({
 
         <div className="flex flex-col items-center">
           <Fingerprint
-            className={`h-16 w-16 transition-colors duration-300 ${
+            className={`h-12 w-12 transition-colors duration-300 ${
               !isFingerDetected ? 'text-gray-400' :
               quality > 75 ? 'text-green-500' :
               quality > 50 ? 'text-yellow-500' :
