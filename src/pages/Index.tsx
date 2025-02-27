@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -133,6 +132,61 @@ const Index = () => {
   };
 
   useEffect(() => {
+    const enterImmersiveMode = async () => {
+      try {
+        if (screen.orientation?.lock) {
+          await screen.orientation.lock('portrait');
+        }
+
+        const elem = document.documentElement;
+        
+        if (elem.requestFullscreen) {
+          await elem.requestFullscreen();
+        } else if (elem.webkitRequestFullscreen) {
+          await elem.webkitRequestFullscreen();
+        } else if (elem.mozRequestFullScreen) {
+          await elem.mozRequestFullScreen();
+        } else if (elem.msRequestFullscreen) {
+          await elem.msRequestFullscreen();
+        }
+
+        const viewport = document.querySelector('meta[name=viewport]');
+        if (viewport) {
+          viewport.setAttribute('content', 
+            'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover'
+          );
+        }
+
+        if (navigator.userAgent.includes("Android")) {
+          try {
+            if ((window as any).AndroidFullScreen?.immersiveMode) {
+              await (window as any).AndroidFullScreen.immersiveMode();
+            }
+          } catch (e) {
+            console.log('Android immersive mode error:', e);
+          }
+        }
+      } catch (error) {
+        console.error('Error activando modo inmersivo:', error);
+      }
+    };
+
+    enterImmersiveMode();
+
+    const handleTouch = () => {
+      enterImmersiveMode();
+    };
+
+    document.addEventListener('touchstart', handleTouch);
+    document.addEventListener('click', handleTouch);
+
+    return () => {
+      document.removeEventListener('touchstart', handleTouch);
+      document.removeEventListener('click', handleTouch);
+    };
+  }, []);
+
+  useEffect(() => {
     if (lastSignal && lastSignal.fingerDetected && isMonitoring) {
       const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
       setHeartRate(heartBeatResult.bpm);
@@ -167,7 +221,6 @@ const Index = () => {
         touchAction: 'none',
         overscrollBehavior: 'none'
       }}
-      translate="no"
     >
       <div className="absolute inset-0 z-0">
         <CameraView 
