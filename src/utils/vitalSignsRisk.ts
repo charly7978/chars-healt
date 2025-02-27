@@ -121,7 +121,7 @@ export class VitalSignsRisk {
   }
 
   static getBPMRisk(bpm: number, isFinalReading: boolean = false): RiskSegment {
-    if (bpm === 0) return { color: '#FFFFFF', label: '' };
+    if (bpm <= 0) return { color: '#FFFFFF', label: '' };
     
     this.updateBPMHistory(bpm);
 
@@ -152,7 +152,7 @@ export class VitalSignsRisk {
   }
 
   static getSPO2Risk(spo2: number): RiskSegment {
-    if (spo2 === 0) return { color: '#FFFFFF', label: '' };
+    if (spo2 <= 0) return { color: '#FFFFFF', label: '' };
     
     this.updateSPO2History(spo2);
 
@@ -170,12 +170,8 @@ export class VitalSignsRisk {
   }
 
   static getBPRisk(pressure: string, isFinalReading: boolean = false): RiskSegment {
-    if (pressure === "0/0") {
+    if (pressure === "0/0" || pressure === "--/--") {
       return { color: '#FFFFFF', label: '' };
-    }
-    
-    if (pressure === "--/--") {
-      return { color: '#FFFFFF', label: 'EVALUANDO...' };
     }
 
     const [systolic, diastolic] = pressure.split('/').map(Number);

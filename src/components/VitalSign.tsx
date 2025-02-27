@@ -16,16 +16,34 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit }) => {
       return getArrhythmiaDisplay();
     }
 
-    if (label === "FRECUENCIA CARDÍACA" && typeof value === 'number') {
-      return VitalSignsRisk.getBPMRisk(value);
+    // Para frecuencia cardíaca, solo mostrar riesgo si hay un valor
+    if (label === "FRECUENCIA CARDÍACA") {
+      if (value === "--" || value === 0) {
+        return { color: '#FFFFFF', label: '' };
+      }
+      if (typeof value === 'number') {
+        return VitalSignsRisk.getBPMRisk(value);
+      }
     }
 
-    if (label === "SPO2" && typeof value === 'number') {
-      return VitalSignsRisk.getSPO2Risk(value);
+    // Para SPO2, solo mostrar riesgo si hay un valor
+    if (label === "SPO2") {
+      if (value === "--" || value === 0) {
+        return { color: '#FFFFFF', label: '' };
+      }
+      if (typeof value === 'number') {
+        return VitalSignsRisk.getSPO2Risk(value);
+      }
     }
 
-    if (label === "PRESIÓN ARTERIAL" && typeof value === 'string') {
-      return VitalSignsRisk.getBPRisk(value);
+    // Para presión arterial
+    if (label === "PRESIÓN ARTERIAL") {
+      if (value === "--/--" || value === "0/0") {
+        return { color: '#FFFFFF', label: '' };
+      }
+      if (typeof value === 'string') {
+        return VitalSignsRisk.getBPRisk(value);
+      }
     }
 
     return { color: '#FFFFFF', label: '' };
@@ -36,7 +54,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit }) => {
     
     if (value === "--") {
       return { 
-        text: "--/--", 
+        text: "--", 
         color: "#FFFFFF",
         label: ""
       };
