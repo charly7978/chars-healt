@@ -304,10 +304,11 @@ const Index = () => {
           />
         </div>
 
-        <div className="flex-1 mt-24" />
+        <div className="flex-1 mt-4" />
 
-        <div className="w-full px-4 pb-8">
-          <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4">
+        {/* Subimos los displays considerablemente */}
+        <div className="w-full px-4 mb-16">
+          <div className="bg-gray-900/60 backdrop-blur-none rounded-xl p-4">
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <VitalSign 
                 label="FRECUENCIA CARDÍACA"
