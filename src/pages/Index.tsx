@@ -265,7 +265,7 @@ const Index = () => {
 
   return (
     <div 
-      className="fixed inset-0 flex flex-col bg-black/90" 
+      className="fixed inset-0 flex flex-col bg-black" 
       style={{ 
         height: '100dvh',
         minHeight: '100vh',
@@ -275,8 +275,8 @@ const Index = () => {
         overflow: 'hidden'
       }}
     >
-      {/* Cámara de fondo - estirada hasta los botones */}
-      <div className="absolute inset-0 bottom-[80px]">
+      {/* Cámara de fondo - visible en toda la pantalla */}
+      <div className="absolute inset-0">
         <CameraView 
           onStreamReady={handleStreamReady}
           isMonitoring={isCameraOn}
@@ -304,10 +304,11 @@ const Index = () => {
           />
         </div>
 
-        <div className="flex-1 mt-24" />
+        <div className="flex-1 mt-4" />
 
-        <div className="w-full px-4 pb-8">
-          <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4">
+        {/* Displays con efecto de transparencia elegante */}
+        <div className="w-full px-4 mb-24">
+          <div className="p-4 rounded-xl" style={{ background: 'rgba(0, 0, 0, 0.2)' }}>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <VitalSign 
                 label="FRECUENCIA CARDÍACA"
@@ -338,11 +339,11 @@ const Index = () => {
 
         {isMonitoring && (
           <div className="fixed bottom-20 left-0 right-0 text-center z-20">
-            <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 40s</span>
+            <span className="text-xl font-medium text-white/90">{elapsedTime}s / 40s</span>
           </div>
         )}
 
-        <div className="relative w-full h-[80px] grid grid-cols-2 gap-px">
+        <div className="absolute bottom-0 left-0 right-0 w-full h-[80px] grid grid-cols-2 gap-px">
           <button 
             onClick={startMonitoring}
             className={`w-full h-full text-2xl font-bold text-white transition-colors duration-200 ${

@@ -91,24 +91,28 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     { text: value, ...getRiskInfo() };
 
   return (
-    <div className="relative overflow-hidden group bg-gradient-to-br from-gray-800/30 to-gray-900/30 backdrop-blur-md rounded-lg p-4 transition-all duration-300 hover:from-gray-800/40 hover:to-gray-900/40">
-      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent animate-[progress_2s_ease-in-out_infinite] opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-      <h3 className="text-gray-400/90 text-xs mb-2">{label}</h3>
+    <div className="relative overflow-hidden group rounded-lg p-4 border border-white/10" 
+         style={{
+           background: 'rgba(0, 0, 0, 0.5)',
+           backdropFilter: 'blur(10px)',
+           boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.1)'
+         }}>
+      <h3 className="text-gray-300 text-xs mb-2 font-medium">{label}</h3>
       <div className="flex flex-col items-center gap-1">
         <div className="flex items-baseline gap-1 justify-center">
           <span 
-            className={`${isArrhythmiaDisplay ? 'text-sm' : 'text-lg'} font-bold transition-colors duration-300`}
+            className={`${isArrhythmiaDisplay ? 'text-sm' : 'text-lg'} font-bold`}
             style={{ color }}
           >
             {isArrhythmiaDisplay ? text : value}
           </span>
           {!isArrhythmiaDisplay && unit && (
-            <span className="text-gray-400/90 text-xs">{unit}</span>
+            <span className="text-gray-400 text-xs">{unit}</span>
           )}
         </div>
         {riskLabel && (
           <span 
-            className="text-[10px] font-medium transition-colors duration-300"
+            className="text-[10px] font-medium"
             style={{ color }}
           >
             {riskLabel}

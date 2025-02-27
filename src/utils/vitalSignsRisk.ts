@@ -20,7 +20,7 @@ interface SegmentCount {
 }
 
 export class VitalSignsRisk {
-  private static readonly STABILITY_WINDOW = 6000; // 6 segundos
+  private static readonly STABILITY_WINDOW = 4000; // 4 segundos (cambiado de 6 segundos)
   private static readonly MEASUREMENT_WINDOW = 40000; // 40 segundos para análisis final
   private static readonly SMOOTHING_FACTOR = 0.25; // Factor de suavizado (25%)
   
@@ -127,12 +127,13 @@ export class VitalSignsRisk {
 
     let currentSegment: RiskSegment;
 
+    // Nuevos rangos de BPM
     if (this.isStableValue(this.bpmHistory, [140, 300])) {
-      currentSegment = { color: '#ea384c', label: 'ALTA TAQUICARDIA' };
-    } else if (this.isStableValue(this.bpmHistory, [100, 139])) {
-      currentSegment = { color: '#F97316', label: 'TAQUICARDIA' };
-    } else if (this.isStableValue(this.bpmHistory, [50, 89])) {
-      currentSegment = { color: '#0EA5E9', label: 'NORMAL' };
+      currentSegment = { color: '#ea384c', label: 'TAQUICARDIA' };
+    } else if (this.isStableValue(this.bpmHistory, [110, 139])) {
+      currentSegment = { color: '#F97316', label: 'LEVE TAQUICARDIA' };
+    } else if (this.isStableValue(this.bpmHistory, [50, 110])) {
+      currentSegment = { color: '#FFFFFF', label: 'NORMAL' };
     } else if (this.isStableValue(this.bpmHistory, [40, 49])) {
       currentSegment = { color: '#F97316', label: 'BRADICARDIA' };
     } else {
