@@ -1,5 +1,5 @@
 
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 
 interface CameraViewProps {
   onStreamReady?: (stream: MediaStream) => void;
@@ -16,97 +16,82 @@ const CameraView = ({
 }: CameraViewProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
-  const frameIntervalRef = useRef<number>(1000 / 30); // 30 FPS
-  const lastFrameTimeRef = useRef<number>(0);
+  const streamRequestRef = useRef<ReturnType<typeof requestAnimationFrame>>();
 
-  const stopCamera = async () => {
+  const stopCamera = useCallback(async () => {
+    if (streamRequestRef.current) {
+      cancelAnimationFrame(streamRequestRef.current);
+      streamRequestRef.current = undefined;
+    }
+    
     if (stream) {
       stream.getTracks().forEach(track => {
         track.stop();
-        if (videoRef.current) {
-          videoRef.current.srcObject = null;
-        }
       });
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
       setStream(null);
     }
-  };
+  }, [stream]);
 
-  const startCamera = async () => {
+  const startCamera = useCallback(async () => {
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error("getUserMedia no está soportado");
       }
 
       const isAndroid = /android/i.test(navigator.userAgent);
-
-      const baseVideoConstraints: MediaTrackConstraints = {
+      
+      // Optimizar configuración de video
+      const videoConstraints: MediaTrackConstraints = {
         facingMode: 'environment',
-        width: { ideal: 720 },
-        height: { ideal: 480 }
+        width: { ideal: 640 }, // Reducido de 720
+        height: { ideal: 480 },
+        frameRate: { ideal: 25, max: 30 } // Optimizado para mejor rendimiento
       };
 
-      if (isAndroid) {
-        // Ajustes para mejorar la extracción de señal en Android
-        Object.assign(baseVideoConstraints, {
-          frameRate: { ideal: 30, max: 30 }, // Limitamos explícitamente a 30 FPS
-          resizeMode: 'crop-and-scale'
-        });
-      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: videoConstraints,
+        audio: false // Explícitamente deshabilitar audio
+      });
 
-      const constraints: MediaStreamConstraints = {
-        video: baseVideoConstraints
-      };
+      const videoTrack = stream.getVideoTracks()[0];
 
-      const newStream = await navigator.mediaDevices.getUserMedia(constraints);
-      const videoTrack = newStream.getVideoTracks()[0];
-
+      // Aplicar optimizaciones específicas para Android
       if (videoTrack && isAndroid) {
         try {
-          const capabilities = videoTrack.getCapabilities();
-          const advancedConstraints: MediaTrackConstraintSet[] = [];
-          
-          if (capabilities.exposureMode) {
-            advancedConstraints.push({ exposureMode: 'continuous' });
-          }
-          if (capabilities.focusMode) {
-            advancedConstraints.push({ focusMode: 'continuous' });
-          }
-          if (capabilities.whiteBalanceMode) {
-            advancedConstraints.push({ whiteBalanceMode: 'continuous' });
-          }
-
-          if (advancedConstraints.length > 0) {
-            await videoTrack.applyConstraints({
-              advanced: advancedConstraints
-            });
-          }
-
-          if (videoRef.current) {
-            videoRef.current.style.transform = 'translateZ(0)';
-            videoRef.current.style.backfaceVisibility = 'hidden';
-          }
+          await videoTrack.applyConstraints({
+            advanced: [
+              { exposureMode: 'continuous' },
+              { focusMode: 'continuous' },
+              { whiteBalanceMode: 'continuous' }
+            ]
+          }).catch(() => {
+            // Ignorar errores de constraints no soportados
+          });
         } catch (err) {
-          console.log("No se pudieron aplicar algunas optimizaciones:", err);
+          console.log("Algunas optimizaciones no están disponibles");
         }
       }
 
       if (videoRef.current) {
-        videoRef.current.srcObject = newStream;
-        if (isAndroid) {
-          videoRef.current.style.willChange = 'transform';
-          videoRef.current.style.transform = 'translateZ(0)';
-        }
+        videoRef.current.srcObject = stream;
+        videoRef.current.style.transform = 'translateZ(0)';
+        // Habilitar aceleración por hardware
+        videoRef.current.style.willChange = 'transform';
+        videoRef.current.style.backfaceVisibility = 'hidden';
       }
 
-      setStream(newStream);
+      setStream(stream);
       
       if (onStreamReady) {
-        onStreamReady(newStream);
+        onStreamReady(stream);
       }
     } catch (err) {
       console.error("Error al iniciar la cámara:", err);
     }
-  };
+  }, [onStreamReady]);
 
   useEffect(() => {
     if (isMonitoring && !stream) {
@@ -114,10 +99,11 @@ const CameraView = ({
     } else if (!isMonitoring && stream) {
       stopCamera();
     }
+
     return () => {
       stopCamera();
     };
-  }, [isMonitoring]);
+  }, [isMonitoring, stream, startCamera, stopCamera]);
 
   return (
     <video
@@ -129,10 +115,11 @@ const CameraView = ({
       style={{
         willChange: 'transform',
         transform: 'translateZ(0)',
-        backfaceVisibility: 'hidden'
+        backfaceVisibility: 'hidden',
+        imageRendering: 'optimizeSpeed'
       }}
     />
   );
 };
 
-export default CameraView;
+export default React.memo(CameraView);
