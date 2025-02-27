@@ -20,9 +20,23 @@ interface SegmentCount {
 }
 
 export class VitalSignsRisk {
-  private static readonly STABILITY_WINDOW = 4000; // 4 segundos (cambiado de 6 segundos)
+  private static readonly STABILITY_WINDOW = 4000; // 4 segundos
   private static readonly MEASUREMENT_WINDOW = 40000; // 40 segundos para análisis final
-  private static readonly SMOOTHING_FACTOR = 0.25; // Factor de suavizado (25%)
+  private static readonly SMOOTHING_FACTOR = 0.15; // Factor de suavizado (reducido para más suavidad)
+  
+  // Nuevos factores de suavizado para diferentes variables
+  private static readonly BPM_SMOOTHING_ALPHA = 0.15;  // Más bajo = más suave
+  private static readonly SPO2_SMOOTHING_ALPHA = 0.20; // Ligeramente más responsivo
+  private static readonly BP_SMOOTHING_ALPHA = 0.10;   // Muy suave para presión arterial
+  
+  // Buffer para promedio móvil ponderado exponencialmente (EWMA)
+  private static recentBpmValues: number[] = [];
+  private static recentSpo2Values: number[] = [];
+  private static recentSystolicValues: number[] = [];
+  private static recentDiastolicValues: number[] = [];
+  
+  // Tamaño de ventana para promedios móviles
+  private static readonly EWMA_WINDOW_SIZE = 8;
   
   private static bpmHistory: StabilityCheck[] = [];
   private static spo2History: StabilityCheck[] = [];
@@ -35,13 +49,40 @@ export class VitalSignsRisk {
   private static bpmSegmentHistory: RiskSegment[] = [];
   private static bpSegmentHistory: RiskSegment[] = [];
 
-  static smoothValue(newValue: number, lastValue: number | null): number {
+  // Método mejorado de suavizado mediante promedio móvil ponderado exponencialmente
+  static smoothValue(newValue: number, lastValue: number | null, alpha: number = this.SMOOTHING_FACTOR): number {
     if (lastValue === null) return newValue;
-    return lastValue + this.SMOOTHING_FACTOR * (newValue - lastValue);
+    return lastValue + alpha * (newValue - lastValue);
+  }
+
+  // Implementación de un filtro de mediana para eliminar valores atípicos
+  private static medianFilter(values: number[]): number {
+    if (values.length === 0) return 0;
+    if (values.length === 1) return values[0];
+    
+    // Crear copia para no modificar el array original
+    const sortedValues = [...values].sort((a, b) => a - b);
+    
+    const middle = Math.floor(sortedValues.length / 2);
+    if (sortedValues.length % 2 === 0) {
+      return (sortedValues[middle - 1] + sortedValues[middle]) / 2;
+    } else {
+      return sortedValues[middle];
+    }
   }
 
   static updateBPMHistory(value: number) {
-    const smoothedValue = this.smoothValue(value, this.lastBPM);
+    // Añadir al buffer de EWMA
+    this.recentBpmValues.push(value);
+    if (this.recentBpmValues.length > this.EWMA_WINDOW_SIZE) {
+      this.recentBpmValues.shift();
+    }
+    
+    // Aplicar filtro de mediana para eliminar valores atípicos
+    const filteredValue = this.medianFilter(this.recentBpmValues);
+    
+    // Aplicar EWMA
+    const smoothedValue = this.smoothValue(filteredValue, this.lastBPM, this.BPM_SMOOTHING_ALPHA);
     this.lastBPM = smoothedValue;
     
     const now = Date.now();
@@ -50,14 +91,40 @@ export class VitalSignsRisk {
   }
 
   static updateSPO2History(value: number) {
+    // Añadir al buffer de EWMA
+    this.recentSpo2Values.push(value);
+    if (this.recentSpo2Values.length > this.EWMA_WINDOW_SIZE) {
+      this.recentSpo2Values.shift();
+    }
+    
+    // Aplicar filtro de mediana para eliminar valores atípicos
+    const filteredValue = this.medianFilter(this.recentSpo2Values);
+    
+    // Aplicar EWMA 
+    const smoothedValue = this.smoothValue(filteredValue, this.lastBPM, this.SPO2_SMOOTHING_ALPHA);
+    
     const now = Date.now();
     this.spo2History = this.spo2History.filter(check => now - check.timestamp < this.MEASUREMENT_WINDOW);
-    this.spo2History.push({ value, timestamp: now });
+    this.spo2History.push({ value: smoothedValue, timestamp: now });
   }
 
   static updateBPHistory(systolic: number, diastolic: number) {
-    const smoothedSystolic = this.smoothValue(systolic, this.lastSystolic);
-    const smoothedDiastolic = this.smoothValue(diastolic, this.lastDiastolic);
+    // Añadir al buffer de EWMA
+    this.recentSystolicValues.push(systolic);
+    this.recentDiastolicValues.push(diastolic);
+    
+    if (this.recentSystolicValues.length > this.EWMA_WINDOW_SIZE) {
+      this.recentSystolicValues.shift();
+      this.recentDiastolicValues.shift();
+    }
+    
+    // Aplicar filtro de mediana para eliminar valores atípicos
+    const filteredSystolic = this.medianFilter(this.recentSystolicValues);
+    const filteredDiastolic = this.medianFilter(this.recentDiastolicValues);
+    
+    // Aplicar EWMA con factor de suavizado más bajo para BP
+    const smoothedSystolic = this.smoothValue(filteredSystolic, this.lastSystolic, this.BP_SMOOTHING_ALPHA);
+    const smoothedDiastolic = this.smoothValue(filteredDiastolic, this.lastDiastolic, this.BP_SMOOTHING_ALPHA);
     
     this.lastSystolic = smoothedSystolic;
     this.lastDiastolic = smoothedDiastolic;
@@ -83,7 +150,7 @@ export class VitalSignsRisk {
       check.value >= range[0] && check.value <= range[1]
     );
 
-    return stableChecks.length >= Math.ceil(recentHistory.length * 0.75);
+    return stableChecks.length >= Math.ceil(recentHistory.length * 0.66); // Reducido de 0.75 a 0.66 para mayor flexibilidad
   }
 
   static isStableBP(range: { systolic: [number, number], diastolic: [number, number] }): boolean {
@@ -100,7 +167,7 @@ export class VitalSignsRisk {
       check.diastolic <= range.diastolic[1]
     );
 
-    return stableChecks.length >= Math.ceil(recentHistory.length * 0.75);
+    return stableChecks.length >= Math.ceil(recentHistory.length * 0.66); // Reducido de 0.75 a 0.66 para mayor flexibilidad
   }
 
   private static getMostFrequentSegment(segments: RiskSegment[]): RiskSegment {
@@ -335,5 +402,9 @@ export class VitalSignsRisk {
     this.lastDiastolic = null;
     this.bpmSegmentHistory = [];
     this.bpSegmentHistory = [];
+    this.recentBpmValues = [];
+    this.recentSpo2Values = [];
+    this.recentSystolicValues = [];
+    this.recentDiastolicValues = [];
   }
 }
