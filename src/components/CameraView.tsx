@@ -1,3 +1,4 @@
+
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 
 interface CameraViewProps {
@@ -50,26 +51,37 @@ const CameraView = ({
     if (!mountedRef.current) return;
     
     try {
-      if (streamRef.current?.active) return;
+      if (streamRef.current?.active) {
+        return; // Ya hay una cámara activa
+      }
 
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error('La cámara no está disponible');
       }
 
-      let stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { exact: 'environment' },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          // Ajustar solo la exposición para mejorar la visualización del rojo
-          advanced: [{
-            exposureMode: 'manual',
-            exposureTime: 2000, // Tiempo de exposición más bajo para evitar sobreexposición
-            exposureCompensation: -1.0 // Reducir la exposición
-          }]
-        },
-        audio: false
-      });
+      // Intenta obtener la cámara trasera primero
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { exact: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            frameRate: { ideal: 30 }
+          },
+          audio: false
+        });
+      } catch (err) {
+        // Si falla, intenta con cualquier cámara disponible
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            frameRate: { ideal: 30 }
+          },
+          audio: false
+        });
+      }
 
       if (!mountedRef.current) {
         stream.getTracks().forEach(track => track.stop());
@@ -82,6 +94,7 @@ const CameraView = ({
         const video = videoRef.current;
         video.srcObject = stream;
         
+        // Esperar a que el video esté listo antes de reproducirlo
         await new Promise<void>((resolve) => {
           video.onloadedmetadata = () => {
             if (mountedRef.current) {
@@ -95,6 +108,7 @@ const CameraView = ({
         });
       }
 
+      // Solo notificar si el componente sigue montado
       if (mountedRef.current && onStreamReady) {
         onStreamReady(stream);
       }

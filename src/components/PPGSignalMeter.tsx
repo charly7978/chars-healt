@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -34,16 +35,16 @@ const PPGSignalMeter = ({
   const lastArrhythmiaTime = useRef<number>(0);
   const arrhythmiaCountRef = useRef<number>(0);
   
-  const WINDOW_WIDTH_MS = 3000; // Reducido para mejor rendimiento
+  const WINDOW_WIDTH_MS = 6000;
   const CANVAS_WIDTH = 1000;
   const CANVAS_HEIGHT = 200;
-  const GRID_SIZE_X = 50;
-  const GRID_SIZE_Y = 25;
-  const verticalScale = 28.0;
-  const SMOOTHING_FACTOR = 0.75; // Ajustado para menor latencia
-  const TARGET_FPS = 60;
-  const FRAME_TIME = 1000 / TARGET_FPS;
-  const BUFFER_SIZE = 600; // Reducido para mejor rendimiento
+  const GRID_SIZE_X = 30;
+  const GRID_SIZE_Y = 15;
+  const verticalScale = 30.0;
+  const SMOOTHING_FACTOR = 0.55;
+  const TARGET_FPS = 90;
+  const FRAME_TIME = 2000 / TARGET_FPS;
+  const BUFFER_SIZE = 600;
 
   useEffect(() => {
     if (!dataBufferRef.current) {
@@ -72,20 +73,20 @@ const PPGSignalMeter = ({
 
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
     const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
-    gradient.addColorStop(0, '#f1f5f9');
-    gradient.addColorStop(1, '#e2e8f0');
+    gradient.addColorStop(0, '#e2e8f0');
+    gradient.addColorStop(1, '#cbd5e1');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(51, 65, 85, 0.1)';
+    ctx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
     ctx.lineWidth = 0.5;
 
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X) {
       ctx.moveTo(x, 0);
       ctx.lineTo(x, CANVAS_HEIGHT);
       if (x % (GRID_SIZE_X * 4) === 0) {
-        ctx.fillStyle = 'rgba(51, 65, 85, 0.5)';
+        ctx.fillStyle = 'rgba(51, 65, 85, 0.6)';
         ctx.font = '10px Inter';
         ctx.textAlign = 'center';
         ctx.fillText(`${x / 10}ms`, x, CANVAS_HEIGHT - 5);
@@ -97,7 +98,7 @@ const PPGSignalMeter = ({
       ctx.lineTo(CANVAS_WIDTH, y);
       if (y % (GRID_SIZE_Y * 4) === 0) {
         const amplitude = ((CANVAS_HEIGHT / 2) - y) / verticalScale;
-        ctx.fillStyle = 'rgba(51, 65, 85, 0.5)';
+        ctx.fillStyle = 'rgba(51, 65, 85, 0.6)';
         ctx.font = '10px Inter';
         ctx.textAlign = 'right';
         ctx.fillText(amplitude.toFixed(1), 25, y + 4);
@@ -106,7 +107,7 @@ const PPGSignalMeter = ({
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(51, 65, 85, 0.2)';
+    ctx.strokeStyle = 'rgba(51, 65, 85, 0.25)';
     ctx.lineWidth = 1;
 
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X * 4) {
@@ -121,7 +122,7 @@ const PPGSignalMeter = ({
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(51, 65, 85, 0.3)';
+    ctx.strokeStyle = 'rgba(51, 65, 85, 0.35)';
     ctx.lineWidth = 1.5;
     ctx.moveTo(0, CANVAS_HEIGHT / 2);
     ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT / 2);
@@ -238,7 +239,7 @@ const PPGSignalMeter = ({
   }, [renderSignal]);
 
   return (
-    <div className="fixed inset-0 bg-gradient-to-b from-white to-slate-50/30">
+    <div className="fixed inset-0 bg-gradient-to-b from-white to-slate-100/40" translate="no">
       <div className="absolute top-0 left-0 right-0 p-2 flex justify-between items-center bg-white/60 backdrop-blur-sm border-b border-slate-100 shadow-sm">
         <div className="flex items-center gap-3">
           <span className="text-xl font-bold text-slate-700">PPG</span>
@@ -258,7 +259,7 @@ const PPGSignalMeter = ({
 
         <div className="flex flex-col items-center">
           <Fingerprint
-            className={`h-12 w-12 transition-colors duration-300 ${
+            className={`h-16 w-16 transition-colors duration-300 ${
               !isFingerDetected ? 'text-gray-400' :
               quality > 75 ? 'text-green-500' :
               quality > 50 ? 'text-yellow-500' :
