@@ -56,6 +56,23 @@ const PPGSignalMeter = ({
   const ADAPTIVE_THRESHOLD_FACTOR = 0.6;
   const NOISE_THRESHOLD = 0.1;
 
+  useEffect(() => {
+    if (!dataBufferRef.current) {
+      dataBufferRef.current = new CircularBuffer(BUFFER_SIZE);
+    }
+
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, []);
+
+  const smoothValue = useCallback((currentValue: number, previousValue: number | null): number => {
+    if (previousValue === null) return currentValue;
+    return previousValue + SMOOTHING_FACTOR * (currentValue - previousValue);
+  }, []);
+
   const getQualityColor = useCallback((q: number) => {
     if (!isFingerDetected) return 'from-gray-400 to-gray-500';
     if (q > 75) return 'from-green-500 to-emerald-500';
@@ -69,11 +86,6 @@ const PPGSignalMeter = ({
     if (q > 50) return 'Señal aceptable';
     return 'Señal débil';
   }, [isFingerDetected]);
-
-  const smoothValue = useCallback((currentValue: number, previousValue: number | null): number => {
-    if (previousValue === null) return currentValue;
-    return previousValue + SMOOTHING_FACTOR * (currentValue - previousValue);
-  }, []);
 
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
     const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
@@ -283,7 +295,7 @@ const PPGSignalMeter = ({
 
     lastRenderTimeRef.current = currentTime;
     animationFrameRef.current = requestAnimationFrame(renderSignal);
-  }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus, isPeakPoint]);
+  }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus, isPeakPoint, drawGrid, smoothValue]);
 
   useEffect(() => {
     renderSignal();
