@@ -39,14 +39,19 @@ const Index = () => {
   } | null>(null);
   const measurementTimerRef = useRef<number | null>(null);
   
-  // Flag para saber si es la primera vez que se inicializa la app
-  const firstInitRef = useRef(true);
+  // Flag para trackear si ya tenemos valores válidos que queremos preservar
+  const hasValidValuesRef = useRef(false);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat, reset: resetHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
   const calculateFinalValues = () => {
+    if (heartRate <= 0 && vitalSigns.spo2 <= 0) {
+      console.log("No hay valores válidos para calcular promedios");
+      return;
+    }
+    
     // Calcular promedios basados en el historial reciente
     const avgBPM = heartRate > 0 ? VitalSignsRisk.getAverageBPM() : 0;
     const avgSPO2 = vitalSigns.spo2 > 0 ? VitalSignsRisk.getAverageSPO2() : 0;
@@ -58,37 +63,32 @@ const Index = () => {
       ? `${avgBP.systolic}/${avgBP.diastolic}` 
       : vitalSigns.pressure;
 
-    setFinalValues({
-      heartRate: avgBPM > 0 ? avgBPM : heartRate,
-      spo2: avgSPO2 > 0 ? avgSPO2 : vitalSigns.spo2,
-      pressure: finalBPString
-    });
+    // Solo actualizar valores finales si tenemos al menos algún valor válido
+    if (avgBPM > 0 || avgSPO2 > 0 || finalBPString !== "--/--") {
+      setFinalValues({
+        heartRate: avgBPM > 0 ? avgBPM : heartRate,
+        spo2: avgSPO2 > 0 ? avgSPO2 : vitalSigns.spo2,
+        pressure: finalBPString
+      });
 
-    console.log("Valores finales calculados:", {
-      heartRate: avgBPM > 0 ? avgBPM : heartRate,
-      spo2: avgSPO2 > 0 ? avgSPO2 : vitalSigns.spo2,
-      pressure: finalBPString
-    });
+      console.log("Valores finales calculados:", {
+        heartRate: avgBPM > 0 ? avgBPM : heartRate,
+        spo2: avgSPO2 > 0 ? avgSPO2 : vitalSigns.spo2,
+        pressure: finalBPString
+      });
+      
+      // Marcar que ya tenemos valores válidos
+      hasValidValuesRef.current = true;
+    }
   };
 
   const startMonitoring = () => {
     if (isMonitoring) {
-      // Si ya está monitorizando, detenemos la monitorización
-      handleMeasurementComplete();
+      // Si ya está monitorizando, detenemos la monitorización sin resetear valores
+      stopMonitoringOnly();
     } else {
-      // Iniciar una nueva monitorización
-      
-      // IMPORTANTE: Sólo reseteamos los procesadores pero NO los valores en pantalla
-      // Esto es crucial para mantener los valores de los displays
-      
-      // Si es la primera vez que se inicializa, inicializamos todo
-      if (firstInitRef.current) {
-        firstInitRef.current = false;
-        // NO reseteamos los valores en la primera inicialización porque ya están en sus valores iniciales
-      }
-      
-      // Reiniciar procesadores internos para nueva medición (sin afectar displays)
-      prepareForNewMeasurement();
+      // Iniciar procesadores de señal PERO PRESERVAR valores en pantalla
+      prepareProcessorsOnly();
       
       // Activar la monitorización
       setIsMonitoring(true);
@@ -104,7 +104,7 @@ const Index = () => {
       measurementTimerRef.current = window.setInterval(() => {
         setElapsedTime(prev => {
           if (prev >= 40) {
-            handleMeasurementComplete();
+            stopMonitoringOnly();
             return 40;
           }
           return prev + 1;
@@ -113,33 +113,33 @@ const Index = () => {
     }
   };
 
-  // Prepara los procesadores para una nueva medición sin alterar los displays
-  const prepareForNewMeasurement = () => {
-    console.log("Preparando procesadores para nueva medición (manteniendo displays)");
+  // Prepara SOLO los procesadores sin tocar ningún valor de display
+  const prepareProcessorsOnly = () => {
+    console.log("Preparando SOLO procesadores (displays intactos)");
     
-    // Reiniciar solamente el temporizador
+    // Reiniciar el temporizador
     setElapsedTime(0);
     
-    // Reiniciar los procesadores internos para nueva medición
-    // Esto no afecta a los valores en pantalla, solo prepara los procesadores
+    // SOLO resetear procesadores internos, nada de displays
     resetHeartBeat();
     resetVitalSigns();
     VitalSignsRisk.resetHistory();
   };
 
-  const handleMeasurementComplete = () => {
-    console.log("Completando medición - manteniendo valores en pantalla");
+  // Detiene monitorización sin modificar ningún display
+  const stopMonitoringOnly = () => {
+    console.log("Deteniendo SOLO monitorización (displays intactos)");
     
-    // Calcular valores finales
+    // Calcular valores finales sin resetear nada
     calculateFinalValues();
     
-    // Detener monitorización pero MANTENER valores
+    // Detener SOLO la monitorización
     setIsMonitoring(false);
     setIsCameraOn(false);
     stopProcessing();
     setMeasurementComplete(true);
     
-    // Evaluar riesgos finales
+    // Evaluar riesgos finales sin modificar displays
     if (heartRate > 0) {
       VitalSignsRisk.getBPMRisk(heartRate, true);
     }
@@ -148,15 +148,24 @@ const Index = () => {
       VitalSignsRisk.getBPRisk(vitalSigns.pressure, true);
     }
     
-    // Limpiar timer
+    // Limpiar solo el timer
     if (measurementTimerRef.current) {
       clearInterval(measurementTimerRef.current);
       measurementTimerRef.current = null;
     }
   };
 
+  // SOLO el botón de RESET puede borrar los displays
   const handleReset = () => {
     console.log("RESET COMPLETO solicitado");
+    
+    // Confirmar antes de resetear si ya tenemos valores válidos
+    if (hasValidValuesRef.current) {
+      if (!window.confirm("¿Seguro quieres borrar TODOS los valores en pantalla?")) {
+        console.log("Reset cancelado por usuario");
+        return;
+      }
+    }
     
     // Detener monitorización
     setIsMonitoring(false);
@@ -168,7 +177,7 @@ const Index = () => {
       measurementTimerRef.current = null;
     }
     
-    // Resetear todos los valores incluyendo displays - SOLO en reset explícito
+    // Resetear SOLO en caso de RESET explícito
     setHeartRate(0);
     setVitalSigns({ 
       spo2: 0, 
@@ -185,6 +194,9 @@ const Index = () => {
     resetHeartBeat();
     resetVitalSigns();
     VitalSignsRisk.resetHistory();
+    
+    // Marcar que ya no tenemos valores válidos
+    hasValidValuesRef.current = false;
   };
 
   const handleStreamReady = (stream: MediaStream) => {
@@ -308,11 +320,28 @@ const Index = () => {
       const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
       
       if (!measurementComplete) {
-        setHeartRate(heartBeatResult.bpm);
+        // Solo actualizar heartRate si está monitorizando y si el valor es mayor que 0
+        if (heartBeatResult.bpm > 0) {
+          setHeartRate(heartBeatResult.bpm);
+        }
         
         const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
         if (vitals) {
-          setVitalSigns(vitals);
+          // Solo actualizar spo2 si hay un valor > 0
+          if (vitals.spo2 > 0) {
+            setVitalSigns(current => ({
+              ...current,
+              spo2: vitals.spo2
+            }));
+          }
+          
+          // Solo actualizar presión si no es "--/--" ni "0/0"
+          if (vitals.pressure !== "--/--" && vitals.pressure !== "0/0") {
+            setVitalSigns(current => ({
+              ...current,
+              pressure: vitals.pressure
+            }));
+          }
           
           if (vitals.lastArrhythmiaData) {
             setLastArrhythmiaData(vitals.lastArrhythmiaData);
