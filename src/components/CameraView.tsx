@@ -43,22 +43,21 @@ const CameraView = ({
 
       const isAndroid = /android/i.test(navigator.userAgent);
       
-      // Optimizar configuración de video
+      // Mantener resolución más alta para SPO2
       const videoConstraints: MediaTrackConstraints = {
         facingMode: 'environment',
-        width: { ideal: 640 }, // Reducido de 720
-        height: { ideal: 480 },
-        frameRate: { ideal: 25, max: 30 } // Optimizado para mejor rendimiento
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        frameRate: { ideal: 30 }
       };
 
       const stream = await navigator.mediaDevices.getUserMedia({
         video: videoConstraints,
-        audio: false // Explícitamente deshabilitar audio
+        audio: false
       });
 
       const videoTrack = stream.getVideoTracks()[0];
 
-      // Aplicar optimizaciones específicas para Android
       if (videoTrack && isAndroid) {
         try {
           await videoTrack.applyConstraints({
@@ -67,8 +66,6 @@ const CameraView = ({
               { focusMode: 'continuous' },
               { whiteBalanceMode: 'continuous' }
             ]
-          }).catch(() => {
-            // Ignorar errores de constraints no soportados
           });
         } catch (err) {
           console.log("Algunas optimizaciones no están disponibles");
@@ -77,10 +74,6 @@ const CameraView = ({
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.style.transform = 'translateZ(0)';
-        // Habilitar aceleración por hardware
-        videoRef.current.style.willChange = 'transform';
-        videoRef.current.style.backfaceVisibility = 'hidden';
       }
 
       setStream(stream);
@@ -112,12 +105,6 @@ const CameraView = ({
       playsInline
       muted
       className="absolute top-0 left-0 min-w-full min-h-full w-auto h-auto z-0 object-cover"
-      style={{
-        willChange: 'transform',
-        transform: 'translateZ(0)',
-        backfaceVisibility: 'hidden',
-        imageRendering: 'optimizeSpeed'
-      }}
     />
   );
 };

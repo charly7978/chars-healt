@@ -29,6 +29,7 @@ const Index = () => {
     rmssd: number;
     rrVariation: number;
   } | null>(null);
+  const [measurementComplete, setMeasurementComplete] = useState(false);
   const measurementTimerRef = useRef<number | null>(null);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
@@ -43,6 +44,7 @@ const Index = () => {
       setIsCameraOn(true);
       startProcessing();
       setElapsedTime(0);
+      setMeasurementComplete(false);
       setVitalSigns(prev => ({
         ...prev,
         arrhythmiaStatus: "SIN ARRITMIAS|0"
@@ -54,13 +56,24 @@ const Index = () => {
       
       measurementTimerRef.current = window.setInterval(() => {
         setElapsedTime(prev => {
-          if (prev >= 30) {
-            handleReset();
-            return 30;
+          if (prev >= 60) {
+            handleMeasurementComplete();
+            return 60;
           }
           return prev + 1;
         });
       }, 1000);
+    }
+  };
+
+  const handleMeasurementComplete = () => {
+    setIsMonitoring(false);
+    stopProcessing();
+    setMeasurementComplete(true);
+    
+    if (measurementTimerRef.current) {
+      clearInterval(measurementTimerRef.current);
+      measurementTimerRef.current = null;
     }
   };
 
@@ -85,6 +98,7 @@ const Index = () => {
     setArrhythmiaCount("--");
     setSignalQuality(0);
     setLastArrhythmiaData(null);
+    setMeasurementComplete(false);
   };
 
   const handleStreamReady = (stream: MediaStream) => {
@@ -206,28 +220,31 @@ const Index = () => {
   useEffect(() => {
     if (lastSignal && lastSignal.fingerDetected && isMonitoring) {
       const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
-      setHeartRate(heartBeatResult.bpm);
       
-      const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
-      if (vitals) {
-        setVitalSigns(vitals);
+      if (!measurementComplete) {
+        setHeartRate(heartBeatResult.bpm);
         
-        if (vitals.lastArrhythmiaData) {
-          setLastArrhythmiaData(vitals.lastArrhythmiaData);
+        const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
+        if (vitals) {
+          setVitalSigns(vitals);
           
-          const [status, count] = vitals.arrhythmiaStatus.split('|');
-          setArrhythmiaCount(count || "0");
-          
-          setVitalSigns(current => ({
-            ...current,
-            arrhythmiaStatus: vitals.arrhythmiaStatus
-          }));
+          if (vitals.lastArrhythmiaData) {
+            setLastArrhythmiaData(vitals.lastArrhythmiaData);
+            
+            const [status, count] = vitals.arrhythmiaStatus.split('|');
+            setArrhythmiaCount(count || "0");
+            
+            setVitalSigns(current => ({
+              ...current,
+              arrhythmiaStatus: vitals.arrhythmiaStatus
+            }));
+          }
         }
       }
       
       setSignalQuality(lastSignal.quality);
     }
-  }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
+  }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns, measurementComplete]);
 
   return (
     <div 
@@ -235,7 +252,6 @@ const Index = () => {
       style={{ 
         height: '100dvh',
         minHeight: '100vh',
-        minHeight: '-webkit-fill-available',
         touchAction: 'none',
         overscrollBehavior: 'none',
         WebkitOverflowScrolling: 'touch',
@@ -300,7 +316,7 @@ const Index = () => {
 
         {isMonitoring && (
           <div className="fixed bottom-20 left-0 right-0 text-center z-20">
-            <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 30s</span>
+            <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 60s</span>
           </div>
         )}
 
