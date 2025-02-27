@@ -276,7 +276,7 @@ const Index = () => {
       }}
     >
       {/* Cámara de fondo - estirada hasta los botones */}
-      <div className="absolute inset-0 bottom-[80px]">
+      <div className="absolute top-0 left-0 right-0 bottom-[80px]">
         <CameraView 
           onStreamReady={handleStreamReady}
           isMonitoring={isCameraOn}
