@@ -172,9 +172,32 @@ export class VitalSignsRisk {
     
     this.updateBPMHistory(bpm);
 
+    // Si es lectura final, siempre calculamos el promedio
+    if (isFinalReading) {
+      const avgBPM = this.getAverageBPM();
+      
+      if (avgBPM > 0) {
+        // Determinar el riesgo basado en el promedio
+        if (avgBPM >= 140) {
+          return { color: '#ea384c', label: 'TAQUICARDIA' };
+        } else if (avgBPM >= 110) {
+          return { color: '#F97316', label: 'LEVE TAQUICARDIA' };
+        } else if (avgBPM >= 50) {
+          return { color: '#FFFFFF', label: 'NORMAL' };
+        } else if (avgBPM >= 40) {
+          return { color: '#F97316', label: 'BRADICARDIA' };
+        }
+      }
+      
+      // Si no hay suficientes datos para calcular el promedio, usar el historial de segmentos
+      if (this.bpmSegmentHistory.length > 0) {
+        return this.getMostFrequentSegment(this.bpmSegmentHistory);
+      }
+    }
+
+    // Procesamiento normal para lecturas en tiempo real
     let currentSegment: RiskSegment;
 
-    // Nuevos rangos de BPM
     if (this.isStableValue(this.bpmHistory, [140, 300])) {
       currentSegment = { color: '#ea384c', label: 'TAQUICARDIA' };
     } else if (this.isStableValue(this.bpmHistory, [110, 139])) {
@@ -192,34 +215,6 @@ export class VitalSignsRisk {
       this.bpmSegmentHistory.push(currentSegment);
     }
 
-    // Si es lectura final y estamos evaluando o no tenemos suficientes datos
-    if (isFinalReading && (currentSegment.label === 'EVALUANDO...' || this.bpmSegmentHistory.length === 0)) {
-      // Calcular un promedio basado en el historial
-      const avgBPM = this.getAverageBPM();
-      if (avgBPM > 0) {
-        // Determinar el riesgo basado en el promedio
-        if (avgBPM >= 140) {
-          return { color: '#ea384c', label: 'TAQUICARDIA' };
-        } else if (avgBPM >= 110) {
-          return { color: '#F97316', label: 'LEVE TAQUICARDIA' };
-        } else if (avgBPM >= 50) {
-          return { color: '#FFFFFF', label: 'NORMAL' };
-        } else if (avgBPM >= 40) {
-          return { color: '#F97316', label: 'BRADICARDIA' };
-        }
-      }
-      
-      // Si tenemos historial, usar el más frecuente
-      if (this.bpmSegmentHistory.length > 0) {
-        return this.getMostFrequentSegment(this.bpmSegmentHistory);
-      }
-    }
-    
-    // Si es lectura final y hay un historial, mostrar el más frecuente
-    if (isFinalReading && this.bpmSegmentHistory.length > 0) {
-      return this.getMostFrequentSegment(this.bpmSegmentHistory);
-    }
-
     return currentSegment;
   }
 
@@ -228,21 +223,8 @@ export class VitalSignsRisk {
     
     this.updateSPO2History(spo2);
     
-    let currentSegment: RiskSegment;
-
-    if (this.isStableValue(this.spo2History, [0, 90])) {
-      currentSegment = { color: '#ea384c', label: 'INSUFICIENCIA RESPIRATORIA' };
-    } else if (this.isStableValue(this.spo2History, [90, 92])) {
-      currentSegment = { color: '#F97316', label: 'LEVE INSUFICIENCIA RESPIRATORIA' };
-    } else if (this.isStableValue(this.spo2History, [93, 100])) {
-      currentSegment = { color: '#0EA5E9', label: 'NORMAL' };
-    } else {
-      currentSegment = { color: '#FFFFFF', label: 'EVALUANDO...' };
-    }
-    
-    // Si es lectura final y estamos evaluando
-    if (isFinalReading && currentSegment.label === 'EVALUANDO...') {
-      // Calcular un promedio basado en el historial
+    // Si es lectura final, siempre calculamos el promedio
+    if (isFinalReading) {
       const avgSPO2 = this.getAverageSPO2();
       if (avgSPO2 > 0) {
         // Determinar el riesgo basado en el promedio
@@ -254,6 +236,19 @@ export class VitalSignsRisk {
           return { color: '#0EA5E9', label: 'NORMAL' };
         }
       }
+    }
+    
+    // Procesamiento normal para lecturas en tiempo real
+    let currentSegment: RiskSegment;
+
+    if (this.isStableValue(this.spo2History, [0, 90])) {
+      currentSegment = { color: '#ea384c', label: 'INSUFICIENCIA RESPIRATORIA' };
+    } else if (this.isStableValue(this.spo2History, [90, 92])) {
+      currentSegment = { color: '#F97316', label: 'LEVE INSUFICIENCIA RESPIRATORIA' };
+    } else if (this.isStableValue(this.spo2History, [93, 100])) {
+      currentSegment = { color: '#0EA5E9', label: 'NORMAL' };
+    } else {
+      currentSegment = { color: '#FFFFFF', label: 'EVALUANDO...' };
     }
     
     return currentSegment;
@@ -271,6 +266,32 @@ export class VitalSignsRisk {
 
     this.updateBPHistory(systolic, diastolic);
 
+    // Si es lectura final, siempre calculamos el promedio
+    if (isFinalReading) {
+      const avgBP = this.getAverageBP();
+      
+      if (avgBP.systolic > 0 && avgBP.diastolic > 0) {
+        // Determinar el riesgo basado en el promedio
+        if (avgBP.systolic >= 150 && avgBP.diastolic >= 100) {
+          return { color: '#ea384c', label: 'PRESIÓN ALTA' };
+        } else if (avgBP.systolic >= 140 && avgBP.diastolic >= 90) {
+          return { color: '#F97316', label: 'LEVE PRESIÓN ALTA' };
+        } else if (avgBP.systolic >= 114 && avgBP.systolic <= 126 && 
+                 avgBP.diastolic >= 76 && avgBP.diastolic <= 84) {
+          return { color: '#0EA5E9', label: 'PRESIÓN NORMAL' };
+        } else if (avgBP.systolic >= 100 && avgBP.systolic <= 110 && 
+                 avgBP.diastolic >= 60 && avgBP.diastolic <= 70) {
+          return { color: '#F97316', label: 'LEVE PRESIÓN BAJA' };
+        }
+      }
+      
+      // Si no hay suficientes datos para calcular el promedio, usar el historial de segmentos
+      if (this.bpSegmentHistory.length > 0) {
+        return this.getMostFrequentSegment(this.bpSegmentHistory);
+      }
+    }
+
+    // Procesamiento normal para lecturas en tiempo real
     let currentSegment: RiskSegment;
 
     if (this.isStableBP({ 
@@ -300,37 +321,6 @@ export class VitalSignsRisk {
     // Guardar el segmento actual para análisis final
     if (currentSegment.label !== 'EVALUANDO...') {
       this.bpSegmentHistory.push(currentSegment);
-    }
-
-    // Si es lectura final y estamos evaluando o no tenemos suficientes datos
-    if (isFinalReading && (currentSegment.label === 'EVALUANDO...' || this.bpSegmentHistory.length === 0)) {
-      // Calcular un promedio basado en el historial
-      const avgBP = this.getAverageBP();
-      
-      if (avgBP.systolic > 0 && avgBP.diastolic > 0) {
-        // Determinar el riesgo basado en el promedio
-        if (avgBP.systolic >= 150 && avgBP.diastolic >= 100) {
-          return { color: '#ea384c', label: 'PRESIÓN ALTA' };
-        } else if (avgBP.systolic >= 140 && avgBP.diastolic >= 90) {
-          return { color: '#F97316', label: 'LEVE PRESIÓN ALTA' };
-        } else if (avgBP.systolic >= 114 && avgBP.systolic <= 126 && 
-                  avgBP.diastolic >= 76 && avgBP.diastolic <= 84) {
-          return { color: '#0EA5E9', label: 'PRESIÓN NORMAL' };
-        } else if (avgBP.systolic >= 100 && avgBP.systolic <= 110 && 
-                  avgBP.diastolic >= 60 && avgBP.diastolic <= 70) {
-          return { color: '#F97316', label: 'LEVE PRESIÓN BAJA' };
-        }
-      }
-      
-      // Si tenemos historial, usar el más frecuente
-      if (this.bpSegmentHistory.length > 0) {
-        return this.getMostFrequentSegment(this.bpSegmentHistory);
-      }
-    }
-    
-    // Si es lectura final y hay un historial, mostrar el más frecuente
-    if (isFinalReading && this.bpSegmentHistory.length > 0) {
-      return this.getMostFrequentSegment(this.bpSegmentHistory);
     }
 
     return currentSegment;
