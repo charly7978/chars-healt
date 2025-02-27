@@ -19,108 +19,135 @@ const CameraView = ({
   const [error, setError] = useState<string | null>(null);
 
   const stopCamera = useCallback(() => {
-    try {
-      if (stream) {
-        const tracks = stream.getTracks();
-        tracks.forEach(track => track.stop());
-        
-        if (videoRef.current) {
-          videoRef.current.srcObject = null;
+    if (stream) {
+      stream.getTracks().forEach(track => {
+        if (track.readyState === 'live') {
+          track.stop();
         }
-        setStream(null);
+      });
+      
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
       }
-    } catch (err) {
-      console.error('Error stopping camera:', err);
+      setStream(null);
     }
   }, [stream]);
 
+  const setupVideoTrack = useCallback(async (videoTrack: MediaStreamTrack) => {
+    try {
+      // Intentamos optimizar la cámara para la medición de SPO2
+      if ('getCapabilities' in videoTrack) {
+        const capabilities = videoTrack.getCapabilities();
+        const settings: MediaTrackConstraints = {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 30 },
+        };
+
+        // Configuraciones específicas para medición SPO2
+        if (capabilities) {
+          if (capabilities.exposureMode) {
+            settings.exposureMode = 'manual';
+            settings.exposureTime = 33000; // 1/30 segundo
+          }
+          if (capabilities.whiteBalanceMode) {
+            settings.whiteBalanceMode = 'manual';
+          }
+          if (capabilities.focusMode) {
+            settings.focusMode = 'manual';
+            settings.focusDistance = 100; // Enfoque cercano
+          }
+        }
+
+        await videoTrack.applyConstraints(settings);
+      }
+
+      // Activar la linterna si está disponible
+      if ('torch' in videoTrack.getCapabilities()) {
+        await videoTrack.applyConstraints({ advanced: [{ torch: true }] });
+      }
+    } catch (err) {
+      console.warn('No se pudieron aplicar todas las optimizaciones:', err);
+    }
+  }, []);
+
   const startCamera = useCallback(async () => {
     try {
-      // Primero detener cualquier stream existente
       stopCamera();
 
-      // Verificar soporte
       if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error("La cámara no está soportada en este navegador");
+        throw new Error('getUserMedia no está soportado');
       }
 
-      // Intentar obtener la cámara trasera primero
-      let cameraStream: MediaStream;
+      // Primero intentamos con la cámara trasera
+      let newStream: MediaStream;
       try {
-        cameraStream = await navigator.mediaDevices.getUserMedia({
+        newStream = await navigator.mediaDevices.getUserMedia({
           video: {
-            facingMode: 'environment',
+            facingMode: { exact: 'environment' },
             width: { ideal: 1280 },
-            height: { ideal: 720 }
+            height: { ideal: 720 },
+            frameRate: { ideal: 30 }
           },
           audio: false
         });
-      } catch (backCameraError) {
-        console.log('Fallback a cámara frontal:', backCameraError);
-        // Si falla, intentar con cualquier cámara
-        cameraStream = await navigator.mediaDevices.getUserMedia({
+      } catch (backError) {
+        console.log('Intentando con cámara frontal:', backError);
+        // Si falla, intentamos con la cámara frontal
+        newStream = await navigator.mediaDevices.getUserMedia({
           video: {
+            facingMode: 'user',
             width: { ideal: 1280 },
-            height: { ideal: 720 }
+            height: { ideal: 720 },
+            frameRate: { ideal: 30 }
           },
           audio: false
         });
       }
 
-      // Verificar que tenemos un track de video
-      const videoTrack = cameraStream.getVideoTracks()[0];
+      const videoTrack = newStream.getVideoTracks()[0];
       if (!videoTrack) {
-        throw new Error("No se pudo obtener el video de la cámara");
+        throw new Error('No se pudo obtener el video track');
       }
 
-      // Configurar el elemento de video
+      await setupVideoTrack(videoTrack);
+
       if (videoRef.current) {
-        videoRef.current.srcObject = cameraStream;
-        await new Promise((resolve) => {
+        videoRef.current.srcObject = newStream;
+        videoRef.current.onloadedmetadata = () => {
           if (videoRef.current) {
-            videoRef.current.onloadedmetadata = resolve;
+            videoRef.current.play().catch(console.error);
           }
-        });
-        await videoRef.current.play();
+        };
       }
 
-      // Guardar el stream y notificar
-      setStream(cameraStream);
+      setStream(newStream);
       setError(null);
-      
+
       if (onStreamReady) {
-        onStreamReady(cameraStream);
+        onStreamReady(newStream);
       }
 
     } catch (err) {
-      console.error('Camera initialization error:', err);
-      setError(err instanceof Error ? err.message : 'Error al iniciar la cámara');
+      const errorMessage = err instanceof Error ? err.message : 'Error al iniciar la cámara';
+      console.error('Error de inicialización de cámara:', err);
+      setError(errorMessage);
       stopCamera();
     }
-  }, [onStreamReady, stopCamera]);
+  }, [onStreamReady, stopCamera, setupVideoTrack]);
 
   useEffect(() => {
     let mounted = true;
 
-    const initCamera = async () => {
-      if (isMonitoring && !stream && mounted) {
-        await startCamera();
-      }
-    };
-
-    initCamera();
+    if (isMonitoring && !stream && mounted) {
+      startCamera();
+    }
 
     return () => {
       mounted = false;
       stopCamera();
     };
   }, [isMonitoring, stream, startCamera, stopCamera]);
-
-  useEffect(() => {
-    if (!isMonitoring) {
-      stopCamera();
-    }
-  }, [isMonitoring, stopCamera]);
 
   if (error) {
     return (
