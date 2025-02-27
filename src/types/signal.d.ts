@@ -1,12 +1,11 @@
 
-import { HeartBeatProcessor } from '../modules/HeartBeatProcessor';
-
 export interface ProcessedSignal {
   timestamp: number;
   rawValue: number;
   filteredValue: number;
   quality: number;
   fingerDetected: boolean;
+  isPeak: boolean;
   roi: {
     x: number;
     y: number;
@@ -28,10 +27,4 @@ export interface SignalProcessor {
   calibrate: () => Promise<boolean>;
   onSignalReady?: (signal: ProcessedSignal) => void;
   onError?: (error: ProcessingError) => void;
-}
-
-declare global {
-  interface Window {
-    heartBeatProcessor: HeartBeatProcessor;
-  }
 }
