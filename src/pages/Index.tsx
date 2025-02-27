@@ -264,7 +264,7 @@ const Index = () => {
 
   return (
     <div 
-      className="fixed inset-0 flex flex-col bg-black" 
+      className="fixed inset-0 flex flex-col"
       style={{ 
         height: '100dvh',
         minHeight: '100vh',
@@ -274,8 +274,8 @@ const Index = () => {
         overflow: 'hidden'
       }}
     >
-      {/* Cámara de fondo - ajustada para mejor visualización */}
-      <div className="absolute inset-0 z-0 bg-black">
+      {/* Cámara de fondo - sin filtros ni superposiciones */}
+      <div className="absolute inset-0 z-0">
         <CameraView 
           onStreamReady={handleStreamReady}
           isMonitoring={isCameraOn}
@@ -289,7 +289,6 @@ const Index = () => {
         style={{
           paddingTop: 'env(safe-area-inset-top)',
           paddingBottom: 'env(safe-area-inset-bottom)',
-          background: 'transparent' // Aseguramos que no hay superposición
         }}
       >
         <div className="h-[50dvh]">
@@ -306,9 +305,9 @@ const Index = () => {
 
         <div className="flex-1 mt-4" />
 
-        {/* Displays con fondo simple - Ajustado tamaño y espaciado */}
+        {/* Displays con fondo mínimo */}
         <div className="w-full px-4 mb-16">
-          <div className="bg-gradient-to-b from-slate-900/90 to-black/90 backdrop-blur-sm p-4 rounded-xl border border-slate-800/30 shadow-2xl">
+          <div className="bg-black/50 backdrop-blur-[2px] p-4 rounded-xl">
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <div className="transform scale-95">
                 <VitalSign 
