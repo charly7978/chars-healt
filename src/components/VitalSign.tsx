@@ -17,31 +17,58 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
       return getArrhythmiaDisplay();
     }
 
-    // Para frecuencia cardíaca, aplicar evaluación directa
+    // Para frecuencia cardíaca
     if (label === "FRECUENCIA CARDÍACA") {
       if (value === "--" || value === 0) {
         return { color: '#FFFFFF', label: '' };
       }
+      // Si es medición en tiempo real y no final, mostrar "EVALUANDO..." hasta que sea estable
+      if (!isFinalReading && typeof value === 'number') {
+        // Verificar si tenemos suficientes datos para evaluar
+        const hasStableReading = VitalSignsRisk.hasSufficientDataForBPM();
+        if (!hasStableReading) {
+          return { color: '#FFFFFF', label: 'EVALUANDO...' };
+        }
+      }
+      
       if (typeof value === 'number') {
         return VitalSignsRisk.getBPMRisk(value, isFinalReading);
       }
     }
 
-    // Para SPO2, aplicar evaluación directa
+    // Para SPO2
     if (label === "SPO2") {
       if (value === "--" || value === 0) {
         return { color: '#FFFFFF', label: '' };
       }
+      // Si es medición en tiempo real y no final, mostrar "EVALUANDO..." hasta que sea estable
+      if (!isFinalReading && typeof value === 'number') {
+        // Verificar si tenemos suficientes datos para evaluar
+        const hasStableReading = VitalSignsRisk.hasSufficientDataForSPO2();
+        if (!hasStableReading) {
+          return { color: '#FFFFFF', label: 'EVALUANDO...' };
+        }
+      }
+      
       if (typeof value === 'number') {
         return VitalSignsRisk.getSPO2Risk(value, isFinalReading);
       }
     }
 
-    // Para presión arterial, aplicar evaluación directa
+    // Para presión arterial
     if (label === "PRESIÓN ARTERIAL") {
       if (value === "--/--" || value === "0/0") {
         return { color: '#FFFFFF', label: '' };
       }
+      // Si es medición en tiempo real y no final, mostrar "EVALUANDO..." hasta que sea estable
+      if (!isFinalReading && typeof value === 'string') {
+        // Verificar si tenemos suficientes datos para evaluar
+        const hasStableReading = VitalSignsRisk.hasSufficientDataForBP();
+        if (!hasStableReading) {
+          return { color: '#FFFFFF', label: 'EVALUANDO...' };
+        }
+      }
+      
       if (typeof value === 'string') {
         return VitalSignsRisk.getBPRisk(value, isFinalReading);
       }
