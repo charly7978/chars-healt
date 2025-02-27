@@ -91,7 +91,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     { text: value, ...getRiskInfo() };
 
   return (
-    <div className="relative overflow-hidden group bg-gradient-to-br from-gray-800/30 to-gray-900/30 backdrop-blur-md rounded-lg p-4 transition-all duration-300 hover:from-gray-800/40 hover:to-gray-900/40">
+    <div className="relative overflow-hidden group bg-gradient-to-br from-gray-800 to-gray-900 rounded-lg p-4 transition-all duration-300 hover:from-gray-800 hover:to-gray-900">
       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent animate-[progress_2s_ease-in-out_infinite] opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
       <h3 className="text-gray-400/90 text-xs mb-2">{label}</h3>
       <div className="flex flex-col items-center gap-1">
