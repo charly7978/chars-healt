@@ -1,3 +1,4 @@
+
 export class VitalSignsProcessor {
   private readonly WINDOW_SIZE = 300;
   private readonly SPO2_CALIBRATION_FACTOR = 1.07; // Ajustado: era 1.02
@@ -203,7 +204,7 @@ export class VitalSignsProcessor {
     this.hasDetectedFirstArrhythmia = false;
     this.arrhythmiaDetected = false;
     this.arrhythmiaCount = 0;
-    this.measurementStartTime: number = Date.now();
+    this.measurementStartTime = Date.now();  // Corregido: quité la anotación de tipo
     this.lastRMSSD = 0;
     this.lastRRVariation = 0;
     this.lastArrhythmiaTime = 0;
