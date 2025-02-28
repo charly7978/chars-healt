@@ -11,6 +11,8 @@ interface HeartBeatResult {
   rrData?: {
     intervals: number[];
     lastPeakTime: number | null;
+    rmssd?: number;
+    rrVariation?: number;
   };
 }
 
@@ -48,7 +50,9 @@ export const useHeartBeatProcessor = () => {
         arrhythmiaCount: 0,
         rrData: {
           intervals: [],
-          lastPeakTime: null
+          lastPeakTime: null,
+          rmssd: 0,
+          rrVariation: 0
         }
       };
     }
@@ -62,12 +66,34 @@ export const useHeartBeatProcessor = () => {
     const result = processorRef.current.processSignal(value);
     const rrData = processorRef.current.getRRIntervals();
 
+    // Añadir propiedades rmssd y rrVariation a rrData
+    const enhancedRRData = {
+      ...rrData,
+      rmssd: 0,
+      rrVariation: 0
+    };
+
+    // Calcular RMSSD y rrVariation si hay suficientes intervalos
+    if (rrData.intervals.length >= 3) {
+      let sumSquaredDiff = 0;
+      for (let i = 1; i < rrData.intervals.length; i++) {
+        const diff = rrData.intervals[i] - rrData.intervals[i-1];
+        sumSquaredDiff += diff * diff;
+      }
+      
+      enhancedRRData.rmssd = Math.sqrt(sumSquaredDiff / (rrData.intervals.length - 1));
+      
+      const avgRR = rrData.intervals.reduce((a, b) => a + b, 0) / rrData.intervals.length;
+      const lastRR = rrData.intervals[rrData.intervals.length - 1];
+      enhancedRRData.rrVariation = Math.abs(lastRR - avgRR) / avgRR;
+    }
+
     console.log('useHeartBeatProcessor - result:', {
       bpm: result.bpm,
       confidence: result.confidence,
       isPeak: result.isPeak,
       arrhythmiaCount: result.arrhythmiaCount,
-      rrIntervals: rrData.intervals,
+      rrIntervals: enhancedRRData,
       timestamp: new Date().toISOString()
     });
     
@@ -78,7 +104,7 @@ export const useHeartBeatProcessor = () => {
 
     return {
       ...result,
-      rrData
+      rrData: enhancedRRData
     };
   }, []);
 

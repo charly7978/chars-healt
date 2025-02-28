@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -205,8 +206,8 @@ const Index = () => {
         if (vitals.arrhythmiaStatus.includes("ARRITMIA")) {
           setLastArrhythmiaData({
             timestamp: Date.now(),
-            rmssd: heartBeatResult.rrData.rmssd,
-            rrVariation: heartBeatResult.rrData.rrVariation
+            rmssd: heartBeatResult.rrData?.rmssd || 0,
+            rrVariation: heartBeatResult.rrData?.rrVariation || 0
           });
         }
       }
