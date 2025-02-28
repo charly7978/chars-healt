@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -52,13 +51,10 @@ const Index = () => {
   const { processSignal: processHeartBeat, reset: resetHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
-  // Función mejorada para calcular valores finales con protección contra errores
   const calculateFinalValues = () => {
     try {
-      // MODIFICADO: Calculamos promedios reales con todos los valores capturados
       console.log("Calculando PROMEDIOS REALES con todos los valores capturados...");
       
-      // Filtrar solo valores válidos (mayores que 0)
       const validHeartRates = allHeartRateValuesRef.current.filter(v => v > 0);
       const validSpo2Values = allSpo2ValuesRef.current.filter(v => v > 0);
       const validSystolicValues = allSystolicValuesRef.current.filter(v => v > 0);
@@ -71,7 +67,6 @@ const Index = () => {
         diastolicValues: validDiastolicValues.length
       });
       
-      // Calcular promedios REALES (no realistas)
       let avgHeartRate = 0;
       let avgSpo2 = 0;
       let avgSystolic = 0;
@@ -80,13 +75,13 @@ const Index = () => {
       if (validHeartRates.length > 0) {
         avgHeartRate = Math.round(validHeartRates.reduce((a, b) => a + b, 0) / validHeartRates.length);
       } else {
-        avgHeartRate = heartRate; // Fallback al último valor si no hay datos suficientes
+        avgHeartRate = heartRate;
       }
       
       if (validSpo2Values.length > 0) {
         avgSpo2 = Math.round(validSpo2Values.reduce((a, b) => a + b, 0) / validSpo2Values.length);
       } else {
-        avgSpo2 = vitalSigns.spo2; // Fallback al último valor si no hay datos suficientes
+        avgSpo2 = vitalSigns.spo2;
       }
       
       let finalBPString = vitalSigns.pressure;
@@ -102,24 +97,20 @@ const Index = () => {
         pressure: finalBPString
       });
       
-      // Solo actualizar valores finales si tenemos al menos algún valor válido
       setFinalValues({
         heartRate: avgHeartRate > 0 ? avgHeartRate : heartRate,
         spo2: avgSpo2 > 0 ? avgSpo2 : vitalSigns.spo2,
         pressure: finalBPString
       });
         
-      // Marcar que ya tenemos valores válidos
       hasValidValuesRef.current = true;
       
-      // Limpiar arrays después de calcular promedios
       allHeartRateValuesRef.current = [];
       allSpo2ValuesRef.current = [];
       allSystolicValuesRef.current = [];
       allDiastolicValuesRef.current = [];
     } catch (error) {
       console.error("Error en calculateFinalValues:", error);
-      // Usar valores actuales como respaldo en caso de error
       setFinalValues({
         heartRate: heartRate,
         spo2: vitalSigns.spo2,
@@ -131,20 +122,16 @@ const Index = () => {
 
   const startMonitoring = () => {
     if (isMonitoring) {
-      // Si ya está monitorizando, detenemos la monitorización sin resetear valores
       stopMonitoringOnly();
     } else {
-      // Iniciar procesadores de señal PERO PRESERVAR valores en pantalla
       prepareProcessorsOnly();
       
-      // Activar la monitorización
       setIsMonitoring(true);
       setIsCameraOn(true);
       startProcessing();
       setElapsedTime(0);
       setMeasurementComplete(false);
       
-      // Limpiar arrays de valores para la nueva medición
       allHeartRateValuesRef.current = [];
       allSpo2ValuesRef.current = [];
       allSystolicValuesRef.current = [];
@@ -167,31 +154,25 @@ const Index = () => {
     }
   };
 
-  // Prepara SOLO los procesadores sin tocar ningún valor de display
   const prepareProcessorsOnly = () => {
     console.log("Preparando SOLO procesadores (displays intactos)");
     
-    // Reiniciar el temporizador
     setElapsedTime(0);
     
-    // SOLO resetear procesadores internos, nada de displays
     resetHeartBeat();
     resetVitalSigns();
     VitalSignsRisk.resetHistory();
   };
 
-  // Detiene monitorización sin modificar ningún display
   const stopMonitoringOnly = () => {
     try {
       console.log("Deteniendo SOLO monitorización (displays intactos)");
       
-      // Detener SOLO la monitorización
       setIsMonitoring(false);
       setIsCameraOn(false);
       stopProcessing();
       setMeasurementComplete(true);
       
-      // Evaluar riesgos SOLO si hay valores válidos
       try {
         if (heartRate > 0) {
           VitalSignsRisk.getBPMRisk(heartRate, true);
@@ -216,17 +197,14 @@ const Index = () => {
         console.error("Error al evaluar riesgo SPO2:", err);
       }
       
-      // Calcular valores finales después de evaluar riesgos
       calculateFinalValues();
       
-      // Limpiar solo el timer
       if (measurementTimerRef.current) {
         clearInterval(measurementTimerRef.current);
         measurementTimerRef.current = null;
       }
     } catch (error) {
       console.error("Error en stopMonitoringOnly:", error);
-      // Asegurar que se limpie el timer incluso en caso de error
       if (measurementTimerRef.current) {
         clearInterval(measurementTimerRef.current);
         measurementTimerRef.current = null;
@@ -236,13 +214,9 @@ const Index = () => {
     }
   };
 
-  // MODIFICADO: Eliminado el popup de confirmación en handleReset
   const handleReset = () => {
     console.log("RESET COMPLETO solicitado");
     
-    // ELIMINADO: Ya no se pide confirmación al resetear
-    
-    // Detener monitorización
     setIsMonitoring(false);
     setIsCameraOn(false);
     stopProcessing();
@@ -252,7 +226,6 @@ const Index = () => {
       measurementTimerRef.current = null;
     }
     
-    // Resetear todos los valores y procesadores
     setHeartRate(0);
     setVitalSigns({ 
       spo2: 0, 
@@ -265,15 +238,12 @@ const Index = () => {
     setMeasurementComplete(false);
     setFinalValues(null);
     
-    // Resetear procesadores
     resetHeartBeat();
     resetVitalSigns();
     VitalSignsRisk.resetHistory();
     
-    // Marcar que ya no tenemos valores válidos
     hasValidValuesRef.current = false;
     
-    // Limpiar arrays de valores
     allHeartRateValuesRef.current = [];
     allSpo2ValuesRef.current = [];
     allSystolicValuesRef.current = [];
@@ -316,7 +286,6 @@ const Index = () => {
       } catch (error) {
         console.error("Error capturando frame:", error);
         if (isMonitoring) {
-          // Seguir intentando incluso si hay error
           requestAnimationFrame(processImage);
         }
       }
@@ -403,33 +372,27 @@ const Index = () => {
         const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
         
         if (!measurementComplete) {
-          // Solo actualizar heartRate si está monitorizando y si el valor es mayor que 0
           if (heartBeatResult.bpm > 0) {
             setHeartRate(heartBeatResult.bpm);
-            // NUEVO: Agregar valor actual a la lista para calcular promedio después
             allHeartRateValuesRef.current.push(heartBeatResult.bpm);
           }
           
           const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
           if (vitals) {
-            // Solo actualizar spo2 si hay un valor > 0
             if (vitals.spo2 > 0) {
               setVitalSigns(current => ({
                 ...current,
                 spo2: vitals.spo2
               }));
-              // NUEVO: Agregar valor actual a la lista para calcular promedio después
               allSpo2ValuesRef.current.push(vitals.spo2);
             }
             
-            // Solo actualizar presión si no es "--/--" ni "0/0"
             if (vitals.pressure !== "--/--" && vitals.pressure !== "0/0") {
               setVitalSigns(current => ({
                 ...current,
                 pressure: vitals.pressure
               }));
               
-              // NUEVO: Extraer y almacenar valores de presión
               const [systolic, diastolic] = vitals.pressure.split('/').map(Number);
               if (systolic > 0 && diastolic > 0) {
                 allSystolicValuesRef.current.push(systolic);
@@ -437,7 +400,6 @@ const Index = () => {
               }
             }
             
-            // Siempre actualizar el estado de arritmia
             setVitalSigns(current => ({
               ...current,
               arrhythmiaStatus: vitals.arrhythmiaStatus
@@ -459,7 +421,6 @@ const Index = () => {
     }
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns, measurementComplete]);
 
-  // Limpieza de temporizadores al desmontar el componente
   useEffect(() => {
     return () => {
       if (measurementTimerRef.current) {
@@ -483,7 +444,6 @@ const Index = () => {
         flexDirection: 'column',
       }}
     >
-      {/* Cámara de fondo - visible en toda la pantalla */}
       <CameraView 
         onStreamReady={handleStreamReady}
         isMonitoring={isCameraOn}
@@ -491,7 +451,6 @@ const Index = () => {
         signalQuality={isMonitoring ? signalQuality : 0}
       />
 
-      {/* Panel de monitorización - PPG Signal Meter */}
       <div className="flex-1 flex flex-col z-10">
         <PPGSignalMeter 
           value={isMonitoring ? lastSignal?.filteredValue || 0 : 0}
@@ -504,7 +463,6 @@ const Index = () => {
         />
       </div>
 
-      {/* Displays - Signos Vitales - Bajados un poco */}
       <div className="fixed bottom-[130px] left-0 right-0 px-4 z-20">
         <div className="p-4">
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -541,14 +499,10 @@ const Index = () => {
         </div>
       )}
 
-      <div className="fixed bottom-0 left-0 right-0 w-full h-[80px] grid grid-cols-2 gap-px">
+      <div className="fixed bottom-0 left-0 right-0 w-full h-[80px] grid grid-cols-2 gap-px z-50">
         <button 
           onClick={startMonitoring}
-          className={`w-full h-full text-2xl font-bold text-white transition-colors duration-200 ${
-            isMonitoring
-              ? 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 active:from-red-700 active:to-red-800'
-              : 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 active:from-blue-700 active:to-blue-800'
-          }`}
+          className="w-full h-full text-2xl font-bold text-white transition-colors duration-200 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 active:from-blue-700 active:to-blue-800"
           style={{ 
             backgroundImage: isMonitoring 
               ? 'linear-gradient(135deg, #f87171, #dc2626, #b91c1c)' 
@@ -560,7 +514,7 @@ const Index = () => {
         </button>
         <button 
           onClick={handleReset}
-          className="w-full h-full text-2xl font-bold text-white bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800 active:from-gray-800 active:to-gray-900 transition-colors duration-200"
+          className="w-full h-full text-2xl font-bold text-white transition-colors duration-200 bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800 active:from-gray-800 active:to-gray-900"
           style={{ 
             backgroundImage: 'linear-gradient(135deg, #64748b, #475569, #334155)',
             textShadow: '0px 1px 3px rgba(0, 0, 0, 0.3)'
