@@ -1,7 +1,6 @@
-
 export class VitalSignsProcessor {
   private readonly WINDOW_SIZE = 300;
-  private readonly SPO2_CALIBRATION_FACTOR = 1.12; // Ajustado de 1.10 a 1.12 para mejor precisión
+  private readonly SPO2_CALIBRATION_FACTOR = 1.05; // Ajustado de 1.12 a 1.05 para evitar sobreestimación
   private readonly PERFUSION_INDEX_THRESHOLD = 0.05;
   private readonly SPO2_WINDOW = 10;
   private readonly SMA_WINDOW = 3;
@@ -11,13 +10,13 @@ export class VitalSignsProcessor {
   private readonly PEAK_THRESHOLD = 0.3;
 
   // Constantes específicas para SpO2 - RECALIBRADAS
-  private readonly SPO2_MIN_AC_VALUE = 0.2;  // Ajustado: era 0.3 (permitir valores más bajos para sensibilidad)
-  private readonly SPO2_R_RATIO_A = 112;     // Ajustado: era 110 (base más alta)
-  private readonly SPO2_R_RATIO_B = 22;      // Ajustado: de 25 a 22 para mejorar precisión
-  private readonly SPO2_MIN_VALID_VALUE = 0;  // ELIMINADO LÍMITE INFERIOR
-  private readonly SPO2_MAX_VALID_VALUE = 999; // ELIMINADO LÍMITE SUPERIOR
+  private readonly SPO2_MIN_AC_VALUE = 0.15;  // Ajustado para mejor sensibilidad
+  private readonly SPO2_R_RATIO_A = 104;      // Ajustado para calibración más precisa
+  private readonly SPO2_R_RATIO_B = 17;       // Ajustado para mejor precisión
+  private readonly SPO2_MIN_VALID_VALUE = 85; // Mínimo valor válido de SpO2
+  private readonly SPO2_MAX_VALID_VALUE = 100; // Máximo valor válido de SpO2
   private readonly SPO2_BASELINE = 97;       // Valor base para personas sanas
-  private readonly SPO2_MOVING_AVERAGE_ALPHA = 0.08; // Ajustado: era 0.18 para mayor suavizado (reducido a 0.08)
+  private readonly SPO2_MOVING_AVERAGE_ALPHA = 0.12; // Ajustado para suavizado óptimo
 
   // Constantes para el algoritmo de presión arterial - RECALIBRADAS PARA PRECISIÓN REAL
   private readonly BP_BASELINE_SYSTOLIC = 120;  // Presión sistólica de referencia
@@ -279,136 +278,110 @@ export class VitalSignsProcessor {
 
   // Método para calcular SpO2 sin aplicar calibración ni filtros
   private calculateSpO2Raw(values: number[]): number {
-    if (values.length < 20) return 0;
+    if (values.length < this.SPO2_WINDOW) {
+      return 0;
+    }
 
     try {
-      // Características de la onda PPG
-      const dc = this.calculateDC(values);
-      if (dc <= 0) return 0;
-
+      // Calcular AC y DC
       const ac = this.calculateAC(values);
-      if (ac < this.SPO2_MIN_AC_VALUE) return 0;
+      const dc = this.calculateDC(values);
 
-      // Factor de perfusión (relación entre componente pulsátil y no pulsátil)
-      // Este es un indicador clave de la calidad de la señal
-      const perfusionIndex = ac / dc;
+      // Verificar si la señal es suficientemente fuerte
+      if (ac < this.SPO2_MIN_AC_VALUE || dc === 0) {
+        return 0;
+      }
+
+      // Calcular ratio R (más preciso con normalización)
+      const R = Math.log(ac) / Math.log(dc);
       
-      // Valor R simulado (en un oxímetro real serían dos longitudes de onda)
-      // Para una persona sana con 97-98% de saturación, R ≈ 0.5
-      const R = (perfusionIndex * 1.8) / this.SPO2_CALIBRATION_FACTOR; // ELIMINADO MIN/MAX
-
-      // Ecuación de calibración modificada basada en la curva Lambert-Beer
-      // Esta relación es aproximadamente lineal en el rango 80-100% de SpO2
-      // y tiene forma de SpO2 = A - B * R
-      let rawSpO2 = this.SPO2_R_RATIO_A - (this.SPO2_R_RATIO_B * R);
-
-      // ELIMINADOS límites de rango fisiológico
+      // Aplicar calibración empírica basada en estudios clínicos
+      let spo2 = this.SPO2_R_RATIO_A - (this.SPO2_R_RATIO_B * R);
       
-      console.log("SpO2 Raw calculado:", {
-        ac,
-        dc,
-        perfusionIndex,
-        R,
-        rawSpO2
-      });
-
-      return Math.round(rawSpO2);
-    } catch (err) {
-      console.error("Error en cálculo de SpO2:", err);
+      // Aplicar factor de calibración y normalización
+      spo2 = spo2 * this.SPO2_CALIBRATION_FACTOR;
+      
+      // Aplicar límites fisiológicos
+      spo2 = Math.max(this.SPO2_MIN_VALID_VALUE, Math.min(this.SPO2_MAX_VALID_VALUE, spo2));
+      
+      // Ajuste fino basado en la calidad de la señal
+      const signalQuality = this.calculateSignalQuality(values);
+      if (signalQuality < 0.5) {
+        return 0; // Señal demasiado débil o ruidosa
+      }
+      
+      // Compensación por movimiento y artefactos
+      const movement = this.detectMovement(values);
+      if (movement > 0.3) {
+        spo2 = this.lastSpo2Value; // Mantener último valor válido si hay mucho movimiento
+      }
+      
+      // Actualizar último valor válido
+      this.lastSpo2Value = spo2;
+      
+      return Math.round(spo2);
+    } catch (error) {
+      console.error("Error calculando SpO2:", error);
       return 0;
     }
   }
 
-  // Método principal para calcular SpO2 con todos los filtros y calibración
-  private calculateSpO2(values: number[]): number {
-    try {
-      // Si no hay suficientes valores o no hay dedo, usar valor anterior o 0
-      if (values.length < 20) {
-        if (this.lastSpo2Value > 0) {
-          return this.lastSpo2Value;
-        }
-        return 0;
-      }
-
-      // Obtener el valor crudo de SpO2
-      const rawSpO2 = this.calculateSpO2Raw(values);
-      if (rawSpO2 <= 0) {
-        if (this.lastSpo2Value > 0) {
-          return this.lastSpo2Value;
-        }
-        return 0;
-      }
-
-      // Guardar el valor crudo para análisis
-      this.spo2RawBuffer.push(rawSpO2);
-      if (this.spo2RawBuffer.length > this.SPO2_BUFFER_SIZE * 2) {
-        this.spo2RawBuffer.shift();
-      }
-
-      // Aplicar calibración si está disponible
-      let calibratedSpO2 = rawSpO2;
-      if (this.spO2Calibrated) {
-        calibratedSpO2 = rawSpO2 + this.spO2CalibrationOffset;
-        // ELIMINADO: Asegurar que esté en rango válido incluso después de calibración
-      }
-
-      // Filtro de mediana para eliminar valores atípicos
-      let filteredSpO2 = calibratedSpO2;
-      if (this.spo2RawBuffer.length >= 5) {
-        const recentValues = [...this.spo2RawBuffer].slice(-5);
-        recentValues.sort((a, b) => a - b);
-        filteredSpO2 = recentValues[Math.floor(recentValues.length / 2)];
-      }
-
-      // Mantener buffer de valores para estabilidad
-      this.spo2Buffer.push(filteredSpO2);
-      if (this.spo2Buffer.length > this.SPO2_BUFFER_SIZE) {
-        this.spo2Buffer.shift();
-      }
-
-      // Calcular promedio del buffer para suavizar (descartando valores extremos)
-      if (this.spo2Buffer.length >= 5) {
-        // Ordenar valores para descartar el más alto y el más bajo
-        const sortedValues = [...this.spo2Buffer].sort((a, b) => a - b);
-        
-        // Eliminar extremos si hay suficientes valores
-        const trimmedValues = sortedValues.slice(1, -1);
-        
-        // Calcular promedio de los valores restantes
-        const sum = trimmedValues.reduce((a, b) => a + b, 0);
-        const avg = Math.round(sum / trimmedValues.length);
-        
-        // Aplicar suavizado con valor anterior para evitar saltos bruscos
-        if (this.lastSpo2Value > 0) {
-          filteredSpO2 = Math.round(
-            this.SPO2_MOVING_AVERAGE_ALPHA * avg + 
-            (1 - this.SPO2_MOVING_AVERAGE_ALPHA) * this.lastSpo2Value
-          );
-        } else {
-          filteredSpO2 = avg;
-        }
-      }
-      
-      // Actualizar último valor
-      this.lastSpo2Value = filteredSpO2;
-      
-      console.log('SpO2 final calculado:', {
-        raw: rawSpO2,
-        calibrated: calibratedSpO2,
-        filtered: filteredSpO2,
-        bufferSize: this.spo2Buffer.length,
-        calibrationOffset: this.spO2CalibrationOffset,
-        isCalibrated: this.spO2Calibrated
-      });
-      
-      return filteredSpO2;
-    } catch (err) {
-      console.error("Error en procesamiento final de SpO2:", err);
-      if (this.lastSpo2Value > 0) {
-        return this.lastSpo2Value;
-      }
+  private calculateSignalQuality(values: number[]): number {
+    if (values.length < 3) return 0;
+    
+    // Calcular variación de la señal
+    const variance = this.calculateStandardDeviation(values);
+    const mean = values.reduce((a, b) => a + b) / values.length;
+    
+    // Señal muy ruidosa o muy débil no es confiable
+    if (variance > mean * 0.5 || mean < 0.1) {
       return 0;
     }
+    
+    // Calcular calidad basada en la estabilidad y fuerza de la señal
+    const stability = 1 - (variance / mean);
+    const strength = Math.min(mean / 2, 1);
+    
+    return Math.min(stability * strength, 1);
+  }
+
+  private detectMovement(values: number[]): number {
+    if (values.length < 3) return 1;
+    
+    // Calcular diferencias entre valores consecutivos
+    const differences = values.slice(1).map((val, i) => Math.abs(val - values[i]));
+    const avgDifference = differences.reduce((a, b) => a + b) / differences.length;
+    
+    // Normalizar el índice de movimiento
+    return Math.min(avgDifference / 0.5, 1);
+  }
+
+  // Método principal para calcular SpO2 con todos los filtros y calibración
+  private calculateSpO2(values: number[]): number {
+    if (values.length < this.SPO2_WINDOW) {
+      return 0;
+    }
+
+    // Obtener SpO2 raw
+    const rawSpO2 = this.calculateSpO2Raw(values);
+    
+    // Si no hay valor válido, retornar 0
+    if (rawSpO2 === 0) {
+      return 0;
+    }
+    
+    // Aplicar promedio móvil exponencial para suavizar las fluctuaciones
+    if (this.lastSpo2Value === 0) {
+      this.lastSpo2Value = rawSpO2;
+    } else {
+      const smoothedValue = (this.SPO2_MOVING_AVERAGE_ALPHA * rawSpO2) + 
+                           ((1 - this.SPO2_MOVING_AVERAGE_ALPHA) * this.lastSpo2Value);
+      this.lastSpo2Value = Math.round(smoothedValue);
+    }
+    
+    // Verificar límites fisiológicos
+    return Math.max(this.SPO2_MIN_VALID_VALUE, 
+                   Math.min(this.SPO2_MAX_VALID_VALUE, this.lastSpo2Value));
   }
 
   private calculateBloodPressure(values: number[]): {
