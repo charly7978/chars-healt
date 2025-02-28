@@ -76,7 +76,7 @@ export const useVitalSignsProcessor = () => {
     
     // 6. Algoritmo avanzado para detección de arritmias combinando múltiples indicadores
     // Criterios basados en literatura médica para arritmias cardíacas
-    const arrhythmiaConfidence = 
+    let arrhythmiaConfidence = 
       (rmssd > 50 ? 0.35 : 0) +                    // Alta RMSSD
       (rrVariation > 0.2 ? 0.25 : 0) +             // Alta variación RR
       (coefficientOfVariation > 0.15 ? 0.20 : 0) + // Alto coeficiente de variación
