@@ -72,20 +72,21 @@ const PPGSignalMeter = ({
   }, []);
 
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
-    // Fondo negro
-    ctx.fillStyle = '#222222';
+    const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+    gradient.addColorStop(0, '#e2e8f0');
+    gradient.addColorStop(1, '#cbd5e1');
+    ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    // Cuadrícula gris claro
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(200, 200, 201, 0.15)';
+    ctx.strokeStyle = 'rgba(51, 65, 85, 0.15)';
     ctx.lineWidth = 0.5;
 
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X) {
       ctx.moveTo(x, 0);
       ctx.lineTo(x, CANVAS_HEIGHT);
       if (x % (GRID_SIZE_X * 4) === 0) {
-        ctx.fillStyle = '#FFFFFF';  // Números de referencia blancos
+        ctx.fillStyle = 'rgba(51, 65, 85, 0.6)';
         ctx.font = '10px Inter';
         ctx.textAlign = 'center';
         ctx.fillText(`${x / 10}ms`, x, CANVAS_HEIGHT - 5);
@@ -97,7 +98,7 @@ const PPGSignalMeter = ({
       ctx.lineTo(CANVAS_WIDTH, y);
       if (y % (GRID_SIZE_Y * 4) === 0) {
         const amplitude = ((CANVAS_HEIGHT / 2) - y) / verticalScale;
-        ctx.fillStyle = '#FFFFFF';  // Números de referencia blancos
+        ctx.fillStyle = 'rgba(51, 65, 85, 0.6)';
         ctx.font = '10px Inter';
         ctx.textAlign = 'right';
         ctx.fillText(amplitude.toFixed(1), 25, y + 4);
@@ -105,9 +106,8 @@ const PPGSignalMeter = ({
     }
     ctx.stroke();
 
-    // Líneas principales más visibles
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(200, 200, 201, 0.25)';
+    ctx.strokeStyle = 'rgba(51, 65, 85, 0.25)';
     ctx.lineWidth = 1;
 
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X * 4) {
@@ -121,9 +121,8 @@ const PPGSignalMeter = ({
     }
     ctx.stroke();
 
-    // Línea central más visible
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(200, 200, 201, 0.35)';
+    ctx.strokeStyle = 'rgba(51, 65, 85, 0.35)';
     ctx.lineWidth = 1.5;
     ctx.moveTo(0, CANVAS_HEIGHT / 2);
     ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT / 2);
@@ -165,23 +164,12 @@ const PPGSignalMeter = ({
     const normalizedValue = (baselineRef.current || 0) - smoothedValue;
     const scaledValue = normalizedValue * verticalScale;
     
-    // Verificar si hay arritmia detectada en el estado
     let isArrhythmia = false;
-    if (arrhythmiaStatus && arrhythmiaStatus.includes("ARRITMIA")) {
-      // Si tenemos datos crudos recientes de arritmia (últimos 1.5 segundos)
-      if (rawArrhythmiaData && now - rawArrhythmiaData.timestamp < 1500) {
-        isArrhythmia = true;
-        lastArrhythmiaTime.current = now;
-      } 
-      // Si hubo una arritmia reciente (últimos 4 segundos)
-      else if (now - lastArrhythmiaTime.current < 4000) {
-        isArrhythmia = true;
-      }
-      // O si la cadena contiene "DETECTADA" recién (sin importar tiempo)
-      else {
-        isArrhythmia = true;
-        lastArrhythmiaTime.current = now;
-      }
+    if (rawArrhythmiaData && 
+        arrhythmiaStatus?.includes("ARRITMIA") && 
+        now - rawArrhythmiaData.timestamp < 1000) {
+      isArrhythmia = true;
+      lastArrhythmiaTime.current = now;
     }
 
     const dataPoint: PPGDataPoint = {
@@ -196,7 +184,6 @@ const PPGSignalMeter = ({
 
     const points = dataBufferRef.current.getPoints();
     if (points.length > 1) {
-      // Dibujar líneas de la señal alternando colores según arritmia
       for (let i = 1; i < points.length; i++) {
         const prevPoint = points[i - 1];
         const point = points[i];
@@ -207,8 +194,7 @@ const PPGSignalMeter = ({
         const y2 = canvas.height / 2 - point.value;
 
         ctx.beginPath();
-        // Usar color rojo para segmentos con arritmia, azul para normales
-        ctx.strokeStyle = point.isArrhythmia ? '#ea384c' : '#0EA5E9';
+        ctx.strokeStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
         ctx.lineWidth = 2;
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
@@ -217,7 +203,6 @@ const PPGSignalMeter = ({
         ctx.stroke();
       }
 
-      // Dibujar puntos en los picos
       points.forEach((point, index) => {
         if (index > 0 && index < points.length - 1) {
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
@@ -227,22 +212,14 @@ const PPGSignalMeter = ({
           
           if (point.value > prevPoint.value && point.value > nextPoint.value) {
             ctx.beginPath();
-            const radius = 4;
-            ctx.arc(x, y, radius, 0, Math.PI * 2);
-            ctx.fillStyle = point.isArrhythmia ? '#ea384c' : '#0EA5E9';
+            ctx.arc(x, y, 4, 0, Math.PI * 2);
+            ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
             ctx.fill();
 
             ctx.font = 'bold 12px Inter';
-            ctx.fillStyle = '#C8C8C9';  // Números de picos cardíacos en gris claro
+            ctx.fillStyle = '#000000';
             ctx.textAlign = 'center';
             ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 20);
-            
-            // Etiqueta adicional para arritmias
-            if (point.isArrhythmia) {
-              ctx.font = 'bold 10px Inter';
-              ctx.fillStyle = '#FF6B6B';
-              ctx.fillText("ARR", x, y - 35);
-            }
           }
         }
       });
@@ -305,6 +282,8 @@ const PPGSignalMeter = ({
           style={{ zIndex: 10 }}
         />
       </div>
+
+      {/* Eliminados los botones duplicados */}
     </>
   );
 };
