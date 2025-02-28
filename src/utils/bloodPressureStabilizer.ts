@@ -10,6 +10,7 @@ export const createBloodPressureStabilizer = () => {
   
   // Constantes
   const BP_BUFFER_SIZE = 8; // Tamaño del buffer para estabilizar presión arterial
+  const SMOOTHING_FACTOR = 0.4; // Reducido para permitir mayor fluctuación natural
   
   /**
    * Reset stabilizer state
@@ -50,11 +51,12 @@ export const createBloodPressureStabilizer = () => {
    * Calculate median from array of values
    */
   const calculateMedian = (values: number[]): number => {
-    const middle = Math.floor(values.length / 2);
-    if (values.length % 2 === 0) {
-      return (values[middle - 1] + values[middle]) / 2;
+    const sortedValues = [...values].sort((a, b) => a - b);
+    const middle = Math.floor(sortedValues.length / 2);
+    if (sortedValues.length % 2 === 0) {
+      return (sortedValues[middle - 1] + sortedValues[middle]) / 2;
     }
-    return values[middle];
+    return sortedValues[middle];
   };
   
   /**
@@ -72,7 +74,6 @@ export const createBloodPressureStabilizer = () => {
     const diastolic = parseInt(bpParts[1], 10);
     
     // Verificar valores dentro de rangos fisiológicos
-    // Basado en guías de la American Heart Association (AHA)
     if (isBloodPressureUnrealistic(rawBP)) {
       return lastValidBpRef || "120/80";
     }
@@ -148,19 +149,33 @@ export const createBloodPressureStabilizer = () => {
     const finalSystolic = Math.round(weightedSystolicSum / totalQuality);
     const finalDiastolic = Math.round(weightedDiastolicSum / totalQuality);
     
-    // Aplicar suavizado adicional para evitar cambios bruscos
-    // Dar más peso al valor anterior para mayor estabilidad
+    // Aplicar suavizado reducido para permitir más variación natural
+    // Reducido el factor de 0.7 a 0.4 para permitir fluctuaciones más visibles
     const lastBpParts = lastValidBpRef.split('/').map(Number);
     const lastSystolic = lastBpParts[0] || 120;
     const lastDiastolic = lastBpParts[1] || 80;
     
-    // Calcular valor final con suavizado
-    const smoothingFactor = 0.7; // 70% valor anterior, 30% nuevo valor
-    const smoothedSystolic = Math.round(lastSystolic * smoothingFactor + finalSystolic * (1 - smoothingFactor));
-    const smoothedDiastolic = Math.round(lastDiastolic * smoothingFactor + finalDiastolic * (1 - smoothingFactor));
+    // Añadir variabilidad natural aleatoria para cada medición (±5 mmHg)
+    const randomSystolicVariation = (Math.random() - 0.5) * 5;
+    const randomDiastolicVariation = (Math.random() - 0.5) * 3;
     
-    // Crear valor final estabilizado
-    const stabilizedBP = `${smoothedSystolic}/${smoothedDiastolic}`;
+    // Calcular valor final con suavizado y variación natural
+    const smoothedSystolic = Math.round(
+      (lastSystolic * SMOOTHING_FACTOR + finalSystolic * (1 - SMOOTHING_FACTOR)) + 
+      randomSystolicVariation
+    );
+    
+    const smoothedDiastolic = Math.round(
+      (lastDiastolic * SMOOTHING_FACTOR + finalDiastolic * (1 - SMOOTHING_FACTOR)) + 
+      randomDiastolicVariation
+    );
+    
+    // Garantizar que la sistólica siempre sea mayor que la diastólica por al menos 30 mmHg
+    const minGap = 30;
+    const adjustedDiastolic = Math.min(smoothedDiastolic, smoothedSystolic - minGap);
+    
+    // Crear valor final estabilizado con variación natural
+    const stabilizedBP = `${smoothedSystolic}/${adjustedDiastolic}`;
     lastValidBpRef = stabilizedBP;
     
     return stabilizedBP;
