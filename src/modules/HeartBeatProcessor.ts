@@ -1,31 +1,31 @@
 export class HeartBeatProcessor {
   // ────────── CONFIGURACIONES PRINCIPALES ──────────
   private readonly SAMPLE_RATE = 30;
-  private readonly WINDOW_SIZE = 60;
+  private readonly WINDOW_SIZE = 100;
   private readonly MIN_BPM = 40;
-  private readonly MAX_BPM = 200; // Se mantiene amplio para no perder picos fuera de rango
-  private readonly SIGNAL_THRESHOLD = 0.40; 
-  private readonly MIN_CONFIDENCE = 0.60;
-  private readonly DERIVATIVE_THRESHOLD = -0.03; 
-  private readonly MIN_PEAK_TIME_MS = 400; 
-  private readonly WARMUP_TIME_MS = 3000; 
+  private readonly MAX_BPM = 200;
+  private readonly SIGNAL_THRESHOLD = 0.25;
+  private readonly MIN_CONFIDENCE = 0.50;
+  private readonly DERIVATIVE_THRESHOLD = -0.02;
+  private readonly MIN_PEAK_TIME_MS = 300;
+  private readonly WARMUP_TIME_MS = 2000;
 
-  // Parámetros de filtrado
-  private readonly MEDIAN_FILTER_WINDOW = 3; 
-  private readonly MOVING_AVERAGE_WINDOW = 3; 
-  private readonly EMA_ALPHA = 0.4; 
-  private readonly BASELINE_FACTOR = 1.0; 
+  // Parámetros de filtrado mejorados
+  private readonly MEDIAN_FILTER_WINDOW = 5;
+  private readonly MOVING_AVERAGE_WINDOW = 5;
+  private readonly EMA_ALPHA = 0.3;
+  private readonly BASELINE_FACTOR = 0.95;
 
-  // Parámetros de beep
-  private readonly BEEP_PRIMARY_FREQUENCY = 880; 
-  private readonly BEEP_SECONDARY_FREQUENCY = 440; 
-  private readonly BEEP_DURATION = 80; 
-  private readonly BEEP_VOLUME = 0.9; 
-  private readonly MIN_BEEP_INTERVAL_MS = 300;
+  // Parámetros de beep optimizados
+  private readonly BEEP_PRIMARY_FREQUENCY = 1000;
+  private readonly BEEP_SECONDARY_FREQUENCY = 500;
+  private readonly BEEP_DURATION = 100;
+  private readonly BEEP_VOLUME = 1.0;
+  private readonly MIN_BEEP_INTERVAL_MS = 250;
 
   // ────────── AUTO-RESET SI LA SEÑAL ES MUY BAJA ──────────
-  private readonly LOW_SIGNAL_THRESHOLD = 0.03;
-  private readonly LOW_SIGNAL_FRAMES = 10;
+  private readonly LOW_SIGNAL_THRESHOLD = 0.02;
+  private readonly LOW_SIGNAL_FRAMES = 15;
   private lowSignalCount = 0;
 
   // Variables internas
@@ -50,13 +50,13 @@ export class HeartBeatProcessor {
   private peakCandidateValue: number = 0;
   
   // Nuevas variables para el filtrado avanzado de falsos positivos
-  private readonly SIMILARITY_THRESHOLD = 0.70; // Umbral de similitud para validación de formas de onda
-  private readonly TEMPLATE_SIZE = 12; // Tamaño de la plantilla de forma de onda
-  private readonly MIN_PEAKS_FOR_TEMPLATE = 3; // Mínimo de picos para formar un template válido
-  private readonly MAX_JITTER_MS = 80; // Máxima variación permitida entre picos (en ms)
-  private waveformTemplates: number[][] = []; // Plantillas de formas de onda de latidos válidos
-  private lastValidPeakTimes: number[] = []; // Tiempos de los últimos picos válidos
-  private readonly ADAPTIVE_REJECTION_FACTOR = 0.5; // Factor para rechazo adaptativo
+  private readonly SIMILARITY_THRESHOLD = 0.70;
+  private readonly TEMPLATE_SIZE = 12;
+  private readonly MIN_PEAKS_FOR_TEMPLATE = 3;
+  private readonly MAX_JITTER_MS = 80;
+  private waveformTemplates: number[][] = [];
+  private lastValidPeakTimes: number[] = [];
+  private readonly ADAPTIVE_REJECTION_FACTOR = 0.5;
 
   constructor() {
     this.initAudio();
@@ -107,101 +107,46 @@ export class HeartBeatProcessor {
 
   private async playBeep(volume: number = this.BEEP_VOLUME) {
     if (!this.audioContext) {
-      console.warn("HeartBeatProcessor: No audio context available for beep");
-      await this.initAudio();
-      if (!this.audioContext) return;
-    }
-    
-    // Si el contexto está suspendido, intentar reanudarlo
-    if (this.audioContext.state === 'suspended') {
       try {
+        this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
         await this.audioContext.resume();
-        console.log("HeartBeatProcessor: Audio Context resumed before beep");
       } catch (e) {
-        console.error("HeartBeatProcessor: Failed to resume audio context", e);
+        console.error("Error creando contexto de audio:", e);
         return;
       }
     }
 
-    // Verificar si estamos en periodo de warmup
-    if (this.isInWarmup()) {
-      console.log("HeartBeatProcessor: Skipping beep during warmup");
-      return;
-    }
-
-    const now = Date.now();
-    if (now - this.lastBeepTime < this.MIN_BEEP_INTERVAL_MS) {
-      return;
-    }
-
     try {
-      console.log("HeartBeatProcessor: Playing beep with volume", volume);
+      if (this.audioContext.state === 'suspended') {
+        await this.audioContext.resume();
+      }
+
+      // Crear un beep más audible
+      const oscillator = this.audioContext.createOscillator();
+      const gainNode = this.audioContext.createGain();
       
-      // Crear osciladores y nodos de ganancia
-      const primaryOscillator = this.audioContext.createOscillator();
-      const primaryGain = this.audioContext.createGain();
-
-      const secondaryOscillator = this.audioContext.createOscillator();
-      const secondaryGain = this.audioContext.createGain();
-
-      // Configurar osciladores
-      primaryOscillator.type = "sine";
-      primaryOscillator.frequency.setValueAtTime(
-        this.BEEP_PRIMARY_FREQUENCY,
-        this.audioContext.currentTime
-      );
-
-      secondaryOscillator.type = "sine";
-      secondaryOscillator.frequency.setValueAtTime(
-        this.BEEP_SECONDARY_FREQUENCY,
-        this.audioContext.currentTime
-      );
-
-      // Configurar envelope del sonido principal (más volumen)
-      primaryGain.gain.setValueAtTime(0, this.audioContext.currentTime);
-      primaryGain.gain.linearRampToValueAtTime(
-        volume * 2.0, // Aumentado para más volumen
-        this.audioContext.currentTime + 0.01
-      );
-      primaryGain.gain.exponentialRampToValueAtTime(
-        0.01,
-        this.audioContext.currentTime + this.BEEP_DURATION / 1000
-      );
-
-      // Configurar envelope del sonido secundario
-      secondaryGain.gain.setValueAtTime(0, this.audioContext.currentTime);
-      secondaryGain.gain.linearRampToValueAtTime(
-        volume * 0.7, // Aumentado para más volumen
-        this.audioContext.currentTime + 0.01
-      );
-      secondaryGain.gain.exponentialRampToValueAtTime(
-        0.01,
-        this.audioContext.currentTime + this.BEEP_DURATION / 1000
-      );
-
-      // Conectar nodos
-      primaryOscillator.connect(primaryGain);
-      secondaryOscillator.connect(secondaryGain);
-      primaryGain.connect(this.audioContext.destination);
-      secondaryGain.connect(this.audioContext.destination);
-
-      // Iniciar y detener osciladores
-      primaryOscillator.start();
-      secondaryOscillator.start();
-
-      primaryOscillator.stop(this.audioContext.currentTime + this.BEEP_DURATION / 1000 + 0.05);
-      secondaryOscillator.stop(this.audioContext.currentTime + this.BEEP_DURATION / 1000 + 0.05);
-
-      this.lastBeepTime = now;
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(this.BEEP_PRIMARY_FREQUENCY, this.audioContext.currentTime);
+      
+      // Envelope más pronunciado
+      gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
+      gainNode.gain.linearRampToValueAtTime(volume, this.audioContext.currentTime + 0.01);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.1);
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(this.audioContext.destination);
+      
+      oscillator.start(this.audioContext.currentTime);
+      oscillator.stop(this.audioContext.currentTime + 0.1);
+      
+      this.lastBeepTime = Date.now();
     } catch (error) {
-      console.error("HeartBeatProcessor: Error playing beep", error);
-      // Intentar reproducir un beep alternativo
+      console.error("Error reproduciendo beep:", error);
+      // Fallback a Audio API
       try {
-        const audio = new Audio("data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAAPuUdcAAAAgD///wQAAAA=");
-        audio.volume = volume;
-        audio.play().catch(err => {
-          console.error("Error en audio alternativo:", err);
-        });
+        const audio = new Audio("data:audio/wav;base64,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qJrx4KOQjahZxWbcZgztj2c49nKmkId44S71j0c8eV9yDK6uPRzx5X18eDvjvQ6yKo9ZSS6l//8elePK/Lf//IInrOF/FvDoADYAGBMGb7FtErm5MXMlmPAJQVgWta7Zx2go+8xJ0UiCb8LHHdftWyLJE0QIAIsI+UbXu67dZMjmgDGCGl1H+vpF4NSDckSIkk7Vd+sxEhBQMRU8j/12UIRhzSaUdQ+rQU5kGeFxm+hb1oh6pWWmv3uvmReDl0UnvtapVaIzo1jZbf/pD6ElLqSX+rUmOQNpJFa/r+sa4e/pBlAABoAAAAA3CUgShLdGIxsY7AUABPRrgCABdDuQ5GC7DqPQCgbbJUAoRSUj+NIEig0YfyWUho1VBBBA//uQZB4ABZx5zfMakeAAAAmwAAAAF5F3P0w9GtAAACfAAAAAwLhMDmAYWMgVEG1U0FIGCBgXBXAtfMH10000EEEEEECUBYln03TTTdNBDZopopYvrTTdNa325mImNg3TTPV9q3pmY0xoO6bv3r00y+IDGid/9aaaZTGMuj9mpu9Mpio1dXrr5HERTZSmqU36A3CumzN/9Robv/Xx4v9ijkSRSNLQhAWumap82WRSBUqXStV/YcS+XVLnSS+WLDroqArFkMEsAS+eWmrUzrO0oEmE40RlMZ5+ODIkAyKAGUwZ3mVKmcamcJnMW26MRPgUw6j+LkhyHGVGYjSUUKNpuJUQoOIAyDvEyG8S5yfK6dhZc0Tx1KI/gviKL6qvvFs1+bWtaz58uUNnryq6kt5RzOCkPWlVqVX2a/EEBUdU1KrXLf40GoiiFXK///qpoiDXrOgqDR38JB0bw7SoL+ZB9o1RCkQjQ2CBYZKd/+VJxZRRZlqSkKiws0WFxUyCwsKiMy7hUVFhIaCrNQsKkTIsLivwKKigsj8XYlwt/WKi2N4d//uQRCSAAjURNIHpMZBGYiaQPSYyAAABLAAAAAAAACWAAAAApUF/Mg+0aohSIRobBAsMlO//Kk4soosy1JSFRYWaLC4qZBYWFRGZdwqKiwkNBVmoWFSJkWFxX4FFRQWR+LsS4W/rFRb/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////VEFHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAU291bmRib3kuZGUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMjAwNGh0dHA6Ly93d3cuc291bmRib3kuZGUAAAAAAAAAACU=");
+        audio.volume = Math.min(1.0, volume * 2);
+        await audio.play();
       } catch (audioErr) {
         console.error("Error completo en sistema de audio:", audioErr);
       }
@@ -236,13 +181,11 @@ export class HeartBeatProcessor {
     return this.smoothedValue;
   }
 
-  // Nueva función para calcular la similitud entre formas de onda (correlación)
   private calculateWaveformSimilarity(waveform1: number[], waveform2: number[]): number {
     if (waveform1.length !== waveform2.length || waveform1.length === 0) {
       return 0;
     }
     
-    // Normalizar las ondas
     const normalize = (wave: number[]): number[] => {
       const min = Math.min(...wave);
       const max = Math.max(...wave);
@@ -254,7 +197,6 @@ export class HeartBeatProcessor {
     const norm1 = normalize(waveform1);
     const norm2 = normalize(waveform2);
     
-    // Calcular la correlación
     let sum = 0;
     let sum1 = 0;
     let sum2 = 0;
@@ -269,7 +211,6 @@ export class HeartBeatProcessor {
     return sum / Math.sqrt(sum1 * sum2);
   }
   
-  // Nueva función para extraer una forma de onda alrededor de un pico
   private extractWaveform(centerIndex: number): number[] {
     const halfSize = Math.floor(this.TEMPLATE_SIZE / 2);
     const start = Math.max(0, centerIndex - halfSize);
@@ -282,10 +223,8 @@ export class HeartBeatProcessor {
     return this.signalBuffer.slice(start, end + 1);
   }
   
-  // Nueva función para verificar si un pico candidato es similar a plantillas existentes
   private isPeakSimilarToTemplates(peakIndex: number): boolean {
     if (this.waveformTemplates.length < this.MIN_PEAKS_FOR_TEMPLATE) {
-      // Si no tenemos suficientes plantillas, aceptamos el pico y lo agregamos como plantilla
       const waveform = this.extractWaveform(peakIndex);
       if (waveform.length === this.TEMPLATE_SIZE) {
         this.waveformTemplates.push(waveform);
@@ -296,11 +235,9 @@ export class HeartBeatProcessor {
     const candidateWaveform = this.extractWaveform(peakIndex);
     if (candidateWaveform.length !== this.TEMPLATE_SIZE) return false;
     
-    // Verificar similitud con al menos una plantilla
     for (const template of this.waveformTemplates) {
       const similarity = this.calculateWaveformSimilarity(candidateWaveform, template);
       if (similarity >= this.SIMILARITY_THRESHOLD) {
-        // Actualizar la plantilla con esta nueva forma de onda (aprendizaje continuo)
         const updatedTemplate = template.map((val, idx) => 
           (val * 0.8) + (candidateWaveform[idx] * 0.2)
         );
@@ -309,8 +246,6 @@ export class HeartBeatProcessor {
       }
     }
     
-    // Verificar si el intervalo temporal es plausible
-    const now = Date.now();
     if (this.lastValidPeakTimes.length >= 2) {
       const lastIntervals = [];
       for (let i = 1; i < this.lastValidPeakTimes.length; i++) {
@@ -320,12 +255,10 @@ export class HeartBeatProcessor {
       const avgInterval = lastIntervals.reduce((a, b) => a + b, 0) / lastIntervals.length;
       const expectedNextPeakTime = this.lastValidPeakTimes[this.lastValidPeakTimes.length - 1] + avgInterval;
       
-      // Si el tiempo es cercano al esperado, aceptamos el pico aunque sea diferente
-      if (Math.abs(now - expectedNextPeakTime) < this.MAX_JITTER_MS) {
-        // Añadir esta forma de onda como una nueva plantilla para adaptarse a cambios
+      if (Math.abs(Date.now() - expectedNextPeakTime) < this.MAX_JITTER_MS) {
         this.waveformTemplates.push(candidateWaveform);
         if (this.waveformTemplates.length > 5) {
-          this.waveformTemplates.shift(); // Mantener solo 5 plantillas máximo
+          this.waveformTemplates.shift();
         }
         return true;
       }
@@ -334,11 +267,9 @@ export class HeartBeatProcessor {
     return false;
   }
   
-  // Nueva función para verificar si el tiempo del pico es plausible según el ritmo cardíaco actual
   private isTimingPlausible(now: number): boolean {
     if (this.lastValidPeakTimes.length < 2) return true;
     
-    // Calculamos intervalo promedio reciente (estimación del período cardíaco)
     const recentIntervals = [];
     for (let i = 1; i < this.lastValidPeakTimes.length; i++) {
       recentIntervals.push(this.lastValidPeakTimes[i] - this.lastValidPeakTimes[i-1]);
@@ -348,7 +279,6 @@ export class HeartBeatProcessor {
     const lastPeakTime = this.lastValidPeakTimes[this.lastValidPeakTimes.length - 1];
     const timeSinceLastPeak = now - lastPeakTime;
     
-    // Definir una ventana adaptativa basada en la variabilidad anterior
     const stdDev = Math.sqrt(
       recentIntervals.reduce((sum, interval) => 
         sum + Math.pow(interval - avgInterval, 2), 0) / recentIntervals.length
@@ -377,7 +307,7 @@ export class HeartBeatProcessor {
       this.signalBuffer.shift();
     }
 
-    if (this.signalBuffer.length < 30) {
+    if (this.signalBuffer.length < Math.floor(this.WINDOW_SIZE * 0.5)) {
       return {
         bpm: 0,
         confidence: 0,
@@ -387,119 +317,73 @@ export class HeartBeatProcessor {
       };
     }
 
-    this.baseline =
-      this.baseline * this.BASELINE_FACTOR + smoothed * (1 - this.BASELINE_FACTOR);
+    this.baseline = this.baseline * this.BASELINE_FACTOR + smoothed * (1 - this.BASELINE_FACTOR);
 
     const normalizedValue = smoothed - this.baseline;
-    this.autoResetIfSignalIsLow(Math.abs(normalizedValue));
+    
+    if (Math.abs(normalizedValue) < this.LOW_SIGNAL_THRESHOLD) {
+      this.lowSignalCount++;
+      if (this.lowSignalCount >= this.LOW_SIGNAL_FRAMES) {
+        this.reset();
+        return {
+          bpm: 0,
+          confidence: 0,
+          isPeak: false,
+          filteredValue: smoothed,
+          arrhythmiaCount: 0
+        };
+      }
+    } else {
+      this.lowSignalCount = 0;
+    }
 
     this.values.push(smoothed);
     if (this.values.length > 3) {
       this.values.shift();
     }
 
-    let smoothDerivative = smoothed - this.lastValue;
+    let smoothDerivative = 0;
     if (this.values.length === 3) {
       smoothDerivative = (this.values[2] - this.values[0]) / 2;
+    } else {
+      smoothDerivative = smoothed - this.lastValue;
     }
     this.lastValue = smoothed;
 
     const { isPeak, confidence } = this.detectPeak(normalizedValue, smoothDerivative);
-    
-    // Versión mejorada de confirmación de pico con filtrado de falsos positivos
     let isConfirmedPeak = false;
-    
-    if (isPeak && !this.lastConfirmedPeak && confidence >= this.MIN_CONFIDENCE) {
-      if (this.peakConfirmationBuffer.length >= 3) {
-        const len = this.peakConfirmationBuffer.length;
-        const goingDown1 = this.peakConfirmationBuffer[len - 1] < this.peakConfirmationBuffer[len - 2];
-        const goingDown2 = this.peakConfirmationBuffer[len - 2] < this.peakConfirmationBuffer[len - 3];
 
-        if (goingDown1 && goingDown2) {
-          const now = Date.now();
-          const currentPeakIndex = this.signalBuffer.length - 1;
-          
-          // Validar por patrón de forma de onda y temporización
-          const isWaveformValid = this.isPeakSimilarToTemplates(currentPeakIndex);
-          const isTimingValid = this.isTimingPlausible(now);
-          
-          // Solo confirmamos picos que pasan todas las validaciones
-          if (isWaveformValid && isTimingValid) {
-            this.lastConfirmedPeak = true;
-            isConfirmedPeak = true;
-            
-            // Registrar este pico válido
-            this.lastValidPeakTimes.push(now);
-            if (this.lastValidPeakTimes.length > 8) {
-              this.lastValidPeakTimes.shift();
-            }
-            
-            // Reproducir beep con volumen alto para picos confirmados
-            this.playBeep(1.0).catch(e => {
-              console.error("HeartBeatProcessor: Error en playBeep durante pico confirmado", e);
-            });
-          }
+    if (isPeak && !this.lastConfirmedPeak && confidence >= this.MIN_CONFIDENCE) {
+      const now = Date.now();
+      if (this.lastPeakTime === null || (now - this.lastPeakTime) >= this.MIN_PEAK_TIME_MS) {
+        isConfirmedPeak = true;
+        this.lastConfirmedPeak = true;
+        this.previousPeakTime = this.lastPeakTime;
+        this.lastPeakTime = now;
+        
+        if (!this.isInWarmup()) {
+          this.playBeep(1.0).catch(console.error);
         }
+        
+        this.updateBPM();
       }
     } else if (!isPeak) {
       this.lastConfirmedPeak = false;
     }
 
-    if (isConfirmedPeak && !this.isInWarmup()) {
-      const now = Date.now();
-      const timeSinceLastPeak = this.lastPeakTime
-        ? now - this.lastPeakTime
-        : Number.MAX_VALUE;
-
-      if (timeSinceLastPeak >= this.MIN_PEAK_TIME_MS) {
-        this.previousPeakTime = this.lastPeakTime;
-        this.lastPeakTime = now;
-        this.updateBPM();
-      }
-    }
-
-    // Calcular BPM actual
-    const currentBPM = this.getSmoothBPM();
-    
-    // Log para depuración
+    const currentBPM = this.calculateCurrentBPM();
     if (currentBPM > 0) {
-      console.log("HeartBeatProcessor - BPM calculado:", {
-        bpm: currentBPM,
-        confidence,
-        isPeak: isConfirmedPeak,
-        timeSinceStart: Date.now() - this.startTime
-      });
+      this.smoothBPM = this.BPM_ALPHA * currentBPM + 
+                      (1 - this.BPM_ALPHA) * (this.smoothBPM || currentBPM);
     }
 
     return {
-      bpm: Math.round(currentBPM),
+      bpm: Math.round(this.smoothBPM),
       confidence,
       isPeak: isConfirmedPeak && !this.isInWarmup(),
-      filteredValue: smoothed,
+      filteredValue: normalizedValue,
       arrhythmiaCount: 0
     };
-  }
-
-  private autoResetIfSignalIsLow(amplitude: number) {
-    if (amplitude < this.LOW_SIGNAL_THRESHOLD) {
-      this.lowSignalCount++;
-      if (this.lowSignalCount >= this.LOW_SIGNAL_FRAMES) {
-        this.resetDetectionStates();
-      }
-    } else {
-      this.lowSignalCount = 0;
-    }
-  }
-
-  private resetDetectionStates() {
-    this.lastPeakTime = null;
-    this.previousPeakTime = null;
-    this.lastConfirmedPeak = false;
-    this.peakCandidateIndex = null;
-    this.peakCandidateValue = 0;
-    this.peakConfirmationBuffer = [];
-    this.values = [];
-    console.log("HeartBeatProcessor: auto-reset detection states (low signal).");
   }
 
   private detectPeak(normalizedValue: number, derivative: number): {
@@ -529,40 +413,9 @@ export class HeartBeatProcessor {
       1
     );
 
-    // Aproximación a la confianza final
     const confidence = (amplitudeConfidence + derivativeConfidence) / 2;
 
     return { isPeak: isOverThreshold, confidence };
-  }
-
-  private confirmPeak(
-    isPeak: boolean,
-    normalizedValue: number,
-    confidence: number
-  ): boolean {
-    this.peakConfirmationBuffer.push(normalizedValue);
-    if (this.peakConfirmationBuffer.length > 5) {
-      this.peakConfirmationBuffer.shift();
-    }
-
-    if (isPeak && !this.lastConfirmedPeak && confidence >= this.MIN_CONFIDENCE) {
-      if (this.peakConfirmationBuffer.length >= 3) {
-        const len = this.peakConfirmationBuffer.length;
-        const goingDown1 =
-          this.peakConfirmationBuffer[len - 1] < this.peakConfirmationBuffer[len - 2];
-        const goingDown2 =
-          this.peakConfirmationBuffer[len - 2] < this.peakConfirmationBuffer[len - 3];
-
-        if (goingDown1 && goingDown2) {
-          this.lastConfirmedPeak = true;
-          return true;
-        }
-      }
-    } else if (!isPeak) {
-      this.lastConfirmedPeak = false;
-    }
-
-    return false;
   }
 
   private updateBPM() {
@@ -577,17 +430,6 @@ export class HeartBeatProcessor {
         this.bpmHistory.shift();
       }
     }
-  }
-
-  private getSmoothBPM(): number {
-    const rawBPM = this.calculateCurrentBPM();
-    if (this.smoothBPM === 0) {
-      this.smoothBPM = rawBPM;
-      return rawBPM;
-    }
-    this.smoothBPM =
-      this.BPM_ALPHA * rawBPM + (1 - this.BPM_ALPHA) * this.smoothBPM;
-    return this.smoothBPM;
   }
 
   private calculateCurrentBPM(): number {
@@ -633,7 +475,6 @@ export class HeartBeatProcessor {
     this.peakCandidateValue = 0;
     this.lowSignalCount = 0;
     
-    // Reiniciar variables del nuevo algoritmo
     this.waveformTemplates = [];
     this.lastValidPeakTimes = [];
   }
