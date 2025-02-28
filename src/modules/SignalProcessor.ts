@@ -26,13 +26,13 @@ export class PPGSignalProcessor implements SignalProcessor {
   private kalmanFilter: KalmanFilter;
   private lastValues: number[] = [];
   private readonly DEFAULT_CONFIG = {
-    BUFFER_SIZE: 20,           // Aumentado para mejor análisis
-    MIN_RED_THRESHOLD: 35,     // Ajustado para mejor sensibilidad
+    BUFFER_SIZE: 30,           // Optimizado para análisis en tiempo real
+    MIN_RED_THRESHOLD: 30,     // Reducido para mejor sensibilidad
     MAX_RED_THRESHOLD: 255,    // Máximo valor posible
-    STABILITY_WINDOW: 8,       // Aumentado para mejor estabilidad
-    MIN_STABILITY_COUNT: 5,    // Aumentado para reducir falsos positivos
-    HYSTERESIS: 8,             // Aumentado para mejor estabilidad
-    MIN_CONSECUTIVE_DETECTIONS: 4  // Aumentado para mayor robustez
+    STABILITY_WINDOW: 10,      // Aumentado para mejor estabilidad
+    MIN_STABILITY_COUNT: 6,    // Ajustado para reducir falsos positivos
+    HYSTERESIS: 10,           // Aumentado para mejor estabilidad
+    MIN_CONSECUTIVE_DETECTIONS: 5  // Aumentado para mayor robustez
   };
 
   private currentConfig: typeof this.DEFAULT_CONFIG;
@@ -150,11 +150,11 @@ export class PPGSignalProcessor implements SignalProcessor {
     let blueSum = 0;
     let count = 0;
     
-    // Usar región central más pequeña (20% del centro) para mejor señal
-    const startX = Math.floor(imageData.width * 0.4);
-    const endX = Math.floor(imageData.width * 0.6);
-    const startY = Math.floor(imageData.height * 0.4);
-    const endY = Math.floor(imageData.height * 0.6);
+    // Usar región central más pequeña (15% del centro) para mejor señal
+    const startX = Math.floor(imageData.width * 0.425);
+    const endX = Math.floor(imageData.width * 0.575);
+    const startY = Math.floor(imageData.height * 0.425);
+    const endY = Math.floor(imageData.height * 0.575);
     
     for (let y = startY; y < endY; y++) {
       for (let x = startX; x < endX; x++) {
@@ -171,7 +171,7 @@ export class PPGSignalProcessor implements SignalProcessor {
     const avgBlue = blueSum / count;
 
     // Mejorada la detección de tejido con sangre
-    const isRedDominant = avgRed > (avgGreen * 1.3) && avgRed > (avgBlue * 1.3);
+    const isRedDominant = avgRed > (avgGreen * 1.4) && avgRed > (avgBlue * 1.4);
     const hasGoodIntensity = avgRed > this.currentConfig.MIN_RED_THRESHOLD;
     
     return (isRedDominant && hasGoodIntensity) ? avgRed : 0;
