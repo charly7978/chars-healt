@@ -9,7 +9,6 @@ import { VitalSignsRisk } from '../utils/vitalSignsRisk';
 export const useVitalSignsProcessor = () => {
   // Core processor
   const processorRef = useRef<VitalSignsProcessor | null>(null);
-<<<<<<< HEAD
   const [arrhythmiaCounter, setArrhythmiaCounter] = useState(0);
   const lastArrhythmiaTime = useRef<number>(0);
   const hasDetectedArrhythmia = useRef<boolean>(false);
@@ -33,7 +32,7 @@ export const useVitalSignsProcessor = () => {
   // Buffers para estabilizar SpO2
   const spo2HistoryRef = useRef<number[]>([]);
   const spo2QualityRef = useRef<number[]>([]);
-  const lastValidSpo2Ref = useRef<number>(98);
+  const lastValidSpo2Ref = useRef<number>(97);
   
   // Ventana deslizante para análisis de tendencias
   const ANALYSIS_WINDOW_SIZE = 12; // Aumentado para mejor análisis
@@ -46,10 +45,7 @@ export const useVitalSignsProcessor = () => {
   const ARRHYTHMIA_RR_VARIATION_THRESHOLD = 0.18; // Umbral de variación RR
   const BP_OUTLIER_FACTOR = 1.4; // Factor para detección de valores atípicos
   const SPO2_MIN_VALID = 85; // Valor mínimo válido para SpO2
-  const SPO2_MAX_VALID = 100; // Valor máximo válido para SpO2
-  
-  // Inicialización perezosa del procesador
-=======
+  const SPO2_MAX_VALID = 100; // Valor máximo válido para SpO2 (corregido a 100%)
   
   // Specialized modules
   const arrhythmiaAnalyzer = useArrhythmiaAnalyzer();
@@ -57,13 +53,7 @@ export const useVitalSignsProcessor = () => {
   const dataCollector = useRef(createVitalSignsDataCollector());
   const signalHistory = useSignalHistory();
   
-  // Constants
-  const MAX_ARRHYTHMIAS_PER_SESSION = 15; // Máximo razonable para 30 segundos
-  
-  /**
-   * Lazy initialization of the VitalSignsProcessor
-   */
->>>>>>> 217231f142f8636f0f7c795da56c77b1d65bd145
+  // Inicialización perezosa del procesador
   const getProcessor = useCallback(() => {
     if (!processorRef.current) {
       console.log('useVitalSignsProcessor: Creando nueva instancia');
@@ -72,7 +62,6 @@ export const useVitalSignsProcessor = () => {
     return processorRef.current;
   }, []);
   
-<<<<<<< HEAD
   // Función avanzada para detectar arritmias basada en algoritmos médicos
   const analyzeArrhythmia = useCallback((intervals: number[]) => {
     if (intervals.length < 5) return { detected: false, confidence: 0, rmssd: 0, rrVariation: 0 };
@@ -381,26 +370,26 @@ export const useVitalSignsProcessor = () => {
     return Math.min(100, Math.max(SPO2_MIN_VALID, Math.round(correctedValue)));
   }, [SPO2_BUFFER_SIZE, SPO2_MIN_VALID]);
   
-=======
-  /**
-   * Process a new signal value and update all vitals
-   */
->>>>>>> 217231f142f8636f0f7c795da56c77b1d65bd145
   const processSignal = useCallback((value: number, rrData?: { intervals: number[], lastPeakTime: number | null }) => {
     const processor = getProcessor();
     const currentTime = Date.now();
     
-    // Store data for analysis
-    signalHistory.addSignal(value);
-    
-    if (rrData) {
-      signalHistory.addRRData(rrData);
+    // Almacenar datos para análisis
+    signalHistoryRef.current.push(value);
+    if (signalHistoryRef.current.length > 300) {
+      signalHistoryRef.current = signalHistoryRef.current.slice(-300);
     }
     
-    // Get base results from the core processor
+    if (rrData) {
+      rrDataHistoryRef.current.push({ ...rrData });
+      if (rrDataHistoryRef.current.length > 20) {
+        rrDataHistoryRef.current = rrDataHistoryRef.current.slice(-20);
+      }
+    }
+    
+    // Obtenemos los resultados directamente del procesador
     const result = processor.processSignal(value, rrData);
     
-<<<<<<< HEAD
     // Calidad estimada basada en la consistencia de los datos
     const signalQuality = Math.min(1.0, signalHistoryRef.current.length / 120);
     
@@ -431,68 +420,45 @@ export const useVitalSignsProcessor = () => {
           counter: arrhythmiaCounter + 1
         });
 
-=======
-    // Stabilize blood pressure
-    const signalQuality = signalHistory.getSignalQuality();
-    const stabilizedBP = bloodPressureStabilizer.current.stabilizeBloodPressure(result.pressure, signalQuality);
-    
-    // Collect data for final averages
-    if (result.spo2 > 0) {
-      dataCollector.current.addSpO2(result.spo2);
-    }
-    
-    if (stabilizedBP !== "--/--" && stabilizedBP !== "0/0") {
-      dataCollector.current.addBloodPressure(stabilizedBP);
-    }
-    
-    // Advanced arrhythmia analysis
-    if (rrData?.intervals && rrData.intervals.length >= 4) {
-      const arrhythmiaResult = arrhythmiaAnalyzer.processArrhythmia(rrData, MAX_ARRHYTHMIAS_PER_SESSION);
-      
-      if (arrhythmiaResult.detected) {
->>>>>>> 217231f142f8636f0f7c795da56c77b1d65bd145
         return {
           spo2: stabilizedSpO2,
           pressure: stabilizedBP,
-          arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus,
-          lastArrhythmiaData: arrhythmiaResult.lastArrhythmiaData
+          arrhythmiaStatus: `ARRITMIA DETECTADA|${arrhythmiaCounter + 1}`,
+          lastArrhythmiaData: {
+            timestamp: currentTime,
+            rmssd: arrhythmiaAnalysis.rmssd,
+            rrVariation: arrhythmiaAnalysis.rrVariation
+          }
         };
       }
-      
+    }
+    
+    // Si ya detectamos una arritmia antes, mantenemos el estado
+    if (hasDetectedArrhythmia.current) {
       return {
         spo2: stabilizedSpO2,
         pressure: stabilizedBP,
-        arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus
+        arrhythmiaStatus: `ARRITMIA DETECTADA|${arrhythmiaCounter}`,
+        lastArrhythmiaData: null
       };
     }
     
-<<<<<<< HEAD
     // Siempre mostrar "SIN ARRITMIAS" desde el principio
-=======
-    // If we already analyzed arrhythmias before, use the latest status
-    const arrhythmiaStatus = `SIN ARRITMIAS|${arrhythmiaAnalyzer.arrhythmiaCounter}`;
-    
->>>>>>> 217231f142f8636f0f7c795da56c77b1d65bd145
     return {
       spo2: stabilizedSpO2,
       pressure: stabilizedBP,
-      arrhythmiaStatus
+      arrhythmiaStatus: `SIN ARRITMIAS|${arrhythmiaCounter}`
     };
-<<<<<<< HEAD
   }, [arrhythmiaCounter, getProcessor, analyzeArrhythmia, stabilizeBloodPressure, stabilizeSpO2, MIN_TIME_BETWEEN_ARRHYTHMIAS, MAX_ARRHYTHMIAS_PER_SESSION]);
-=======
-  }, [getProcessor, arrhythmiaAnalyzer, signalHistory]);
->>>>>>> 217231f142f8636f0f7c795da56c77b1d65bd145
 
-  /**
-   * Reset all processors and data
-   */
   const reset = useCallback(() => {
     if (processorRef.current) {
       processorRef.current.reset();
     }
+    setArrhythmiaCounter(0);
+    lastArrhythmiaTime.current = 0;
+    hasDetectedArrhythmia.current = false;
     
-<<<<<<< HEAD
     // Limpiar arrays de historial
     signalHistoryRef.current = [];
     rrDataHistoryRef.current = [];
@@ -504,42 +470,26 @@ export const useVitalSignsProcessor = () => {
     spo2HistoryRef.current = [];
     spo2QualityRef.current = [];
     lastValidBpRef.current = "120/80";
-    lastValidSpo2Ref.current = 98;
+    lastValidSpo2Ref.current = 97;
     
     console.log("Reseteo de detección de arritmias, presión arterial y SpO2");
   }, []);
-=======
-    // Reset all specialized modules
-    arrhythmiaAnalyzer.reset();
-    bloodPressureStabilizer.current.reset();
-    dataCollector.current.reset();
-    signalHistory.reset();
-    VitalSignsRisk.resetHistory();
-    
-    console.log("Reseteo de detección de arritmias y presión arterial");
-  }, [arrhythmiaAnalyzer, signalHistory]);
->>>>>>> 217231f142f8636f0f7c795da56c77b1d65bd145
   
-  /**
-   * Aggressive memory cleanup
-   */
+  // Función para limpieza agresiva de memoria
   const cleanMemory = useCallback(() => {
     console.log("useVitalSignsProcessor: Limpieza agresiva de memoria");
     
-    // Destroy current processor and create a new one
+    // Destruir procesador actual y crear uno nuevo
     if (processorRef.current) {
       processorRef.current.reset();
       processorRef.current = new VitalSignsProcessor();
     }
     
-    // Reset all specialized modules
-    arrhythmiaAnalyzer.reset();
-    bloodPressureStabilizer.current.reset();
-    dataCollector.current.reset();
-    signalHistory.reset();
-    VitalSignsRisk.resetHistory();
+    // Resetear estados
+    setArrhythmiaCounter(0);
+    lastArrhythmiaTime.current = 0;
+    hasDetectedArrhythmia.current = false;
     
-<<<<<<< HEAD
     // Vaciar completamente los buffers
     signalHistoryRef.current = [];
     rrDataHistoryRef.current = [];
@@ -551,12 +501,9 @@ export const useVitalSignsProcessor = () => {
     spo2HistoryRef.current = [];
     spo2QualityRef.current = [];
     lastValidBpRef.current = "120/80";
-    lastValidSpo2Ref.current = 98;
+    lastValidSpo2Ref.current = 97;
     
     // Forzar garbage collection si está disponible
-=======
-    // Force garbage collection if available
->>>>>>> 217231f142f8636f0f7c795da56c77b1d65bd145
     if (window.gc) {
       try {
         window.gc();
@@ -564,13 +511,12 @@ export const useVitalSignsProcessor = () => {
         console.log("GC no disponible en este entorno");
       }
     }
-  }, [arrhythmiaAnalyzer, signalHistory]);
+  }, []);
 
   return {
     processSignal,
     reset,
-    cleanMemory,
-    arrhythmiaCounter: arrhythmiaAnalyzer.arrhythmiaCounter,
-    dataCollector: dataCollector.current
+    arrhythmiaCounter,
+    cleanMemory
   };
 };
