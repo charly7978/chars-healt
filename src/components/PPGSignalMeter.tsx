@@ -302,6 +302,11 @@ const PPGSignalMeter = ({
           className="w-full h-[calc(50vh)] mt-0 absolute top-0 left-0 right-0"
           style={{ zIndex: 10 }}
         />
+        
+        {/* Título "Cars-Health" debajo del gráfico */}
+        <div className="absolute bottom-2 left-0 right-0 text-center z-20">
+          <h2 className="text-white font-medium text-sm">Cars-Health</h2>
+        </div>
       </div>
     </>
   );
