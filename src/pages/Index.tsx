@@ -496,13 +496,7 @@ const Index = () => {
         />
       </div>
 
-      {/* Título "Chars Healt" en posición exacta */}
-      <div className="absolute z-40" style={{ top: '50.5vh', left: 0, right: 0, textAlign: 'center' }}>
-        <h1 className="text-2xl font-bold">
-          <span className="text-white">Chars</span>
-          <span className="text-[#33C3F0]">Healt</span>
-        </h1>
-      </div>
+      {/* Eliminando el título "Chars Healt" que estaba aquí */}
 
       {/* Panel de signos vitales con posición fija abajo */}
       <div className="absolute z-20" style={{ bottom: '65px', left: 0, right: 0, padding: '0 12px' }}>
