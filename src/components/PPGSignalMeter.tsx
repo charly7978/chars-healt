@@ -299,7 +299,7 @@ const PPGSignalMeter = ({
           ref={canvasRef}
           width={CANVAS_WIDTH}
           height={CANVAS_HEIGHT}
-          className="w-full h-[calc(40vh)] mt-0 absolute top-0 left-0 right-0"
+          className="w-full h-[calc(50vh)] mt-0 absolute top-0 left-0 right-0"
           style={{ zIndex: 10 }}
         />
       </div>
