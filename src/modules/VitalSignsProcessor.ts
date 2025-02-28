@@ -14,7 +14,7 @@ export class VitalSignsProcessor {
   private spo2Buffer: number[] = [];
   private systolicBuffer: number[] = [];
   private diastolicBuffer: number[] = [];
-  private readonly SPO2_BUFFER_SIZE = 8; // Reducido para mayor reactividad
+  private readonly SPO2_BUFFER_SIZE = 8;
   private readonly BP_BUFFER_SIZE = 10;
   private readonly BP_ALPHA = 0.7;
   private lastValue = 0;
@@ -29,7 +29,7 @@ export class VitalSignsProcessor {
   private lastRMSSD: number = 0;
   private lastRRVariation: number = 0;
   private lastArrhythmiaTime: number = 0;
-  private spO2BaseValue: number = 95; // Valor base para SPO2
+  private spO2BaseValue: number = 95;
 
   public processSignal(
     ppgValue: number,
@@ -60,17 +60,15 @@ export class VitalSignsProcessor {
       this.isLearningPhase = false;
     }
 
-    // Determinar estado de arritmia - MODIFICADO para mostrar SIN ARRITMIAS desde el inicio
+    // Determinar estado de arritmia
     let arrhythmiaStatus;
     if (this.hasDetectedFirstArrhythmia) {
-      // Una vez detectada la primera arritmia, siempre mostramos este estado
       arrhythmiaStatus = `ARRITMIA DETECTADA|${this.arrhythmiaCount}`;
     } else {
-      // Incluso en fase de calibración, mostramos "SIN ARRITMIAS"
       arrhythmiaStatus = `SIN ARRITMIAS|${this.arrhythmiaCount}`;
     }
 
-    // Calcular otros signos vitales
+    // Calcular otros signos vitales sin forzar valores
     const spo2 = this.calculateSpO2(this.ppgValues.slice(-60));
     const bp = this.calculateBloodPressure(this.ppgValues.slice(-60));
     const pressure = `${bp.systolic}/${bp.diastolic}`;
@@ -116,7 +114,7 @@ export class VitalSignsProcessor {
     
     // Si es una nueva arritmia y ha pasado suficiente tiempo desde la última
     if (newArrhythmiaState && 
-        currentTime - this.lastArrhythmiaTime > 1000) { // Mínimo 1 segundo entre arritmias
+        currentTime - this.lastArrhythmiaTime > 1000) {
       this.arrhythmiaCount++;
       this.lastArrhythmiaTime = currentTime;
       
@@ -151,7 +149,6 @@ export class VitalSignsProcessor {
     this.lastRMSSD = 0;
     this.lastRRVariation = 0;
     this.lastArrhythmiaTime = 0;
-    // Reiniciar el valor base de SPO2 con una ligera variación
     this.spO2BaseValue = 95 + (Math.random() * 2 - 1);
   }
 
@@ -166,12 +163,6 @@ export class VitalSignsProcessor {
     const rrInterval = currentTime - this.lastPeakTime;
     this.rrIntervals.push(rrInterval);
     
-    console.log("VitalSignsProcessor: Nuevo latido", {
-      timestamp: currentTime,
-      rrInterval,
-      totalIntervals: this.rrIntervals.length
-    });
-
     // Mantener ventana móvil de intervalos
     if (this.rrIntervals.length > 20) {
       this.rrIntervals.shift();
@@ -186,13 +177,12 @@ export class VitalSignsProcessor {
   }
 
   private calculateSpO2(values: number[]): number {
+    // Si no hay suficientes valores, no hay medición válida
     if (values.length < 20) {
-      // Si no hay suficientes valores pero tenemos buffer, usar último valor
       if (this.spo2Buffer.length > 0) {
         return this.spo2Buffer[this.spo2Buffer.length - 1];
       }
-      // Si no hay buffer, usar valor base con pequeña variación
-      return Math.round(this.spO2BaseValue + (Math.random() * 2 - 1));
+      return 0; // Si no hay mediciones previas, devolver 0 (no hay medición)
     }
 
     const dc = this.calculateDC(values);
@@ -200,71 +190,37 @@ export class VitalSignsProcessor {
       if (this.spo2Buffer.length > 0) {
         return this.spo2Buffer[this.spo2Buffer.length - 1];
       }
-      return Math.round(this.spO2BaseValue);
+      return 0;
     }
 
     const ac = this.calculateAC(values);
     const perfusionIndex = ac / dc;
     
-    // MEJORADO: Manejo de señal débil
+    // Manejo de señal débil sin forzar valores
     if (perfusionIndex < this.PERFUSION_INDEX_THRESHOLD) {
       if (this.spo2Buffer.length > 0) {
-        // Con señal débil, mantener valor previo con pequeña variación
-        const lastValid = this.spo2Buffer[this.spo2Buffer.length - 1];
-        // Variación limitada a ±1 
-        const variation = Math.random() > 0.7 ? Math.round(Math.random() * 2 - 1) : 0;
-        return Math.min(99, Math.max(92, lastValid + variation));
+        return this.spo2Buffer[this.spo2Buffer.length - 1];
       }
-      return Math.round(this.spO2BaseValue);
+      return 0;
     }
 
-    // MEJORADO: Cálculo de SpO2 más realista
-    // El ratio R es inversamente proporcional al SpO2
+    // Cálculo de SpO2 basado en la señal real
     const R = (ac / dc) / this.SPO2_CALIBRATION_FACTOR;
+    let spO2 = Math.round(110 - (20 * R));
     
-    // Rango más realista y variable
-    let rawSpO2 = 110 - (20 * R);
-    
-    // Ajustar calidad de señal
-    if (perfusionIndex > 0.15) {
-      // Mejor calidad = menor variación
-      rawSpO2 += Math.random() * 0.8 - 0.4;
-    } else if (perfusionIndex < 0.08) {
-      // Peor calidad = mayor variación
-      rawSpO2 += Math.random() * 2 - 1;
-    } else {
-      // Calidad media
-      rawSpO2 += Math.random() * 1.2 - 0.6;
-    }
-    
-    // Restringir a rango fisiológico normal
-    let spO2 = Math.round(Math.min(99, Math.max(92, rawSpO2)));
-
     // Mantener buffer de valores para estabilidad
     this.spo2Buffer.push(spO2);
     if (this.spo2Buffer.length > this.SPO2_BUFFER_SIZE) {
       this.spo2Buffer.shift();
     }
 
-    // Calcular promedio ponderado del buffer (más peso a los valores recientes)
+    // Calcular promedio del buffer para suavizar
     if (this.spo2Buffer.length >= 3) {
-      let weightedSum = 0;
-      let totalWeight = 0;
-      
-      this.spo2Buffer.forEach((val, idx) => {
-        // Peso exponencial: valores más recientes tienen más peso
-        const weight = Math.pow(1.5, idx);
-        weightedSum += val * weight;
-        totalWeight += weight;
-      });
-      
-      spO2 = Math.round(weightedSum / totalWeight);
+      const sum = this.spo2Buffer.reduce((a, b) => a + b, 0);
+      spO2 = Math.round(sum / this.spo2Buffer.length);
     }
-
-    // Garantizar variación en las mediciones para que no sea siempre 94
-    const finalReading = Math.min(99, Math.max(92, spO2));
     
-    return finalReading;
+    return spO2;
   }
 
   private calculateBloodPressure(values: number[]): {
@@ -277,7 +233,7 @@ export class VitalSignsProcessor {
 
     const { peakIndices, valleyIndices } = this.localFindPeaksAndValleys(values);
     if (peakIndices.length < 2) {
-      return { systolic: 120, diastolic: 80 };
+      return { systolic: 0, diastolic: 0 };
     }
 
     const fps = 30;
@@ -290,7 +246,7 @@ export class VitalSignsProcessor {
       pttValues.push(dt);
     }
     
-    // Calculate weighted PTT using specific variable names
+    // Calculate weighted PTT
     let pttWeightSum = 0;
     let pttWeightedSum = 0;
     
@@ -336,7 +292,7 @@ export class VitalSignsProcessor {
       this.diastolicBuffer.shift();
     }
 
-    // Calculate final smoothed values with specific variable names
+    // Calculate final smoothed values
     let finalSystolic = 0;
     let finalDiastolic = 0;
     let smoothingWeightSum = 0;

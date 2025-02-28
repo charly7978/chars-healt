@@ -20,14 +20,14 @@ interface SegmentCount {
 }
 
 export class VitalSignsRisk {
-  private static readonly STABILITY_WINDOW = 2000; // Reducido a 2 segundos para SpO2
+  private static readonly STABILITY_WINDOW = 3000; // 3 segundos para mostrar un estado estable
   private static readonly MEASUREMENT_WINDOW = 40000; // 40 segundos para análisis final
-  private static readonly SMOOTHING_FACTOR = 0.15; // Factor de suavizado (reducido para más suavidad)
+  private static readonly SMOOTHING_FACTOR = 0.15;
   
-  // Nuevos factores de suavizado para diferentes variables
-  private static readonly BPM_SMOOTHING_ALPHA = 0.15;  // Más bajo = más suave
-  private static readonly SPO2_SMOOTHING_ALPHA = 0.25; // Aumentado para SpO2
-  private static readonly BP_SMOOTHING_ALPHA = 0.05;   // Reducido a 0.05 para una suavidad extrema
+  // Factores de suavizado
+  private static readonly BPM_SMOOTHING_ALPHA = 0.15;
+  private static readonly SPO2_SMOOTHING_ALPHA = 0.15;
+  private static readonly BP_SMOOTHING_ALPHA = 0.05;
   
   // Buffer para promedio móvil ponderado exponencialmente (EWMA)
   private static recentBpmValues: number[] = [];
@@ -37,34 +37,31 @@ export class VitalSignsRisk {
   
   // Tamaño de ventana para promedios móviles
   private static readonly EWMA_WINDOW_SIZE = 8;
-  // Ventana más pequeña para SpO2 para que sea más reactivo
-  private static readonly SPO2_EWMA_WINDOW_SIZE = 5;
   
   private static bpmHistory: StabilityCheck[] = [];
   private static spo2History: StabilityCheck[] = [];
   private static bpHistory: BPCheck[] = [];
   
   private static lastBPM: number | null = null;
-  private static lastSPO2: number | null = null; // Nuevo: seguimiento específico para SPO2
+  private static lastSPO2: number | null = null;
   private static lastSystolic: number | null = null;
   private static lastDiastolic: number | null = null;
   
   private static bpmSegmentHistory: RiskSegment[] = [];
-  private static spo2SegmentHistory: RiskSegment[] = []; // Nuevo: historial de segmentos SPO2
+  private static spo2SegmentHistory: RiskSegment[] = [];
   private static bpSegmentHistory: RiskSegment[] = [];
 
-  // Método mejorado de suavizado mediante promedio móvil ponderado exponencialmente
+  // Método de suavizado
   static smoothValue(newValue: number, lastValue: number | null, alpha: number = this.SMOOTHING_FACTOR): number {
     if (lastValue === null) return newValue;
     return lastValue + alpha * (newValue - lastValue);
   }
 
-  // Implementación de un filtro de mediana para eliminar valores atípicos
+  // Filtro de mediana para eliminar valores atípicos
   private static medianFilter(values: number[]): number {
     if (values.length === 0) return 0;
     if (values.length === 1) return values[0];
     
-    // Crear copia para no modificar el array original
     const sortedValues = [...values].sort((a, b) => a - b);
     
     const middle = Math.floor(sortedValues.length / 2);
@@ -107,23 +104,18 @@ export class VitalSignsRisk {
   static updateSPO2History(value: number) {
     if (value <= 0) return; // No registrar valores inválidos
     
-    // CORREGIDO: Optimizar el manejo de SPO2
-    // Limitar SPO2 a un rango más razonable (90-100)
-    // Valores por debajo de 90 suelen ser errores de lectura o muy poco frecuentes
-    const cappedValue = Math.min(100, Math.max(90, value));
-    
-    // Añadir al buffer de EWMA con ventana más pequeña
-    this.recentSpo2Values.push(cappedValue);
-    if (this.recentSpo2Values.length > this.SPO2_EWMA_WINDOW_SIZE) {
+    // Añadir al buffer de EWMA - SIN FORZAR VALORES
+    this.recentSpo2Values.push(value);
+    if (this.recentSpo2Values.length > this.EWMA_WINDOW_SIZE) {
       this.recentSpo2Values.shift();
     }
     
     // Aplicar filtro de mediana para eliminar valores atípicos
     const filteredValue = this.medianFilter(this.recentSpo2Values);
     
-    // Aplicar EWMA con alpha más alto para SPO2
+    // Aplicar EWMA
     const smoothedValue = this.smoothValue(filteredValue, this.lastSPO2, this.SPO2_SMOOTHING_ALPHA);
-    this.lastSPO2 = smoothedValue; // Usar lastSPO2 dedicado en lugar de lastBPM
+    this.lastSPO2 = smoothedValue;
     
     const now = Date.now();
     this.spo2History = this.spo2History.filter(check => now - check.timestamp < this.MEASUREMENT_WINDOW);
@@ -132,7 +124,6 @@ export class VitalSignsRisk {
     // Log para depuración
     console.log("VitalSignsRisk - Actualizado SPO2 History:", {
       rawValue: value,
-      cappedValue,
       smoothedValue,
       historyLength: this.spo2History.length,
       timestamp: new Date().toISOString()
@@ -193,26 +184,7 @@ export class VitalSignsRisk {
       check.value >= range[0] && check.value <= range[1]
     );
 
-    // CORREGIDO: Reducido el umbral para SpO2 - solo necesitamos 50% para SPO2
-    return stableChecks.length >= Math.ceil(recentHistory.length * 0.5);
-  }
-
-  // Método específico para estabilidad de SpO2
-  static isStableSPO2(range: [number, number]): boolean {
-    // Usar un criterio más flexible para SpO2
-    const now = Date.now();
-    const oldestAllowed = now - this.STABILITY_WINDOW;
-    const recentHistory = this.spo2History.filter(check => check.timestamp >= oldestAllowed);
-    
-    // Solo necesitamos 2 lecturas para SPO2
-    if (recentHistory.length < 2) return false;
-    
-    const stableChecks = recentHistory.filter(check => 
-      check.value >= range[0] && check.value <= range[1]
-    );
-
-    // Para SpO2, solo necesitamos 40% de lecturas estables
-    return stableChecks.length >= Math.ceil(recentHistory.length * 0.4);
+    return stableChecks.length >= Math.ceil(recentHistory.length * 0.7);
   }
 
   static isStableBP(range: { systolic: [number, number], diastolic: [number, number] }): boolean {
@@ -229,7 +201,7 @@ export class VitalSignsRisk {
       check.diastolic <= range.diastolic[1]
     );
 
-    return stableChecks.length >= Math.ceil(recentHistory.length * 0.66);
+    return stableChecks.length >= Math.ceil(recentHistory.length * 0.7);
   }
 
   private static getMostFrequentSegment(segments: RiskSegment[]): RiskSegment {
@@ -275,47 +247,22 @@ export class VitalSignsRisk {
   static getAverageSPO2(): number {
     if (this.spo2History.length === 0) return 0;
     
-    // CORREGIDO: Mejorado el cálculo de SpO2 promedio
-    // Usar solo las lecturas más recientes (últimos 15 segundos)
-    const now = Date.now();
-    const recentCutoff = now - 15000; // Últimos 15 segundos
+    // Usar todo el historial de datos para el promedio final
+    const validReadings = this.spo2History.filter(check => check.value > 0);
     
-    // Filtrar por validez y tiempo
-    const validReadings = this.spo2History
-      .filter(check => check.value > 0 && check.timestamp >= recentCutoff);
+    if (validReadings.length === 0) return 0;
     
-    if (validReadings.length === 0) {
-      // Si no hay lecturas recientes válidas, usar todo el historial
-      const allValidReadings = this.spo2History.filter(check => check.value > 0);
-      if (allValidReadings.length === 0) return 0;
-      
-      const sum = allValidReadings.reduce((total, check) => total + check.value, 0);
-      const avg = Math.min(100, Math.round(sum / allValidReadings.length));
-      
-      console.log("VitalSignsRisk - Calculado promedio SPO2 (usando todo el historial):", {
-        average: avg,
-        totalSamples: allValidReadings.length,
-        timestamp: new Date().toISOString()
-      });
-      
-      return avg;
-    }
-    
-    // Calcular promedio con lecturas recientes
     const sum = validReadings.reduce((total, check) => total + check.value, 0);
-    // Asegurar que el promedio esté en rango normal (92-99)
-    // Esto evita valores anómalos en el resultado final
-    const rawAvg = sum / validReadings.length;
-    const normalizedAvg = Math.min(99, Math.max(92, Math.round(rawAvg)));
+    const avg = Math.round(sum / validReadings.length);
     
-    console.log("VitalSignsRisk - Calculado promedio SPO2 (lecturas recientes):", {
-      rawAverage: rawAvg,
-      normalizedAverage: normalizedAvg,
+    // Log para depuración
+    console.log("VitalSignsRisk - Calculado promedio SPO2:", {
+      average: avg,
       totalSamples: validReadings.length,
       timestamp: new Date().toISOString()
     });
     
-    return normalizedAvg;
+    return avg;
   }
 
   // Función para calcular el promedio del historial de presión arterial
@@ -421,35 +368,21 @@ export class VitalSignsRisk {
       }
     }
     
-    // CORREGIDO: Mejor lógica para SpO2 en tiempo real
-    // Procesamiento para lecturas en tiempo real con criterios más flexibles
+    // RESTAURADO: Comportamiento original para tiempo real
     let currentSegment: RiskSegment;
 
-    // Usar método específico para SpO2
-    if (this.isStableSPO2([0, 90])) {
+    if (this.isStableValue(this.spo2History, [0, 90])) {
       currentSegment = { color: '#ea384c', label: 'INSUFICIENCIA RESPIRATORIA' };
-    } else if (this.isStableSPO2([90, 92])) {
+    } else if (this.isStableValue(this.spo2History, [90, 92])) {
       currentSegment = { color: '#F97316', label: 'LEVE INSUFICIENCIA RESPIRATORIA' };
-    } else if (this.isStableSPO2([93, 100])) {
+    } else if (this.isStableValue(this.spo2History, [93, 100])) {
       currentSegment = { color: '#0EA5E9', label: 'NORMAL' };
     } else {
-      // Si tenemos al menos 2 lecturas, mostrar un estado basado en la última
-      if (this.spo2History.length >= 2) {
-        const lastValue = this.spo2History[this.spo2History.length - 1].value;
-        
-        if (lastValue <= 90) {
-          currentSegment = { color: '#ea384c', label: 'POSIBLE INSUFICIENCIA' };
-        } else if (lastValue <= 92) {
-          currentSegment = { color: '#F97316', label: 'POSIBLE LEVE INSUF.' };
-        } else {
-          currentSegment = { color: '#0EA5E9', label: 'NIVEL NORMAL' };
-        }
-      } else {
-        currentSegment = { color: '#FFFFFF', label: 'EVALUANDO...' };
-      }
+      // RESTAURADO: Mostrar "EVALUANDO..." cuando no hay estabilidad
+      currentSegment = { color: '#FFFFFF', label: 'EVALUANDO...' };
     }
     
-    // Guardar el segmento actual para análisis final si es un resultado estable
+    // Guardar el segmento actual para análisis final
     if (currentSegment.label !== 'EVALUANDO...') {
       this.spo2SegmentHistory.push(currentSegment);
     }
