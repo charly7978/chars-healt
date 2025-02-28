@@ -39,6 +39,12 @@ const Index = () => {
   } | null>(null);
   const measurementTimerRef = useRef<number | null>(null);
   
+  // Nuevos arrays para almacenar todos los valores durante la medición
+  const allHeartRateValuesRef = useRef<number[]>([]);
+  const allSpo2ValuesRef = useRef<number[]>([]);
+  const allSystolicValuesRef = useRef<number[]>([]);
+  const allDiastolicValuesRef = useRef<number[]>([]);
+  
   // Flag para trackear si ya tenemos valores válidos que queremos preservar
   const hasValidValuesRef = useRef(false);
   
@@ -49,61 +55,68 @@ const Index = () => {
   // Función mejorada para calcular valores finales con protección contra errores
   const calculateFinalValues = () => {
     try {
-      if (heartRate <= 0 && vitalSigns.spo2 <= 0) {
-        console.log("No hay valores válidos para calcular promedios");
-        return;
+      // MODIFICADO: Calculamos promedios reales con todos los valores capturados
+      console.log("Calculando PROMEDIOS REALES con todos los valores capturados...");
+      
+      // Filtrar solo valores válidos (mayores que 0)
+      const validHeartRates = allHeartRateValuesRef.current.filter(v => v > 0);
+      const validSpo2Values = allSpo2ValuesRef.current.filter(v => v > 0);
+      const validSystolicValues = allSystolicValuesRef.current.filter(v => v > 0);
+      const validDiastolicValues = allDiastolicValuesRef.current.filter(v => v > 0);
+      
+      console.log("Valores acumulados para promedios:", {
+        heartRateValues: validHeartRates.length,
+        spo2Values: validSpo2Values.length,
+        systolicValues: validSystolicValues.length,
+        diastolicValues: validDiastolicValues.length
+      });
+      
+      // Calcular promedios REALES (no realistas)
+      let avgHeartRate = 0;
+      let avgSpo2 = 0;
+      let avgSystolic = 0;
+      let avgDiastolic = 0;
+      
+      if (validHeartRates.length > 0) {
+        avgHeartRate = Math.round(validHeartRates.reduce((a, b) => a + b, 0) / validHeartRates.length);
+      } else {
+        avgHeartRate = heartRate; // Fallback al último valor si no hay datos suficientes
       }
       
-      console.log("Calculando valores finales promedios...");
-      
-      // Calcular promedios basados en el historial reciente
-      let avgBPM = 0;
-      let avgSPO2 = 0;
-      let avgBP = { systolic: 0, diastolic: 0 };
-      
-      try {
-        avgBPM = VitalSignsRisk.getAverageBPM();
-      } catch (err) {
-        console.error("Error al calcular avgBPM:", err);
-        avgBPM = 0;
+      if (validSpo2Values.length > 0) {
+        avgSpo2 = Math.round(validSpo2Values.reduce((a, b) => a + b, 0) / validSpo2Values.length);
+      } else {
+        avgSpo2 = vitalSigns.spo2; // Fallback al último valor si no hay datos suficientes
       }
       
-      try {
-        avgSPO2 = VitalSignsRisk.getAverageSPO2();
-      } catch (err) {
-        console.error("Error al calcular avgSPO2:", err);
-        avgSPO2 = 0;
+      let finalBPString = vitalSigns.pressure;
+      if (validSystolicValues.length > 0 && validDiastolicValues.length > 0) {
+        avgSystolic = Math.round(validSystolicValues.reduce((a, b) => a + b, 0) / validSystolicValues.length);
+        avgDiastolic = Math.round(validDiastolicValues.reduce((a, b) => a + b, 0) / validDiastolicValues.length);
+        finalBPString = `${avgSystolic}/${avgDiastolic}`;
       }
       
-      try {
-        avgBP = VitalSignsRisk.getAverageBP();
-      } catch (err) {
-        console.error("Error al calcular avgBP:", err);
-        avgBP = { systolic: 0, diastolic: 0 };
-      }
-
-      const finalBPString = avgBP.systolic > 0 && avgBP.diastolic > 0 
-        ? `${avgBP.systolic}/${avgBP.diastolic}` 
-        : vitalSigns.pressure;
-
-      // Solo actualizar valores finales si tenemos al menos algún valor válido
-      const finalHeartRate = avgBPM > 0 ? avgBPM : heartRate;
-      const finalSpo2 = avgSPO2 > 0 ? avgSPO2 : vitalSigns.spo2;
-        
-      setFinalValues({
-        heartRate: finalHeartRate,
-        spo2: finalSpo2,
+      console.log("PROMEDIOS REALES calculados:", {
+        heartRate: avgHeartRate,
+        spo2: avgSpo2,
         pressure: finalBPString
       });
-
-      console.log("Valores finales calculados:", {
-        heartRate: finalHeartRate,
-        spo2: finalSpo2,
+      
+      // Solo actualizar valores finales si tenemos al menos algún valor válido
+      setFinalValues({
+        heartRate: avgHeartRate > 0 ? avgHeartRate : heartRate,
+        spo2: avgSpo2 > 0 ? avgSpo2 : vitalSigns.spo2,
         pressure: finalBPString
       });
         
       // Marcar que ya tenemos valores válidos
       hasValidValuesRef.current = true;
+      
+      // Limpiar arrays después de calcular promedios
+      allHeartRateValuesRef.current = [];
+      allSpo2ValuesRef.current = [];
+      allSystolicValuesRef.current = [];
+      allDiastolicValuesRef.current = [];
     } catch (error) {
       console.error("Error en calculateFinalValues:", error);
       // Usar valores actuales como respaldo en caso de error
@@ -130,6 +143,12 @@ const Index = () => {
       startProcessing();
       setElapsedTime(0);
       setMeasurementComplete(false);
+      
+      // Limpiar arrays de valores para la nueva medición
+      allHeartRateValuesRef.current = [];
+      allSpo2ValuesRef.current = [];
+      allSystolicValuesRef.current = [];
+      allDiastolicValuesRef.current = [];
       
       if (measurementTimerRef.current) {
         clearInterval(measurementTimerRef.current);
@@ -259,6 +278,12 @@ const Index = () => {
     
     // Marcar que ya no tenemos valores válidos
     hasValidValuesRef.current = false;
+    
+    // Limpiar arrays de valores
+    allHeartRateValuesRef.current = [];
+    allSpo2ValuesRef.current = [];
+    allSystolicValuesRef.current = [];
+    allDiastolicValuesRef.current = [];
   };
 
   const handleStreamReady = (stream: MediaStream) => {
@@ -386,6 +411,8 @@ const Index = () => {
           // Solo actualizar heartRate si está monitorizando y si el valor es mayor que 0
           if (heartBeatResult.bpm > 0) {
             setHeartRate(heartBeatResult.bpm);
+            // NUEVO: Agregar valor actual a la lista para calcular promedio después
+            allHeartRateValuesRef.current.push(heartBeatResult.bpm);
           }
           
           const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
@@ -396,6 +423,8 @@ const Index = () => {
                 ...current,
                 spo2: vitals.spo2
               }));
+              // NUEVO: Agregar valor actual a la lista para calcular promedio después
+              allSpo2ValuesRef.current.push(vitals.spo2);
             }
             
             // Solo actualizar presión si no es "--/--" ni "0/0"
@@ -404,6 +433,13 @@ const Index = () => {
                 ...current,
                 pressure: vitals.pressure
               }));
+              
+              // NUEVO: Extraer y almacenar valores de presión
+              const [systolic, diastolic] = vitals.pressure.split('/').map(Number);
+              if (systolic > 0 && diastolic > 0) {
+                allSystolicValuesRef.current.push(systolic);
+                allDiastolicValuesRef.current.push(diastolic);
+              }
             }
             
             // Siempre actualizar el estado de arritmia

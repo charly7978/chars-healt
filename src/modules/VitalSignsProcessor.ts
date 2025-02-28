@@ -1,3 +1,4 @@
+
 export class VitalSignsProcessor {
   private readonly WINDOW_SIZE = 300;
   private readonly SPO2_CALIBRATION_FACTOR = 1.10; // PRIMERA VARIABLE MODIFICADA: Ajustado de 1.07 a 1.10 para mejor precisión
@@ -14,7 +15,7 @@ export class VitalSignsProcessor {
   private readonly SPO2_R_RATIO_A = 112;     // Ajustado: era 110 (base más alta)
   private readonly SPO2_R_RATIO_B = 25;      // SEGUNDA VARIABLE MODIFICADA: Volviendo al valor original para mejor precisión
   private readonly SPO2_MIN_VALID_VALUE = 90;  // Ajustado: era 92 (permitir valores más bajos)
-  private readonly SPO2_MAX_VALID_VALUE = 100; // Valor máximo fisiológico válido
+  private readonly SPO2_MAX_VALID_VALUE = 98; // MODIFICADO: Ajustado a 98% como valor máximo (era 100)
   private readonly SPO2_BASELINE = 97;       // Valor base para personas sanas
   private readonly SPO2_MOVING_AVERAGE_ALPHA = 0.18; // Ajustado: era 0.2 (suavizado levemente mayor)
 
