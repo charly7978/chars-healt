@@ -258,13 +258,13 @@ const PPGSignalMeter = ({
 
   return (
     <>
-      {/* Título en rojo en la parte superior - REDUCIDO DE text-xl A text-lg */}
+      {/* Título alineado a la izquierda y más pequeño */}
       <div className="absolute top-0 left-0 right-0 z-20 p-1">
-        <h1 className="text-lg font-bold text-red-600 text-center">PPG SEÑAL CARDIACA</h1>
+        <h1 className="text-sm font-bold text-red-600 text-left pl-4">PPG SEÑAL CARDIACA</h1>
       </div>
 
-      {/* Sección de huellas digitales y calidad de señal - REDUCIDO SUTILMENTE DE w-[200px] A w-[190px] */}
-      <div className="absolute top-1 right-2 z-20 flex items-center gap-3 bg-black/40 rounded-lg p-2">
+      {/* Sensor de calidad subido un poco y huella desplazada más al margen derecho y reducida */}
+      <div className="absolute top-0 right-1 z-20 flex items-center gap-2 bg-black/40 rounded-lg p-2">
         <div className="w-[190px]">
           <div className={`h-1.5 w-full rounded-full bg-gradient-to-r ${getQualityColor(quality)} transition-all duration-1000 ease-in-out`}>
             <div
@@ -280,7 +280,7 @@ const PPGSignalMeter = ({
 
         <div className="flex flex-col items-center">
           <Fingerprint
-            className={`h-14 w-14 transition-colors duration-300 ${
+            className={`h-12 w-12 transition-colors duration-300 ${
               !isFingerDetected ? 'text-gray-400' :
               quality > 75 ? 'text-green-500' :
               quality > 50 ? 'text-yellow-500' :
@@ -288,7 +288,7 @@ const PPGSignalMeter = ({
             }`}
             strokeWidth={1.5}
           />
-          <span className="text-[10px] text-center mt-0.5 font-medium text-white">
+          <span className="text-[9px] text-center mt-0.5 font-medium text-white">
             {isFingerDetected ? "Dedo detectado" : "Ubique su dedo"}
           </span>
         </div>
