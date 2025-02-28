@@ -85,8 +85,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     { text: value, ...getRiskInfo() };
 
   return (
-    <div className="relative overflow-hidden group bg-gradient-to-b from-blue-900/30 to-indigo-900/30 backdrop-blur-sm rounded-xl border border-indigo-500/20 p-4 shadow-lg">
-      <div className="absolute inset-0 bg-black/10 pointer-events-none"></div>
+    <div className="relative overflow-hidden group bg-transparent backdrop-blur-sm rounded-xl border border-indigo-500/20 p-4 shadow-lg">
       <div className="relative z-10">
         <h3 className="text-blue-100/80 text-xs font-medium tracking-wider mb-2">{label}</h3>
         <div className="flex flex-col items-center gap-1">
