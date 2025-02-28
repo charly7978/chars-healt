@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -404,13 +405,7 @@ const Index = () => {
         const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
         
         if (!measurementComplete) {
-          // Actualizar BPM solo si es un valor válido y hay detección de dedo
-          if (heartBeatResult.bpm > 0 && heartBeatResult.confidence > 0.6) {
-            console.log("Index - BPM actualizado:", {
-              bpm: heartBeatResult.bpm,
-              confidence: heartBeatResult.confidence,
-              isPeak: heartBeatResult.isPeak
-            });
+          if (heartBeatResult.bpm > 0) {
             setHeartRate(heartBeatResult.bpm);
             allHeartRateValuesRef.current.push(heartBeatResult.bpm);
           }
@@ -456,15 +451,6 @@ const Index = () => {
       } catch (error) {
         console.error("Error procesando señal:", error);
       }
-    } else if (!lastSignal?.fingerDetected && isMonitoring) {
-      // Si no hay detección de dedo, resetear valores
-      setHeartRate(0);
-      setVitalSigns(prev => ({
-        ...prev,
-        spo2: 0,
-        pressure: "--/--"
-      }));
-      setSignalQuality(0);
     }
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns, measurementComplete]);
 
