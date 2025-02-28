@@ -46,42 +46,74 @@ const Index = () => {
   const { processSignal: processHeartBeat, reset: resetHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
+  // Función mejorada para calcular valores finales con protección contra errores
   const calculateFinalValues = () => {
-    if (heartRate <= 0 && vitalSigns.spo2 <= 0) {
-      console.log("No hay valores válidos para calcular promedios");
-      return;
+    try {
+      if (heartRate <= 0 && vitalSigns.spo2 <= 0) {
+        console.log("No hay valores válidos para calcular promedios");
+        return;
+      }
+      
+      console.log("Calculando valores finales promedios...");
+      
+      // Calcular promedios basados en el historial reciente
+      let avgBPM = 0;
+      let avgSPO2 = 0;
+      let avgBP = { systolic: 0, diastolic: 0 };
+      
+      try {
+        avgBPM = VitalSignsRisk.getAverageBPM();
+      } catch (err) {
+        console.error("Error al calcular avgBPM:", err);
+        avgBPM = 0;
+      }
+      
+      try {
+        avgSPO2 = VitalSignsRisk.getAverageSPO2();
+      } catch (err) {
+        console.error("Error al calcular avgSPO2:", err);
+        avgSPO2 = 0;
+      }
+      
+      try {
+        avgBP = VitalSignsRisk.getAverageBP();
+      } catch (err) {
+        console.error("Error al calcular avgBP:", err);
+        avgBP = { systolic: 0, diastolic: 0 };
+      }
+
+      const finalBPString = avgBP.systolic > 0 && avgBP.diastolic > 0 
+        ? `${avgBP.systolic}/${avgBP.diastolic}` 
+        : vitalSigns.pressure;
+
+      // Solo actualizar valores finales si tenemos al menos algún valor válido
+      const finalHeartRate = avgBPM > 0 ? avgBPM : heartRate;
+      const finalSpo2 = avgSPO2 > 0 ? avgSPO2 : vitalSigns.spo2;
+        
+      setFinalValues({
+        heartRate: finalHeartRate,
+        spo2: finalSpo2,
+        pressure: finalBPString
+      });
+
+      console.log("Valores finales calculados:", {
+        heartRate: finalHeartRate,
+        spo2: finalSpo2,
+        pressure: finalBPString
+      });
+        
+      // Marcar que ya tenemos valores válidos
+      hasValidValuesRef.current = true;
+    } catch (error) {
+      console.error("Error en calculateFinalValues:", error);
+      // Usar valores actuales como respaldo en caso de error
+      setFinalValues({
+        heartRate: heartRate,
+        spo2: vitalSigns.spo2,
+        pressure: vitalSigns.pressure
+      });
+      hasValidValuesRef.current = true;
     }
-    
-    // CORREGIDO: Asegurar que los cálculos de promedios se realicen correctamente
-    console.log("Calculando valores finales promedios...");
-    
-    // Calcular promedios basados en el historial reciente
-    const avgBPM = VitalSignsRisk.getAverageBPM();
-    const avgSPO2 = VitalSignsRisk.getAverageSPO2();
-    const avgBP = VitalSignsRisk.getAverageBP();
-
-    const finalBPString = avgBP.systolic > 0 && avgBP.diastolic > 0 
-      ? `${avgBP.systolic}/${avgBP.diastolic}` 
-      : vitalSigns.pressure;
-
-    // Solo actualizar valores finales si tenemos al menos algún valor válido
-    const finalHeartRate = avgBPM > 0 ? avgBPM : heartRate;
-    const finalSpo2 = avgSPO2 > 0 ? avgSPO2 : vitalSigns.spo2;
-      
-    setFinalValues({
-      heartRate: finalHeartRate,
-      spo2: finalSpo2,
-      pressure: finalBPString
-    });
-
-    console.log("Valores finales calculados:", {
-      heartRate: finalHeartRate,
-      spo2: finalSpo2,
-      pressure: finalBPString
-    });
-      
-    // Marcar que ya tenemos valores válidos
-    hasValidValuesRef.current = true;
   };
 
   const startMonitoring = () => {
@@ -101,6 +133,7 @@ const Index = () => {
       
       if (measurementTimerRef.current) {
         clearInterval(measurementTimerRef.current);
+        measurementTimerRef.current = null;
       }
       
       measurementTimerRef.current = window.setInterval(() => {
@@ -130,34 +163,57 @@ const Index = () => {
 
   // Detiene monitorización sin modificar ningún display
   const stopMonitoringOnly = () => {
-    console.log("Deteniendo SOLO monitorización (displays intactos)");
-    
-    // Detener SOLO la monitorización
-    setIsMonitoring(false);
-    setIsCameraOn(false);
-    stopProcessing();
-    setMeasurementComplete(true);
-    
-    // CORREGIDO: Evaluar riesgos finales con isFinalReading=true
-    if (heartRate > 0) {
-      VitalSignsRisk.getBPMRisk(heartRate, true);
-    }
-    
-    if (vitalSigns.pressure !== "--/--" && vitalSigns.pressure !== "0/0") {
-      VitalSignsRisk.getBPRisk(vitalSigns.pressure, true);
-    }
-    
-    if (vitalSigns.spo2 > 0) {
-      VitalSignsRisk.getSPO2Risk(vitalSigns.spo2, true);
-    }
-    
-    // CORREGIDO: Calcular valores finales después de evaluar riesgos
-    calculateFinalValues();
-    
-    // Limpiar solo el timer
-    if (measurementTimerRef.current) {
-      clearInterval(measurementTimerRef.current);
-      measurementTimerRef.current = null;
+    try {
+      console.log("Deteniendo SOLO monitorización (displays intactos)");
+      
+      // Detener SOLO la monitorización
+      setIsMonitoring(false);
+      setIsCameraOn(false);
+      stopProcessing();
+      setMeasurementComplete(true);
+      
+      // Evaluar riesgos SOLO si hay valores válidos
+      try {
+        if (heartRate > 0) {
+          VitalSignsRisk.getBPMRisk(heartRate, true);
+        }
+      } catch (err) {
+        console.error("Error al evaluar riesgo BPM:", err);
+      }
+      
+      try {
+        if (vitalSigns.pressure !== "--/--" && vitalSigns.pressure !== "0/0") {
+          VitalSignsRisk.getBPRisk(vitalSigns.pressure, true);
+        }
+      } catch (err) {
+        console.error("Error al evaluar riesgo BP:", err);
+      }
+      
+      try {
+        if (vitalSigns.spo2 > 0) {
+          VitalSignsRisk.getSPO2Risk(vitalSigns.spo2, true);
+        }
+      } catch (err) {
+        console.error("Error al evaluar riesgo SPO2:", err);
+      }
+      
+      // Calcular valores finales después de evaluar riesgos
+      calculateFinalValues();
+      
+      // Limpiar solo el timer
+      if (measurementTimerRef.current) {
+        clearInterval(measurementTimerRef.current);
+        measurementTimerRef.current = null;
+      }
+    } catch (error) {
+      console.error("Error en stopMonitoringOnly:", error);
+      // Asegurar que se limpie el timer incluso en caso de error
+      if (measurementTimerRef.current) {
+        clearInterval(measurementTimerRef.current);
+        measurementTimerRef.current = null;
+      }
+      setIsMonitoring(false);
+      setIsCameraOn(false);
     }
   };
 
@@ -323,50 +379,64 @@ const Index = () => {
 
   useEffect(() => {
     if (lastSignal && lastSignal.fingerDetected && isMonitoring) {
-      const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
-      
-      if (!measurementComplete) {
-        // Solo actualizar heartRate si está monitorizando y si el valor es mayor que 0
-        if (heartBeatResult.bpm > 0) {
-          setHeartRate(heartBeatResult.bpm);
+      try {
+        const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
+        
+        if (!measurementComplete) {
+          // Solo actualizar heartRate si está monitorizando y si el valor es mayor que 0
+          if (heartBeatResult.bpm > 0) {
+            setHeartRate(heartBeatResult.bpm);
+          }
+          
+          const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
+          if (vitals) {
+            // Solo actualizar spo2 si hay un valor > 0
+            if (vitals.spo2 > 0) {
+              setVitalSigns(current => ({
+                ...current,
+                spo2: vitals.spo2
+              }));
+            }
+            
+            // Solo actualizar presión si no es "--/--" ni "0/0"
+            if (vitals.pressure !== "--/--" && vitals.pressure !== "0/0") {
+              setVitalSigns(current => ({
+                ...current,
+                pressure: vitals.pressure
+              }));
+            }
+            
+            // Siempre actualizar el estado de arritmia
+            setVitalSigns(current => ({
+              ...current,
+              arrhythmiaStatus: vitals.arrhythmiaStatus
+            }));
+            
+            if (vitals.lastArrhythmiaData) {
+              setLastArrhythmiaData(vitals.lastArrhythmiaData);
+              
+              const [status, count] = vitals.arrhythmiaStatus.split('|');
+              setArrhythmiaCount(count || "0");
+            }
+          }
         }
         
-        const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
-        if (vitals) {
-          // Solo actualizar spo2 si hay un valor > 0
-          if (vitals.spo2 > 0) {
-            setVitalSigns(current => ({
-              ...current,
-              spo2: vitals.spo2
-            }));
-          }
-          
-          // Solo actualizar presión si no es "--/--" ni "0/0"
-          if (vitals.pressure !== "--/--" && vitals.pressure !== "0/0") {
-            setVitalSigns(current => ({
-              ...current,
-              pressure: vitals.pressure
-            }));
-          }
-          
-          // Siempre actualizar el estado de arritmia
-          setVitalSigns(current => ({
-            ...current,
-            arrhythmiaStatus: vitals.arrhythmiaStatus
-          }));
-          
-          if (vitals.lastArrhythmiaData) {
-            setLastArrhythmiaData(vitals.lastArrhythmiaData);
-            
-            const [status, count] = vitals.arrhythmiaStatus.split('|');
-            setArrhythmiaCount(count || "0");
-          }
-        }
+        setSignalQuality(lastSignal.quality);
+      } catch (error) {
+        console.error("Error procesando señal:", error);
       }
-      
-      setSignalQuality(lastSignal.quality);
     }
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns, measurementComplete]);
+
+  // Limpieza de temporizadores al desmontar el componente
+  useEffect(() => {
+    return () => {
+      if (measurementTimerRef.current) {
+        clearInterval(measurementTimerRef.current);
+        measurementTimerRef.current = null;
+      }
+    };
+  }, []);
 
   return (
     <div 

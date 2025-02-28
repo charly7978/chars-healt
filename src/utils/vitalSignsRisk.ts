@@ -254,7 +254,8 @@ export class VitalSignsRisk {
     
     if (validReadings.length === 0) return 0;
     
-    const sum = validReadings.reduce((total, check) => total + check.value, on);
+    // CORREGIDO: Cambié 'on' a '0'
+    const sum = validReadings.reduce((total, check) => total + check.value, 0);
     const avg = Math.min(100, Math.round(sum / validReadings.length)); // Asegurar máximo 100%
     
     // Log para depuración
