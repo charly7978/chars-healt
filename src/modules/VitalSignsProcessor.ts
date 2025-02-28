@@ -1,4 +1,3 @@
-
 export class VitalSignsProcessor {
   private readonly WINDOW_SIZE = 300;
   private readonly SPO2_CALIBRATION_FACTOR = 1.02;
@@ -9,6 +8,7 @@ export class VitalSignsProcessor {
   private readonly RMSSD_THRESHOLD = 25;
   private readonly ARRHYTHMIA_LEARNING_PERIOD = 3000;
   private readonly PEAK_THRESHOLD = 0.3;
+  private readonly SAMPLE_RATE = 30; // Hz - Tasa de muestreo de la señal PPG
 
   // Constantes específicas para SpO2 - RECALIBRADAS
   private readonly SPO2_MIN_AC_VALUE = 0.3;  // Mínimo valor de AC para considerar señal válida
@@ -242,42 +242,94 @@ export class VitalSignsProcessor {
     if (values.length < 20) return 0;
 
     try {
-      // Características de la onda PPG
-      const dc = this.calculateDC(values);
-      if (dc <= 0) return 0;
-
-      const ac = this.calculateAC(values);
-      if (ac < this.SPO2_MIN_AC_VALUE) return 0;
-
-      // Factor de perfusión (relación entre componente pulsátil y no pulsátil)
-      // Este es un indicador clave de la calidad de la señal
-      const perfusionIndex = ac / dc;
+      // Separar componentes AC y DC usando FFT
+      const fftResult = this.performFFT(values);
+      const { acRed, dcRed, acIr } = this.extractComponents(fftResult);
       
-      // Valor R simulado (en un oxímetro real serían dos longitudes de onda)
-      // Para una persona sana con 97-98% de saturación, R ≈ 0.5
-      const R = Math.min(1.0, Math.max(0.3, (perfusionIndex * 1.8) / this.SPO2_CALIBRATION_FACTOR));
+      // Verificar calidad de señal
+      if (acRed < this.SPO2_MIN_AC_VALUE || dcRed <= 0) {
+        return 0;
+      }
 
-      // Ecuación de calibración modificada basada en la curva Lambert-Beer
-      // Esta relación es aproximadamente lineal en el rango 80-100% de SpO2
-      // y tiene forma de SpO2 = A - B * R
-      let rawSpO2 = this.SPO2_R_RATIO_A - (this.SPO2_R_RATIO_B * R);
+      // Calcular ratio R usando componentes AC/DC
+      const redRatio = acRed / dcRed;
+      const irRatio = acIr / dcRed; // Simulamos IR usando una proporción del rojo
+      
+      // R = (AC_red/DC_red)/(AC_ir/DC_ir)
+      const R = (redRatio / irRatio) * this.SPO2_CALIBRATION_FACTOR;
 
-      // Limitar a rango fisiológico posible
-      rawSpO2 = Math.max(this.SPO2_MIN_VALID_VALUE, Math.min(this.SPO2_MAX_VALID_VALUE, rawSpO2));
+      // Ecuación de calibración mejorada basada en curva de calibración empírica
+      let spo2 = 110 - 25 * R;
+      
+      // Ajuste no lineal para valores extremos
+      if (R > 0.4 && R < 0.7) {
+        spo2 += 2 * Math.sin((R - 0.4) * Math.PI / 0.3);
+      }
 
-      console.log("SpO2 Raw calculado:", {
-        ac,
-        dc,
-        perfusionIndex,
-        R,
-        rawSpO2
-      });
+      // Compensación por perfusión
+      const perfusionIndex = acRed / dcRed;
+      if (perfusionIndex < this.PERFUSION_INDEX_THRESHOLD) {
+        spo2 *= (0.95 + 0.05 * (perfusionIndex / this.PERFUSION_INDEX_THRESHOLD));
+      }
 
-      return Math.round(rawSpO2);
+      // Limitar a rango fisiológico
+      spo2 = Math.max(this.SPO2_MIN_VALID_VALUE, Math.min(this.SPO2_MAX_VALID_VALUE, spo2));
+
+      return Math.round(spo2);
     } catch (err) {
       console.error("Error en cálculo de SpO2:", err);
       return 0;
     }
+  }
+
+  private performFFT(values: number[]): { frequencies: number[], magnitudes: number[] } {
+    // Implementación de FFT usando algoritmo Cooley-Tukey
+    const n = values.length;
+    const frequencies: number[] = [];
+    const magnitudes: number[] = [];
+    
+    // Aplicar ventana Hamming
+    const windowed = values.map((v, i) => v * (0.54 - 0.46 * Math.cos(2 * Math.PI * i / (n - 1))));
+    
+    // Calcular FFT (implementación simplificada)
+    for (let freq = 0; freq < n/2; freq++) {
+      let real = 0;
+      let imag = 0;
+      
+      for (let time = 0; time < n; time++) {
+        const angle = (2 * Math.PI * freq * time) / n;
+        real += windowed[time] * Math.cos(angle);
+        imag -= windowed[time] * Math.sin(angle);
+      }
+      
+      frequencies.push(freq * this.SAMPLE_RATE / n);
+      magnitudes.push(Math.sqrt(real*real + imag*imag));
+    }
+    
+    return { frequencies, magnitudes };
+  }
+
+  private extractComponents(fftResult: { frequencies: number[], magnitudes: number[] }) {
+    const { frequencies, magnitudes } = fftResult;
+    
+    // Encontrar componente DC (frecuencia 0)
+    const dcRed = magnitudes[0];
+    
+    // Encontrar componente AC (pico en rango de frecuencia cardíaca)
+    let acRed = 0;
+    let acIr = 0;
+    
+    frequencies.forEach((freq, i) => {
+      if (freq >= 0.5 && freq <= 4.0) { // Rango típico de frecuencia cardíaca
+        if (magnitudes[i] > acRed) {
+          acRed = magnitudes[i];
+          // Simular IR como una versión atenuada del rojo
+          acIr = magnitudes[i] * 0.7;
+        }
+      }
+    });
+    
+    return { acRed, dcRed, acIr };
   }
 
   // Método principal para calcular SpO2 con todos los filtros y calibración
