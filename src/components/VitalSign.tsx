@@ -85,28 +85,31 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     { text: value, ...getRiskInfo() };
 
   return (
-    <div className="relative overflow-hidden group bg-black rounded-lg p-4">
-      <h3 className="text-gray-400/90 text-xs mb-2">{label}</h3>
-      <div className="flex flex-col items-center gap-1">
-        <div className="flex items-baseline gap-1 justify-center">
-          <span 
-            className={`${isArrhythmiaDisplay ? 'text-sm' : 'text-lg'} font-bold`}
-            style={{ color }}
-          >
-            {isArrhythmiaDisplay ? text : value}
-          </span>
-          {!isArrhythmiaDisplay && unit && (
-            <span className="text-gray-400/90 text-xs">{unit}</span>
+    <div className="relative overflow-hidden group bg-black/60 backdrop-blur-sm rounded-lg border border-gray-800/60 p-4 shadow-lg">
+      <div className="absolute inset-0 bg-gradient-to-b from-slate-900/30 to-slate-800/20 pointer-events-none"></div>
+      <div className="relative z-10">
+        <h3 className="text-gray-400/90 text-xs font-medium tracking-wide mb-2">{label}</h3>
+        <div className="flex flex-col items-center gap-1">
+          <div className="flex items-baseline gap-1 justify-center">
+            <span 
+              className={`${isArrhythmiaDisplay ? 'text-sm' : 'text-lg'} font-bold transition-colors duration-300`}
+              style={{ color }}
+            >
+              {isArrhythmiaDisplay ? text : value}
+            </span>
+            {!isArrhythmiaDisplay && unit && (
+              <span className="text-gray-400/90 text-xs">{unit}</span>
+            )}
+          </div>
+          {riskLabel && (
+            <span 
+              className="text-[10px] font-medium tracking-wide"
+              style={{ color }}
+            >
+              {riskLabel}
+            </span>
           )}
         </div>
-        {riskLabel && (
-          <span 
-            className="text-[10px] font-medium"
-            style={{ color }}
-          >
-            {riskLabel}
-          </span>
-        )}
       </div>
     </div>
   );
