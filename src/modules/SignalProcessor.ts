@@ -26,13 +26,13 @@ export class PPGSignalProcessor implements SignalProcessor {
   private kalmanFilter: KalmanFilter;
   private lastValues: number[] = [];
   private readonly DEFAULT_CONFIG = {
-    BUFFER_SIZE: 60,           // Aumentado para mejor análisis
-    MIN_RED_THRESHOLD: 20,     // Reducido para mejor sensibilidad
+    BUFFER_SIZE: 90,           // Optimizado para mejor análisis
+    MIN_RED_THRESHOLD: 15,     // Reducido para mejor sensibilidad
     MAX_RED_THRESHOLD: 255,    // Máximo valor posible
-    STABILITY_WINDOW: 12,      // Optimizado para estabilidad
-    MIN_STABILITY_COUNT: 6,    // Ajustado para reducir falsos positivos
-    HYSTERESIS: 12,           // Optimizado para estabilidad
-    MIN_CONSECUTIVE_DETECTIONS: 4  // Reducido para respuesta más rápida
+    STABILITY_WINDOW: 15,      // Aumentado para mejor estabilidad
+    MIN_STABILITY_COUNT: 8,    // Ajustado para mejor confirmación
+    HYSTERESIS: 8,            // Optimizado para estabilidad
+    MIN_CONSECUTIVE_DETECTIONS: 5  // Aumentado para reducir falsos positivos
   };
 
   private currentConfig: typeof this.DEFAULT_CONFIG;
@@ -41,9 +41,9 @@ export class PPGSignalProcessor implements SignalProcessor {
   private consecutiveDetections: number = 0;
   private isCurrentlyDetected: boolean = false;
   private lastDetectionTime: number = 0;
-  private readonly DETECTION_TIMEOUT = 300;     // Reducido para respuesta más rápida
-  private readonly MIN_SIGNAL_AMPLITUDE = 0.06; // Ajustado para mejor sensibilidad
-  private readonly QUALITY_THRESHOLD = 0.60;    // Ajustado para precisión
+  private readonly DETECTION_TIMEOUT = 250;     // Optimizado para respuesta rápida
+  private readonly MIN_SIGNAL_AMPLITUDE = 0.08; // Ajustado para mejor sensibilidad
+  private readonly QUALITY_THRESHOLD = 0.65;    // Aumentado para mayor precisión
 
   constructor(
     public onSignalReady?: (signal: ProcessedSignal) => void,
@@ -152,11 +152,11 @@ export class PPGSignalProcessor implements SignalProcessor {
     let blueSum = 0;
     let count = 0;
     
-    // Usar región central más pequeña (25% del centro) para mejor señal
-    const startX = Math.floor(imageData.width * 0.375);
-    const endX = Math.floor(imageData.width * 0.625);
-    const startY = Math.floor(imageData.height * 0.375);
-    const endY = Math.floor(imageData.height * 0.625);
+    // Región central más pequeña (20% del centro) para mejor señal
+    const startX = Math.floor(imageData.width * 0.4);
+    const endX = Math.floor(imageData.width * 0.6);
+    const startY = Math.floor(imageData.height * 0.4);
+    const endY = Math.floor(imageData.height * 0.6);
     
     for (let y = startY; y < endY; y++) {
       for (let x = startX; x < endX; x++) {
@@ -173,7 +173,7 @@ export class PPGSignalProcessor implements SignalProcessor {
     const avgBlue = blueSum / count;
 
     // Mejorada la detección de tejido con sangre
-    const isRedDominant = avgRed > (avgGreen * 1.3) && avgRed > (avgBlue * 1.3);
+    const isRedDominant = avgRed > (avgGreen * 1.4) && avgRed > (avgBlue * 1.4);
     const hasGoodIntensity = avgRed > this.currentConfig.MIN_RED_THRESHOLD;
     
     return (isRedDominant && hasGoodIntensity) ? avgRed : 0;
@@ -249,7 +249,7 @@ export class PPGSignalProcessor implements SignalProcessor {
   }
 
   private calculateStability(): number {
-    if (this.lastValues.length < 2) return 0;
+    if (this.lastValues.length < 3) return 0;
     
     // Cálculo mejorado de estabilidad
     const variations = this.lastValues.slice(1).map((val, i) => 
@@ -259,8 +259,8 @@ export class PPGSignalProcessor implements SignalProcessor {
     const avgVariation = variations.reduce((sum, val) => sum + val, 0) / variations.length;
     const maxVariation = Math.max(...variations);
     
-    // Mejorada la fórmula de estabilidad
-    const stabilityScore = 1 - (avgVariation / 40) * 0.65 - (maxVariation / 80) * 0.35;
+    // Mejorada la fórmula de estabilidad con más peso en la regularidad
+    const stabilityScore = 1 - (avgVariation / 35) * 0.7 - (maxVariation / 70) * 0.3;
     return Math.max(0, Math.min(1, stabilityScore));
   }
 

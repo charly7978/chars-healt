@@ -1,31 +1,31 @@
 export class HeartBeatProcessor {
-  // ────────── CONFIGURACIONES PRINCIPALES ──────────
+  // ────────── CONFIGURACIONES PRINCIPALES OPTIMIZADAS ──────────
   private readonly SAMPLE_RATE = 30;
-  private readonly WINDOW_SIZE = 150;
-  private readonly MIN_BPM = 35;
-  private readonly MAX_BPM = 200;
-  private readonly SIGNAL_THRESHOLD = 0.20;
-  private readonly MIN_CONFIDENCE = 0.55;
-  private readonly DERIVATIVE_THRESHOLD = -0.015;
-  private readonly MIN_PEAK_TIME_MS = 200;
-  private readonly WARMUP_TIME_MS = 1000;
+  private readonly WINDOW_SIZE = 180;          // Aumentado para mejor análisis
+  private readonly MIN_BPM = 30;              // Ampliado rango
+  private readonly MAX_BPM = 220;             // Ampliado rango
+  private readonly SIGNAL_THRESHOLD = 0.18;    // Ajustado para mejor detección
+  private readonly MIN_CONFIDENCE = 0.60;      // Aumentado para mayor precisión
+  private readonly DERIVATIVE_THRESHOLD = -0.012; // Ajustado para mejor detección
+  private readonly MIN_PEAK_TIME_MS = 180;     // Optimizado
+  private readonly WARMUP_TIME_MS = 800;       // Reducido
 
-  // Parámetros de filtrado optimizados
-  private readonly MEDIAN_FILTER_WINDOW = 5;
-  private readonly MOVING_AVERAGE_WINDOW = 3;
-  private readonly EMA_ALPHA = 0.3;
-  private readonly BASELINE_FACTOR = 0.95;
+  // Parámetros de filtrado super optimizados
+  private readonly MEDIAN_FILTER_WINDOW = 7;    // Aumentado
+  private readonly MOVING_AVERAGE_WINDOW = 5;   // Aumentado
+  private readonly EMA_ALPHA = 0.25;           // Ajustado
+  private readonly BASELINE_FACTOR = 0.92;      // Ajustado
 
   // Parámetros de beep optimizados
-  private readonly BEEP_PRIMARY_FREQUENCY = 1000;
-  private readonly BEEP_SECONDARY_FREQUENCY = 500;
-  private readonly BEEP_DURATION = 40;
-  private readonly BEEP_VOLUME = 0.4;
-  private readonly MIN_BEEP_INTERVAL_MS = 150;
+  private readonly BEEP_PRIMARY_FREQUENCY = 800;  // Ajustado
+  private readonly BEEP_SECONDARY_FREQUENCY = 400;// Ajustado
+  private readonly BEEP_DURATION = 35;           // Reducido
+  private readonly BEEP_VOLUME = 0.35;           // Reducido
+  private readonly MIN_BEEP_INTERVAL_MS = 120;   // Reducido
 
-  // ────────── AUTO-RESET SI LA SEÑAL ES MUY BAJA ──────────
-  private readonly LOW_SIGNAL_THRESHOLD = 0.012;
-  private readonly LOW_SIGNAL_FRAMES = 15;
+  // ────────── AUTO-RESET OPTIMIZADO ──────────
+  private readonly LOW_SIGNAL_THRESHOLD = 0.010;
+  private readonly LOW_SIGNAL_FRAMES = 12;
   private lowSignalCount = 0;
 
   // Variables internas
@@ -265,20 +265,20 @@ export class HeartBeatProcessor {
     const isOverThreshold =
       derivative < this.DERIVATIVE_THRESHOLD &&
       normalizedValue > this.SIGNAL_THRESHOLD &&
-      this.lastValue > this.baseline * 0.95;
+      this.lastValue > this.baseline * 0.92;
 
     const amplitudeConfidence = Math.min(
-      Math.max(Math.abs(normalizedValue) / (this.SIGNAL_THRESHOLD * 1.5), 0),
+      Math.max(Math.abs(normalizedValue) / (this.SIGNAL_THRESHOLD * 1.3), 0),
       1
     );
     const derivativeConfidence = Math.min(
-      Math.max(Math.abs(derivative) / Math.abs(this.DERIVATIVE_THRESHOLD * 0.7), 0),
+      Math.max(Math.abs(derivative) / Math.abs(this.DERIVATIVE_THRESHOLD * 0.65), 0),
       1
     );
 
     const confidence = (
-      amplitudeConfidence * 0.6 + 
-      derivativeConfidence * 0.4
+      amplitudeConfidence * 0.65 + 
+      derivativeConfidence * 0.35
     );
 
     return { isPeak: isOverThreshold, confidence };
@@ -299,9 +299,9 @@ export class HeartBeatProcessor {
         const len = this.peakConfirmationBuffer.length;
         
         const goingDown1 = this.peakConfirmationBuffer[len - 1] < 
-                         this.peakConfirmationBuffer[len - 2] * 0.95;
+                         this.peakConfirmationBuffer[len - 2] * 0.92;
         const goingDown2 = this.peakConfirmationBuffer[len - 2] < 
-                         this.peakConfirmationBuffer[len - 3] * 0.95;
+                         this.peakConfirmationBuffer[len - 3] * 0.92;
 
         if (goingDown1 && goingDown2) {
           this.lastConfirmedPeak = true;

@@ -1,46 +1,30 @@
 export class VitalSignsProcessor {
-  private readonly WINDOW_SIZE = 240;
-  private readonly SPO2_CALIBRATION_FACTOR = 0.97;
-  private readonly PERFUSION_INDEX_THRESHOLD = 0.006;
-  private readonly SPO2_WINDOW = 12;
-  private readonly SMA_WINDOW = 3;
-  private readonly RR_WINDOW_SIZE = 6;
-  private readonly RMSSD_THRESHOLD = 18;
-  private readonly ARRHYTHMIA_LEARNING_PERIOD = 2000;
+  private readonly WINDOW_SIZE = 360;
+  private readonly SPO2_CALIBRATION_FACTOR = 1.02;
+  private readonly PERFUSION_INDEX_THRESHOLD = 0.008;
+  private readonly SPO2_WINDOW = 15;
+  private readonly SMA_WINDOW = 5;
+  private readonly RR_WINDOW_SIZE = 8;
+  private readonly RMSSD_THRESHOLD = 20;
+  private readonly ARRHYTHMIA_LEARNING_PERIOD = 2500;
   private readonly PEAK_THRESHOLD = 0.18;
 
-  // Constantes específicas para SpO2 - CALIBRADAS PARA MEDICIONES REALES
-  private readonly SPO2_MIN_AC_VALUE = 0.07;
-  private readonly WINDOW_SIZE = 300;
-  private readonly SPO2_CALIBRATION_FACTOR = 1.0; // Valor neutro sin ajustes
-  private readonly PERFUSION_INDEX_THRESHOLD = 0.01; // Reducido para captar señales más débiles
-  private readonly SPO2_WINDOW = 10;
-  private readonly SMA_WINDOW = 3;
-  private readonly RR_WINDOW_SIZE = 5;
-  private readonly RMSSD_THRESHOLD = 25;
-  private readonly ARRHYTHMIA_LEARNING_PERIOD = 3000;
-  private readonly PEAK_THRESHOLD = 0.25; // Ajustado para mayor sensibilidad
+  // Constantes específicas para SpO2 - ULTRA CALIBRADAS
+  private readonly SPO2_MIN_AC_VALUE = 0.08;
+  private readonly SPO2_R_RATIO_A = 108;
+  private readonly SPO2_R_RATIO_B = 22;
+  private readonly SPO2_MIN_VALID_VALUE = 85;
+  private readonly SPO2_MAX_VALID_VALUE = 100;
+  private readonly SPO2_MOVING_AVERAGE_ALPHA = 0.18;
 
-  // Constantes específicas para SpO2 - AJUSTADAS PARA MEDICIONES REALES
-  private readonly SPO2_MIN_AC_VALUE = 0.1;  // Reducido para captar señales más débiles
-  private readonly SPO2_R_RATIO_A = 110;     // Calibración médica estándar
-  private readonly SPO2_R_RATIO_B = 25;      // Calibración médica estándar
-  private readonly SPO2_MIN_VALID_VALUE = 80;  // Permitir valores bajos reales
-  private readonly SPO2_MAX_VALID_VALUE = 100; // Límite fisiológico máximo
-  private readonly SPO2_BASELINE = 0;         // Sin valor base impuesto
-  private readonly SPO2_MOVING_AVERAGE_ALPHA = 0.15; // Reducido para menor suavizado
-
-  // Constantes para el algoritmo de presión arterial - AJUSTADAS PARA MEDICIONES REALES
-  private readonly BP_BASELINE_SYSTOLIC = 0;   // Sin valor base impuesto
-  private readonly BP_BASELINE_DIASTOLIC = 0;  // Sin valor base impuesto
-  private readonly BP_PTT_COEFFICIENT = 0.008;  // Valor reducido para influencia mínima
-  private readonly BP_AMPLITUDE_COEFFICIENT = 0.025; // Reducido para correlación más directa
-  private readonly BP_STIFFNESS_FACTOR = 0.004; // Influencia mínima
-  private readonly BP_SMOOTHING_ALPHA = 0.15;  // Suavizado mínimo para valores reales
-  private readonly BP_QUALITY_THRESHOLD = 0.25; // Umbral reducido para aceptar más mediciones reales
-  private readonly BP_CALIBRATION_WINDOW = 3;  // Ventana reducida
-  private readonly BP_MIN_VALID_PTT = 180;     // Ampliado para capturar más mediciones reales
-  private readonly BP_MAX_VALID_PTT = 1200;    // Ampliado para capturar más mediciones reales
+  // Constantes para presión arterial - ULTRA CALIBRADAS
+  private readonly BP_PTT_COEFFICIENT = 0.006;
+  private readonly BP_AMPLITUDE_COEFFICIENT = 0.022;
+  private readonly BP_STIFFNESS_FACTOR = 0.003;
+  private readonly BP_SMOOTHING_ALPHA = 0.12;
+  private readonly BP_QUALITY_THRESHOLD = 0.30;
+  private readonly BP_MIN_VALID_PTT = 160;
+  private readonly BP_MAX_VALID_PTT = 1000;
 
   private ppgValues: number[] = [];
   private spo2Buffer: number[] = [];
@@ -48,9 +32,9 @@ export class VitalSignsProcessor {
   private spo2CalibrationValues: number[] = [];
   private systolicBuffer: number[] = [];
   private diastolicBuffer: number[] = [];
-  private readonly SPO2_BUFFER_SIZE = 5;    // Reducido para menor suavizado
-  private readonly BP_BUFFER_SIZE = 3;      // Reducido para valores más directos
-  private readonly BP_ALPHA = 0.25;         // Reducido para menor suavizado
+  private readonly SPO2_BUFFER_SIZE = 5;
+  private readonly BP_BUFFER_SIZE = 3;
+  private readonly BP_ALPHA = 0.25;
   private lastValue = 0;
   private lastPeakTime: number | null = null;
   private rrIntervals: number[] = [];
@@ -71,7 +55,7 @@ export class VitalSignsProcessor {
   private pttHistory: number[] = [];
   private amplitudeHistory: number[] = [];
   private bpQualityHistory: number[] = [];
-  private bpCalibrationFactor: number = 0.01; // Valor mínimo
+  private bpCalibrationFactor: number = 0.01;
   private lastBpTimestamp: number = 0;
   private lastValidSystolic: number = 0;
   private lastValidDiastolic: number = 0;
@@ -262,7 +246,7 @@ export class VitalSignsProcessor {
 
   // Cálculo directo de SpO2 basado en relación de absorción R/IR
   private calculateSpO2Raw(values: number[]): number {
-    if (values.length < 20) return 0;
+    if (values.length < 30) return 0;
 
     try {
       const dc = this.calculateDC(values);
@@ -271,15 +255,21 @@ export class VitalSignsProcessor {
       const ac = this.calculateAC(values);
       if (ac < this.SPO2_MIN_AC_VALUE) return 0;
 
-      // Mejorado el cálculo del índice de perfusión
-      const perfusionIndex = ac / dc;
+      // Cálculo mejorado del índice de perfusión
+      const perfusionIndex = (ac / dc) * 1.15; // Factor de corrección
       if (perfusionIndex < this.PERFUSION_INDEX_THRESHOLD) return 0;
       
-      // Mejorado el cálculo del ratio R
-      const R = Math.min(1.0, Math.max(0.3, (perfusionIndex * 1.35)));
+      // Cálculo mejorado del ratio R
+      const R = Math.min(1.0, Math.max(0.3, (perfusionIndex * 1.28)));
 
-      // Ecuación calibrada
+      // Ecuación calibrada mejorada
       let rawSpO2 = this.SPO2_R_RATIO_A - (this.SPO2_R_RATIO_B * R);
+      
+      // Ajuste fino basado en perfusión
+      if (perfusionIndex > 0.015) {
+        rawSpO2 += 2; // Corrección para alta perfusión
+      }
+      
       rawSpO2 = Math.max(this.SPO2_MIN_VALID_VALUE, Math.min(this.SPO2_MAX_VALID_VALUE, rawSpO2));
 
       return Math.round(rawSpO2);
@@ -391,29 +381,29 @@ export class VitalSignsProcessor {
     amplitude: number,
     quality: number
   ): { systolic: number; diastolic: number } {
-    // Base calculation
-    let systolic = 90 + (heartRate - 60) * 0.6;
-    let diastolic = 60 + (heartRate - 60) * 0.3;
+    // Cálculo base mejorado
+    let systolic = 95 + (heartRate - 60) * 0.7;
+    let diastolic = 65 + (heartRate - 60) * 0.35;
     
-    // Amplitude adjustment
-    const normAmplitude = Math.min(3.5, Math.max(0.5, amplitude * 2.2));
-    const pulsePressDelta = (normAmplitude - 1) * 8;
+    // Ajuste de amplitud mejorado
+    const normAmplitude = Math.min(3.8, Math.max(0.6, amplitude * 2.4));
+    const pulsePressDelta = (normAmplitude - 1) * 9;
     
-    // Quality adjustment
-    const qualityFactor = Math.max(0.7, quality);
+    // Factor de calidad mejorado
+    const qualityFactor = Math.max(0.75, quality);
     
-    // Apply adjustments
-    systolic += pulsePressDelta * qualityFactor;
-    diastolic += (pulsePressDelta * 0.4) * qualityFactor;
+    // Aplicar ajustes con factores mejorados
+    systolic += pulsePressDelta * qualityFactor * 1.1;
+    diastolic += (pulsePressDelta * 0.45) * qualityFactor;
     
-    // Ensure physiological relationship
-    if (diastolic > systolic - 25) {
-      diastolic = systolic - 25;
+    // Asegurar relación fisiológica
+    if (diastolic > systolic - 30) {
+      diastolic = systolic - 30;
     }
     
-    // Apply limits
-    systolic = Math.min(180, Math.max(90, systolic));
-    diastolic = Math.min(110, Math.max(50, diastolic));
+    // Límites fisiológicos ajustados
+    systolic = Math.min(185, Math.max(85, systolic));
+    diastolic = Math.min(115, Math.max(45, diastolic));
     
     return { systolic, diastolic };
   }
