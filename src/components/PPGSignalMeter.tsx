@@ -258,14 +258,14 @@ const PPGSignalMeter = ({
 
   return (
     <>
-      {/* Título en rojo en la parte superior */}
+      {/* Título en rojo en la parte superior - REDUCIDO DE text-xl A text-lg */}
       <div className="absolute top-0 left-0 right-0 z-20 p-1">
-        <h1 className="text-xl font-bold text-red-600 text-center">PPG SEÑAL CARDIACA</h1>
+        <h1 className="text-lg font-bold text-red-600 text-center">PPG SEÑAL CARDIACA</h1>
       </div>
 
-      {/* Sección de huellas digitales y calidad de señal - Ahora es flotante sobre el gráfico */}
+      {/* Sección de huellas digitales y calidad de señal - REDUCIDO SUTILMENTE DE w-[200px] A w-[190px] */}
       <div className="absolute top-1 right-2 z-20 flex items-center gap-3 bg-black/40 rounded-lg p-2">
-        <div className="w-[200px]">
+        <div className="w-[190px]">
           <div className={`h-1.5 w-full rounded-full bg-gradient-to-r ${getQualityColor(quality)} transition-all duration-1000 ease-in-out`}>
             <div
               className="h-full rounded-full bg-white/20 animate-pulse transition-all duration-1000"
