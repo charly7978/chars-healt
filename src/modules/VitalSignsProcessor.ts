@@ -1,7 +1,6 @@
-
 export class VitalSignsProcessor {
   private readonly WINDOW_SIZE = 300;
-  private readonly SPO2_CALIBRATION_FACTOR = 1.02;
+  private readonly SPO2_CALIBRATION_FACTOR = 1.07; // Ajustado: era 1.02
   private readonly PERFUSION_INDEX_THRESHOLD = 0.05;
   private readonly SPO2_WINDOW = 10;
   private readonly SMA_WINDOW = 3;
@@ -11,13 +10,13 @@ export class VitalSignsProcessor {
   private readonly PEAK_THRESHOLD = 0.3;
 
   // Constantes específicas para SpO2 - RECALIBRADAS
-  private readonly SPO2_MIN_AC_VALUE = 0.3;  // Mínimo valor de AC para considerar señal válida
-  private readonly SPO2_R_RATIO_A = 110;     // Parámetros de la ecuación de calibración
-  private readonly SPO2_R_RATIO_B = 25;      // SpO2 = A - B * R
-  private readonly SPO2_MIN_VALID_VALUE = 92;  // Valor mínimo fisiológico válido (incrementado a 92)
+  private readonly SPO2_MIN_AC_VALUE = 0.2;  // Ajustado: era 0.3 (permitir valores más bajos para sensibilidad)
+  private readonly SPO2_R_RATIO_A = 112;     // Ajustado: era 110 (base más alta)
+  private readonly SPO2_R_RATIO_B = 22;      // Ajustado: era 25 (menor reducción por R)
+  private readonly SPO2_MIN_VALID_VALUE = 90;  // Ajustado: era 92 (permitir valores más bajos)
   private readonly SPO2_MAX_VALID_VALUE = 100; // Valor máximo fisiológico válido
   private readonly SPO2_BASELINE = 97;       // Valor base para personas sanas
-  private readonly SPO2_MOVING_AVERAGE_ALPHA = 0.2; // Factor para promedio móvil
+  private readonly SPO2_MOVING_AVERAGE_ALPHA = 0.18; // Ajustado: era 0.2 (suavizado levemente mayor)
 
   private ppgValues: number[] = [];
   private spo2Buffer: number[] = [];
@@ -204,7 +203,7 @@ export class VitalSignsProcessor {
     this.hasDetectedFirstArrhythmia = false;
     this.arrhythmiaDetected = false;
     this.arrhythmiaCount = 0;
-    this.measurementStartTime = Date.now();
+    this.measurementStartTime: number = Date.now();
     this.lastRMSSD = 0;
     this.lastRRVariation = 0;
     this.lastArrhythmiaTime = 0;
