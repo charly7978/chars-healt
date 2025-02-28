@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -488,6 +489,7 @@ const Index = () => {
         />
       </div>
 
+      {/* Dejamos solo este título y eliminamos el duplicado */}
       <div className="text-center mb-3 z-40 absolute top-[50.5vh] left-0 right-0">
         <h1 className="text-2xl font-bold">
           <span className="text-white">Chars</span>
