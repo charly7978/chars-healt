@@ -72,11 +72,8 @@ const PPGSignalMeter = ({
   }, []);
 
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
-    // Nuevo fondo negro/gris oscuro
-    const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
-    gradient.addColorStop(0, '#222222');
-    gradient.addColorStop(1, '#1A1A1A');
-    ctx.fillStyle = gradient;
+    // Fondo negro
+    ctx.fillStyle = '#222222';
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
     // Cuadrícula blanca
