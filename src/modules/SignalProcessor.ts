@@ -26,13 +26,13 @@ export class PPGSignalProcessor implements SignalProcessor {
   private kalmanFilter: KalmanFilter;
   private lastValues: number[] = [];
   private readonly DEFAULT_CONFIG = {
-    BUFFER_SIZE: 45,           // Aumentado para mejor análisis
-    MIN_RED_THRESHOLD: 25,     // Reducido para mejor sensibilidad
+    BUFFER_SIZE: 60,           // Optimizado para mejor análisis
+    MIN_RED_THRESHOLD: 20,     // Reducido para mejor sensibilidad
     MAX_RED_THRESHOLD: 255,    // Máximo valor posible
-    STABILITY_WINDOW: 15,      // Aumentado para mejor estabilidad
-    MIN_STABILITY_COUNT: 8,    // Aumentado para reducir falsos positivos
-    HYSTERESIS: 15,           // Aumentado para mejor estabilidad
-    MIN_CONSECUTIVE_DETECTIONS: 6  // Aumentado para mayor robustez
+    STABILITY_WINDOW: 20,      // Aumentado para mejor estabilidad
+    MIN_STABILITY_COUNT: 10,   // Aumentado para reducir falsos positivos
+    HYSTERESIS: 18,           // Aumentado para mejor estabilidad
+    MIN_CONSECUTIVE_DETECTIONS: 8  // Aumentado para mayor robustez
   };
 
   private currentConfig: typeof this.DEFAULT_CONFIG;
@@ -41,9 +41,9 @@ export class PPGSignalProcessor implements SignalProcessor {
   private consecutiveDetections: number = 0;
   private isCurrentlyDetected: boolean = false;
   private lastDetectionTime: number = 0;
-  private readonly DETECTION_TIMEOUT = 400;     // Reducido para respuesta más rápida
-  private readonly MIN_SIGNAL_AMPLITUDE = 0.08; // Ajustado para mejor sensibilidad
-  private readonly QUALITY_THRESHOLD = 0.65;    // Aumentado para mayor precisión
+  private readonly DETECTION_TIMEOUT = 350;     // Optimizado para respuesta más rápida
+  private readonly MIN_SIGNAL_AMPLITUDE = 0.12; // Ajustado para mejor sensibilidad
+  private readonly QUALITY_THRESHOLD = 0.70;    // Aumentado para mayor precisión
 
   constructor(
     public onSignalReady?: (signal: ProcessedSignal) => void,
@@ -152,11 +152,11 @@ export class PPGSignalProcessor implements SignalProcessor {
     let blueSum = 0;
     let count = 0;
     
-    // Usar región central más pequeña (30% del centro) para mejor señal
-    const startX = Math.floor(imageData.width * 0.35);
-    const endX = Math.floor(imageData.width * 0.65);
-    const startY = Math.floor(imageData.height * 0.35);
-    const endY = Math.floor(imageData.height * 0.65);
+    // Usar región central más pequeña (25% del centro) para mejor señal
+    const startX = Math.floor(imageData.width * 0.375);
+    const endX = Math.floor(imageData.width * 0.625);
+    const startY = Math.floor(imageData.height * 0.375);
+    const endY = Math.floor(imageData.height * 0.625);
     
     for (let y = startY; y < endY; y++) {
       for (let x = startX; x < endX; x++) {
@@ -173,10 +173,9 @@ export class PPGSignalProcessor implements SignalProcessor {
     const avgBlue = blueSum / count;
 
     // Mejorada la detección de tejido con sangre
-    const isRedDominant = avgRed > (avgGreen * 1.4) && avgRed > (avgBlue * 1.4);
+    const isRedDominant = avgRed > (avgGreen * 1.5) && avgRed > (avgBlue * 1.5);
     const hasGoodIntensity = avgRed > this.currentConfig.MIN_RED_THRESHOLD;
     
-    // Retornar 0 si no hay suficiente señal roja
     return (isRedDominant && hasGoodIntensity) ? avgRed : 0;
   }
 

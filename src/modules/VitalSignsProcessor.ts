@@ -10,37 +10,25 @@ export class VitalSignsProcessor {
   private readonly PEAK_THRESHOLD = 0.20;
 
   // Constantes específicas para SpO2 - CALIBRADAS PARA MEDICIONES REALES
-  private readonly SPO2_MIN_AC_VALUE = 0.08;
-  private readonly WINDOW_SIZE = 300;
-  private readonly SPO2_CALIBRATION_FACTOR = 1.0; // Valor neutro sin ajustes
-  private readonly PERFUSION_INDEX_THRESHOLD = 0.01; // Reducido para captar señales más débiles
-  private readonly SPO2_WINDOW = 10;
-  private readonly SMA_WINDOW = 3;
-  private readonly RR_WINDOW_SIZE = 5;
-  private readonly RMSSD_THRESHOLD = 25;
-  private readonly ARRHYTHMIA_LEARNING_PERIOD = 3000;
-  private readonly PEAK_THRESHOLD = 0.25; // Ajustado para mayor sensibilidad
-
-  // Constantes específicas para SpO2 - AJUSTADAS PARA MEDICIONES REALES
-  private readonly SPO2_MIN_AC_VALUE = 0.1;  // Reducido para captar señales más débiles
-  private readonly SPO2_R_RATIO_A = 110;     // Calibración médica estándar
-  private readonly SPO2_R_RATIO_B = 25;      // Calibración médica estándar
-  private readonly SPO2_MIN_VALID_VALUE = 75;  // Permitir valores bajos reales
+  private readonly SPO2_MIN_AC_VALUE = 0.12;  // Aumentado para mejor señal
+  private readonly SPO2_R_RATIO_A = 108;     // Calibración médica ajustada
+  private readonly SPO2_R_RATIO_B = 22;      // Calibración médica ajustada
+  private readonly SPO2_MIN_VALID_VALUE = 80;  // Rango fisiológico normal
   private readonly SPO2_MAX_VALID_VALUE = 100; // Límite fisiológico máximo
   private readonly SPO2_BASELINE = 0;         // Sin valor base impuesto
-  private readonly SPO2_MOVING_AVERAGE_ALPHA = 0.05; // Reducido para menor suavizado
+  private readonly SPO2_MOVING_AVERAGE_ALPHA = 0.15; // Suavizado optimizado
 
   // Constantes para el algoritmo de presión arterial - AJUSTADAS PARA MEDICIONES REALES
   private readonly BP_BASELINE_SYSTOLIC = 0;   // Sin valor base impuesto
   private readonly BP_BASELINE_DIASTOLIC = 0;  // Sin valor base impuesto
-  private readonly BP_PTT_COEFFICIENT = 0.01;  // Valor reducido para influencia mínima
-  private readonly BP_AMPLITUDE_COEFFICIENT = 0.03; // Reducido para correlación más directa
-  private readonly BP_STIFFNESS_FACTOR = 0.005; // Influencia mínima
-  private readonly BP_SMOOTHING_ALPHA = 0.03;  // Suavizado mínimo para valores reales
-  private readonly BP_QUALITY_THRESHOLD = 0.2; // Umbral reducido para aceptar más mediciones reales
-  private readonly BP_CALIBRATION_WINDOW = 3;  // Ventana reducida
-  private readonly BP_MIN_VALID_PTT = 150;     // Ampliado para capturar más mediciones reales
-  private readonly BP_MAX_VALID_PTT = 1300;    // Ampliado para capturar más mediciones reales
+  private readonly BP_PTT_COEFFICIENT = 0.015;  // Coeficiente optimizado
+  private readonly BP_AMPLITUDE_COEFFICIENT = 0.035; // Coeficiente optimizado
+  private readonly BP_STIFFNESS_FACTOR = 0.008; // Factor optimizado
+  private readonly BP_SMOOTHING_ALPHA = 0.05;  // Suavizado optimizado
+  private readonly BP_QUALITY_THRESHOLD = 0.25; // Umbral optimizado
+  private readonly BP_CALIBRATION_WINDOW = 4;  // Ventana optimizada
+  private readonly BP_MIN_VALID_PTT = 180;     // Rango fisiológico normal
+  private readonly BP_MAX_VALID_PTT = 1200;    // Rango fisiológico normal
 
   private ppgValues: number[] = [];
   private spo2Buffer: number[] = [];
@@ -242,27 +230,26 @@ export class VitalSignsProcessor {
 
   // Cálculo directo de SpO2 basado en relación de absorción R/IR
   private calculateSpO2Raw(values: number[]): number {
-    if (values.length < 20) return 0;
+    if (values.length < 30) return 0;
 
     try {
-      // Características básicas de la onda PPG
       const dc = this.calculateDC(values);
       if (dc <= 0) return 0;
 
       const ac = this.calculateAC(values);
       if (ac < this.SPO2_MIN_AC_VALUE) return 0;
 
-      // Medición directa del índice de perfusión (señal AC/DC)
       const perfusionIndex = ac / dc;
       
-      // Calcular ratio R usando fórmula estándar para oximetría de pulso
-      const R = Math.min(1.0, Math.max(0.3, (perfusionIndex * 1.4)));
+      // Ratio R mejorado para oximetría de pulso
+      const R = Math.min(1.0, Math.max(0.35, (perfusionIndex * 1.35)));
 
-      // Ecuación de calibración estándar para oxímetros
+      // Ecuación de calibración optimizada
       let rawSpO2 = this.SPO2_R_RATIO_A - (this.SPO2_R_RATIO_B * R);
 
-      // Restricción solo a límites fisiológicos extremos
-      rawSpO2 = Math.max(75, Math.min(100, rawSpO2));
+      // Restricción a rangos fisiológicos normales
+      rawSpO2 = Math.max(this.SPO2_MIN_VALID_VALUE, 
+                        Math.min(this.SPO2_MAX_VALID_VALUE, rawSpO2));
 
       return Math.round(rawSpO2);
     } catch (err) {
