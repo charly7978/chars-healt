@@ -1,9 +1,8 @@
-
 import * as React from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, HTMLMotionProps } from "framer-motion";
 import { Input } from "@/components/ui/input";
 
 interface CalibrationDialogProps {
@@ -63,7 +62,7 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({
           <div className="flex items-center justify-between mb-4">
             <Button
               variant="ghost"
-              size="icon"
+              className="w-9 h-9 p-0"
               onClick={() => {
                 if (!isSubmitting) {
                   onClose();

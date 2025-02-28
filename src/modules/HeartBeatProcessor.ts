@@ -1,4 +1,3 @@
-
 export class HeartBeatProcessor {
   // ────────── CONFIGURACIONES PRINCIPALES ──────────
   private readonly SAMPLE_RATE = 30;
@@ -66,24 +65,41 @@ export class HeartBeatProcessor {
 
   private async initAudio() {
     try {
-      // Inicializar el contexto de audio en respuesta a una interacción del usuario
-      this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      // Inicializar el contexto de audio solo si no existe
+      if (!this.audioContext) {
+        this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        console.log("HeartBeatProcessor: Audio Context Created", this.audioContext.state);
+      }
       
       // Asegurarse de que el contexto esté activo
-      if (this.audioContext?.state === 'suspended') {
+      if (this.audioContext.state === 'suspended') {
         await this.audioContext.resume();
+        console.log("HeartBeatProcessor: Audio Context Resumed");
       }
       
       // Reproducir un beep silencioso para activar el audio
-      await this.playBeep(0.01);
-      console.log("HeartBeatProcessor: Audio Context Initialized", this.audioContext?.state);
+      const oscillator = this.audioContext.createOscillator();
+      const gainNode = this.audioContext.createGain();
+      gainNode.gain.value = 0.01;
+      oscillator.connect(gainNode);
+      gainNode.connect(this.audioContext.destination);
+      oscillator.start();
+      oscillator.stop(this.audioContext.currentTime + 0.1);
       
       // Agregar listener para manejar cambios de estado del contexto
-      if (this.audioContext) {
-        this.audioContext.onstatechange = () => {
-          console.log("HeartBeatProcessor: Audio Context state changed to", this.audioContext?.state);
-        };
-      }
+      this.audioContext.onstatechange = () => {
+        console.log("HeartBeatProcessor: Audio Context state changed to", this.audioContext.state);
+      };
+      
+      // Agregar evento de click global para reanudar el contexto si está suspendido
+      document.addEventListener('click', () => {
+        if (this.audioContext?.state === 'suspended') {
+          this.audioContext.resume().then(() => {
+            console.log("HeartBeatProcessor: Audio Context resumed after user interaction");
+          });
+        }
+      }, { once: true });
+      
     } catch (error) {
       console.error("HeartBeatProcessor: Error initializing audio", error);
     }
@@ -92,14 +108,8 @@ export class HeartBeatProcessor {
   private async playBeep(volume: number = this.BEEP_VOLUME) {
     if (!this.audioContext) {
       console.warn("HeartBeatProcessor: No audio context available for beep");
-      // Intentar inicializar el audio nuevamente
-      try {
-        this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-        await this.audioContext.resume();
-      } catch (e) {
-        console.error("HeartBeatProcessor: Failed to create audio context on demand", e);
-        return;
-      }
+      await this.initAudio();
+      if (!this.audioContext) return;
     }
     
     // Si el contexto está suspendido, intentar reanudarlo
@@ -150,7 +160,7 @@ export class HeartBeatProcessor {
       // Configurar envelope del sonido principal (más volumen)
       primaryGain.gain.setValueAtTime(0, this.audioContext.currentTime);
       primaryGain.gain.linearRampToValueAtTime(
-        volume * 1.5, // Aumentado para más volumen
+        volume * 2.0, // Aumentado para más volumen
         this.audioContext.currentTime + 0.01
       );
       primaryGain.gain.exponentialRampToValueAtTime(
@@ -161,7 +171,7 @@ export class HeartBeatProcessor {
       // Configurar envelope del sonido secundario
       secondaryGain.gain.setValueAtTime(0, this.audioContext.currentTime);
       secondaryGain.gain.linearRampToValueAtTime(
-        volume * 0.5, // Aumentado para más volumen
+        volume * 0.7, // Aumentado para más volumen
         this.audioContext.currentTime + 0.01
       );
       secondaryGain.gain.exponentialRampToValueAtTime(
@@ -185,6 +195,16 @@ export class HeartBeatProcessor {
       this.lastBeepTime = now;
     } catch (error) {
       console.error("HeartBeatProcessor: Error playing beep", error);
+      // Intentar reproducir un beep alternativo
+      try {
+        const audio = new Audio("data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAAPuUdcAAAAgD///wQAAAA=");
+        audio.volume = volume;
+        audio.play().catch(err => {
+          console.error("Error en audio alternativo:", err);
+        });
+      } catch (audioErr) {
+        console.error("Error completo en sistema de audio:", audioErr);
+      }
     }
   }
 
@@ -413,6 +433,11 @@ export class HeartBeatProcessor {
             if (this.lastValidPeakTimes.length > 8) {
               this.lastValidPeakTimes.shift();
             }
+            
+            // Reproducir beep con volumen alto para picos confirmados
+            this.playBeep(1.0).catch(e => {
+              console.error("HeartBeatProcessor: Error en playBeep durante pico confirmado", e);
+            });
           }
         }
       }
@@ -429,27 +454,25 @@ export class HeartBeatProcessor {
       if (timeSinceLastPeak >= this.MIN_PEAK_TIME_MS) {
         this.previousPeakTime = this.lastPeakTime;
         this.lastPeakTime = now;
-        
-        // Mejorado: Llamada al beep con mayor volumen y manejo de errores
-        this.playBeep(0.5).catch(e => {
-          console.error("HeartBeatProcessor: Error en playBeep durante pico confirmado", e);
-          // Intentar reprodución de audio alternativa
-          try {
-            const audio = new Audio();
-            audio.src = "data:audio/wav;base64,UklGRisAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQcAAAAAAAAAAAAAAAE=";
-            audio.volume = 0.5;
-            audio.play().catch(err => console.error("HeartBeatProcessor: Error en audio alternativo", err));
-          } catch (audioErr) {
-            console.error("HeartBeatProcessor: Error en audio alternativo", audioErr);
-          }
-        });
-        
         this.updateBPM();
       }
     }
 
+    // Calcular BPM actual
+    const currentBPM = this.getSmoothBPM();
+    
+    // Log para depuración
+    if (currentBPM > 0) {
+      console.log("HeartBeatProcessor - BPM calculado:", {
+        bpm: currentBPM,
+        confidence,
+        isPeak: isConfirmedPeak,
+        timeSinceStart: Date.now() - this.startTime
+      });
+    }
+
     return {
-      bpm: Math.round(this.getSmoothBPM()),
+      bpm: Math.round(currentBPM),
       confidence,
       isPeak: isConfirmedPeak && !this.isInWarmup(),
       filteredValue: smoothed,
