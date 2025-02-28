@@ -188,38 +188,85 @@ const PPGSignalMeter = ({
     drawGrid(ctx);
 
     const points = dataBufferRef.current.getPoints();
-    if (points.length > 1) {
-      // Dibujar la línea principal siempre en azul
-      ctx.beginPath();
-      ctx.lineWidth = 2;
-      ctx.lineJoin = 'round';
-      ctx.lineCap = 'round';
-      ctx.strokeStyle = '#0EA5E9'; // Siempre azul para la línea principal
+    
+    // Identificar los picos y latidos completos
+    let beatSegments: {start: number, end: number, isArrhythmia: boolean}[] = [];
+    let currentBeatStart = 0;
+    let inBeat = false;
+    let beatIsArrhythmia = false;
+    
+    // Identificar latidos completos basados en cruces por cero y picos
+    for (let i = 1; i < points.length; i++) {
+      const prev = points[i-1];
+      const current = points[i];
       
-      for (let i = 1; i < points.length; i++) {
-        const prevPoint = points[i - 1];
-        const point = points[i];
-        
-        const x1 = canvas.width - ((now - prevPoint.time) * canvas.width / WINDOW_WIDTH_MS);
-        const y1 = canvas.height / 2 - prevPoint.value;
-        const x2 = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-        const y2 = canvas.height / 2 - point.value;
-
-        if (i === 1) {
-          ctx.moveTo(x1, y1);
-        }
-        
-        // Usar curvas de Bezier para suavizar la línea
-        const xc = (x1 + x2) / 2;
-        const yc = (y1 + y2) / 2;
-        ctx.quadraticCurveTo(x1, y1, xc, yc);
-        
-        if (i === points.length - 1) {
-          ctx.lineTo(x2, y2);
-        }
+      // Detección de inicio de latido (cruce por cero ascendente)
+      if (prev.value <= 0 && current.value > 0 && !inBeat) {
+        currentBeatStart = i - 1;
+        inBeat = true;
+        beatIsArrhythmia = false;
       }
-      ctx.stroke();
+      
+      // Si este punto es una arritmia, marcar todo el latido actual
+      if (current.isArrhythmia && inBeat) {
+        beatIsArrhythmia = true;
+      }
+      
+      // Detección de fin de latido (cruce por cero descendente después de un pico)
+      if (prev.value > 0 && current.value <= 0 && inBeat) {
+        beatSegments.push({
+          start: currentBeatStart,
+          end: i,
+          isArrhythmia: beatIsArrhythmia
+        });
+        inBeat = false;
+      }
+    }
 
+    // Si hay un latido en progreso al final, cerrarlo
+    if (inBeat) {
+      beatSegments.push({
+        start: currentBeatStart,
+        end: points.length - 1,
+        isArrhythmia: beatIsArrhythmia
+      });
+    }
+    
+    // Dibujar cada segmento de latido con su color correspondiente
+    if (points.length > 1) {
+      for (const segment of beatSegments) {
+        ctx.beginPath();
+        ctx.lineWidth = 2;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = segment.isArrhythmia ? '#DC2626' : '#0EA5E9';
+        
+        // Dibujar este segmento de latido
+        for (let i = segment.start; i <= segment.end; i++) {
+          const point = points[i];
+          const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
+          const y = canvas.height / 2 - point.value;
+          
+          if (i === segment.start) {
+            ctx.moveTo(x, y);
+          } else {
+            // Usar curvas de Bezier para suavizar la línea
+            const prevPoint = points[i-1];
+            const x1 = canvas.width - ((now - prevPoint.time) * canvas.width / WINDOW_WIDTH_MS);
+            const y1 = canvas.height / 2 - prevPoint.value;
+            const xc = (x1 + x) / 2;
+            const yc = (y1 + y) / 2;
+            ctx.quadraticCurveTo(x1, y1, xc, yc);
+            
+            if (i === segment.end) {
+              ctx.lineTo(x, y);
+            }
+          }
+        }
+        ctx.stroke();
+      }
+
+      // Dibujar puntos de pico y etiquetas
       points.forEach((point, index) => {
         if (index > 0 && index < points.length - 1) {
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
@@ -228,18 +275,15 @@ const PPGSignalMeter = ({
           const nextPoint = points[index + 1];
           
           if (point.value > prevPoint.value && point.value > nextPoint.value) {
-            // Determinar el color según si es arritmia o no
-            const circleColor = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
-            
             // Dibujar círculo para los puntos de pico
             ctx.beginPath();
             ctx.arc(x, y, 4, 0, Math.PI * 2);
-            ctx.fillStyle = circleColor;
+            ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
             ctx.fill();
 
             // Dibujar valor del pico
             ctx.font = 'bold 12px Inter';
-            ctx.fillStyle = '#C0C0C0'; // Gris claro para los números de picos
+            ctx.fillStyle = '#C0C0C0';
             ctx.textAlign = 'center';
             ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 20);
             
@@ -248,13 +292,13 @@ const PPGSignalMeter = ({
               // Círculo adicional para arritmias
               ctx.beginPath();
               ctx.arc(x, y, 8, 0, Math.PI * 2);
-              ctx.strokeStyle = '#FFFF00'; // Círculo amarillo
+              ctx.strokeStyle = '#FFFF00';
               ctx.lineWidth = 1.5;
               ctx.stroke();
               
               // Etiqueta "ARR"
               ctx.font = 'bold 10px Inter';
-              ctx.fillStyle = '#FF6B6B'; // Color rojo claro para ARR
+              ctx.fillStyle = '#FF6B6B';
               ctx.fillText("ARR", x, y - 35);
             }
           }
@@ -301,10 +345,7 @@ const PPGSignalMeter = ({
         <div className="flex flex-col items-center">
           <Fingerprint
             className={`h-14 w-14 transition-colors duration-300 ${
-              !isFingerDetected ? 'text-gray-200' :
-              quality > 75 ? 'text-white' :
-              quality > 50 ? 'text-yellow-200' :
-              'text-red-200'
+              !isFingerDetected ? 'text-gray-200' : 'text-green-500'
             }`}
             strokeWidth={1.5}
           />
