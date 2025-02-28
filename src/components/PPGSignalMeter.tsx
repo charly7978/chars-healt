@@ -43,8 +43,8 @@ const PPGSignalMeter = ({
   const verticalScale = 30.0;
   const SMOOTHING_FACTOR = 0.55;
   const TARGET_FPS = 150;
-  const FRAME_TIME = 3500 / TARGET_FPS;
-  const BUFFER_SIZE = 60;
+  const FRAME_TIME = 4500 / TARGET_FPS;
+  const BUFFER_SIZE = 10;
 
   useEffect(() => {
     if (!dataBufferRef.current) {
