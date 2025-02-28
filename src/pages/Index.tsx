@@ -496,6 +496,14 @@ const Index = () => {
         />
       </div>
 
+      {/* Título "Chars Healt" colocado exactamente entre el gráfico y los displays */}
+      <div className="text-center mb-3 z-40">
+        <h1 className="text-xl font-bold">
+          <span className="text-white">Chars</span>
+          <span className="text-[#ea384c]">Healt</span>
+        </h1>
+      </div>
+
       {/* Reducido el tamaño del bloque de displays y acercado a la botonera */}
       <div className="fixed bottom-[65px] left-0 right-0 px-3 z-20">
         <div className="p-2 bg-black/60 rounded-lg">
