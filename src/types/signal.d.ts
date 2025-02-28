@@ -30,17 +30,8 @@ export interface SignalProcessor {
   onError?: (error: ProcessingError) => void;
 }
 
-// Interfaces para Web Worker
-export interface WorkerMessage {
-  type: string;
-  data?: any;
-  signal?: ProcessedSignal;
-  error?: any;
-}
-
 declare global {
   interface Window {
     heartBeatProcessor: HeartBeatProcessor;
-    gc?: () => void;
   }
 }
