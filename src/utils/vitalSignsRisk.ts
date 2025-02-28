@@ -1,5 +1,4 @@
 
-
 interface RiskSegment {
   color: string;
   label: string;
@@ -28,7 +27,7 @@ export class VitalSignsRisk {
   // Factores de suavizado
   private static readonly BPM_SMOOTHING_ALPHA = 0.15;
   private static readonly SPO2_SMOOTHING_ALPHA = 0.15;
-  private static readonly BP_SMOOTHING_ALPHA = 0.05;
+  private static readonly BP_SMOOTHING_ALPHA = 0.03; // Reducido de 0.05 a 0.03 para menos suavizado
   
   // Buffer para promedio móvil ponderado exponencialmente (EWMA)
   private static recentBpmValues: number[] = [];

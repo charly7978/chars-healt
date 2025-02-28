@@ -74,8 +74,8 @@ const PPGSignalMeter = ({
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     
-    // Aumentar opacidad al 50% como solicitado
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';  // Negro con 50% de opacidad
+    // Aumentar opacidad al 70% como solicitado
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';  // Negro con 70% de opacidad
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
     ctx.beginPath();
