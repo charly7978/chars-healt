@@ -52,7 +52,15 @@ const CameraView = ({
     
     try {
       if (streamRef.current?.active) {
-        return; // Ya hay una cámara activa
+        // La cámara ya está activa, verificar estado de la linterna
+        const videoTrack = streamRef.current.getVideoTracks()[0];
+        if (videoTrack && videoTrack.getCapabilities()?.torch) {
+          // Activar o desactivar linterna según estado de monitorización
+          videoTrack.applyConstraints({
+            advanced: [{ torch: isMonitoring }]
+          }).catch(err => console.error(`Error ${isMonitoring ? 'activando' : 'desactivando'} linterna:`, err));
+        }
+        return;
       }
 
       if (!navigator.mediaDevices?.getUserMedia) {
@@ -108,6 +116,14 @@ const CameraView = ({
         });
       }
 
+      // Gestionar la linterna basado en el estado de monitorización
+      const videoTrack = stream.getVideoTracks()[0];
+      if (videoTrack && videoTrack.getCapabilities()?.torch) {
+        videoTrack.applyConstraints({
+          advanced: [{ torch: isMonitoring }]
+        }).catch(err => console.error(`Error ${isMonitoring ? 'activando' : 'desactivando'} linterna:`, err));
+      }
+
       // Solo notificar si el componente sigue montado
       if (mountedRef.current && onStreamReady) {
         onStreamReady(stream);
@@ -117,7 +133,19 @@ const CameraView = ({
       console.error('Error al iniciar la cámara:', err);
       stopCamera();
     }
-  }, [onStreamReady, stopCamera]);
+  }, [isMonitoring, onStreamReady, stopCamera]);
+
+  // Controlar el estado de la linterna cuando cambia isMonitoring
+  useEffect(() => {
+    if (streamRef.current) {
+      const videoTrack = streamRef.current.getVideoTracks()[0];
+      if (videoTrack && videoTrack.getCapabilities()?.torch) {
+        videoTrack.applyConstraints({
+          advanced: [{ torch: isMonitoring }]
+        }).catch(err => console.error(`Error ${isMonitoring ? 'activando' : 'desactivando'} linterna:`, err));
+      }
+    }
+  }, [isMonitoring]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -125,6 +153,14 @@ const CameraView = ({
     const initializeCamera = async () => {
       if (isMonitoring && !streamRef.current?.active) {
         await startCamera();
+      } else if (!isMonitoring && streamRef.current) {
+        // Si ya no estamos monitoreando, asegurarnos de apagar la linterna
+        const videoTrack = streamRef.current.getVideoTracks()[0];
+        if (videoTrack && videoTrack.getCapabilities()?.torch) {
+          videoTrack.applyConstraints({
+            advanced: [{ torch: false }]
+          }).catch(err => console.error("Error desactivando linterna:", err));
+        }
       }
     };
 
@@ -135,13 +171,6 @@ const CameraView = ({
       stopCamera();
     };
   }, [isMonitoring, startCamera, stopCamera]);
-
-  // Manejar cambios en isMonitoring
-  useEffect(() => {
-    if (!isMonitoring && streamRef.current) {
-      stopCamera();
-    }
-  }, [isMonitoring, stopCamera]);
 
   return (
     <video

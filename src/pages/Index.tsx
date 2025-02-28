@@ -257,7 +257,8 @@ const Index = () => {
     const videoTrack = stream.getVideoTracks()[0];
     const imageCapture = new ImageCapture(videoTrack);
     
-    if (videoTrack.getCapabilities()?.torch) {
+    // Solo activar la linterna si estamos monitorizando
+    if (isMonitoring && videoTrack.getCapabilities()?.torch) {
       videoTrack.applyConstraints({
         advanced: [{ torch: true }]
       }).catch(err => console.error("Error activando linterna:", err));
@@ -293,7 +294,39 @@ const Index = () => {
     };
 
     processImage();
+    
+    // Configurar listener para apagar la linterna cuando se detenga la monitorización
+    return () => {
+      if (videoTrack.getCapabilities()?.torch) {
+        videoTrack.applyConstraints({
+          advanced: [{ torch: false }]
+        }).catch(err => console.error("Error desactivando linterna:", err));
+      }
+    };
   };
+
+  // Asegurarse que la linterna se apague cuando cambie isMonitoring
+  useEffect(() => {
+    if (!isMonitoring && isCameraOn) {
+      // Intentar apagar el flash si estaba encendido y ahora paramos
+      try {
+        const tracks = navigator.mediaDevices
+          .getUserMedia({ video: true })
+          .then(stream => {
+            const videoTrack = stream.getVideoTracks()[0];
+            if (videoTrack && videoTrack.getCapabilities()?.torch) {
+              videoTrack.applyConstraints({
+                advanced: [{ torch: false }]
+              }).catch(err => console.error("Error desactivando linterna:", err));
+            }
+            stream.getTracks().forEach(track => track.stop());
+          })
+          .catch(err => console.error("Error al intentar apagar la linterna:", err));
+      } catch (err) {
+        console.error("Error al acceder a la cámara para apagar la linterna:", err);
+      }
+    }
+  }, [isMonitoring, isCameraOn]);
 
   useEffect(() => {
     const enterImmersiveMode = async () => {
@@ -349,21 +382,20 @@ const Index = () => {
 
     enterImmersiveMode();
     
-    setTimeout(enterImmersiveMode, 500);
-    setTimeout(enterImmersiveMode, 1500);
+    // Optimizado: reduciendo las llamadas repeat innecesarias
+    const immersiveTimeout = setTimeout(enterImmersiveMode, 1000);
 
     const handleInteraction = () => {
       enterImmersiveMode();
     };
 
-    document.addEventListener('touchstart', handleInteraction);
-    document.addEventListener('click', handleInteraction);
-    document.addEventListener('touchend', handleInteraction);
+    document.addEventListener('touchstart', handleInteraction, { passive: true });
+    document.addEventListener('click', handleInteraction, { passive: true });
 
     return () => {
+      clearTimeout(immersiveTimeout);
       document.removeEventListener('touchstart', handleInteraction);
       document.removeEventListener('click', handleInteraction);
-      document.removeEventListener('touchend', handleInteraction);
     };
   }, []);
 
@@ -464,10 +496,10 @@ const Index = () => {
         />
       </div>
 
-      {/* Reducido el tamaño del bloque de displays */}
-      <div className="fixed bottom-[90px] left-0 right-0 px-3 z-20">
+      {/* Reducido el tamaño del bloque de displays y acercado a la botonera */}
+      <div className="fixed bottom-[65px] left-0 right-0 px-3 z-20">
         <div className="p-2 bg-black/60 rounded-lg">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
             <VitalSign 
               label="FRECUENCIA CARDÍACA"
               value={finalValues ? finalValues.heartRate : heartRate || "--"}
@@ -495,13 +527,11 @@ const Index = () => {
         </div>
       </div>
 
-      {/* Eliminado el contador de segundos */}
-
       {/* Reducido levemente la botonera */}
       <div className="fixed bottom-0 left-0 right-0 w-full h-[55px] grid grid-cols-2 gap-px z-50">
         <button 
           onClick={startMonitoring}
-          className="w-full h-full text-xl font-bold text-white transition-colors duration-200 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 active:from-blue-700 active:to-blue-800"
+          className="w-full h-full text-xl font-bold text-white transition-colors duration-200"
           style={{ 
             backgroundImage: isMonitoring 
               ? 'linear-gradient(135deg, #f87171, #dc2626, #b91c1c)' 
@@ -513,7 +543,7 @@ const Index = () => {
         </button>
         <button 
           onClick={handleReset}
-          className="w-full h-full text-xl font-bold text-white transition-colors duration-200 bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800 active:from-gray-800 active:to-gray-900"
+          className="w-full h-full text-xl font-bold text-white transition-colors duration-200"
           style={{ 
             backgroundImage: 'linear-gradient(135deg, #64748b, #475569, #334155)',
             textShadow: '0px 1px 3px rgba(0, 0, 0, 0.3)'
