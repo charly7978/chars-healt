@@ -85,29 +85,29 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     { text: value, ...getRiskInfo() };
 
   return (
-    <div className="relative overflow-hidden rounded-xl backdrop-blur-md bg-white/10 border border-white/20 shadow-lg">
-      <div className="absolute inset-0 bg-gradient-to-br from-blue-400/10 to-teal-400/10 pointer-events-none" />
+    <div className="relative overflow-hidden rounded-xl backdrop-blur-md bg-black/40 border border-white/20 shadow-lg">
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-900/30 to-blue-500/20 pointer-events-none" />
       <div className="absolute inset-0 bg-white/5 pointer-events-none" style={{
-        backgroundImage: "radial-gradient(circle at top right, rgba(147, 197, 253, 0.1), transparent 70%)"
+        backgroundImage: "radial-gradient(circle at top right, rgba(147, 197, 253, 0.2), transparent 70%)"
       }} />
       <div className="relative z-10 p-4">
-        <h3 className="text-slate-800 text-xs font-medium tracking-wider mb-2">{label}</h3>
+        <h3 className="text-white text-xs font-medium tracking-wider mb-2">{label}</h3>
         <div className="flex flex-col items-center gap-1">
           <div className="flex items-baseline gap-1 justify-center">
             <span 
-              className={`${isArrhythmiaDisplay ? 'text-base' : 'text-xl'} font-bold transition-colors duration-300`}
-              style={{ color }}
+              className={`${isArrhythmiaDisplay ? 'text-base' : 'text-2xl'} font-bold transition-colors duration-300`}
+              style={{ color: color || '#FFFFFF' }}
             >
               {isArrhythmiaDisplay ? text : value}
             </span>
             {!isArrhythmiaDisplay && unit && (
-              <span className="text-slate-600 text-xs">{unit}</span>
+              <span className="text-gray-300 text-xs">{unit}</span>
             )}
           </div>
           {riskLabel && (
             <span 
-              className="text-[10px] font-semibold tracking-wider mt-1"
-              style={{ color }}
+              className="text-xs font-semibold tracking-wider mt-1"
+              style={{ color: color || '#FFFFFF' }}
             >
               {riskLabel}
             </span>
