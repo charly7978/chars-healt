@@ -26,11 +26,11 @@ export class PPGSignalProcessor implements SignalProcessor {
   private kalmanFilter: KalmanFilter;
   private lastValues: number[] = [];
   private readonly DEFAULT_CONFIG = {
-    BUFFER_SIZE: 30,           // Optimizado para análisis en tiempo real
-    MIN_RED_THRESHOLD: 30,     // Reducido para mejor sensibilidad
+    BUFFER_SIZE: 30,           // Optimizado para mejor respuesta
+    MIN_RED_THRESHOLD: 45,     // Aumentado para mejor detección de tejido
     MAX_RED_THRESHOLD: 255,    // Máximo valor posible
     STABILITY_WINDOW: 10,      // Aumentado para mejor estabilidad
-    MIN_STABILITY_COUNT: 6,    // Ajustado para reducir falsos positivos
+    MIN_STABILITY_COUNT: 6,    // Aumentado para reducir falsos positivos
     HYSTERESIS: 10,           // Aumentado para mejor estabilidad
     MIN_CONSECUTIVE_DETECTIONS: 5  // Aumentado para mayor robustez
   };
@@ -150,7 +150,7 @@ export class PPGSignalProcessor implements SignalProcessor {
     let blueSum = 0;
     let count = 0;
     
-    // Usar región central más pequeña (15% del centro) para mejor señal
+    // Reducir región de interés al 15% central para mejor señal
     const startX = Math.floor(imageData.width * 0.425);
     const endX = Math.floor(imageData.width * 0.575);
     const startY = Math.floor(imageData.height * 0.425);
@@ -159,9 +159,9 @@ export class PPGSignalProcessor implements SignalProcessor {
     for (let y = startY; y < endY; y++) {
       for (let x = startX; x < endX; x++) {
         const i = (y * imageData.width + x) * 4;
-        redSum += data[i];     // Canal rojo
-        greenSum += data[i+1]; // Canal verde
-        blueSum += data[i+2];  // Canal azul
+        redSum += data[i];     
+        greenSum += data[i+1]; 
+        blueSum += data[i+2];  
         count++;
       }
     }
@@ -170,7 +170,7 @@ export class PPGSignalProcessor implements SignalProcessor {
     const avgGreen = greenSum / count;
     const avgBlue = blueSum / count;
 
-    // Mejorada la detección de tejido con sangre
+    // Mejorada detección de tejido con sangre
     const isRedDominant = avgRed > (avgGreen * 1.4) && avgRed > (avgBlue * 1.4);
     const hasGoodIntensity = avgRed > this.currentConfig.MIN_RED_THRESHOLD;
     
