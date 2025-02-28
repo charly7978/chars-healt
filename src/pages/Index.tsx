@@ -7,7 +7,6 @@ import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import { VitalSignsRisk } from '@/utils/vitalSignsRisk';
-import HeartRateDisplay from "@/components/HeartRateDisplay";
 
 interface VitalSigns {
   spo2: number;
@@ -48,13 +47,8 @@ const Index = () => {
   const hasValidValuesRef = useRef(false);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
-  const { processSignal: processHeartBeat, reset: resetHeartBeat, setAudioEnabled } = useHeartBeatProcessor();
+  const { processSignal: processHeartBeat, reset: resetHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
-
-  // Asegurar que el beep esté activado
-  useEffect(() => {
-    setAudioEnabled(true);
-  }, [setAudioEnabled]);
 
   const calculateFinalValues = () => {
     try {
@@ -489,14 +483,6 @@ const Index = () => {
         />
       </div>
 
-      {/* Display prominente del ritmo cardíaco */}
-      <div className="absolute top-4 left-0 right-0 z-30 flex justify-center">
-        <HeartRateDisplay 
-          bpm={finalValues ? finalValues.heartRate : heartRate}
-          isActive={isMonitoring || measurementComplete}
-        />
-      </div>
-
       {/* PPG Signal Meter con posición absoluta fija */}
       <div className="absolute inset-0 z-10">
         <PPGSignalMeter 
@@ -509,6 +495,8 @@ const Index = () => {
           rawArrhythmiaData={lastArrhythmiaData}
         />
       </div>
+
+      {/* Eliminando el título "Chars Healt" que estaba aquí */}
 
       {/* Panel de signos vitales con posición fija abajo */}
       <div className="absolute z-20" style={{ bottom: '65px', left: 0, right: 0, padding: '0 12px' }}>
@@ -568,12 +556,6 @@ const Index = () => {
           </button>
         </div>
       </div>
-
-      {isMonitoring && (
-        <div className="absolute bottom-40 left-0 right-0 text-center z-30">
-          <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 40s</span>
-        </div>
-      )}
     </div>
   );
 };
