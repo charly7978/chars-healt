@@ -85,9 +85,10 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     { text: value, ...getRiskInfo() };
 
   return (
-    <div className="relative overflow-hidden group bg-transparent backdrop-blur-sm rounded-xl border border-indigo-500/20 p-4 shadow-lg">
-      <div className="relative z-10">
-        <h3 className="text-blue-100/80 text-xs font-medium tracking-wider mb-2">{label}</h3>
+    <div className="relative overflow-hidden rounded-xl backdrop-blur-md bg-white/10 border border-white/20 shadow-lg">
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-indigo-600/5 pointer-events-none" />
+      <div className="relative z-10 p-4">
+        <h3 className="text-slate-800 text-xs font-medium tracking-wider mb-2">{label}</h3>
         <div className="flex flex-col items-center gap-1">
           <div className="flex items-baseline gap-1 justify-center">
             <span 
@@ -97,7 +98,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
               {isArrhythmiaDisplay ? text : value}
             </span>
             {!isArrhythmiaDisplay && unit && (
-              <span className="text-blue-200/70 text-xs">{unit}</span>
+              <span className="text-slate-600 text-xs">{unit}</span>
             )}
           </div>
           {riskLabel && (

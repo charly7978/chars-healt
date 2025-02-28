@@ -501,8 +501,8 @@ const Index = () => {
       />
 
       {/* Displays - Signos Vitales */}
-      <div className="fixed bottom-24 left-0 right-0 px-4">
-        <div className="rounded-xl p-4">
+      <div className="fixed bottom-24 left-0 right-0 px-4 z-20">
+        <div className="p-4">
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <VitalSign 
               label="FRECUENCIA CARDÍACA"
