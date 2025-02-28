@@ -93,7 +93,7 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
     const resetCanvas = () => {
       if (!canvas || !ctx) return;
       
-      // Limpiar el canvas
+      // Limpiar el canvas - con fondo transparente en lugar de negro
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
       // Dibujar cuadrícula
@@ -171,7 +171,7 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
         baselineRef.current = 0.99 * baselineRef.current + 0.01 * (lastValueRef.current || 0);
       }
       
-      // Limpiar y preparar el canvas
+      // Limpiar y preparar el canvas - sin fondo
       resetCanvas();
       
       // Calcular el rango visible de tiempo
@@ -273,15 +273,13 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
         </div>
       </div>
 
-      {/* Visualizador de señal PPG */}
+      {/* Visualizador de señal PPG - ahora con fondo transparente */}
       <canvas
         ref={canvasRef}
         width={CANVAS_WIDTH}
         height={CANVAS_HEIGHT}
         className="w-full h-full"
       />
-
-      {/* Se elimina el título duplicado que estaba aquí */}
     </div>
   );
 };
