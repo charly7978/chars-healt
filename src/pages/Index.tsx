@@ -227,7 +227,7 @@ const Index = () => {
 
       {/* Displays - Signos Vitales - Posicionados a media pantalla */}
       <div className="fixed top-1/2 left-0 right-0 px-4 z-30">
-        <div className="p-4">
+        <div className="p-4 rounded-xl bg-black bg-opacity-60">
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <VitalSign 
               label="FRECUENCIA CARDÍACA"
@@ -256,13 +256,9 @@ const Index = () => {
         </div>
       </div>
 
-      {isMonitoring && (
-        <div className="fixed bottom-[160px] left-0 right-0 text-center z-20">
-          <span className="text-xl font-medium text-white">{elapsedTime}s / 40s</span>
-        </div>
-      )}
+      {/* Se elimina el contador de segundos que estaba aquí */}
 
-      <div className="fixed bottom-0 left-0 right-0 w-full h-[65px] grid grid-cols-2 gap-px z-50">
+      <div className="fixed bottom-0 left-0 right-0 w-full h-[60px] grid grid-cols-2 gap-px z-50">
         <button 
           onClick={isMonitoring ? stopMonitoring : startMonitoring}
           className="w-full h-full text-xl font-bold text-white transition-colors duration-200"
