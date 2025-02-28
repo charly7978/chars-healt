@@ -8,7 +8,7 @@ export const useSignalHistory = () => {
   // Buffers para mantener registro de señales y resultados
   const signalHistoryRef = useRef<number[]>([]);
   const rrDataHistoryRef = useRef<Array<{ intervals: number[], lastPeakTime: number | null }>>([]);
-  const signalQualityHistoryRef = useRef<number[]>([]); // Historial de calidad de señal
+  const signalQualityHistoryRef = useRef<number[]>([]); // Signal quality history
   
   /**
    * Add signal value to history
@@ -19,7 +19,7 @@ export const useSignalHistory = () => {
       signalHistoryRef.current = signalHistoryRef.current.slice(-300);
     }
     
-    // Calcular y guardar calidad de señal
+    // Calculate and save signal quality
     const currentQuality = Math.min(1.0, signalHistoryRef.current.length / 100);
     signalQualityHistoryRef.current.push(currentQuality);
     if (signalQualityHistoryRef.current.length > 15) {
@@ -31,10 +31,10 @@ export const useSignalHistory = () => {
    * Add RR interval data to history
    */
   const addRRData = (rrData: { intervals: number[], lastPeakTime: number | null }) => {
-    // Filtrar valores anómalos antes de guardar
+    // Filter outliers before saving
     const validIntervals = rrData.intervals.filter(interval => {
-      // Criterios básicos de validez fisiológica para RR
-      return interval >= 350 && interval <= 1800; // Rango válido para 33-170 BPM
+      // Basic physiological validity criteria for RR
+      return interval >= 350 && interval <= 1800; // Valid range for 33-170 BPM
     });
     
     if (validIntervals.length > 0) {
@@ -53,17 +53,17 @@ export const useSignalHistory = () => {
    * Get signal quality estimate based on history length and stability
    */
   const getSignalQuality = (): number => {
-    // Promedio ponderado de calidad reciente (da más peso a mediciones recientes)
+    // Weighted average of recent quality (gives more weight to recent measurements)
     if (signalQualityHistoryRef.current.length === 0) {
       return Math.min(1.0, signalHistoryRef.current.length / 100);
     }
     
-    // Calcular promedio ponderado de últimas 15 mediciones de calidad
+    // Calculate weighted average of last 15 quality measurements
     let totalWeight = 0;
     let weightedSum = 0;
     
     signalQualityHistoryRef.current.forEach((quality, index) => {
-      // El peso aumenta con el índice para dar más importancia a muestras recientes
+      // Weight increases with index to give more importance to recent samples
       const weight = index + 1;
       weightedSum += quality * weight;
       totalWeight += weight;

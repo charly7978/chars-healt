@@ -8,7 +8,7 @@ export class VitalSignsProcessor {
   private readonly WINDOW_SIZE = 300;
   private ppgValues: number[] = [];
   private readonly SMA_WINDOW = 3;
-  private readonly BPM_SMOOTHING_ALPHA = 0.18; // Aumentado para suavizar más el BPM
+  private readonly BPM_SMOOTHING_ALPHA = 0.20; // Increased for smoother BPM
   private lastBPM: number = 0;
   
   // Specialized modules for each vital sign
@@ -33,10 +33,10 @@ export class VitalSignsProcessor {
 
     // Update RR intervals if available
     if (rrData?.intervals && rrData.intervals.length > 0) {
-      // Ajuste ligero en sensibilidad de arritmias: filter outliers from RR data
+      // Slight adjustment to arrhythmia sensitivity: filter outliers from RR data
       const validIntervals = rrData.intervals.filter(interval => {
         // Slightly stricter filter to reduce false positives
-        return interval >= 350 && interval <= 1800; // Válido para 33-170 BPM
+        return interval >= 350 && interval <= 1800; // Valid for 33-170 BPM
       });
       
       if (validIntervals.length > 0) {
@@ -91,8 +91,8 @@ export class VitalSignsProcessor {
   }
 
   /**
-   * Suavizar el BPM para fluctuaciones más naturales
-   * @param rawBPM Valor BPM sin procesar
+   * Smooth BPM for more natural fluctuations
+   * @param rawBPM Raw BPM value
    */
   public smoothBPM(rawBPM: number): number {
     if (rawBPM <= 0) return 0;
@@ -102,7 +102,7 @@ export class VitalSignsProcessor {
       return rawBPM;
     }
     
-    // Aplicar suavizado exponencial
+    // Apply exponential smoothing with increased factor for more stability
     const smoothed = Math.round(
       this.BPM_SMOOTHING_ALPHA * rawBPM + 
       (1 - this.BPM_SMOOTHING_ALPHA) * this.lastBPM

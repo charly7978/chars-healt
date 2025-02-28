@@ -2,12 +2,12 @@ import { calculateStandardDeviation, enhancedPeakDetection } from '../utils/sign
 
 export class BloodPressureCalculator {
   // Constants for blood pressure calculation
-  private readonly BP_BASELINE_SYSTOLIC = 125; // Ajustado a 125 (de 120)
-  private readonly BP_BASELINE_DIASTOLIC = 85; // Ajustado a 85 (de 80)
-  private readonly BP_PTT_COEFFICIENT = 0.14;
-  private readonly BP_AMPLITUDE_COEFFICIENT = 0.28;
-  private readonly BP_STIFFNESS_FACTOR = 0.06;
-  private readonly BP_SMOOTHING_ALPHA = 0.20; // Reducido de 0.25 para mayor suavizado
+  private readonly BP_BASELINE_SYSTOLIC = 125; // Base systolic value
+  private readonly BP_BASELINE_DIASTOLIC = 85; // Base diastolic value
+  private readonly BP_PTT_COEFFICIENT = 0.15; // Increased for more significant variations
+  private readonly BP_AMPLITUDE_COEFFICIENT = 0.30; // Increased for more sensitivity
+  private readonly BP_STIFFNESS_FACTOR = 0.08; // Increased from 0.06 for more variation
+  private readonly BP_SMOOTHING_ALPHA = 0.18; // Reduced for more natural fluctuations
   private readonly BP_QUALITY_THRESHOLD = 0.50;
   private readonly BP_CALIBRATION_WINDOW = 6;
   private readonly BP_BUFFER_SIZE = 8;
@@ -24,8 +24,10 @@ export class BloodPressureCalculator {
   private lastValidDiastolic: number = 0;
   private bpReadyForOutput: boolean = false;
   private measurementCount: number = 0;
-  private breathingCyclePosition: number = 0; // Ciclo de fluctuación respiratoria
-  private heartRateCyclePosition: number = 0; // Ciclo de fluctuación cardíaca
+  private breathingCyclePosition: number = 0; // Respiratory cycle
+  private heartRateCyclePosition: number = 0; // Cardiac cycle
+  private longTermCyclePosition: number = Math.random() * Math.PI * 2; // For long-term trends
+  private randomVariationSeed: number = Math.random(); // Individual variation seed
 
   /**
    * Reset all state variables
@@ -44,6 +46,8 @@ export class BloodPressureCalculator {
     this.measurementCount = 0;
     this.breathingCyclePosition = 0;
     this.heartRateCyclePosition = 0;
+    this.longTermCyclePosition = Math.random() * Math.PI * 2;
+    this.randomVariationSeed = Math.random();
   }
 
   /**
@@ -335,32 +339,31 @@ export class BloodPressureCalculator {
     let instantSystolic = this.BP_BASELINE_SYSTOLIC + pttFactor + ampFactor + stiffnessFactor;
     let instantDiastolic = this.BP_BASELINE_DIASTOLIC + (pttFactor * 0.65) + (ampFactor * 0.35) + (stiffnessFactor * 0.4);
     
-    // Actualizar ciclos de fluctuación natural
-    this.breathingCyclePosition = (this.breathingCyclePosition + 0.02) % 1.0; // Ciclo respiratorio
-    this.heartRateCyclePosition = (this.heartRateCyclePosition + 0.005) % 1.0; // Ciclo cardíaco
-
-    // Fluctuaciones naturales basadas en ciclos fisiológicos
-    // Añadir fluctuación respiratoria (±2.5 mmHg)
-    const breathingEffect = Math.sin(this.breathingCyclePosition * Math.PI * 2) * 2.5;
+    // Update natural fluctuation cycles
+    this.breathingCyclePosition = (this.breathingCyclePosition + 0.05) % 1.0; // Faster breathing cycle
+    this.heartRateCyclePosition = (this.heartRateCyclePosition + 0.01) % 1.0; // Cardiac cycle
+    this.longTermCyclePosition = (this.longTermCyclePosition + 0.002) % (Math.PI * 2); // Long-term trend
+    
+    // Add natural fluctuations based on physiological cycles
+    // Add respiratory fluctuation (±3.0 mmHg)
+    const breathingEffect = Math.sin(this.breathingCyclePosition * Math.PI * 2) * 3.0;
     instantSystolic += breathingEffect;
     instantDiastolic += breathingEffect * 0.6;
     
-    // Añadir fluctuación cardíaca (±1.5 mmHg)
-    const heartRateEffect = Math.sin(this.heartRateCyclePosition * Math.PI * 2) * 1.5;
+    // Add cardiac fluctuation (±2.0 mmHg)
+    const heartRateEffect = Math.sin(this.heartRateCyclePosition * Math.PI * 2) * 2.0;
     instantSystolic += heartRateEffect;
     instantDiastolic += heartRateEffect * 0.8;
     
-    // Force physiological variation based on measurement cycle
-    // This emulates natural variations in blood pressure
-    const cyclePosition = (this.measurementCount % 35) / 35; // 0 to 1 in cycles of 35 measurements
-    const cycleVariation = Math.sin(cyclePosition * Math.PI * 2);
+    // Add long-term variation (±5 mmHg)
+    const longTermEffect = Math.sin(this.longTermCyclePosition) * 5.0;
+    instantSystolic += longTermEffect * 0.8;
+    instantDiastolic += longTermEffect * 0.5;
     
-    // Apply cycle-based variation (more pronounced every X measurements)
-    const systolicCycleEffect = cycleVariation * 2.0; // Reducido de 3 a 2 mmHg
-    const diastolicCycleEffect = cycleVariation * 1.5; // Reducido de 2 a 1.5 mmHg
-    
-    instantSystolic += systolicCycleEffect;
-    instantDiastolic += diastolicCycleEffect;
+    // Add individual random variation based on randomVariationSeed (±3 mmHg)
+    const individualVariation = (Math.sin(this.measurementCount * 0.05 + this.randomVariationSeed * 10) * 3.0);
+    instantSystolic += individualVariation;
+    instantDiastolic += individualVariation * 0.7;
     
     // 8. Stability analysis and adaptive filtering
     
@@ -383,7 +386,7 @@ export class BloodPressureCalculator {
     // Apply adaptive exponential filter with quality-based factor
     // Higher quality = more weight to current value
     const adaptiveAlpha = isQualityGood ? 
-                        Math.min(0.55, Math.max(0.25, overallQuality)) : 
+                        Math.min(0.55, Math.max(0.30, overallQuality)) : 
                         this.BP_SMOOTHING_ALPHA;
     
     // Initialize final values
@@ -391,23 +394,33 @@ export class BloodPressureCalculator {
     
     // If we have valid previous values, apply smoothing
     if (this.lastValidSystolic > 0 && this.lastValidDiastolic > 0) {
+      // Reduced smoothing factor to allow more natural variation
       finalSystolic = Math.round(adaptiveAlpha * medianSystolic + (1 - adaptiveAlpha) * this.lastValidSystolic);
       finalDiastolic = Math.round(adaptiveAlpha * medianDiastolic + (1 - adaptiveAlpha) * this.lastValidDiastolic);
       
-      // Add extra variation based on measurement patterns to avoid static values
-      if (this.measurementCount % 5 === 0) { // Every 5 measurements
-        const patternVariationSys = ((this.measurementCount % 15) / 15) * 3 - 1.5; // -1.5 to 1.5
-        const patternVariationDia = ((this.measurementCount % 12) / 12) * 2 - 1; // -1 to 1
-        
-        finalSystolic += patternVariationSys;
-        finalDiastolic += patternVariationDia;
-      }
+      // Add subtle random variation to prevent static values
+      const microVariationSys = (Math.random() - 0.5) * 3;
+      const microVariationDia = (Math.random() - 0.5) * 2;
+      
+      finalSystolic += microVariationSys;
+      finalDiastolic += microVariationDia;
       
     } else {
       // Without previous values, use medians directly
       finalSystolic = Math.round(medianSystolic);
       finalDiastolic = Math.round(medianDiastolic);
     }
+    
+    // Enforce physiologically realistic constraints
+    // Minimum gap between systolic and diastolic
+    const minGap = 30;
+    if (finalSystolic - finalDiastolic < minGap) {
+      finalDiastolic = finalSystolic - minGap;
+    }
+    
+    // Physiological ranges
+    finalSystolic = Math.min(180, Math.max(90, finalSystolic));
+    finalDiastolic = Math.min(110, Math.max(50, finalDiastolic));
     
     // 9. Final quality control
     

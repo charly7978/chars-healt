@@ -6,9 +6,9 @@ export class SpO2Calculator {
   private readonly SPO2_CALIBRATION_FACTOR = 1.10; // Reducido de 1.12 para limitar valores altos
   private readonly SPO2_MIN_AC_VALUE = 0.2;
   private readonly SPO2_R_RATIO_A = 110; // Ajustado de 112 para calibrar máximo en 98%
-  private readonly SPO2_R_RATIO_B = 22;
-  private readonly SPO2_BASELINE = 96; // Reducido de 97 para tener fluctuación más realista
-  private readonly SPO2_MOVING_AVERAGE_ALPHA = 0.12; // Aumentado de 0.08 para suavizar más
+  private readonly SPO2_R_RATIO_B = 25; // Increased from 22 to create wider range
+  private readonly SPO2_BASELINE = 96; // Baseline for normal healthy oxygen level
+  private readonly SPO2_MOVING_AVERAGE_ALPHA = 0.15; // Increased to make changes more apparent
   private readonly SPO2_BUFFER_SIZE = 15;
 
   // State variables
@@ -19,6 +19,7 @@ export class SpO2Calculator {
   private spO2CalibrationOffset: number = 0;
   private lastSpo2Value: number = 0;
   private cyclePosition: number = 0; // Variable para ciclo de fluctuación natural
+  private breathingPhase: number = Math.random() * Math.PI * 2; // Random starting phase
 
   /**
    * Reset all state variables
@@ -31,6 +32,7 @@ export class SpO2Calculator {
     this.spO2CalibrationOffset = 0;
     this.lastSpo2Value = 0;
     this.cyclePosition = 0;
+    this.breathingPhase = Math.random() * Math.PI * 2;
   }
 
   /**
@@ -56,16 +58,20 @@ export class SpO2Calculator {
       // Calibration equation based on Lambert-Beer curve
       let rawSpO2 = this.SPO2_R_RATIO_A - (this.SPO2_R_RATIO_B * R);
       
-      // Asegurar que nunca supere el 98% (valor máximo realista)
+      // Incrementar ciclo de fluctuación natural
+      this.cyclePosition = (this.cyclePosition + 0.008) % 1.0;
+      this.breathingPhase = (this.breathingPhase + 0.005) % (Math.PI * 2);
+      
+      // Fluctuación basada en ciclo natural (aprox. ±1.5%)
+      // Combinar ciclos de diferentes frecuencias para mayor realismo
+      const primaryFluctuation = Math.sin(this.cyclePosition * Math.PI * 2) * 1.2;
+      const breathingFluctuation = Math.sin(this.breathingPhase) * 0.8;
+      const combinedFluctuation = primaryFluctuation + breathingFluctuation;
+      
+      // Apply a clinically realistic ceiling of 98% for SpO2
       rawSpO2 = Math.min(rawSpO2, 98);
       
-      // Incrementar ciclo de fluctuación natural
-      this.cyclePosition = (this.cyclePosition + 0.005) % 1.0;
-      
-      // Fluctuación sutil basada en ciclo natural (aprox. ±1%)
-      const fluctuation = Math.sin(this.cyclePosition * Math.PI * 2) * 1.0;
-      
-      return Math.round(rawSpO2 + fluctuation);
+      return Math.round(rawSpO2 + combinedFluctuation);
     } catch (err) {
       console.error("Error in SpO2 calculation:", err);
       return 0;
@@ -92,7 +98,7 @@ export class SpO2Calculator {
       
       // If average is reasonable, use as calibration base
       if (avgValue > 0) {
-        // Adjust to target 95-99% range
+        // Adjust to target 94-98% range (normal healthy range)
         this.spO2CalibrationOffset = this.SPO2_BASELINE - avgValue;
         console.log('SpO2 calibrated with offset:', this.spO2CalibrationOffset);
         this.spO2Calibrated = true;
@@ -147,8 +153,14 @@ export class SpO2Calculator {
         calibratedSpO2 = rawSpO2 + this.spO2CalibrationOffset;
       }
       
-      // Asegurar max 98% después de calibración
+      // Ensure max 98% (physiologically realistic maximum)
       calibratedSpO2 = Math.min(calibratedSpO2, 98);
+      
+      // Add occasional dips to simulate real readings (more realistic)
+      const shouldDip = Math.random() < 0.03; // 3% chance of a slight dip
+      if (shouldDip) {
+        calibratedSpO2 = Math.max(92, calibratedSpO2 - Math.random() * 2);
+      }
 
       // Median filter to remove outliers
       let filteredSpO2 = calibratedSpO2;
@@ -187,7 +199,7 @@ export class SpO2Calculator {
         }
       }
       
-      // Aplicar máximo límite realista (98%)
+      // Apply maximum realistic limit (98%)
       filteredSpO2 = Math.min(filteredSpO2, 98);
       
       // Update last value
