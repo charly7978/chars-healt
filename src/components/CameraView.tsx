@@ -17,7 +17,15 @@ const CameraView = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const mountedRef = useRef(true);
+  const initializingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  const [isAndroid, setIsAndroid] = useState(false);
+
+  // Detectar si estamos en Android
+  useEffect(() => {
+    const userAgent = navigator.userAgent.toLowerCase();
+    setIsAndroid(/android/i.test(userAgent));
+  }, []);
 
   // Función para detener la cámara y liberar recursos
   const stopCamera = useCallback(() => {
@@ -26,9 +34,10 @@ const CameraView = ({
     if (streamRef.current) {
       const tracks = streamRef.current.getTracks();
       tracks.forEach(track => {
-        // Desactivar la linterna si está disponible
+        // Primero desactivar la linterna si está disponible
         if (track.getCapabilities()?.torch) {
           try {
+            console.log("CameraView: Desactivando linterna");
             track.applyConstraints({
               advanced: [{ torch: false }]
             }).catch(err => console.error("Error desactivando linterna:", err));
@@ -37,15 +46,17 @@ const CameraView = ({
           }
         }
         
-        // Detener la pista
-        try {
-          if (track.readyState === 'live') {
-            console.log("CameraView: Deteniendo track de video");
-            track.stop();
+        // Esperar un momento antes de detener la pista (ayuda con Android)
+        setTimeout(() => {
+          try {
+            if (track.readyState === 'live') {
+              console.log("CameraView: Deteniendo track de video");
+              track.stop();
+            }
+          } catch (err) {
+            console.error("Error deteniendo track:", err);
           }
-        } catch (err) {
-          console.error("Error deteniendo track:", err);
-        }
+        }, 50);
       });
 
       streamRef.current = null;
@@ -54,6 +65,7 @@ const CameraView = ({
     // Limpiar el video element
     if (videoRef.current) {
       try {
+        videoRef.current.pause();
         videoRef.current.srcObject = null;
       } catch (err) {
         console.error("Error limpiando video element:", err);
@@ -63,30 +75,34 @@ const CameraView = ({
 
   // Función para iniciar la cámara
   const startCamera = useCallback(async () => {
-    if (!mountedRef.current) return;
+    if (!mountedRef.current || initializingRef.current) return;
     if (!isMonitoring) {
       console.log("CameraView: No iniciando cámara porque isMonitoring es false");
       return;
     }
     
+    initializingRef.current = true;
     console.log("CameraView: Iniciando cámara");
     setError(null);
     
     try {
       // Asegurarse de que cualquier stream previo está detenido
       stopCamera();
+      
+      // Esperar un momento para que los recursos se liberen (especialmente en Android)
+      await new Promise(resolve => setTimeout(resolve, isAndroid ? 300 : 50));
 
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error('La API getUserMedia no está disponible');
       }
 
-      // Configuración de la cámara optimizada para dispositivos móviles
-      const constraints = {
+      // Configuración de la cámara optimizada para cada plataforma
+      const constraints: MediaStreamConstraints = {
         video: {
           facingMode: 'environment',
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-          frameRate: { ideal: 30 }
+          width: isAndroid ? { ideal: 1280 } : { ideal: 640 },
+          height: isAndroid ? { ideal: 720 } : { ideal: 480 },
+          frameRate: { ideal: isAndroid ? 24 : 30 }
         },
         audio: false
       };
@@ -99,15 +115,60 @@ const CameraView = ({
       if (!mountedRef.current || !isMonitoring) {
         console.log("CameraView: Componente desmontado o no monitorizando, liberando stream");
         mediaStream.getTracks().forEach(track => track.stop());
+        initializingRef.current = false;
         return;
       }
 
       streamRef.current = mediaStream;
 
+      // Configurar optimizaciones específicas para Android
+      if (isAndroid) {
+        console.log("CameraView: Aplicando optimizaciones para Android");
+        const videoTrack = mediaStream.getVideoTracks()[0];
+        if (videoTrack) {
+          try {
+            // Optimizaciones para Android
+            const capabilities = videoTrack.getCapabilities();
+            const settings: MediaTrackConstraints = {};
+            
+            if (capabilities.exposureMode && capabilities.exposureMode.includes('continuous')) {
+              settings.exposureMode = 'continuous';
+            }
+            
+            if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+              settings.focusMode = 'continuous';
+            }
+            
+            if (capabilities.whiteBalanceMode && capabilities.whiteBalanceMode.includes('continuous')) {
+              settings.whiteBalanceMode = 'continuous';
+            }
+            
+            if (Object.keys(settings).length > 0) {
+              await videoTrack.applyConstraints(settings);
+              console.log("CameraView: Optimizaciones para Android aplicadas", settings);
+            }
+          } catch (err) {
+            console.error("Error aplicando optimizaciones para Android:", err);
+          }
+        }
+      }
+
       // Configurar el elemento de video
       if (videoRef.current) {
         console.log("CameraView: Asignando stream al elemento video");
+        
+        // Optimizaciones específicas para el elemento video en Android
+        if (isAndroid) {
+          videoRef.current.style.willChange = 'transform';
+          videoRef.current.style.transform = 'translateZ(0)';
+          videoRef.current.style.backfaceVisibility = 'hidden';
+        }
+        
         videoRef.current.srcObject = mediaStream;
+        
+        // En Android, esperar a que las optimizaciones se apliquen antes de reproducir
+        await new Promise(resolve => setTimeout(resolve, isAndroid ? 100 : 0));
+        
         await videoRef.current.play().catch(e => {
           console.error("Error reproduciendo video:", e);
           throw e;
@@ -116,6 +177,9 @@ const CameraView = ({
       } else {
         console.error("CameraView: El elemento video no está disponible");
       }
+
+      // Esperar un momento antes de activar la linterna en Android
+      await new Promise(resolve => setTimeout(resolve, isAndroid ? 200 : 0));
 
       // Intentar activar la linterna si estamos monitorizando
       const videoTrack = mediaStream.getVideoTracks()[0];
@@ -142,23 +206,25 @@ const CameraView = ({
       console.error('Error iniciando la cámara:', error);
       setError(`Error iniciando la cámara: ${error instanceof Error ? error.message : String(error)}`);
       stopCamera();
+    } finally {
+      initializingRef.current = false;
     }
-  }, [isMonitoring, onStreamReady, stopCamera]);
+  }, [isMonitoring, onStreamReady, stopCamera, isAndroid]);
 
   // Efecto para iniciar/detener la cámara cuando cambia isMonitoring
   useEffect(() => {
     console.log("CameraView: isMonitoring cambió a:", isMonitoring);
     
     if (isMonitoring) {
-      // Usar un pequeño timeout para evitar problemas con múltiples inicializaciones
+      // Usar un timeout más largo para Android
       const timeoutId = setTimeout(() => {
         startCamera();
-      }, 100);
+      }, isAndroid ? 500 : 100);
       return () => clearTimeout(timeoutId);
     } else {
       stopCamera();
     }
-  }, [isMonitoring, startCamera, stopCamera]);
+  }, [isMonitoring, startCamera, stopCamera, isAndroid]);
 
   // Efecto de limpieza al montar/desmontar el componente
   useEffect(() => {
@@ -195,7 +261,8 @@ const CameraView = ({
         style={{
           transform: 'translateZ(0)', // Hardware acceleration
           WebkitBackfaceVisibility: 'hidden',
-          backfaceVisibility: 'hidden'
+          backfaceVisibility: 'hidden',
+          willChange: isAndroid ? 'transform' : 'auto',
         }}
       />
       {error && (
