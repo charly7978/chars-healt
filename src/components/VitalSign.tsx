@@ -85,10 +85,10 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     { text: value, ...getRiskInfo() };
 
   return (
-    <div className="relative overflow-hidden group bg-gradient-to-b from-blue-900/70 to-indigo-900/70 backdrop-blur-md rounded-xl border border-indigo-500/30 p-4 shadow-lg">
-      <div className="absolute inset-0 bg-blue-600/5 pointer-events-none"></div>
+    <div className="relative overflow-hidden group bg-gradient-to-b from-blue-900/30 to-indigo-900/30 backdrop-blur-sm rounded-xl border border-indigo-500/20 p-4 shadow-lg">
+      <div className="absolute inset-0 bg-black/10 pointer-events-none"></div>
       <div className="relative z-10">
-        <h3 className="text-blue-100/90 text-xs font-medium tracking-wider uppercase mb-2">{label}</h3>
+        <h3 className="text-blue-100/80 text-xs font-medium tracking-wider mb-2">{label}</h3>
         <div className="flex flex-col items-center gap-1">
           <div className="flex items-baseline gap-1 justify-center">
             <span 
@@ -98,12 +98,12 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
               {isArrhythmiaDisplay ? text : value}
             </span>
             {!isArrhythmiaDisplay && unit && (
-              <span className="text-blue-200/90 text-xs">{unit}</span>
+              <span className="text-blue-200/70 text-xs">{unit}</span>
             )}
           </div>
           {riskLabel && (
             <span 
-              className="text-[10px] font-semibold tracking-wider uppercase mt-1"
+              className="text-[10px] font-semibold tracking-wider mt-1"
               style={{ color }}
             >
               {riskLabel}
