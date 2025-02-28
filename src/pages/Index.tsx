@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -458,33 +457,26 @@ const Index = () => {
 
   return (
     <div 
-      className="fixed inset-0 flex flex-col bg-black" 
+      className="fixed inset-0" 
       style={{ 
-        height: '100%',
-        maxHeight: '100dvh',
+        height: '100dvh',
         minHeight: '100vh',
         touchAction: 'none',
         overscrollBehavior: 'none',
         WebkitOverflowScrolling: 'touch',
         overflow: 'hidden',
-        paddingTop: 'var(--sat)',
-        paddingRight: 'var(--sar)',
-        paddingBottom: 'var(--sab)',
-        paddingLeft: 'var(--sal)',
+        display: 'flex',
+        flexDirection: 'column',
       }}
     >
-      {/* Capa de CameraView con posición absoluta */}
-      <div className="absolute inset-0 z-0">
-        <CameraView 
-          onStreamReady={handleStreamReady}
-          isMonitoring={isCameraOn}
-          isFingerDetected={isMonitoring ? lastSignal?.fingerDetected : false}
-          signalQuality={isMonitoring ? signalQuality : 0}
-        />
-      </div>
+      <CameraView 
+        onStreamReady={handleStreamReady}
+        isMonitoring={isCameraOn}
+        isFingerDetected={isMonitoring ? lastSignal?.fingerDetected : false}
+        signalQuality={isMonitoring ? signalQuality : 0}
+      />
 
-      {/* PPG Signal Meter con posición absoluta fija */}
-      <div className="absolute inset-0 z-10">
+      <div className="flex-1 flex flex-col z-10">
         <PPGSignalMeter 
           value={isMonitoring ? lastSignal?.filteredValue || 0 : 0}
           quality={isMonitoring ? lastSignal?.quality || 0 : 0}
@@ -496,16 +488,14 @@ const Index = () => {
         />
       </div>
 
-      {/* Título "Chars Healt" en posición exacta */}
-      <div className="absolute z-40" style={{ top: '50.5vh', left: 0, right: 0, textAlign: 'center' }}>
+      <div className="text-center mb-3 z-40 absolute top-[50.5vh] left-0 right-0">
         <h1 className="text-2xl font-bold">
           <span className="text-white">Chars</span>
           <span className="text-[#33C3F0]">Healt</span>
         </h1>
       </div>
 
-      {/* Panel de signos vitales con posición fija abajo */}
-      <div className="absolute z-20" style={{ bottom: '65px', left: 0, right: 0, padding: '0 12px' }}>
+      <div className="fixed bottom-[65px] left-0 right-0 px-3 z-20">
         <div className="p-2 bg-black/60 rounded-lg">
           <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
             <VitalSign 
@@ -535,32 +525,29 @@ const Index = () => {
         </div>
       </div>
 
-      {/* Botonera fija en la parte inferior */}
-      <div className="absolute z-50" style={{ bottom: 0, left: 0, right: 0, height: '55px' }}>
-        <div className="grid grid-cols-2 gap-px w-full h-full">
-          <button 
-            onClick={startMonitoring}
-            className="w-full h-full text-xl font-bold text-white transition-colors duration-200"
-            style={{ 
-              backgroundImage: isMonitoring 
-                ? 'linear-gradient(135deg, #f87171, #dc2626, #b91c1c)' 
-                : 'linear-gradient(135deg, #3b82f6, #2563eb, #1d4ed8)',
-              textShadow: '0px 1px 3px rgba(0, 0, 0, 0.3)'
-            }}
-          >
-            {isMonitoring ? 'DETENER' : 'INICIAR'}
-          </button>
-          <button 
-            onClick={handleReset}
-            className="w-full h-full text-xl font-bold text-white transition-colors duration-200"
-            style={{ 
-              backgroundImage: 'linear-gradient(135deg, #64748b, #475569, #334155)',
-              textShadow: '0px 1px 3px rgba(0, 0, 0, 0.3)'
-            }}
-          >
-            RESET
-          </button>
-        </div>
+      <div className="fixed bottom-0 left-0 right-0 w-full h-[55px] grid grid-cols-2 gap-px z-50">
+        <button 
+          onClick={startMonitoring}
+          className="w-full h-full text-xl font-bold text-white transition-colors duration-200"
+          style={{ 
+            backgroundImage: isMonitoring 
+              ? 'linear-gradient(135deg, #f87171, #dc2626, #b91c1c)' 
+              : 'linear-gradient(135deg, #3b82f6, #2563eb, #1d4ed8)',
+            textShadow: '0px 1px 3px rgba(0, 0, 0, 0.3)'
+          }}
+        >
+          {isMonitoring ? 'DETENER' : 'INICIAR'}
+        </button>
+        <button 
+          onClick={handleReset}
+          className="w-full h-full text-xl font-bold text-white transition-colors duration-200"
+          style={{ 
+            backgroundImage: 'linear-gradient(135deg, #64748b, #475569, #334155)',
+            textShadow: '0px 1px 3px rgba(0, 0, 0, 0.3)'
+          }}
+        >
+          RESET
+        </button>
       </div>
     </div>
   );

@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -40,10 +41,10 @@ const PPGSignalMeter = ({
   const GRID_SIZE_X = 30;
   const GRID_SIZE_Y = 30;
   const verticalScale = 39.0;
-  const SMOOTHING_FACTOR = 0.9;
-  const TARGET_FPS = 60;
-  const FRAME_TIME = 1000 / TARGET_FPS;
-  const BUFFER_SIZE = 200;
+  const SMOOTHING_FACTOR = 0.9; // Reducido para que reaccione más rápido
+  const TARGET_FPS = 60; // Ajustado para un mejor rendimiento 
+  const FRAME_TIME = 1000 / TARGET_FPS; // Optimizado para mejor FPS
+  const BUFFER_SIZE = 200; // Reducido para menor uso de memoria
 
   useEffect(() => {
     if (!dataBufferRef.current) {
@@ -71,18 +72,20 @@ const PPGSignalMeter = ({
   }, []);
 
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
+    // Fondo negro (sin cambios)
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
+    // Cuadrícula verde - MODIFICADO: Cambiado de blanco a verde
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(0, 255, 127, 0.15)';
+    ctx.strokeStyle = 'rgba(0, 255, 127, 0.15)'; // Verde suave para la cuadrícula principal
     ctx.lineWidth = 0.5;
 
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X) {
       ctx.moveTo(x, 0);
       ctx.lineTo(x, CANVAS_HEIGHT);
       if (x % (GRID_SIZE_X * 4) === 0) {
-        ctx.fillStyle = 'rgba(0, 255, 127, 0.9)';
+        ctx.fillStyle = 'rgba(0, 255, 127, 0.9)';  // Verde más brillante para las etiquetas
         ctx.font = '10px Inter';
         ctx.textAlign = 'center';
         ctx.fillText(`${x / 10}ms`, x, CANVAS_HEIGHT - 5);
@@ -94,7 +97,7 @@ const PPGSignalMeter = ({
       ctx.lineTo(CANVAS_WIDTH, y);
       if (y % (GRID_SIZE_Y * 4) === 0) {
         const amplitude = ((CANVAS_HEIGHT / 2) - y) / verticalScale;
-        ctx.fillStyle = 'rgba(0, 255, 127, 0.9)';
+        ctx.fillStyle = 'rgba(0, 255, 127, 0.9)';  // Verde más brillante para las etiquetas
         ctx.font = '10px Inter';
         ctx.textAlign = 'right';
         ctx.fillText(amplitude.toFixed(1), 25, y + 4);
@@ -102,8 +105,9 @@ const PPGSignalMeter = ({
     }
     ctx.stroke();
 
+    // Líneas principales más visibles - MODIFICADO: Cambiado a verde más intenso
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(0, 255, 127, 0.25)';
+    ctx.strokeStyle = 'rgba(0, 255, 127, 0.25)'; // Verde más intenso para líneas principales
     ctx.lineWidth = 1;
 
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X * 4) {
@@ -117,8 +121,9 @@ const PPGSignalMeter = ({
     }
     ctx.stroke();
 
+    // Línea central más visible - BAJADA SUTILMENTE (de CANVAS_HEIGHT/2 a CANVAS_HEIGHT*0.6)
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(0, 255, 127, 0.35)';
+    ctx.strokeStyle = 'rgba(0, 255, 127, 0.35)'; // Verde más intenso para línea central
     ctx.lineWidth = 1.5;
     ctx.moveTo(0, CANVAS_HEIGHT * 0.6);
     ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT * 0.6);
@@ -140,7 +145,7 @@ const PPGSignalMeter = ({
     }
 
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+    const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true }); // Optimización clave: rendering desincronizado
     if (!ctx) {
       animationFrameRef.current = requestAnimationFrame(renderSignal);
       return;
@@ -157,6 +162,7 @@ const PPGSignalMeter = ({
     const smoothedValue = smoothValue(value, lastValueRef.current);
     lastValueRef.current = smoothedValue;
 
+    // Invertir el signo del valor normalizado para que los picos vayan hacia arriba
     const normalizedValue = smoothedValue - (baselineRef.current || 0);
     const scaledValue = normalizedValue * verticalScale;
     
@@ -180,11 +186,13 @@ const PPGSignalMeter = ({
 
     const points = dataBufferRef.current.getPoints();
     if (points.length > 1) {
+      // Dibujamos solo los puntos visibles para mejorar rendimiento
       const visiblePoints = points.filter(
         point => (now - point.time) <= WINDOW_WIDTH_MS
       );
       
       if (visiblePoints.length > 1) {
+        // Optimización: Dibujamos todo el trazo de una vez
         ctx.beginPath();
         ctx.strokeStyle = '#0EA5E9';
         ctx.lineWidth = 2;
@@ -205,6 +213,7 @@ const PPGSignalMeter = ({
             ctx.lineTo(x, y);
           }
           
+          // Cambiamos color para puntos de arritmia
           if (point.isArrhythmia && i < visiblePoints.length - 1) {
             ctx.stroke();
             ctx.beginPath();
@@ -217,6 +226,7 @@ const PPGSignalMeter = ({
             ctx.lineTo(nextX, nextY);
             ctx.stroke();
             
+            // Volvemos al color normal
             ctx.beginPath();
             ctx.strokeStyle = '#0EA5E9';
             ctx.moveTo(nextX, nextY);
@@ -227,34 +237,41 @@ const PPGSignalMeter = ({
         ctx.stroke();
       }
 
+      // Dibujar puntos de pico (optimizado)
       for (let i = 1; i < visiblePoints.length - 1; i++) {
         const prevPoint = visiblePoints[i - 1];
         const point = visiblePoints[i];
         const nextPoint = visiblePoints[i + 1];
         
+        // Optimizado: solo procesamos si es un pico
         if (point.value > prevPoint.value && point.value > nextPoint.value) {
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
           const y = canvas.height * 0.6 - point.value;
           
+          // Dibujar círculo para los puntos de pico
           ctx.beginPath();
           ctx.arc(x, y, 4, 0, Math.PI * 2);
           ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
           ctx.fill();
 
+          // Dibujar valor del pico
           ctx.font = 'bold 12px Inter';
-          ctx.fillStyle = '#C0C0C0';
+          ctx.fillStyle = '#C0C0C0'; // Gris claro para los números de picos
           ctx.textAlign = 'center';
           ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 20);
           
+          // Agregar círculo y etiqueta "ARR" para arritmias
           if (point.isArrhythmia) {
+            // Círculo adicional para arritmias
             ctx.beginPath();
             ctx.arc(x, y, 8, 0, Math.PI * 2);
-            ctx.strokeStyle = '#FFFF00';
+            ctx.strokeStyle = '#FFFF00'; // Círculo amarillo
             ctx.lineWidth = 1.5;
             ctx.stroke();
             
+            // Etiqueta "ARR"
             ctx.font = 'bold 10px Inter';
-            ctx.fillStyle = '#FF6B6B';
+            ctx.fillStyle = '#FF6B6B'; // Color rojo claro para ARR
             ctx.fillText("ARR", x, y - 35);
           }
         }
@@ -276,8 +293,8 @@ const PPGSignalMeter = ({
 
   return (
     <>
-      <div className="absolute top-0 right-1 z-30 flex items-center gap-2 bg-black/40 rounded-lg p-2"
-           style={{ top: '5px', right: '5px' }}>
+      {/* Sensor de calidad subido un poco y huella desplazada más al margen derecho y reducida */}
+      <div className="absolute top-0 right-1 z-20 flex items-center gap-2 bg-black/40 rounded-lg p-2">
         <div className="w-[190px]">
           <div className={`h-1.5 w-full rounded-full bg-gradient-to-r ${getQualityColor(quality)} transition-all duration-1000 ease-in-out`}>
             <div
@@ -307,17 +324,18 @@ const PPGSignalMeter = ({
         </div>
       </div>
 
-      <div className="absolute inset-0 w-full" style={{ height: '50vh', top: 0 }}>
+      <div className="flex-1 w-full relative">
         <canvas
           ref={canvasRef}
           width={CANVAS_WIDTH}
           height={CANVAS_HEIGHT}
-          className="w-full h-full"
-          style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 }}
+          className="w-full h-[calc(50vh)] mt-0 absolute top-0 left-0 right-0"
+          style={{ zIndex: 10 }}
         />
       </div>
       
-      <div className="absolute" style={{ top: 'calc(50vh + 5px)', left: 0, right: 0, textAlign: 'center', zIndex: 30 }}>
+      {/* Título "Chars Healt" colocado DEBAJO del gráfico, no dentro */}
+      <div className="text-center mt-[50vh] mb-2 z-30 relative">
         <h1 className="text-lg font-bold">
           <span className="text-white">Chars</span>
           <span className="text-[#ea384c]">Healt</span>
