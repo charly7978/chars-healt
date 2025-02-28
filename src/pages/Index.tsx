@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -224,8 +225,8 @@ const Index = () => {
         />
       </div>
 
-      {/* Displays - Signos Vitales - Bajados significativamente más */}
-      <div className="fixed bottom-[200px] left-0 right-0 px-4 z-30">
+      {/* Displays - Signos Vitales - Posicionados a media pantalla */}
+      <div className="fixed top-1/2 left-0 right-0 px-4 z-30">
         <div className="p-4">
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <VitalSign 
@@ -263,7 +264,7 @@ const Index = () => {
 
       <div className="fixed bottom-0 left-0 right-0 w-full h-[80px] grid grid-cols-2 gap-px z-50">
         <button 
-          onClick={startMonitoring}
+          onClick={isMonitoring ? stopMonitoring : startMonitoring}
           className="w-full h-full text-2xl font-bold text-white transition-colors duration-200"
           style={{ 
             backgroundImage: isMonitoring 
