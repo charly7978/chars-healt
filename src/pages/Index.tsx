@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -39,13 +38,11 @@ const Index = () => {
   } | null>(null);
   const measurementTimerRef = useRef<number | null>(null);
   
-  // Nuevos arrays para almacenar todos los valores durante la medición
   const allHeartRateValuesRef = useRef<number[]>([]);
   const allSpo2ValuesRef = useRef<number[]>([]);
   const allSystolicValuesRef = useRef<number[]>([]);
   const allDiastolicValuesRef = useRef<number[]>([]);
   
-  // Flag para trackear si ya tenemos valores válidos que queremos preservar
   const hasValidValuesRef = useRef(false);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
@@ -257,7 +254,6 @@ const Index = () => {
     const videoTrack = stream.getVideoTracks()[0];
     const imageCapture = new ImageCapture(videoTrack);
     
-    // Solo activar la linterna si estamos monitorizando
     if (isMonitoring && videoTrack.getCapabilities()?.torch) {
       videoTrack.applyConstraints({
         advanced: [{ torch: true }]
@@ -295,7 +291,6 @@ const Index = () => {
 
     processImage();
     
-    // Configurar listener para apagar la linterna cuando se detenga la monitorización
     return () => {
       if (videoTrack.getCapabilities()?.torch) {
         videoTrack.applyConstraints({
@@ -305,10 +300,8 @@ const Index = () => {
     };
   };
 
-  // Asegurarse que la linterna se apague cuando cambie isMonitoring
   useEffect(() => {
     if (!isMonitoring && isCameraOn) {
-      // Intentar apagar el flash si estaba encendido y ahora paramos
       try {
         const tracks = navigator.mediaDevices
           .getUserMedia({ video: true })
@@ -382,7 +375,6 @@ const Index = () => {
 
     enterImmersiveMode();
     
-    // Optimizado: reduciendo las llamadas repeat innecesarias
     const immersiveTimeout = setTimeout(enterImmersiveMode, 1000);
 
     const handleInteraction = () => {
@@ -496,15 +488,13 @@ const Index = () => {
         />
       </div>
 
-      {/* Título "Chars Healt" colocado exactamente entre el gráfico y los displays */}
-      <div className="text-center mb-3 z-40 absolute top-[50vh] left-0 right-0">
-        <h1 className="text-xl font-bold">
+      <div className="text-center mb-3 z-40 absolute top-[50.5vh] left-0 right-0">
+        <h1 className="text-2xl font-bold">
           <span className="text-white">Chars</span>
-          <span className="text-[#ea384c]">Healt</span>
+          <span className="text-[#33C3F0]">Healt</span>
         </h1>
       </div>
 
-      {/* Reducido el tamaño del bloque de displays y acercado a la botonera */}
       <div className="fixed bottom-[65px] left-0 right-0 px-3 z-20">
         <div className="p-2 bg-black/60 rounded-lg">
           <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
@@ -535,7 +525,6 @@ const Index = () => {
         </div>
       </div>
 
-      {/* Reducido levemente la botonera */}
       <div className="fixed bottom-0 left-0 right-0 w-full h-[55px] grid grid-cols-2 gap-px z-50">
         <button 
           onClick={startMonitoring}
