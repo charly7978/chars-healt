@@ -121,12 +121,12 @@ const PPGSignalMeter = ({
     }
     ctx.stroke();
 
-    // Línea central más visible (sin cambios)
+    // Línea central más visible - BAJADA SUTILMENTE (de CANVAS_HEIGHT/2 a CANVAS_HEIGHT*0.6)
     ctx.beginPath();
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
     ctx.lineWidth = 1.5;
-    ctx.moveTo(0, CANVAS_HEIGHT / 2);
-    ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT / 2);
+    ctx.moveTo(0, CANVAS_HEIGHT * 0.6);
+    ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT * 0.6);
     ctx.stroke();
   }, []);
 
@@ -190,9 +190,9 @@ const PPGSignalMeter = ({
         const point = points[i];
         
         const x1 = canvas.width - ((now - prevPoint.time) * canvas.width / WINDOW_WIDTH_MS);
-        const y1 = canvas.height / 2 - prevPoint.value;
+        const y1 = canvas.height * 0.6 - prevPoint.value;
         const x2 = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-        const y2 = canvas.height / 2 - point.value;
+        const y2 = canvas.height * 0.6 - point.value;
 
         ctx.beginPath();
         ctx.strokeStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
@@ -207,7 +207,7 @@ const PPGSignalMeter = ({
       points.forEach((point, index) => {
         if (index > 0 && index < points.length - 1) {
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-          const y = canvas.height / 2 - point.value;
+          const y = canvas.height * 0.6 - point.value;
           const prevPoint = points[index - 1];
           const nextPoint = points[index + 1];
           
