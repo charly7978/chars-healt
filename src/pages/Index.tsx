@@ -497,7 +497,7 @@ const Index = () => {
       </div>
 
       {/* Título "Chars Healt" colocado exactamente entre el gráfico y los displays */}
-      <div className="text-center mb-3 z-40">
+      <div className="text-center mb-3 z-40 absolute top-[50vh] left-0 right-0">
         <h1 className="text-xl font-bold">
           <span className="text-white">Chars</span>
           <span className="text-[#ea384c]">Healt</span>
