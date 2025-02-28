@@ -38,11 +38,11 @@ const PPGSignalMeter = ({
   const WINDOW_WIDTH_MS = 2500;
   const CANVAS_WIDTH = 600;
   const CANVAS_HEIGHT = 450;
-  const GRID_SIZE_X = 10;
-  const GRID_SIZE_Y = 10;
+  const GRID_SIZE_X = 20;
+  const GRID_SIZE_Y = 20;
   const verticalScale = 45.0;
-  const SMOOTHING_FACTOR = 0.9; // Reducido para que reaccione más rápido
-  const TARGET_FPS = 60; // Ajustado para un mejor rendimiento 
+  const SMOOTHING_FACTOR = 0.99; // Reducido para que reaccione más rápido
+  const TARGET_FPS = 30; // Ajustado para un mejor rendimiento 
   const FRAME_TIME = 1000 / TARGET_FPS; // Optimizado para mejor FPS
   const BUFFER_SIZE = 100; // Reducido para menor uso de memoria
 
