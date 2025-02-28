@@ -22,10 +22,10 @@ export class VitalSignsProcessor {
   // Nuevas constantes para el algoritmo avanzado de presión arterial
   private readonly BP_BASELINE_SYSTOLIC = 120;  // Presión sistólica de referencia
   private readonly BP_BASELINE_DIASTOLIC = 80;  // Presión diastólica de referencia
-  private readonly BP_PTT_COEFFICIENT = 0.12;   // Coeficiente mejorado para relación PTT-presión
+  private readonly BP_PTT_COEFFICIENT = 0.18;   // AJUSTE 1: Aumentado de 0.12 a 0.18 para mayor sensibilidad a cambios en PTT
   private readonly BP_AMPLITUDE_COEFFICIENT = 0.35; // Coeficiente ajustado para amplitud
   private readonly BP_STIFFNESS_FACTOR = 0.07;  // Factor de rigidez arterial
-  private readonly BP_SMOOTHING_ALPHA = 0.65;   // Factor de suavizado adaptativo
+  private readonly BP_SMOOTHING_ALPHA = 0.25;   // AJUSTE 2: Reducido de 0.65 a 0.25 para permitir más variabilidad
   private readonly BP_QUALITY_THRESHOLD = 0.4;  // Umbral de calidad mínima para medición válida
   private readonly BP_CALIBRATION_WINDOW = 8;   // Ventana para auto-calibración
   private readonly BP_MIN_VALID_PTT = 300;      // PTT mínimo válido (ms)
