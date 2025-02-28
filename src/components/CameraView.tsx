@@ -21,6 +21,7 @@ const CameraView = ({
   const stopCamera = useCallback(() => {
     if (!mountedRef.current) return;
 
+    console.log("CameraView: Deteniendo cámara explícitamente");
     if (streamRef.current) {
       const tracks = streamRef.current.getTracks();
       tracks.forEach(track => {
@@ -35,6 +36,7 @@ const CameraView = ({
           }
         }
         if (track.readyState === 'live') {
+          console.log("CameraView: Deteniendo track de video");
           track.stop();
         }
       });
@@ -52,6 +54,12 @@ const CameraView = ({
 
   const startCamera = useCallback(async () => {
     if (!mountedRef.current) return;
+    if (!isMonitoring) {
+      console.log("CameraView: No iniciando cámara porque isMonitoring es false");
+      return;
+    }
+    
+    console.log("CameraView: Iniciando cámara porque isMonitoring es true");
     
     try {
       if (streamRef.current?.active) {
@@ -113,7 +121,8 @@ const CameraView = ({
         });
       }
 
-      if (!mountedRef.current) {
+      if (!mountedRef.current || !isMonitoring) {
+        console.log("CameraView: Componente desmontado o no monitorizando, liberando stream");
         stream.getTracks().forEach(track => track.stop());
         return;
       }
@@ -153,7 +162,7 @@ const CameraView = ({
         }
         
         video.onloadedmetadata = () => {
-          if (!mountedRef.current) return;
+          if (!mountedRef.current || !isMonitoring) return;
           
           // Play de video con manejo de promise para navegadores modernos
           const playPromise = video.play();
@@ -218,7 +227,7 @@ const CameraView = ({
       }
 
       // Notificar que el stream está listo para procesamiento
-      if (mountedRef.current && onStreamReady) {
+      if (mountedRef.current && isMonitoring && onStreamReady) {
         onStreamReady(stream);
       }
 
@@ -230,44 +239,28 @@ const CameraView = ({
 
   // Controlar el estado de la linterna cuando cambia isMonitoring
   useEffect(() => {
-    if (streamRef.current) {
-      const videoTrack = streamRef.current.getVideoTracks()[0];
-      if (videoTrack && videoTrack.getCapabilities()?.torch) {
-        videoTrack.applyConstraints({
-          advanced: [{ torch: isMonitoring }]
-        }).catch(err => {
-          console.error(`Error ${isMonitoring ? 'activando' : 'desactivando'} linterna:`, err);
-        });
-      }
+    console.log("CameraView: isMonitoring cambió a:", isMonitoring);
+    
+    if (isMonitoring) {
+      startCamera();
+    } else if (streamRef.current) {
+      console.log("CameraView: Deteniendo cámara porque isMonitoring es false");
+      stopCamera();
     }
-  }, [isMonitoring]);
+    
+  }, [isMonitoring, startCamera, stopCamera]);
 
+  // Effect principal de inicialización y limpieza
   useEffect(() => {
     mountedRef.current = true;
-
-    const initializeCamera = async () => {
-      if (isMonitoring && !streamRef.current?.active) {
-        await startCamera();
-      } else if (!isMonitoring && streamRef.current) {
-        // Si ya no estamos monitoreando, asegurarnos de apagar la linterna
-        const videoTrack = streamRef.current.getVideoTracks()[0];
-        if (videoTrack && videoTrack.getCapabilities()?.torch) {
-          videoTrack.applyConstraints({
-            advanced: [{ torch: false }]
-          }).catch(err => {
-            console.error("Error desactivando linterna:", err);
-          });
-        }
-      }
-    };
-
-    initializeCamera();
+    console.log("CameraView: Componente montado, isMonitoring:", isMonitoring);
 
     return () => {
+      console.log("CameraView: Componente desmontando, limpiando recursos");
       mountedRef.current = false;
       stopCamera();
     };
-  }, [isMonitoring, startCamera, stopCamera]);
+  }, [stopCamera]);
 
   return (
     <video
@@ -275,7 +268,7 @@ const CameraView = ({
       autoPlay
       playsInline
       muted
-      className="absolute top-0 left-0 min-w-full min-h-full w-auto h-auto z-0 object-cover"
+      className={`absolute top-0 left-0 min-w-full min-h-full w-auto h-auto z-0 object-cover ${!isMonitoring ? 'hidden' : ''}`}
       style={{
         willChange: 'transform',
         transform: 'translateZ(0)',
