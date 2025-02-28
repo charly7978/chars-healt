@@ -76,10 +76,10 @@ export class HeartBeatProcessor {
   }
 
   private async playBeep(volume: number = this.BEEP_VOLUME) {
-    if (!this.audioContext || this.isInWarmup()) return;
+    if (!this.audioContext) return;
 
     const now = Date.now();
-    if (now - this.lastBeepTime < this.MIN_BEEP_INTERVAL_MS) return;
+    if (now - this.lastBeepTime < this.MIN_BEEP_INTERVAL_MS * 0.8) return;
 
     try {
       const primaryOscillator = this.audioContext.createOscillator();
@@ -100,10 +100,11 @@ export class HeartBeatProcessor {
         this.audioContext.currentTime
       );
 
-      // Envelope del sonido principal
+      const adjustedVolume = volume * 1.5;
+      
       primaryGain.gain.setValueAtTime(0, this.audioContext.currentTime);
       primaryGain.gain.linearRampToValueAtTime(
-        volume,
+        adjustedVolume,
         this.audioContext.currentTime + 0.01
       );
       primaryGain.gain.exponentialRampToValueAtTime(
@@ -111,10 +112,9 @@ export class HeartBeatProcessor {
         this.audioContext.currentTime + this.BEEP_DURATION / 1000
       );
 
-      // Envelope del sonido secundario
       secondaryGain.gain.setValueAtTime(0, this.audioContext.currentTime);
       secondaryGain.gain.linearRampToValueAtTime(
-        volume * 0.3,
+        adjustedVolume * 0.3,
         this.audioContext.currentTime + 0.01
       );
       secondaryGain.gain.exponentialRampToValueAtTime(
@@ -134,8 +134,18 @@ export class HeartBeatProcessor {
       secondaryOscillator.stop(this.audioContext.currentTime + this.BEEP_DURATION / 1000 + 0.05);
 
       this.lastBeepTime = now;
+      
+      if (this.audioContext.state !== 'running') {
+        await this.audioContext.resume();
+      }
     } catch (error) {
       console.error("HeartBeatProcessor: Error playing beep", error);
+      try {
+        this.audioContext = new AudioContext();
+        await this.audioContext.resume();
+      } catch (e) {
+        console.error("HeartBeatProcessor: Failed to reset audio context", e);
+      }
     }
   }
 
@@ -312,7 +322,7 @@ export class HeartBeatProcessor {
     // Confirmación de pico con criterios más estrictos
     const isConfirmedPeak = this.confirmPeak(isPeak, normalizedValue, confidence, smoothDerivative);
 
-    if (isConfirmedPeak && !this.isInWarmup()) {
+    if (isConfirmedPeak) {
       const now = Date.now();
       const timeSinceLastPeak = this.lastPeakTime
         ? now - this.lastPeakTime
@@ -321,7 +331,9 @@ export class HeartBeatProcessor {
       if (timeSinceLastPeak >= this.MIN_PEAK_TIME_MS) {
         this.previousPeakTime = this.lastPeakTime;
         this.lastPeakTime = now;
-        this.playBeep(Math.min(0.12 + (qualityScore * 0.05), 0.2)); // Volumen adaptativo basado en calidad
+        
+        this.playBeep(Math.min(0.25 + (qualityScore * 0.1), 0.35));
+        
         this.updateBPM();
       }
     }
@@ -329,7 +341,7 @@ export class HeartBeatProcessor {
     return {
       bpm: Math.round(this.getSmoothBPM()),
       confidence: confidence * qualityScore, // Ajustar confianza por calidad
-      isPeak: isConfirmedPeak && !this.isInWarmup(),
+      isPeak: isConfirmedPeak,
       filteredValue: smoothed,
       arrhythmiaCount: 0
     };
@@ -434,7 +446,7 @@ export class HeartBeatProcessor {
       this.peakConfirmationBuffer.shift();
     }
 
-    if (isPeak && !this.lastConfirmedPeak && confidence >= this.MIN_CONFIDENCE) {
+    if (isPeak && !this.lastConfirmedPeak && confidence >= this.MIN_CONFIDENCE * 0.85) {
       if (this.peakConfirmationBuffer.length >= 5) { // Requiere más puntos para confirmación
         const len = this.peakConfirmationBuffer.length;
         
@@ -456,9 +468,9 @@ export class HeartBeatProcessor {
                           this.peakConfirmationBuffer[len - 3] * 0.95;
         
         // Verificar que la pendiente es suficientemente negativa (característica de un pico real)
-        const steepEnough = derivative < this.DERIVATIVE_THRESHOLD * 0.8;
+        const steepEnough = derivative < this.DERIVATIVE_THRESHOLD * 0.85;
 
-        if (goingDown1 && goingDown2 && wasGoingUp && steepEnough) {
+        if ((goingDown1 && goingDown2 && wasGoingUp) || (goingDown1 && steepEnough)) {
           // Es un pico confirmado, añadirlo a los valores de pico válidos
           this.lastValidPeakValues.push(normalizedValue);
           if (this.lastValidPeakValues.length > 8) {
@@ -483,23 +495,16 @@ export class HeartBeatProcessor {
 
     const instantBPM = 60000 / interval;
     
-    // Filtrado mejorado de valores BPM para mediciones reales
-    if (instantBPM >= this.MIN_BPM && instantBPM <= this.MAX_BPM) {
-      // Si ya tenemos valores, verificar que el nuevo no sea muy diferente
+    if (instantBPM >= this.MIN_BPM * 0.9 && instantBPM <= this.MAX_BPM * 1.1) {
       if (this.bpmHistory.length > 0) {
         const avgBPM = this.calculateCurrentBPM();
         
-        // Permitir mayor variabilidad para capturar cambios reales en la frecuencia cardíaca
-        // Pero seguir filtrando valores claramente erróneos
-        const variabilityThreshold = this.bpmHistory.length < 5 ? 0.45 : 0.35;
+        const variabilityThreshold = this.bpmHistory.length < 5 ? 0.55 : 0.45;
         
         if (avgBPM > 0 && Math.abs(instantBPM - avgBPM) / avgBPM > variabilityThreshold) {
-          // Verificación adicional: si tenemos varios valores consecutivos en la misma dirección,
-          // podría ser un cambio real en la frecuencia cardíaca (aceleración o desaceleración)
           const isConsistentTrend = this.checkConsistentTrend(instantBPM);
           
-          if (!isConsistentTrend) {
-            // No añadir valores muy atípicos sin tendencia consistente
+          if (!isConsistentTrend && this.bpmHistory.length > 3) {
             console.log("HeartBeatProcessor: Rejected outlier BPM:", instantBPM, "avg:", avgBPM);
             return;
           }
@@ -507,7 +512,7 @@ export class HeartBeatProcessor {
       }
       
       this.bpmHistory.push(instantBPM);
-      if (this.bpmHistory.length > 15) { // Aumentado para mejor estabilidad
+      if (this.bpmHistory.length > 15) {
         this.bpmHistory.shift();
       }
     }
@@ -544,11 +549,9 @@ export class HeartBeatProcessor {
       return rawBPM;
     }
     
-    // Suavizado adaptativo: menos suavizado para permitir cambios reales
-    // Esto permite que la frecuencia cardíaca varíe más naturalmente
     const adaptiveAlpha = this.bpmHistory.length > 8 ? 
-                          this.BPM_ALPHA * 1.2 : // Aumentar factor para más variabilidad
-                          this.BPM_ALPHA;
+                          this.BPM_ALPHA * 1.5 :
+                          this.BPM_ALPHA * 1.2;
     
     this.smoothBPM =
       adaptiveAlpha * rawBPM + (1 - adaptiveAlpha) * this.smoothBPM;
@@ -560,24 +563,16 @@ export class HeartBeatProcessor {
       return 0;
     }
     
-    // Método mejorado: usar mediana con recorte para mayor robustez
-    // pero permitir más variabilidad para capturar cambios reales
     const sorted = [...this.bpmHistory].sort((a, b) => a - b);
     
-    // Recortar valores extremos (solo 10% de cada lado para permitir más variabilidad)
-    const cutPercentage = this.bpmHistory.length >= 8 ? 0.1 : 0.05;
+    const cutPercentage = this.bpmHistory.length >= 8 ? 0.05 : 0.0;
     const cutAmount = Math.floor(sorted.length * cutPercentage);
     const trimmed = sorted.slice(cutAmount, sorted.length - cutAmount);
     
     if (!trimmed.length) return 0;
     
-    // Calcular mediana del conjunto recortado
-    const medianIndex = Math.floor(trimmed.length / 2);
-    const median = trimmed.length % 2 === 0 
-                 ? (trimmed[medianIndex - 1] + trimmed[medianIndex]) / 2
-                 : trimmed[medianIndex];
-    
-    return median;
+    const sum = trimmed.reduce((acc, val) => acc + val, 0);
+    return sum / trimmed.length;
   }
 
   public getFinalBPM(): number {
@@ -585,16 +580,13 @@ export class HeartBeatProcessor {
       return 0;
     }
     
-    // Método mejorado para BPM final
     const sorted = [...this.bpmHistory].sort((a, b) => a - b);
     
-    // Recortar 15% de cada extremo para mayor robustez
     const cut = Math.ceil(sorted.length * 0.15);
     const finalSet = sorted.slice(cut, sorted.length - cut);
     
     if (!finalSet.length) return 0;
     
-    // Usar mediana en lugar de media para mayor robustez
     const medianIndex = Math.floor(finalSet.length / 2);
     const median = finalSet.length % 2 === 0 
                  ? (finalSet[medianIndex - 1] + finalSet[medianIndex]) / 2
@@ -629,7 +621,6 @@ export class HeartBeatProcessor {
   }
 
   public getRRIntervals(): { intervals: number[]; lastPeakTime: number | null } {
-    // Convertir historial de BPM a intervalos RR (ms)
     const rrIntervals = this.bpmHistory.map(bpm => 60000 / bpm);
     
     return {

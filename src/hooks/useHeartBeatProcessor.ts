@@ -76,6 +76,20 @@ export const useHeartBeatProcessor = () => {
     return value;
   }, [MEDIAN_FILTER_WINDOW]);
 
+  // Nueva función para calcular la variabilidad del BPM
+  const calculateBPMVariability = useCallback((): number => {
+    if (bpmHistoryRef.current.length < 3) return 0;
+    
+    const bpmValues = bpmHistoryRef.current.map(item => item.bpm);
+    const mean = bpmValues.reduce((sum, val) => sum + val, 0) / bpmValues.length;
+    
+    const squaredDiffs = bpmValues.map(val => Math.pow(val - mean, 2));
+    const variance = squaredDiffs.reduce((sum, val) => sum + val, 0) / bpmValues.length;
+    
+    // Normalizar variabilidad entre 0 y 1
+    return Math.min(1, Math.sqrt(variance) / 10);
+  }, []);
+
   // Nueva función para calcular la calidad de la señal
   const calculateSignalQuality = useCallback((value: number, confidence: number): number => {
     // Factores que contribuyen a la calidad
@@ -116,6 +130,60 @@ export const useHeartBeatProcessor = () => {
     );
   }, []);
 
+  // Función mejorada para estabilizar BPM
+  const stabilizeBPM = useCallback((instantBPM: number, confidence: number): number => {
+    const currentTime = Date.now();
+    
+    // Registrar BPM en historial
+    bpmHistoryRef.current.push({
+      time: currentTime,
+      bpm: instantBPM,
+      confidence
+    });
+    
+    if (bpmHistoryRef.current.length > BPM_HISTORY_SIZE) {
+      bpmHistoryRef.current.shift();
+    }
+    
+    // Si no hay suficiente historial, devolver el valor actual
+    if (bpmHistoryRef.current.length < 3) {
+      return instantBPM;
+    }
+    
+    // CORRECCIÓN: Dar más peso a valores recientes para mayor variabilidad
+    let totalWeight = 0;
+    let weightedSum = 0;
+    
+    // Dar más peso a valores recientes y con alta confianza
+    bpmHistoryRef.current.forEach((item, index) => {
+      // Factor de recencia: valores más recientes tienen más peso
+      const recencyFactor = (index + 1) / bpmHistoryRef.current.length;
+      // CORRECCIÓN: Aumentar factor de recencia
+      const adjustedRecencyFactor = Math.pow(recencyFactor, 1.5); // Exponente mayor da más peso a valores recientes
+      // Peso combinado
+      const weight = item.confidence * adjustedRecencyFactor;
+      
+      totalWeight += weight;
+      weightedSum += item.bpm * weight;
+    });
+    
+    if (totalWeight === 0) return instantBPM;
+    
+    const avgBPM = weightedSum / totalWeight;
+    
+    // CORRECCIÓN: Aumentar umbral para valores atípicos
+    if (Math.abs(instantBPM - avgBPM) / avgBPM > BPM_OUTLIER_THRESHOLD * 1.5) {
+      console.log(`useHeartBeatProcessor: Valor atípico filtrado - BPM: ${instantBPM}, Promedio: ${avgBPM}`);
+      return avgBPM;
+    }
+    
+    // CORRECCIÓN: Aumentar factor adaptativo para permitir más variabilidad
+    const variability = calculateBPMVariability();
+    const adaptiveFactor = Math.min(0.5, 0.2 + variability * 0.3);
+    
+    return Math.round(instantBPM * adaptiveFactor + avgBPM * (1 - adaptiveFactor));
+  }, [BPM_HISTORY_SIZE, BPM_OUTLIER_THRESHOLD, calculateBPMVariability]);
+
   // Función mejorada para validar si un pico es genuino
   const validatePeak = useCallback((result: HeartBeatResult): HeartBeatResult => {
     const currentTime = Date.now();
@@ -125,8 +193,9 @@ export const useHeartBeatProcessor = () => {
       return result;
     }
     
-    // Verificar si la confianza está por encima del umbral
-    if (result.confidence < MIN_CONFIDENCE_THRESHOLD) {
+    // CORRECCIÓN: Reducir umbral de confianza para detectar más picos
+    const adjustedThreshold = MIN_CONFIDENCE_THRESHOLD * 0.85;
+    if (result.confidence < adjustedThreshold) {
       return { ...result, isPeak: false };
     }
     
@@ -136,19 +205,19 @@ export const useHeartBeatProcessor = () => {
       recentConfidencesRef.current.shift();
     }
     
-    // Verificar la consistencia de los últimos valores de confianza
+    // CORRECCIÓN: Reducir exigencia en la consistencia de confianza
     if (recentConfidencesRef.current.length >= 5) {
       const avgConfidence = recentConfidencesRef.current
         .slice(-5)
         .reduce((sum, conf) => sum + conf, 0) / 5;
       
-      // Si la confianza promedio es baja, es probable que sea un falso positivo
-      if (avgConfidence < MIN_CONFIDENCE_THRESHOLD * 0.9) {
+      // Si la confianza promedio es muy baja, es probable que sea un falso positivo
+      if (avgConfidence < adjustedThreshold * 0.8) {
         return { ...result, isPeak: false };
       }
     }
     
-    // Verificar consistencia temporal con picos anteriores
+    // CORRECCIÓN: Relajar verificación de consistencia temporal
     if (peakHistoryRef.current.length >= 2) {
       const lastPeakTime = peakHistoryRef.current[peakHistoryRef.current.length - 1].time;
       const timeSinceLastPeak = currentTime - lastPeakTime;
@@ -159,7 +228,8 @@ export const useHeartBeatProcessor = () => {
       
       for (let i = 1; i < peakHistoryRef.current.length; i++) {
         const interval = peakHistoryRef.current[i].time - peakHistoryRef.current[i-1].time;
-        if (interval > 200 && interval < 2000) { // Rango válido para intervalos RR (30-300 BPM)
+        // CORRECCIÓN: Ampliar rango válido para intervalos RR
+        if (interval > 180 && interval < 2500) { // 24-333 BPM
           avgInterval += interval;
           intervalCount++;
         }
@@ -168,9 +238,9 @@ export const useHeartBeatProcessor = () => {
       if (intervalCount > 0) {
         avgInterval /= intervalCount;
         
-        // Si el tiempo desde el último pico es demasiado corto (menos del 70% del intervalo promedio)
-        // probablemente es un falso positivo
-        if (timeSinceLastPeak < avgInterval * 0.7) {
+        // CORRECCIÓN: Permitir intervalos más cortos
+        // Si el tiempo desde el último pico es demasiado corto (menos del 60% del intervalo promedio)
+        if (timeSinceLastPeak < avgInterval * 0.6) {
           return { ...result, isPeak: false };
         }
       }
@@ -194,81 +264,14 @@ export const useHeartBeatProcessor = () => {
       result.confidence
     );
     
-    // Rechazar picos con calidad de señal muy baja
-    if (signalQuality < SIGNAL_QUALITY_THRESHOLD) {
+    // CORRECCIÓN: Reducir umbral de calidad para aceptar más picos
+    if (signalQuality < SIGNAL_QUALITY_THRESHOLD * 0.8) {
       return { ...result, isPeak: false };
     }
     
     // Es un pico genuino
     return result;
   }, [MIN_CONFIDENCE_THRESHOLD, CONFIDENCE_HISTORY_SIZE, PEAK_HISTORY_SIZE, SIGNAL_QUALITY_THRESHOLD, calculateSignalQuality]);
-
-  // Función mejorada para estabilizar BPM
-  const stabilizeBPM = useCallback((instantBPM: number, confidence: number): number => {
-    const currentTime = Date.now();
-    
-    // Registrar BPM en historial
-    bpmHistoryRef.current.push({
-      time: currentTime,
-      bpm: instantBPM,
-      confidence
-    });
-    
-    if (bpmHistoryRef.current.length > BPM_HISTORY_SIZE) {
-      bpmHistoryRef.current.shift();
-    }
-    
-    // Si no hay suficiente historial, devolver el valor actual
-    if (bpmHistoryRef.current.length < 3) {
-      return instantBPM;
-    }
-    
-    // Calcular BPM promedio ponderado por confianza
-    let totalWeight = 0;
-    let weightedSum = 0;
-    
-    // Dar más peso a valores recientes y con alta confianza
-    bpmHistoryRef.current.forEach((item, index) => {
-      // Factor de recencia: valores más recientes tienen más peso
-      const recencyFactor = (index + 1) / bpmHistoryRef.current.length;
-      // Peso combinado
-      const weight = item.confidence * recencyFactor;
-      
-      totalWeight += weight;
-      weightedSum += item.bpm * weight;
-    });
-    
-    if (totalWeight === 0) return instantBPM;
-    
-    const avgBPM = weightedSum / totalWeight;
-    
-    // Detectar y filtrar valores atípicos
-    if (Math.abs(instantBPM - avgBPM) / avgBPM > BPM_OUTLIER_THRESHOLD) {
-      console.log(`useHeartBeatProcessor: Valor atípico filtrado - BPM: ${instantBPM}, Promedio: ${avgBPM}`);
-      return avgBPM;
-    }
-    
-    // Aplicar suavizado adaptativo
-    // Más suavizado cuando hay más historia y mayor variabilidad
-    const variability = calculateBPMVariability();
-    const adaptiveFactor = Math.min(0.3, 0.1 + variability * 0.2);
-    
-    return Math.round(instantBPM * adaptiveFactor + avgBPM * (1 - adaptiveFactor));
-  }, [BPM_HISTORY_SIZE, BPM_OUTLIER_THRESHOLD]);
-
-  // Nueva función para calcular la variabilidad del BPM
-  const calculateBPMVariability = useCallback((): number => {
-    if (bpmHistoryRef.current.length < 3) return 0;
-    
-    const bpmValues = bpmHistoryRef.current.map(item => item.bpm);
-    const mean = bpmValues.reduce((sum, val) => sum + val, 0) / bpmValues.length;
-    
-    const squaredDiffs = bpmValues.map(val => Math.pow(val - mean, 2));
-    const variance = squaredDiffs.reduce((sum, val) => sum + val, 0) / bpmValues.length;
-    
-    // Normalizar variabilidad entre 0 y 1
-    return Math.min(1, Math.sqrt(variance) / 10);
-  }, []);
 
   const processSignal = useCallback((value: number): HeartBeatResult => {
     if (!processorRef.current) {
@@ -298,7 +301,7 @@ export const useHeartBeatProcessor = () => {
       signalBufferRef.current = signalBufferRef.current.slice(-300);
     }
 
-    // Aplicar filtrado mejorado para reducir ruido
+    // CORRECCIÓN: Aplicar filtrado mejorado para reducir ruido pero preservar picos
     const filteredValue = applyMedianFilter(value);
     
     // Procesar la señal con el filtro aplicado
@@ -312,8 +315,9 @@ export const useHeartBeatProcessor = () => {
     });
 
     // Estabilizar BPM si es un valor válido
+    // CORRECCIÓN: Reducir umbral de confianza para aceptar más valores
     let stabilizedBPM = validatedResult.bpm;
-    if (validatedResult.bpm > 0 && validatedResult.confidence > MIN_CONFIDENCE_THRESHOLD * 0.8) {
+    if (validatedResult.bpm > 0 && validatedResult.confidence > MIN_CONFIDENCE_THRESHOLD * 0.7) {
       stabilizedBPM = stabilizeBPM(validatedResult.bpm, validatedResult.confidence);
     }
 
