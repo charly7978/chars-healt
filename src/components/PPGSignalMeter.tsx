@@ -273,12 +273,15 @@ const PPGSignalMeter = ({
         </div>
       </div>
 
-      <canvas
-        ref={canvasRef}
-        width={CANVAS_WIDTH}
-        height={CANVAS_HEIGHT}
-        className="w-full h-[calc(40vh)] mt-20"
-      />
+      <div className="flex-1 w-full relative">
+        <canvas
+          ref={canvasRef}
+          width={CANVAS_WIDTH}
+          height={CANVAS_HEIGHT}
+          className="w-full h-[calc(40vh)] mt-20 absolute top-0 left-0 right-0"
+          style={{ zIndex: 10 }}
+        />
+      </div>
 
       <div className="fixed bottom-0 left-0 right-0 h-[80px] grid grid-cols-2 gap-px bg-gray-100">
         <button 

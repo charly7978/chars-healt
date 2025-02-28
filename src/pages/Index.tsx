@@ -478,7 +478,9 @@ const Index = () => {
         touchAction: 'none',
         overscrollBehavior: 'none',
         WebkitOverflowScrolling: 'touch',
-        overflow: 'hidden'
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
       }}
     >
       {/* Cámara de fondo - visible en toda la pantalla */}
@@ -490,15 +492,17 @@ const Index = () => {
       />
 
       {/* Panel de monitorización - PPG Signal Meter */}
-      <PPGSignalMeter 
-        value={isMonitoring ? lastSignal?.filteredValue || 0 : 0}
-        quality={isMonitoring ? lastSignal?.quality || 0 : 0}
-        isFingerDetected={isMonitoring ? lastSignal?.fingerDetected || false : false}
-        onStartMeasurement={startMonitoring}
-        onReset={handleReset}
-        arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
-        rawArrhythmiaData={lastArrhythmiaData}
-      />
+      <div className="flex-1 flex flex-col z-10">
+        <PPGSignalMeter 
+          value={isMonitoring ? lastSignal?.filteredValue || 0 : 0}
+          quality={isMonitoring ? lastSignal?.quality || 0 : 0}
+          isFingerDetected={isMonitoring ? lastSignal?.fingerDetected || false : false}
+          onStartMeasurement={startMonitoring}
+          onReset={handleReset}
+          arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
+          rawArrhythmiaData={lastArrhythmiaData}
+        />
+      </div>
 
       {/* Displays - Signos Vitales */}
       <div className="fixed bottom-24 left-0 right-0 px-4 z-20">
