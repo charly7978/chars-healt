@@ -21,6 +21,7 @@ export const useHeartBeatProcessor = () => {
   const signalBufferRef = useRef<number[]>([]);
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioInitializedRef = useRef<boolean>(false);
+  const lastBeepTimeRef = useRef<number>(0);
 
   useEffect(() => {
     console.log('useHeartBeatProcessor: Creando nueva instancia de HeartBeatProcessor');
@@ -43,6 +44,15 @@ export const useHeartBeatProcessor = () => {
         } else {
           audioInitializedRef.current = true;
         }
+
+        // Reproducir un beep silencioso para activar el audio
+        const oscillator = audioContextRef.current.createOscillator();
+        const gainNode = audioContextRef.current.createGain();
+        gainNode.gain.value = 0.01;
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContextRef.current.destination);
+        oscillator.start();
+        oscillator.stop(audioContextRef.current.currentTime + 0.1);
       } catch (e) {
         console.error('useHeartBeatProcessor: Error inicializando Audio Context:', e);
       }
@@ -52,6 +62,14 @@ export const useHeartBeatProcessor = () => {
       (window as any).heartBeatProcessor = processorRef.current;
       (window as any).audioContext = audioContextRef.current;
     }
+
+    document.addEventListener('click', () => {
+      if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+        audioContextRef.current.resume().then(() => {
+          console.log('Audio Context resumed after user interaction');
+        });
+      }
+    }, { once: true });
 
     return () => {
       console.log('useHeartBeatProcessor: Limpiando processor');
@@ -72,7 +90,17 @@ export const useHeartBeatProcessor = () => {
   }, []);
 
   const playBeep = useCallback(() => {
-    if (!audioContextRef.current) return;
+    const now = Date.now();
+    // Limitar la frecuencia de beeps (no más de uno cada 300ms)
+    if (now - lastBeepTimeRef.current < 300) {
+      return;
+    }
+    lastBeepTimeRef.current = now;
+    
+    if (!audioContextRef.current) {
+      console.warn('No audio context available');
+      return;
+    }
     
     try {
       // Verificar y reactivar el contexto de audio si está suspendido
@@ -87,7 +115,7 @@ export const useHeartBeatProcessor = () => {
       oscillator.frequency.value = 800;
       
       gainNode.gain.setValueAtTime(0, audioContextRef.current.currentTime);
-      gainNode.gain.linearRampToValueAtTime(0.7, audioContextRef.current.currentTime + 0.01);
+      gainNode.gain.linearRampToValueAtTime(1.0, audioContextRef.current.currentTime + 0.01);
       gainNode.gain.exponentialRampToValueAtTime(0.01, audioContextRef.current.currentTime + 0.1);
       
       oscillator.connect(gainNode);
@@ -95,13 +123,25 @@ export const useHeartBeatProcessor = () => {
       
       oscillator.start();
       oscillator.stop(audioContextRef.current.currentTime + 0.1);
+      
+      console.log('BEEP played at', now);
     } catch (e) {
       console.error('Error reproduciendo beep:', e);
       // Plan B alternativo con el elemento Audio
-      const audio = new Audio();
-      audio.src = "data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAAPuUdcAAAAgD///wQAAAA=";
-      audio.volume = 0.8;
-      audio.play().catch(err => console.error("Error en audio alternativo:", err));
+      try {
+        const audio = new Audio();
+        audio.src = "data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAAPuUdcAAAAgD///wQAAAA=";
+        audio.volume = 1.0;
+        audio.play().catch(err => {
+          console.error("Error en audio alternativo:", err);
+          // Tercer intento: usar un beep con la API de Audio con un sonido pregenerado
+          const backupAudio = new Audio("data:audio/wav;base64,UklGRisAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQcAAAAAAAAAAAAAAAE=");
+          backupAudio.volume = 1.0;
+          backupAudio.play().catch(e => console.error("Todos los intentos de reproducir sonido fallaron:", e));
+        });
+      } catch (audioErr) {
+        console.error("Error completo en sistema de audio:", audioErr);
+      }
     }
   }, []);
 
@@ -132,6 +172,7 @@ export const useHeartBeatProcessor = () => {
     
     // Si se detecta un pico, reproducir el beep directamente aquí
     if (result.isPeak) {
+      console.log('PEAK DETECTED - Playing beep');
       playBeep();
     }
     
