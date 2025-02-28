@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -34,16 +35,16 @@ const PPGSignalMeter = ({
   const lastArrhythmiaTime = useRef<number>(0);
   const arrhythmiaCountRef = useRef<number>(0);
   
-  const WINDOW_WIDTH_MS = 2700;
-  const CANVAS_WIDTH = 500;
+  const WINDOW_WIDTH_MS = 3500;
+  const CANVAS_WIDTH = 450;
   const CANVAS_HEIGHT = 450;
-  const GRID_SIZE_X = 200;
-  const GRID_SIZE_Y = 200;
-  const verticalScale = 35.0;
-  const SMOOTHING_FACTOR = 1.0;
+  const GRID_SIZE_X = 30;
+  const GRID_SIZE_Y = 30;
+  const verticalScale = 39.0;
+  const SMOOTHING_FACTOR = 0.9;
   const TARGET_FPS = 60;
   const FRAME_TIME = 1000 / TARGET_FPS;
-  const BUFFER_SIZE = 150;
+  const BUFFER_SIZE = 200;
 
   useEffect(() => {
     if (!dataBufferRef.current) {
@@ -71,58 +72,61 @@ const PPGSignalMeter = ({
   }, []);
 
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
-    ctx.fillStyle = '#000000';
+    ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    
+    // Aumentado a 50% de opacidad como solicitado
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(0, 255, 0, 0.15)';
+    ctx.strokeStyle = 'rgba(0, 255, 127, 0.15)';
     ctx.lineWidth = 0.5;
 
-    for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X / 4) {
+    for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X) {
       ctx.moveTo(x, 0);
       ctx.lineTo(x, CANVAS_HEIGHT);
-      if (x % GRID_SIZE_X === 0) {
-        ctx.strokeStyle = 'rgba(0, 255, 0, 0.3)';
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.strokeStyle = 'rgba(0, 255, 0, 0.15)';
+      if (x % (GRID_SIZE_X * 4) === 0) {
+        ctx.fillStyle = 'rgba(0, 255, 127, 0.9)';
+        ctx.font = '10px Inter';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${x / 10}ms`, x, CANVAS_HEIGHT - 5);
       }
     }
 
-    for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y / 4) {
+    for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y) {
       ctx.moveTo(0, y);
       ctx.lineTo(CANVAS_WIDTH, y);
-      if (y % GRID_SIZE_Y === 0) {
-        ctx.strokeStyle = 'rgba(0, 255, 0, 0.3)';
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.strokeStyle = 'rgba(0, 255, 0, 0.15)';
+      if (y % (GRID_SIZE_Y * 4) === 0) {
+        const amplitude = ((CANVAS_HEIGHT / 2) - y) / verticalScale;
+        ctx.fillStyle = 'rgba(0, 255, 127, 0.9)';
+        ctx.font = '10px Inter';
+        ctx.textAlign = 'right';
+        ctx.fillText(amplitude.toFixed(1), 25, y + 4);
       }
     }
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(0, 255, 0, 0.4)';
+    ctx.strokeStyle = 'rgba(0, 255, 127, 0.25)';
     ctx.lineWidth = 1;
-    ctx.setLineDash([5, 5]);
+
+    for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X * 4) {
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, CANVAS_HEIGHT);
+    }
+
+    for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y * 4) {
+      ctx.moveTo(0, y);
+      ctx.lineTo(CANVAS_WIDTH, y);
+    }
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(0, 255, 127, 0.35)';
+    ctx.lineWidth = 1.5;
     ctx.moveTo(0, CANVAS_HEIGHT * 0.6);
     ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT * 0.6);
     ctx.stroke();
-    ctx.setLineDash([]);
-
-    ctx.fillStyle = '#00FF00';
-    ctx.font = '10px monospace';
-    ctx.textAlign = 'center';
-    for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X) {
-      const time = (x / CANVAS_WIDTH * WINDOW_WIDTH_MS / 1000).toFixed(1);
-      ctx.fillText(`${time}s`, x, CANVAS_HEIGHT - 5);
-    }
-
-    ctx.textAlign = 'right';
-    for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y) {
-      const amplitude = ((CANVAS_HEIGHT / 2) - y) / verticalScale;
-      ctx.fillText(amplitude.toFixed(1), 25, y + 4);
-    }
   }, []);
 
   const renderSignal = useCallback(() => {
@@ -140,7 +144,7 @@ const PPGSignalMeter = ({
     }
 
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+    const ctx = canvas.getContext('2d', { alpha: true, desynchronized: true });
     if (!ctx) {
       animationFrameRef.current = requestAnimationFrame(renderSignal);
       return;
@@ -157,7 +161,7 @@ const PPGSignalMeter = ({
     const smoothedValue = smoothValue(value, lastValueRef.current);
     lastValueRef.current = smoothedValue;
 
-    const normalizedValue = (smoothedValue - (baselineRef.current || 0)) * 1.5;
+    const normalizedValue = smoothedValue - (baselineRef.current || 0);
     const scaledValue = normalizedValue * verticalScale;
     
     let isArrhythmia = false;
@@ -186,30 +190,13 @@ const PPGSignalMeter = ({
       
       if (visiblePoints.length > 1) {
         ctx.beginPath();
-        ctx.strokeStyle = 'rgba(0, 255, 0, 0.2)';
-        ctx.lineWidth = 4;
+        ctx.strokeStyle = '#0EA5E9';
+        ctx.lineWidth = 2;
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
         
         let firstPoint = true;
-        for (const point of visiblePoints) {
-          const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-          const y = canvas.height * 0.6 - point.value;
-          
-          if (firstPoint) {
-            ctx.moveTo(x, y);
-            firstPoint = false;
-          } else {
-            ctx.lineTo(x, y);
-          }
-        }
-        ctx.stroke();
-
-        ctx.beginPath();
-        ctx.strokeStyle = '#00FF00';
-        ctx.lineWidth = 2;
         
-        firstPoint = true;
         for (let i = 0; i < visiblePoints.length; i++) {
           const point = visiblePoints[i];
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
@@ -225,8 +212,7 @@ const PPGSignalMeter = ({
           if (point.isArrhythmia && i < visiblePoints.length - 1) {
             ctx.stroke();
             ctx.beginPath();
-            ctx.strokeStyle = '#FF0000';
-            ctx.lineWidth = 3;
+            ctx.strokeStyle = '#DC2626';
             ctx.moveTo(x, y);
             
             const nextPoint = visiblePoints[i + 1];
@@ -236,44 +222,44 @@ const PPGSignalMeter = ({
             ctx.stroke();
             
             ctx.beginPath();
-            ctx.strokeStyle = '#00FF00';
-            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#0EA5E9';
             ctx.moveTo(nextX, nextY);
+            firstPoint = false;
           }
         }
+        
         ctx.stroke();
+      }
 
-        for (let i = 1; i < visiblePoints.length - 1; i++) {
-          const prevPoint = visiblePoints[i - 1];
-          const point = visiblePoints[i];
-          const nextPoint = visiblePoints[i + 1];
+      for (let i = 1; i < visiblePoints.length - 1; i++) {
+        const prevPoint = visiblePoints[i - 1];
+        const point = visiblePoints[i];
+        const nextPoint = visiblePoints[i + 1];
+        
+        if (point.value > prevPoint.value && point.value > nextPoint.value) {
+          const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
+          const y = canvas.height * 0.6 - point.value;
           
-          if (point.value > prevPoint.value && point.value > nextPoint.value) {
-            const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-            const y = canvas.height * 0.6 - point.value;
-            
-            ctx.beginPath();
-            ctx.arc(x, y, 3, 0, Math.PI * 2);
-            ctx.fillStyle = point.isArrhythmia ? '#FF0000' : '#00FF00';
-            ctx.fill();
+          ctx.beginPath();
+          ctx.arc(x, y, 4, 0, Math.PI * 2);
+          ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
+          ctx.fill();
 
-            ctx.font = '10px monospace';
-            ctx.fillStyle = point.isArrhythmia ? '#FF0000' : '#00FF00';
-            ctx.textAlign = 'center';
-            ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 15);
+          ctx.font = 'bold 12px Inter';
+          ctx.fillStyle = '#C0C0C0';
+          ctx.textAlign = 'center';
+          ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 20);
+          
+          if (point.isArrhythmia) {
+            ctx.beginPath();
+            ctx.arc(x, y, 8, 0, Math.PI * 2);
+            ctx.strokeStyle = '#FFFF00';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
             
-            if (point.isArrhythmia) {
-              const pulseSize = (Math.sin(now * 0.01) + 1) * 2 + 6;
-              ctx.beginPath();
-              ctx.arc(x, y, pulseSize, 0, Math.PI * 2);
-              ctx.strokeStyle = '#FF0000';
-              ctx.lineWidth = 1;
-              ctx.stroke();
-              
-              ctx.font = 'bold 10px monospace';
-              ctx.fillStyle = '#FF0000';
-              ctx.fillText("ARR", x, y - 25);
-            }
+            ctx.font = 'bold 10px Inter';
+            ctx.fillStyle = '#FF6B6B';
+            ctx.fillText("ARR", x, y - 35);
           }
         }
       }
@@ -281,7 +267,7 @@ const PPGSignalMeter = ({
 
     lastRenderTimeRef.current = currentTime;
     animationFrameRef.current = requestAnimationFrame(renderSignal);
-  }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus, drawGrid]);
+  }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus, drawGrid, smoothValue]);
 
   useEffect(() => {
     renderSignal();
@@ -294,11 +280,8 @@ const PPGSignalMeter = ({
 
   return (
     <>
-      <div className="absolute top-0 left-0 right-0 z-20 p-1">
-        <h1 className="text-sm font-bold text-red-600 text-left pl-4">PPG SEÑAL CARDIACA</h1>
-      </div>
-
-      <div className="absolute top-0 right-1 z-20 flex items-center gap-2 bg-black/40 rounded-lg p-2">
+      <div className="absolute top-0 right-1 z-30 flex items-center gap-2 bg-black/40 rounded-lg p-2"
+           style={{ top: '5px', right: '5px' }}>
         <div className="w-[190px]">
           <div className={`h-1.5 w-full rounded-full bg-gradient-to-r ${getQualityColor(quality)} transition-all duration-1000 ease-in-out`}>
             <div
@@ -328,18 +311,21 @@ const PPGSignalMeter = ({
         </div>
       </div>
 
-      <div className="flex-1 w-full relative">
+      <div className="absolute inset-0 w-full" style={{ height: '50vh', top: 0 }}>
         <canvas
           ref={canvasRef}
           width={CANVAS_WIDTH}
           height={CANVAS_HEIGHT}
-          className="w-full h-[calc(50vh)] mt-0 absolute top-0 left-0 right-0"
-          style={{ zIndex: 10 }}
+          className="w-full h-full"
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 }}
         />
-        
-        <div className="absolute bottom-2 left-0 right-0 text-center z-20">
-          <h2 className="text-white font-medium text-sm">Cars-Health</h2>
-        </div>
+      </div>
+      
+      <div className="absolute" style={{ top: 'calc(50vh + 5px)', left: 0, right: 0, textAlign: 'center', zIndex: 30 }}>
+        <h1 className="text-3xl font-bold">
+          <span className="text-white">Chars</span>
+          <span className="text-[#ea384c]">Healt</span>
+        </h1>
       </div>
     </>
   );

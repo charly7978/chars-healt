@@ -19,131 +19,50 @@ export const useHeartBeatProcessor = () => {
   const [currentBPM, setCurrentBPM] = useState<number>(0);
   const [confidence, setConfidence] = useState<number>(0);
   const signalBufferRef = useRef<number[]>([]);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const audioInitializedRef = useRef<boolean>(false);
-  const lastBeepTimeRef = useRef<number>(0);
+  // Buffers para mejor análisis de señal
+  const recentValuesRef = useRef<number[]>([]);
+  const recentConfidencesRef = useRef<number[]>([]);
+  const MIN_CONFIDENCE_THRESHOLD = 0.5; // Reducido para captar más señales reales
+  const BPM_HISTORY_SIZE = 10; // Tamaño de historial para estabilidad
+  const bpmHistoryRef = useRef<number[]>([]);
 
   useEffect(() => {
     console.log('useHeartBeatProcessor: Creando nueva instancia de HeartBeatProcessor');
     processorRef.current = new HeartBeatProcessor();
     
-    // Inicializar contexto de audio aquí para que responda a la interacción del usuario
-    if (!audioInitializedRef.current) {
-      try {
-        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-        console.log('useHeartBeatProcessor: Audio Context creado:', audioContextRef.current.state);
-        
-        // Intentar activar el contexto de audio inmediatamente
-        if (audioContextRef.current.state === 'suspended') {
-          audioContextRef.current.resume().then(() => {
-            console.log('useHeartBeatProcessor: Audio Context resumed');
-            audioInitializedRef.current = true;
-          }).catch(err => {
-            console.error('useHeartBeatProcessor: Error resuming Audio Context:', err);
-          });
-        } else {
-          audioInitializedRef.current = true;
-        }
-
-        // Reproducir un beep silencioso para activar el audio
-        const oscillator = audioContextRef.current.createOscillator();
-        const gainNode = audioContextRef.current.createGain();
-        gainNode.gain.value = 0.01;
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContextRef.current.destination);
-        oscillator.start();
-        oscillator.stop(audioContextRef.current.currentTime + 0.1);
-      } catch (e) {
-        console.error('useHeartBeatProcessor: Error inicializando Audio Context:', e);
-      }
-    }
-    
     if (typeof window !== 'undefined') {
       (window as any).heartBeatProcessor = processorRef.current;
-      (window as any).audioContext = audioContextRef.current;
     }
-
-    document.addEventListener('click', () => {
-      if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
-        audioContextRef.current.resume().then(() => {
-          console.log('Audio Context resumed after user interaction');
-        });
-      }
-    }, { once: true });
 
     return () => {
       console.log('useHeartBeatProcessor: Limpiando processor');
       if (processorRef.current) {
         processorRef.current = null;
       }
-      if (audioContextRef.current) {
-        audioContextRef.current.close().catch(e => console.error('Error cerrando AudioContext:', e));
-        audioContextRef.current = null;
-      }
       if (typeof window !== 'undefined') {
         (window as any).heartBeatProcessor = undefined;
-        (window as any).audioContext = undefined;
       }
       // Limpiar buffer
       signalBufferRef.current = [];
+      recentValuesRef.current = [];
+      recentConfidencesRef.current = [];
+      bpmHistoryRef.current = [];
     };
   }, []);
 
-  const playBeep = useCallback(() => {
-    const now = Date.now();
-    // Limitar la frecuencia de beeps (no más de uno cada 300ms)
-    if (now - lastBeepTimeRef.current < 300) {
-      return;
-    }
-    lastBeepTimeRef.current = now;
+  // Función para obtener mediana
+  const getMedian = (values: number[]): number => {
+    if (values.length === 0) return 0;
     
-    if (!audioContextRef.current) {
-      console.warn('No audio context available');
-      return;
-    }
+    const sorted = [...values].sort((a, b) => a - b);
+    const middle = Math.floor(sorted.length / 2);
     
-    try {
-      // Verificar y reactivar el contexto de audio si está suspendido
-      if (audioContextRef.current.state === 'suspended') {
-        audioContextRef.current.resume();
-      }
-      
-      const oscillator = audioContextRef.current.createOscillator();
-      const gainNode = audioContextRef.current.createGain();
-      
-      oscillator.type = 'sine';
-      oscillator.frequency.value = 800;
-      
-      gainNode.gain.setValueAtTime(0, audioContextRef.current.currentTime);
-      gainNode.gain.linearRampToValueAtTime(1.0, audioContextRef.current.currentTime + 0.01);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContextRef.current.currentTime + 0.1);
-      
-      oscillator.connect(gainNode);
-      gainNode.connect(audioContextRef.current.destination);
-      
-      oscillator.start();
-      oscillator.stop(audioContextRef.current.currentTime + 0.1);
-      
-      console.log('BEEP played at', now);
-    } catch (e) {
-      console.error('Error reproduciendo beep:', e);
-      // Plan B alternativo con el elemento Audio
-      try {
-        const audio = new Audio();
-        audio.src = "data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAAPuUdcAAAAgD///wQAAAA=";
-        audio.volume = 1.0;
-        audio.play().catch(err => {
-          console.error("Error en audio alternativo:", err);
-          // Tercer intento: usar un beep con la API de Audio con un sonido pregenerado
-          const backupAudio = new Audio("data:audio/wav;base64,UklGRisAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQcAAAAAAAAAAAAAAAE=");
-          backupAudio.volume = 1.0;
-          backupAudio.play().catch(e => console.error("Todos los intentos de reproducir sonido fallaron:", e));
-        });
-      } catch (audioErr) {
-        console.error("Error completo en sistema de audio:", audioErr);
-      }
+    if (sorted.length % 2 === 0) {
+      return (sorted[middle - 1] + sorted[middle]) / 2;
+    } else {
+      return sorted[middle];
     }
-  }, []);
+  };
 
   const processSignal = useCallback((value: number): HeartBeatResult => {
     if (!processorRef.current) {
@@ -160,33 +79,127 @@ export const useHeartBeatProcessor = () => {
       };
     }
 
+    console.log('useHeartBeatProcessor - processSignal:', {
+      inputValue: value,
+      currentProcessor: !!processorRef.current,
+      timestamp: new Date().toISOString()
+    });
+
     // Almacenar señal en buffer para análisis
     signalBufferRef.current.push(value);
-    // Limitar tamaño del buffer para controlar memoria
     if (signalBufferRef.current.length > 300) {
       signalBufferRef.current = signalBufferRef.current.slice(-300);
     }
 
-    const result = processorRef.current.processSignal(value);
-    const rrData = processorRef.current.getRRIntervals();
+    // Aplicar filtro mínimo solo para estabilidad
+    const filteredValue = applyBasicFilter(value);
     
-    // Si se detecta un pico, reproducir el beep directamente aquí
-    if (result.isPeak) {
-      console.log('PEAK DETECTED - Playing beep');
-      playBeep();
+    // Procesar la señal con el valor filtrado
+    const result = processorRef.current.processSignal(filteredValue);
+    const rrData = processorRef.current.getRRIntervals();
+
+    // Almacenar valores recientes
+    recentValuesRef.current.push(filteredValue);
+    recentConfidencesRef.current.push(result.confidence);
+    
+    if (recentValuesRef.current.length > 10) {
+      recentValuesRef.current.shift();
+      recentConfidencesRef.current.shift();
+    }
+
+    // Validar picos para eliminar falsos positivos extremos
+    const validatedResult = validatePeak(result);
+    
+    // Almacenar BPM en historial para estabilidad
+    if (validatedResult.bpm > 40 && validatedResult.bpm < 200) {
+      bpmHistoryRef.current.push(validatedResult.bpm);
+      if (bpmHistoryRef.current.length > BPM_HISTORY_SIZE) {
+        bpmHistoryRef.current.shift();
+      }
     }
     
-    // Asegurarse de que el BPM se actualice correctamente
-    if (result.bpm > 0) {
-      setCurrentBPM(Math.round(result.bpm));
-      setConfidence(result.confidence);
+    // Usar valor directo si hay buena confianza, o mediana si hay suficiente historial
+    let finalBpm = validatedResult.bpm;
+    if (bpmHistoryRef.current.length >= 3) {
+      const medianBpm = getMedian(bpmHistoryRef.current);
+      // Usar mediana solo si el valor actual es muy diferente
+      if (Math.abs(finalBpm - medianBpm) > 10) {
+        finalBpm = medianBpm;
+      }
+    }
+
+    console.log('useHeartBeatProcessor - result:', {
+      bpm: result.bpm,
+      validatedBpm: validatedResult.bpm,
+      finalBpm,
+      confidence: result.confidence,
+      isPeak: result.isPeak,
+      validatedIsPeak: validatedResult.isPeak,
+      arrhythmiaCount: result.arrhythmiaCount,
+      rrIntervals: rrData.intervals,
+      timestamp: new Date().toISOString()
+    });
+    
+    if (finalBpm > 0) {
+      setCurrentBPM(finalBpm);
+      setConfidence(validatedResult.confidence);
     }
 
     return {
-      ...result,
+      ...validatedResult,
+      bpm: finalBpm,  // Usar BPM estabilizado
       rrData
     };
-  }, [playBeep]);
+  }, []);
+
+  // Filtro básico para eliminar solo ruidos extremos
+  const applyBasicFilter = (value: number): number => {
+    const windowSize = 3;
+    recentValuesRef.current.push(value);
+    
+    if (recentValuesRef.current.length > windowSize) {
+      recentValuesRef.current.shift();
+    }
+    
+    if (recentValuesRef.current.length === windowSize) {
+      const sorted = [...recentValuesRef.current].sort((a, b) => a - b);
+      return sorted[Math.floor(windowSize / 2)];
+    }
+    
+    return value;
+  };
+
+  // Validación básica de picos para eliminar valores no fisiológicos
+  const validatePeak = (result: HeartBeatResult): HeartBeatResult => {
+    if (!result.isPeak) {
+      return result;
+    }
+    
+    // Verificar si la confianza está por encima del umbral mínimo
+    if (result.confidence < MIN_CONFIDENCE_THRESHOLD) {
+      return { ...result, isPeak: false };
+    }
+    
+    // Si el BPM está fuera de rango fisiológico normal, requerir mayor confianza
+    if ((result.bpm < 40 || result.bpm > 180) && result.confidence < 0.7) {
+      return { ...result, isPeak: false };
+    }
+    
+    // Validar la consistencia solo para BPM extremos
+    if (result.bpm < 30 || result.bpm > 200) {
+      if (recentConfidencesRef.current.length >= 3) {
+        const avgConfidence = recentConfidencesRef.current
+          .slice(-3)
+          .reduce((sum, conf) => sum + conf, 0) / 3;
+        
+        if (avgConfidence < 0.65) {
+          return { ...result, isPeak: false };
+        }
+      }
+    }
+    
+    return result;
+  };
 
   const reset = useCallback(() => {
     console.log('useHeartBeatProcessor: Reseteando processor');
@@ -196,8 +209,11 @@ export const useHeartBeatProcessor = () => {
     setCurrentBPM(0);
     setConfidence(0);
     
-    // Limpiar buffer de señales para liberar memoria
+    // Limpiar todos los buffers
     signalBufferRef.current = [];
+    recentValuesRef.current = [];
+    recentConfidencesRef.current = [];
+    bpmHistoryRef.current = [];
     
     // Forzar garbage collection si está disponible
     if (window.gc) {
@@ -222,6 +238,9 @@ export const useHeartBeatProcessor = () => {
     
     // Limpiar buffer de señales
     signalBufferRef.current = [];
+    recentValuesRef.current = [];
+    recentConfidencesRef.current = [];
+    bpmHistoryRef.current = [];
     
     // Recrear el procesador para asegurar limpieza completa
     processorRef.current = new HeartBeatProcessor();

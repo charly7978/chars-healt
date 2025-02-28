@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -38,13 +39,11 @@ const Index = () => {
   } | null>(null);
   const measurementTimerRef = useRef<number | null>(null);
   
-  // Nuevos arrays para almacenar todos los valores durante la medición
   const allHeartRateValuesRef = useRef<number[]>([]);
   const allSpo2ValuesRef = useRef<number[]>([]);
   const allSystolicValuesRef = useRef<number[]>([]);
   const allDiastolicValuesRef = useRef<number[]>([]);
   
-  // Flag para trackear si ya tenemos valores válidos que queremos preservar
   const hasValidValuesRef = useRef(false);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
@@ -256,7 +255,6 @@ const Index = () => {
     const videoTrack = stream.getVideoTracks()[0];
     const imageCapture = new ImageCapture(videoTrack);
     
-    // Solo activar la linterna si estamos monitorizando
     if (isMonitoring && videoTrack.getCapabilities()?.torch) {
       videoTrack.applyConstraints({
         advanced: [{ torch: true }]
@@ -294,7 +292,6 @@ const Index = () => {
 
     processImage();
     
-    // Configurar listener para apagar la linterna cuando se detenga la monitorización
     return () => {
       if (videoTrack.getCapabilities()?.torch) {
         videoTrack.applyConstraints({
@@ -304,10 +301,8 @@ const Index = () => {
     };
   };
 
-  // Asegurarse que la linterna se apague cuando cambie isMonitoring
   useEffect(() => {
     if (!isMonitoring && isCameraOn) {
-      // Intentar apagar el flash si estaba encendido y ahora paramos
       try {
         const tracks = navigator.mediaDevices
           .getUserMedia({ video: true })
@@ -381,7 +376,6 @@ const Index = () => {
 
     enterImmersiveMode();
     
-    // Optimizado: reduciendo las llamadas repeat innecesarias
     const immersiveTimeout = setTimeout(enterImmersiveMode, 1000);
 
     const handleInteraction = () => {
@@ -404,13 +398,7 @@ const Index = () => {
         const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
         
         if (!measurementComplete) {
-          // Actualizar BPM solo si es un valor válido y hay detección de dedo
-          if (heartBeatResult.bpm > 0 && heartBeatResult.confidence > 0.6) {
-            console.log("Index - BPM actualizado:", {
-              bpm: heartBeatResult.bpm,
-              confidence: heartBeatResult.confidence,
-              isPeak: heartBeatResult.isPeak
-            });
+          if (heartBeatResult.bpm > 0) {
             setHeartRate(heartBeatResult.bpm);
             allHeartRateValuesRef.current.push(heartBeatResult.bpm);
           }
@@ -456,15 +444,6 @@ const Index = () => {
       } catch (error) {
         console.error("Error procesando señal:", error);
       }
-    } else if (!lastSignal?.fingerDetected && isMonitoring) {
-      // Si no hay detección de dedo, resetear valores
-      setHeartRate(0);
-      setVitalSigns(prev => ({
-        ...prev,
-        spo2: 0,
-        pressure: "--/--"
-      }));
-      setSignalQuality(0);
     }
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns, measurementComplete]);
 
@@ -479,26 +458,33 @@ const Index = () => {
 
   return (
     <div 
-      className="fixed inset-0" 
+      className="fixed inset-0 flex flex-col bg-black" 
       style={{ 
-        height: '100dvh',
+        height: '100%',
+        maxHeight: '100dvh',
         minHeight: '100vh',
         touchAction: 'none',
         overscrollBehavior: 'none',
         WebkitOverflowScrolling: 'touch',
         overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
+        paddingTop: 'var(--sat)',
+        paddingRight: 'var(--sar)',
+        paddingBottom: 'var(--sab)',
+        paddingLeft: 'var(--sal)',
       }}
     >
-      <CameraView 
-        onStreamReady={handleStreamReady}
-        isMonitoring={isCameraOn}
-        isFingerDetected={isMonitoring ? lastSignal?.fingerDetected : false}
-        signalQuality={isMonitoring ? signalQuality : 0}
-      />
+      {/* Capa de CameraView con posición absoluta */}
+      <div className="absolute inset-0 z-0">
+        <CameraView 
+          onStreamReady={handleStreamReady}
+          isMonitoring={isCameraOn}
+          isFingerDetected={isMonitoring ? lastSignal?.fingerDetected : false}
+          signalQuality={isMonitoring ? signalQuality : 0}
+        />
+      </div>
 
-      <div className="flex-1 flex flex-col z-10">
+      {/* PPG Signal Meter con posición absoluta fija */}
+      <div className="absolute inset-0 z-10">
         <PPGSignalMeter 
           value={isMonitoring ? lastSignal?.filteredValue || 0 : 0}
           quality={isMonitoring ? lastSignal?.quality || 0 : 0}
@@ -510,8 +496,10 @@ const Index = () => {
         />
       </div>
 
-      {/* Reducido el tamaño del bloque de displays y acercado a la botonera */}
-      <div className="fixed bottom-[65px] left-0 right-0 px-3 z-20">
+      {/* Eliminando el título "Chars Healt" que estaba aquí */}
+
+      {/* Panel de signos vitales con posición fija abajo */}
+      <div className="absolute z-20" style={{ bottom: '65px', left: 0, right: 0, padding: '0 12px' }}>
         <div className="p-2 bg-black/60 rounded-lg">
           <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
             <VitalSign 
@@ -541,30 +529,32 @@ const Index = () => {
         </div>
       </div>
 
-      {/* Reducido levemente la botonera */}
-      <div className="fixed bottom-0 left-0 right-0 w-full h-[55px] grid grid-cols-2 gap-px z-50">
-        <button 
-          onClick={startMonitoring}
-          className="w-full h-full text-xl font-bold text-white transition-colors duration-200"
-          style={{ 
-            backgroundImage: isMonitoring 
-              ? 'linear-gradient(135deg, #f87171, #dc2626, #b91c1c)' 
-              : 'linear-gradient(135deg, #3b82f6, #2563eb, #1d4ed8)',
-            textShadow: '0px 1px 3px rgba(0, 0, 0, 0.3)'
-          }}
-        >
-          {isMonitoring ? 'DETENER' : 'INICIAR'}
-        </button>
-        <button 
-          onClick={handleReset}
-          className="w-full h-full text-xl font-bold text-white transition-colors duration-200"
-          style={{ 
-            backgroundImage: 'linear-gradient(135deg, #64748b, #475569, #334155)',
-            textShadow: '0px 1px 3px rgba(0, 0, 0, 0.3)'
-          }}
-        >
-          RESET
-        </button>
+      {/* Botonera fija en la parte inferior */}
+      <div className="absolute z-50" style={{ bottom: 0, left: 0, right: 0, height: '55px' }}>
+        <div className="grid grid-cols-2 gap-px w-full h-full">
+          <button 
+            onClick={startMonitoring}
+            className="w-full h-full text-xl font-bold text-white transition-colors duration-200"
+            style={{ 
+              backgroundImage: isMonitoring 
+                ? 'linear-gradient(135deg, #f87171, #dc2626, #b91c1c)' 
+                : 'linear-gradient(135deg, #3b82f6, #2563eb, #1d4ed8)',
+              textShadow: '0px 1px 3px rgba(0, 0, 0, 0.3)'
+            }}
+          >
+            {isMonitoring ? 'DETENER' : 'INICIAR'}
+          </button>
+          <button 
+            onClick={handleReset}
+            className="w-full h-full text-xl font-bold text-white transition-colors duration-200"
+            style={{ 
+              backgroundImage: 'linear-gradient(135deg, #64748b, #475569, #334155)',
+              textShadow: '0px 1px 3px rgba(0, 0, 0, 0.3)'
+            }}
+          >
+            RESET
+          </button>
+        </div>
       </div>
     </div>
   );
