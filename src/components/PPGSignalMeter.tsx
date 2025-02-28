@@ -258,26 +258,29 @@ const PPGSignalMeter = ({
 
   return (
     <>
-      <div className="absolute top-0 left-0 right-0 p-2 flex justify-between items-center bg-white border-b border-slate-100 shadow-sm">
-        <div className="flex items-center gap-3">
-          <span className="text-xl font-bold text-slate-700">PPG</span>
-          <div className="w-[200px]">
-            <div className={`h-1.5 w-full rounded-full bg-gradient-to-r ${getQualityColor(quality)} transition-all duration-1000 ease-in-out`}>
-              <div
-                className="h-full rounded-full bg-white/20 animate-pulse transition-all duration-1000"
-                style={{ width: `${isFingerDetected ? quality : 0}%` }}
-              />
-            </div>
-            <span className="text-[9px] text-center mt-0.5 font-medium transition-colors duration-700 block" 
-                  style={{ color: quality > 60 ? '#0EA5E9' : '#F59E0B' }}>
-              {getQualityText(quality)}
-            </span>
+      {/* Título en rojo en la parte superior */}
+      <div className="absolute top-0 left-0 right-0 z-20 p-1">
+        <h1 className="text-xl font-bold text-red-600 text-center">PPG SEÑAL CARDIACA</h1>
+      </div>
+
+      {/* Sección de huellas digitales y calidad de señal - Ahora es flotante sobre el gráfico */}
+      <div className="absolute top-1 right-2 z-20 flex items-center gap-3 bg-black/40 rounded-lg p-2">
+        <div className="w-[200px]">
+          <div className={`h-1.5 w-full rounded-full bg-gradient-to-r ${getQualityColor(quality)} transition-all duration-1000 ease-in-out`}>
+            <div
+              className="h-full rounded-full bg-white/20 animate-pulse transition-all duration-1000"
+              style={{ width: `${isFingerDetected ? quality : 0}%` }}
+            />
           </div>
+          <span className="text-[9px] text-center mt-0.5 font-medium transition-colors duration-700 block text-white" 
+                style={{ color: quality > 60 ? '#0EA5E9' : '#F59E0B' }}>
+            {getQualityText(quality)}
+          </span>
         </div>
 
         <div className="flex flex-col items-center">
           <Fingerprint
-            className={`h-16 w-16 transition-colors duration-300 ${
+            className={`h-14 w-14 transition-colors duration-300 ${
               !isFingerDetected ? 'text-gray-400' :
               quality > 75 ? 'text-green-500' :
               quality > 50 ? 'text-yellow-500' :
@@ -285,7 +288,7 @@ const PPGSignalMeter = ({
             }`}
             strokeWidth={1.5}
           />
-          <span className="text-[10px] text-center mt-0.5 font-medium text-slate-600">
+          <span className="text-[10px] text-center mt-0.5 font-medium text-white">
             {isFingerDetected ? "Dedo detectado" : "Ubique su dedo"}
           </span>
         </div>
@@ -296,7 +299,7 @@ const PPGSignalMeter = ({
           ref={canvasRef}
           width={CANVAS_WIDTH}
           height={CANVAS_HEIGHT}
-          className="w-full h-[calc(40vh)] mt-20 absolute top-0 left-0 right-0"
+          className="w-full h-[calc(40vh)] mt-0 absolute top-0 left-0 right-0"
           style={{ zIndex: 10 }}
         />
       </div>
