@@ -76,16 +76,16 @@ const PPGSignalMeter = ({
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    // Cuadrícula blanca (sin cambios)
+    // Cuadrícula verde - MODIFICADO: Cambiado de blanco a verde
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.strokeStyle = 'rgba(0, 255, 127, 0.15)'; // Verde suave para la cuadrícula principal
     ctx.lineWidth = 0.5;
 
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X) {
       ctx.moveTo(x, 0);
       ctx.lineTo(x, CANVAS_HEIGHT);
       if (x % (GRID_SIZE_X * 4) === 0) {
-        ctx.fillStyle = '#FFFFFF';  // Cambiado a blanco (antes amarillo)
+        ctx.fillStyle = 'rgba(0, 255, 127, 0.9)';  // Verde más brillante para las etiquetas
         ctx.font = '10px Inter';
         ctx.textAlign = 'center';
         ctx.fillText(`${x / 10}ms`, x, CANVAS_HEIGHT - 5);
@@ -97,7 +97,7 @@ const PPGSignalMeter = ({
       ctx.lineTo(CANVAS_WIDTH, y);
       if (y % (GRID_SIZE_Y * 4) === 0) {
         const amplitude = ((CANVAS_HEIGHT / 2) - y) / verticalScale;
-        ctx.fillStyle = '#FFFFFF';  // Cambiado a blanco (antes amarillo)
+        ctx.fillStyle = 'rgba(0, 255, 127, 0.9)';  // Verde más brillante para las etiquetas
         ctx.font = '10px Inter';
         ctx.textAlign = 'right';
         ctx.fillText(amplitude.toFixed(1), 25, y + 4);
@@ -105,9 +105,9 @@ const PPGSignalMeter = ({
     }
     ctx.stroke();
 
-    // Líneas principales más visibles (sin cambios)
+    // Líneas principales más visibles - MODIFICADO: Cambiado a verde más intenso
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+    ctx.strokeStyle = 'rgba(0, 255, 127, 0.25)'; // Verde más intenso para líneas principales
     ctx.lineWidth = 1;
 
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X * 4) {
@@ -123,7 +123,7 @@ const PPGSignalMeter = ({
 
     // Línea central más visible - BAJADA SUTILMENTE (de CANVAS_HEIGHT/2 a CANVAS_HEIGHT*0.6)
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+    ctx.strokeStyle = 'rgba(0, 255, 127, 0.35)'; // Verde más intenso para línea central
     ctx.lineWidth = 1.5;
     ctx.moveTo(0, CANVAS_HEIGHT * 0.6);
     ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT * 0.6);
@@ -280,7 +280,7 @@ const PPGSignalMeter = ({
 
     lastRenderTimeRef.current = currentTime;
     animationFrameRef.current = requestAnimationFrame(renderSignal);
-  }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus]);
+  }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus, drawGrid, smoothValue]);
 
   useEffect(() => {
     renderSignal();
