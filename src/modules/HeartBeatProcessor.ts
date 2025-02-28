@@ -1,31 +1,31 @@
 export class HeartBeatProcessor {
-  // ────────── CONFIGURACIONES PRINCIPALES ULTRA OPTIMIZADAS ──────────
+  // ────────── CONFIGURACIONES PRINCIPALES ──────────
   private readonly SAMPLE_RATE = 30;
-  private readonly WINDOW_SIZE = 210;          // Aumentado para análisis más profundo
-  private readonly MIN_BPM = 30;              // Rango fisiológico mínimo
-  private readonly MAX_BPM = 220;             // Rango fisiológico máximo
-  private readonly SIGNAL_THRESHOLD = 0.22;    // Aumentado para mejor detección
-  private readonly MIN_CONFIDENCE = 0.68;      // Aumentado para mayor precisión
-  private readonly DERIVATIVE_THRESHOLD = -0.015; // Ajustado para mejor detección
-  private readonly MIN_PEAK_TIME_MS = 200;     // Optimizado para ritmo cardíaco real
-  private readonly WARMUP_TIME_MS = 1200;      // Aumentado para mejor estabilización
+  private readonly WINDOW_SIZE = 60;
+  private readonly MIN_BPM = 40;
+  private readonly MAX_BPM = 200; // Se mantiene amplio para no perder picos fuera de rango
+  private readonly SIGNAL_THRESHOLD = 0.40; 
+  private readonly MIN_CONFIDENCE = 0.60;
+  private readonly DERIVATIVE_THRESHOLD = -0.03; 
+  private readonly MIN_PEAK_TIME_MS = 400; 
+  private readonly WARMUP_TIME_MS = 3000; 
 
-  // Parámetros de filtrado ultra optimizados
-  private readonly MEDIAN_FILTER_WINDOW = 9;    // Aumentado para mejor filtrado
-  private readonly MOVING_AVERAGE_WINDOW = 7;   // Aumentado para suavizado óptimo
-  private readonly EMA_ALPHA = 0.22;           // Ajustado para mejor respuesta
-  private readonly BASELINE_FACTOR = 0.94;      // Ajustado para mejor línea base
+  // Parámetros de filtrado
+  private readonly MEDIAN_FILTER_WINDOW = 3; 
+  private readonly MOVING_AVERAGE_WINDOW = 3; 
+  private readonly EMA_ALPHA = 0.4; 
+  private readonly BASELINE_FACTOR = 1.0; 
 
-  // Parámetros de beep optimizados para mejor feedback
-  private readonly BEEP_PRIMARY_FREQUENCY = 880;  // Ajustado para mejor audibilidad
-  private readonly BEEP_SECONDARY_FREQUENCY = 440;// Ajustado para mejor distinción
-  private readonly BEEP_DURATION = 40;           // Aumentado para mejor percepción
-  private readonly BEEP_VOLUME = 0.40;           // Aumentado ligeramente
-  private readonly MIN_BEEP_INTERVAL_MS = 150;   // Ajustado para evitar solapamiento
+  // Parámetros de beep
+  private readonly BEEP_PRIMARY_FREQUENCY = 880; 
+  private readonly BEEP_SECONDARY_FREQUENCY = 440; 
+  private readonly BEEP_DURATION = 80; 
+  private readonly BEEP_VOLUME = 0.9; 
+  private readonly MIN_BEEP_INTERVAL_MS = 300;
 
-  // ────────── AUTO-RESET OPTIMIZADO ──────────
-  private readonly LOW_SIGNAL_THRESHOLD = 0.012;
-  private readonly LOW_SIGNAL_FRAMES = 15;
+  // ────────── AUTO-RESET SI LA SEÑAL ES MUY BAJA ──────────
+  private readonly LOW_SIGNAL_THRESHOLD = 0.03;
+  private readonly LOW_SIGNAL_FRAMES = 10;
   private lowSignalCount = 0;
 
   // Variables internas
@@ -265,21 +265,19 @@ export class HeartBeatProcessor {
     const isOverThreshold =
       derivative < this.DERIVATIVE_THRESHOLD &&
       normalizedValue > this.SIGNAL_THRESHOLD &&
-      this.lastValue > this.baseline * 0.92;
+      this.lastValue > this.baseline * 0.98;
 
     const amplitudeConfidence = Math.min(
-      Math.max(Math.abs(normalizedValue) / (this.SIGNAL_THRESHOLD * 1.3), 0),
+      Math.max(Math.abs(normalizedValue) / (this.SIGNAL_THRESHOLD * 1.8), 0),
       1
     );
     const derivativeConfidence = Math.min(
-      Math.max(Math.abs(derivative) / Math.abs(this.DERIVATIVE_THRESHOLD * 0.65), 0),
+      Math.max(Math.abs(derivative) / Math.abs(this.DERIVATIVE_THRESHOLD * 0.8), 0),
       1
     );
 
-    const confidence = (
-      amplitudeConfidence * 0.65 + 
-      derivativeConfidence * 0.35
-    );
+    // Aproximación a la confianza final
+    const confidence = (amplitudeConfidence + derivativeConfidence) / 2;
 
     return { isPeak: isOverThreshold, confidence };
   }
@@ -297,11 +295,10 @@ export class HeartBeatProcessor {
     if (isPeak && !this.lastConfirmedPeak && confidence >= this.MIN_CONFIDENCE) {
       if (this.peakConfirmationBuffer.length >= 3) {
         const len = this.peakConfirmationBuffer.length;
-        
-        const goingDown1 = this.peakConfirmationBuffer[len - 1] < 
-                         this.peakConfirmationBuffer[len - 2] * 0.92;
-        const goingDown2 = this.peakConfirmationBuffer[len - 2] < 
-                         this.peakConfirmationBuffer[len - 3] * 0.92;
+        const goingDown1 =
+          this.peakConfirmationBuffer[len - 1] < this.peakConfirmationBuffer[len - 2];
+        const goingDown2 =
+          this.peakConfirmationBuffer[len - 2] < this.peakConfirmationBuffer[len - 3];
 
         if (goingDown1 && goingDown2) {
           this.lastConfirmedPeak = true;

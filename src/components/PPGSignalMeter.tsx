@@ -74,8 +74,8 @@ const PPGSignalMeter = ({
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     
-    // Aumentado a 50% de opacidad como solicitado
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    // Aumentar opacidad al 70% como solicitado
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';  // Negro con 70% de opacidad
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
     ctx.beginPath();
@@ -322,7 +322,7 @@ const PPGSignalMeter = ({
       </div>
       
       <div className="absolute" style={{ top: 'calc(50vh + 5px)', left: 0, right: 0, textAlign: 'center', zIndex: 30 }}>
-        <h1 className="text-3xl font-bold">
+        <h1 className="text-xl font-bold">
           <span className="text-white">Chars</span>
           <span className="text-[#ea384c]">Healt</span>
         </h1>
