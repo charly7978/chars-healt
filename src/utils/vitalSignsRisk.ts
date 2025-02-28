@@ -351,6 +351,8 @@ export class VitalSignsRisk {
     // Si es lectura final, siempre calculamos el promedio
     if (isFinalReading) {
       const avgSPO2 = this.getAverageSPO2();
+      console.log("Cálculo final de SpO2:", { avgSPO2, isFinalReading });
+      
       if (avgSPO2 > 0) {
         // Determinar el riesgo basado en el promedio
         if (avgSPO2 <= 90) {
@@ -370,19 +372,42 @@ export class VitalSignsRisk {
     
     // RESTAURADO: Comportamiento original para tiempo real
     let currentSegment: RiskSegment;
-
-    if (this.isStableValue(this.spo2History, [0, 90])) {
-      currentSegment = { color: '#ea384c', label: 'INSUFICIENCIA RESPIRATORIA' };
-    } else if (this.isStableValue(this.spo2History, [90, 92])) {
-      currentSegment = { color: '#F97316', label: 'LEVE INSUFICIENCIA RESPIRATORIA' };
-    } else if (this.isStableValue(this.spo2History, [93, 100])) {
-      currentSegment = { color: '#0EA5E9', label: 'NORMAL' };
-    } else {
-      // RESTAURADO: Mostrar "EVALUANDO..." cuando no hay estabilidad
+    
+    // Comprobar la estabilidad de la señal
+    const isStable = 
+      this.isStableValue(this.spo2History, [0, 90]) || 
+      this.isStableValue(this.spo2History, [90, 92]) || 
+      this.isStableValue(this.spo2History, [93, 100]);
+    
+    // Si hay pocos valores o la señal es inestable, mostrar "EVALUANDO..."
+    if (this.spo2History.length < 5 || !isStable) {
       currentSegment = { color: '#FFFFFF', label: 'EVALUANDO...' };
+      console.log("SpO2 inestable o insuficientes datos:", {
+        historyLength: this.spo2History.length,
+        isStable,
+        status: 'EVALUANDO'
+      });
+    } 
+    // Si la señal es estable, determinar el nivel de riesgo
+    else {
+      if (this.isStableValue(this.spo2History, [0, 90])) {
+        currentSegment = { color: '#ea384c', label: 'INSUFICIENCIA RESPIRATORIA' };
+      } else if (this.isStableValue(this.spo2History, [90, 92])) {
+        currentSegment = { color: '#F97316', label: 'LEVE INSUFICIENCIA RESPIRATORIA' };
+      } else if (this.isStableValue(this.spo2History, [93, 100])) {
+        currentSegment = { color: '#0EA5E9', label: 'NORMAL' };
+      } else {
+        // Esto no debería ocurrir dado el chequeo de isStable previo
+        currentSegment = { color: '#FFFFFF', label: 'EVALUANDO...' };
+      }
+      
+      console.log("SpO2 estable:", {
+        valor: spo2,
+        estado: currentSegment.label
+      });
     }
     
-    // Guardar el segmento actual para análisis final
+    // Guardar el segmento actual para análisis final solo si no es "EVALUANDO..."
     if (currentSegment.label !== 'EVALUANDO...') {
       this.spo2SegmentHistory.push(currentSegment);
     }

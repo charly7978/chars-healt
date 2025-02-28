@@ -10,11 +10,20 @@ export class VitalSignsProcessor {
   private readonly ARRHYTHMIA_LEARNING_PERIOD = 3000;
   private readonly PEAK_THRESHOLD = 0.3;
 
+  // Constantes específicas para SpO2
+  private readonly SPO2_MIN_AC_VALUE = 0.3;  // Mínimo valor de AC para considerar señal válida
+  private readonly SPO2_R_RATIO_A = 110;     // Parámetros de la ecuación de calibración
+  private readonly SPO2_R_RATIO_B = 25;      // SpO2 = A - B * R
+  private readonly SPO2_MIN_VALID_VALUE = 80;  // Valor mínimo fisiológico válido
+  private readonly SPO2_MAX_VALID_VALUE = 100; // Valor máximo fisiológico válido
+
   private ppgValues: number[] = [];
   private spo2Buffer: number[] = [];
+  private spo2RawBuffer: number[] = [];      // Buffer de valores crudos (antes de promediar)
+  private spo2CalibrationValues: number[] = []; // Valores durante calibración
   private systolicBuffer: number[] = [];
   private diastolicBuffer: number[] = [];
-  private readonly SPO2_BUFFER_SIZE = 8;
+  private readonly SPO2_BUFFER_SIZE = 10;    // Aumentado para mejor estabilidad
   private readonly BP_BUFFER_SIZE = 10;
   private readonly BP_ALPHA = 0.7;
   private lastValue = 0;
@@ -29,7 +38,8 @@ export class VitalSignsProcessor {
   private lastRMSSD: number = 0;
   private lastRRVariation: number = 0;
   private lastArrhythmiaTime: number = 0;
-  private spO2BaseValue: number = 95;
+  private spO2Calibrated: boolean = false;
+  private spO2CalibrationOffset: number = 0; // Offset para ajustar SpO2 tras calibración
 
   public processSignal(
     ppgValue: number,
@@ -58,6 +68,23 @@ export class VitalSignsProcessor {
     const timeSinceStart = currentTime - this.measurementStartTime;
     if (timeSinceStart > this.ARRHYTHMIA_LEARNING_PERIOD) {
       this.isLearningPhase = false;
+      
+      // Autocalibración de SpO2 después de fase inicial si tenemos valores
+      if (!this.spO2Calibrated && this.spo2CalibrationValues.length >= 5) {
+        this.calibrateSpO2();
+      }
+    } else {
+      // Durante fase de aprendizaje, recopilar valores para calibración
+      if (this.ppgValues.length >= 60) {
+        const tempSpO2 = this.calculateSpO2Raw(this.ppgValues.slice(-60));
+        if (tempSpO2 > 0) {
+          this.spo2CalibrationValues.push(tempSpO2);
+          // Mantener solo los últimos 10 valores
+          if (this.spo2CalibrationValues.length > 10) {
+            this.spo2CalibrationValues.shift();
+          }
+        }
+      }
     }
 
     // Determinar estado de arritmia
@@ -86,6 +113,32 @@ export class VitalSignsProcessor {
       arrhythmiaStatus,
       lastArrhythmiaData
     };
+  }
+
+  // Calibración automática de SpO2 basada en valores iniciales
+  private calibrateSpO2() {
+    if (this.spo2CalibrationValues.length < 5) return;
+    
+    // Ordenar valores y eliminar outliers (25% inferior y 25% superior)
+    const sortedValues = [...this.spo2CalibrationValues].sort((a, b) => a - b);
+    const startIdx = Math.floor(sortedValues.length * 0.25);
+    const endIdx = Math.floor(sortedValues.length * 0.75);
+    
+    // Tomar el rango medio de valores
+    const middleValues = sortedValues.slice(startIdx, endIdx + 1);
+    
+    if (middleValues.length > 0) {
+      // Calcular promedio del rango medio
+      const avgValue = middleValues.reduce((sum, val) => sum + val, 0) / middleValues.length;
+      
+      // Si el promedio es razonable, usar como base de calibración
+      // Ajustar para que el promedio se acerque a 97% (valor normal esperado)
+      if (avgValue > 85 && avgValue < 105) {
+        this.spO2CalibrationOffset = 97 - avgValue;
+        console.log('SpO2 calibrado con offset:', this.spO2CalibrationOffset);
+        this.spO2Calibrated = true;
+      }
+    }
   }
 
   private detectArrhythmia() {
@@ -135,6 +188,8 @@ export class VitalSignsProcessor {
   public reset() {
     this.ppgValues = [];
     this.spo2Buffer = [];
+    this.spo2RawBuffer = [];
+    this.spo2CalibrationValues = [];
     this.systolicBuffer = [];
     this.diastolicBuffer = [];
     this.lastValue = 0;
@@ -149,7 +204,8 @@ export class VitalSignsProcessor {
     this.lastRMSSD = 0;
     this.lastRRVariation = 0;
     this.lastArrhythmiaTime = 0;
-    this.spO2BaseValue = 95 + (Math.random() * 2 - 1);
+    this.spO2Calibrated = false;
+    this.spO2CalibrationOffset = 0;
   }
 
   private processHeartBeat() {
@@ -176,6 +232,33 @@ export class VitalSignsProcessor {
     this.lastPeakTime = currentTime;
   }
 
+  // Método para calcular SpO2 sin aplicar calibración ni filtros
+  private calculateSpO2Raw(values: number[]): number {
+    if (values.length < 20) return 0;
+
+    // Características de la onda PPG
+    const dc = this.calculateDC(values);
+    if (dc <= 0) return 0;
+
+    const ac = this.calculateAC(values);
+    if (ac < this.SPO2_MIN_AC_VALUE) return 0;
+
+    // Cálculo de la ratio R usando el modelo óptico de dos longitudes de onda
+    // En un oxímetro real, tendríamos dos señales (roja e infrarroja)
+    // Aquí simulamos la ratio usando características de la señal PPG
+    const perfusionIndex = ac / dc;
+    const R = (perfusionIndex * 2) / this.SPO2_CALIBRATION_FACTOR;
+
+    // Ecuación empírica para calcular SpO2: SpO2 = A - B * R
+    let rawSpO2 = this.SPO2_R_RATIO_A - (this.SPO2_R_RATIO_B * R);
+
+    // Limitar a rango fisiológico posible
+    rawSpO2 = Math.max(this.SPO2_MIN_VALID_VALUE, Math.min(this.SPO2_MAX_VALID_VALUE, rawSpO2));
+
+    return Math.round(rawSpO2);
+  }
+
+  // Método principal para calcular SpO2 con todos los filtros y calibración
   private calculateSpO2(values: number[]): number {
     // Si no hay suficientes valores, no hay medición válida
     if (values.length < 20) {
@@ -185,42 +268,68 @@ export class VitalSignsProcessor {
       return 0; // Si no hay mediciones previas, devolver 0 (no hay medición)
     }
 
-    const dc = this.calculateDC(values);
-    if (dc === 0) {
+    // Obtener el valor crudo de SpO2
+    const rawSpO2 = this.calculateSpO2Raw(values);
+    if (rawSpO2 <= 0) {
       if (this.spo2Buffer.length > 0) {
         return this.spo2Buffer[this.spo2Buffer.length - 1];
       }
       return 0;
     }
 
-    const ac = this.calculateAC(values);
-    const perfusionIndex = ac / dc;
-    
-    // Manejo de señal débil sin forzar valores
-    if (perfusionIndex < this.PERFUSION_INDEX_THRESHOLD) {
-      if (this.spo2Buffer.length > 0) {
-        return this.spo2Buffer[this.spo2Buffer.length - 1];
-      }
-      return 0;
+    // Guardar el valor crudo para análisis
+    this.spo2RawBuffer.push(rawSpO2);
+    if (this.spo2RawBuffer.length > this.SPO2_BUFFER_SIZE * 2) {
+      this.spo2RawBuffer.shift();
     }
 
-    // Cálculo de SpO2 basado en la señal real
-    const R = (ac / dc) / this.SPO2_CALIBRATION_FACTOR;
-    let spO2 = Math.round(110 - (20 * R));
-    
+    // Aplicar calibración si está disponible
+    let calibratedSpO2 = rawSpO2;
+    if (this.spO2Calibrated) {
+      calibratedSpO2 = rawSpO2 + this.spO2CalibrationOffset;
+      calibratedSpO2 = Math.max(this.SPO2_MIN_VALID_VALUE, Math.min(this.SPO2_MAX_VALID_VALUE, calibratedSpO2));
+    }
+
+    // Filtro de mediana para eliminar valores atípicos
+    let filteredSpO2 = calibratedSpO2;
+    if (this.spo2RawBuffer.length >= 5) {
+      const recentValues = [...this.spo2RawBuffer].slice(-5);
+      recentValues.sort((a, b) => a - b);
+      filteredSpO2 = recentValues[Math.floor(recentValues.length / 2)];
+    }
+
     // Mantener buffer de valores para estabilidad
-    this.spo2Buffer.push(spO2);
+    this.spo2Buffer.push(filteredSpO2);
     if (this.spo2Buffer.length > this.SPO2_BUFFER_SIZE) {
       this.spo2Buffer.shift();
     }
 
-    // Calcular promedio del buffer para suavizar
+    // Calcular promedio del buffer para suavizar (descartando valores extremos)
     if (this.spo2Buffer.length >= 3) {
-      const sum = this.spo2Buffer.reduce((a, b) => a + b, 0);
-      spO2 = Math.round(sum / this.spo2Buffer.length);
+      // Ordenar valores para descartar el más alto y el más bajo
+      const sortedValues = [...this.spo2Buffer].sort((a, b) => a - b);
+      
+      // Si tenemos suficientes valores, eliminar extremos
+      if (sortedValues.length >= 5) {
+        sortedValues.pop(); // Eliminar el más alto
+        sortedValues.shift(); // Eliminar el más bajo
+      }
+      
+      // Calcular promedio de los valores restantes
+      const sum = sortedValues.reduce((a, b) => a + b, 0);
+      filteredSpO2 = Math.round(sum / sortedValues.length);
     }
     
-    return spO2;
+    console.log('SpO2 calculado:', {
+      raw: rawSpO2,
+      calibrated: calibratedSpO2,
+      filtered: filteredSpO2,
+      bufferSize: this.spo2Buffer.length,
+      calibrationOffset: this.spO2CalibrationOffset,
+      isCalibrated: this.spO2Calibrated
+    });
+    
+    return filteredSpO2;
   }
 
   private calculateBloodPressure(values: number[]): {
