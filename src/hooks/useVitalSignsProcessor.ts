@@ -71,7 +71,7 @@ export const useVitalSignsProcessor = () => {
       };
     }
     
-    // Si no hay arritmias detectadas aún
+    // MODIFICADO: Siempre mostrar "SIN ARRITMIAS" desde el principio, nunca CALIBRANDO
     return {
       spo2: result.spo2,
       pressure: result.pressure,
