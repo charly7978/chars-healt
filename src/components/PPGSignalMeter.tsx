@@ -40,11 +40,11 @@ const PPGSignalMeter = ({
   const CANVAS_HEIGHT = 300;
   const GRID_SIZE_X = 30;
   const GRID_SIZE_Y = 30;
-  const verticalScale = 35.0;
-  const SMOOTHING_FACTOR = 1.09;
+  const verticalScale = 45.0;
+  const SMOOTHING_FACTOR = 0.89;
   const TARGET_FPS = 150;
-  const FRAME_TIME = 5500 / TARGET_FPS;
-  const BUFFER_SIZE = 8000;
+  const FRAME_TIME = 4500 / TARGET_FPS;
+  const BUFFER_SIZE = 800;
 
   useEffect(() => {
     if (!dataBufferRef.current) {
