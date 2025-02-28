@@ -283,25 +283,7 @@ const PPGSignalMeter = ({
         />
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 h-[80px] grid grid-cols-2 gap-px bg-gray-100">
-        <button 
-          onClick={onStartMeasurement}
-          className="bg-white text-slate-700 hover:bg-gray-50 active:bg-gray-100 transition-colors duration-200"
-        >
-          <span className="text-lg font-semibold">
-            INICIAR/DETENER
-          </span>
-        </button>
-
-        <button 
-          onClick={onReset}
-          className="bg-white text-slate-700 hover:bg-gray-50 active:bg-gray-100 transition-colors duration-200"
-        >
-          <span className="text-lg font-semibold">
-            RESETEAR
-          </span>
-        </button>
-      </div>
+      {/* Eliminados los botones duplicados */}
     </>
   );
 };

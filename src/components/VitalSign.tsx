@@ -84,9 +84,25 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     getArrhythmiaDisplay() : 
     { text: value, ...getRiskInfo() };
 
+  // Determinar el gradiente a usar basado en el tipo de display
+  const getGradientClass = () => {
+    if (isArrhythmiaDisplay) {
+      return "from-blue-400/20 via-indigo-300/15 to-purple-300/10";
+    } else if (label === "FRECUENCIA CARDÍACA") {
+      return "from-red-400/20 via-orange-300/15 to-yellow-300/10";
+    } else if (label === "SPO2") {
+      return "from-cyan-400/20 via-blue-300/15 to-indigo-300/10";
+    } else {
+      return "from-emerald-400/20 via-teal-300/15 to-green-300/10";
+    }
+  };
+
   return (
     <div className="relative overflow-hidden rounded-xl backdrop-blur-md bg-white/10 border border-white/20 shadow-lg">
-      <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-indigo-600/5 pointer-events-none" />
+      <div className={`absolute inset-0 bg-gradient-to-br ${getGradientClass()} pointer-events-none`} />
+      <div className="absolute inset-0 bg-white/5" style={{
+        backgroundImage: "radial-gradient(circle at top right, rgba(255,255,255,0.2), transparent 70%)"
+      }} />
       <div className="relative z-10 p-4">
         <h3 className="text-slate-800 text-xs font-medium tracking-wider mb-2">{label}</h3>
         <div className="flex flex-col items-center gap-1">

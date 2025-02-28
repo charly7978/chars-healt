@@ -504,8 +504,8 @@ const Index = () => {
         />
       </div>
 
-      {/* Displays - Signos Vitales */}
-      <div className="fixed bottom-24 left-0 right-0 px-4 z-20">
+      {/* Displays - Signos Vitales - Bajados un poco */}
+      <div className="fixed bottom-[130px] left-0 right-0 px-4 z-20">
         <div className="p-4">
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <VitalSign 
@@ -536,7 +536,7 @@ const Index = () => {
       </div>
 
       {isMonitoring && (
-        <div className="fixed bottom-20 left-0 right-0 text-center z-20">
+        <div className="fixed bottom-[100px] left-0 right-0 text-center z-20">
           <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 40s</span>
         </div>
       )}
@@ -549,12 +549,22 @@ const Index = () => {
               ? 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 active:from-red-700 active:to-red-800'
               : 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 active:from-blue-700 active:to-blue-800'
           }`}
+          style={{ 
+            backgroundImage: isMonitoring 
+              ? 'linear-gradient(135deg, #f87171, #dc2626, #b91c1c)' 
+              : 'linear-gradient(135deg, #3b82f6, #2563eb, #1d4ed8)',
+            textShadow: '0px 1px 3px rgba(0, 0, 0, 0.3)'
+          }}
         >
           {isMonitoring ? 'DETENER' : 'INICIAR'}
         </button>
         <button 
           onClick={handleReset}
           className="w-full h-full text-2xl font-bold text-white bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800 active:from-gray-800 active:to-gray-900 transition-colors duration-200"
+          style={{ 
+            backgroundImage: 'linear-gradient(135deg, #64748b, #475569, #334155)',
+            textShadow: '0px 1px 3px rgba(0, 0, 0, 0.3)'
+          }}
         >
           RESET
         </button>
