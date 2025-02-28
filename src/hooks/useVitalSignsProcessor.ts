@@ -148,6 +148,7 @@ export const useVitalSignsProcessor = () => {
       }
     }
     
+    // Obtenemos los resultados directamente del procesador sin modificarlos
     const result = processor.processSignal(value, rrData);
     
     // Análisis avanzado de intervalos RR para arritmias
