@@ -1,34 +1,46 @@
 export class VitalSignsProcessor {
-  private readonly WINDOW_SIZE = 450;  // Aumentado para mejor análisis
-  private readonly SPO2_CALIBRATION_FACTOR = 0.98; // Ajustado para precisión
-  private readonly PERFUSION_INDEX_THRESHOLD = 0.008; // Más sensible
-  private readonly SPO2_WINDOW = 15;   // Aumentado para estabilidad
-  private readonly SMA_WINDOW = 4;     // Ajustado para balance
-  private readonly RR_WINDOW_SIZE = 8; // Aumentado para mejor detección
-  private readonly RMSSD_THRESHOLD = 30; // Ajustado para arritmias
-  private readonly ARRHYTHMIA_LEARNING_PERIOD = 2500; // Reducido
-  private readonly PEAK_THRESHOLD = 0.22; // Ajustado para sensibilidad
+  private readonly WINDOW_SIZE = 360;
+  private readonly SPO2_CALIBRATION_FACTOR = 0.98;
+  private readonly PERFUSION_INDEX_THRESHOLD = 0.008;
+  private readonly SPO2_WINDOW = 15;
+  private readonly SMA_WINDOW = 4;
+  private readonly RR_WINDOW_SIZE = 8;
+  private readonly RMSSD_THRESHOLD = 20;
+  private readonly ARRHYTHMIA_LEARNING_PERIOD = 2500;
+  private readonly PEAK_THRESHOLD = 0.20;
 
-  // Constantes específicas para SpO2 - CALIBRADAS
-  private readonly SPO2_MIN_AC_VALUE = 0.08;  // Más sensible
-  private readonly SPO2_R_RATIO_A = 108;     // Calibrado
-  private readonly SPO2_R_RATIO_B = 22;      // Calibrado
-  private readonly SPO2_MIN_VALID_VALUE = 70;  // Ampliado rango
-  private readonly SPO2_MAX_VALID_VALUE = 100; // Límite máximo
-  private readonly SPO2_BASELINE = 0;         // Sin offset
-  private readonly SPO2_MOVING_AVERAGE_ALPHA = 0.15; // Más suave
+  // Constantes específicas para SpO2 - CALIBRADAS PARA MEDICIONES REALES
+  private readonly SPO2_MIN_AC_VALUE = 0.08;
+  private readonly WINDOW_SIZE = 300;
+  private readonly SPO2_CALIBRATION_FACTOR = 1.0; // Valor neutro sin ajustes
+  private readonly PERFUSION_INDEX_THRESHOLD = 0.01; // Reducido para captar señales más débiles
+  private readonly SPO2_WINDOW = 10;
+  private readonly SMA_WINDOW = 3;
+  private readonly RR_WINDOW_SIZE = 5;
+  private readonly RMSSD_THRESHOLD = 25;
+  private readonly ARRHYTHMIA_LEARNING_PERIOD = 3000;
+  private readonly PEAK_THRESHOLD = 0.25; // Ajustado para mayor sensibilidad
 
-  // Constantes para presión arterial - CALIBRADAS
-  private readonly BP_BASELINE_SYSTOLIC = 0;   // Sin offset
-  private readonly BP_BASELINE_DIASTOLIC = 0;  // Sin offset
-  private readonly BP_PTT_COEFFICIENT = 0.015;  // Ajustado
-  private readonly BP_AMPLITUDE_COEFFICIENT = 0.04; // Ajustado
-  private readonly BP_STIFFNESS_FACTOR = 0.008; // Ajustado
-  private readonly BP_SMOOTHING_ALPHA = 0.06;  // Más suave
-  private readonly BP_QUALITY_THRESHOLD = 0.25; // Ajustado
-  private readonly BP_CALIBRATION_WINDOW = 4;  // Optimizado
-  private readonly BP_MIN_VALID_PTT = 140;     // Ampliado
-  private readonly BP_MAX_VALID_PTT = 1400;    // Ampliado
+  // Constantes específicas para SpO2 - AJUSTADAS PARA MEDICIONES REALES
+  private readonly SPO2_MIN_AC_VALUE = 0.1;  // Reducido para captar señales más débiles
+  private readonly SPO2_R_RATIO_A = 110;     // Calibración médica estándar
+  private readonly SPO2_R_RATIO_B = 25;      // Calibración médica estándar
+  private readonly SPO2_MIN_VALID_VALUE = 75;  // Permitir valores bajos reales
+  private readonly SPO2_MAX_VALID_VALUE = 100; // Límite fisiológico máximo
+  private readonly SPO2_BASELINE = 0;         // Sin valor base impuesto
+  private readonly SPO2_MOVING_AVERAGE_ALPHA = 0.05; // Reducido para menor suavizado
+
+  // Constantes para el algoritmo de presión arterial - AJUSTADAS PARA MEDICIONES REALES
+  private readonly BP_BASELINE_SYSTOLIC = 0;   // Sin valor base impuesto
+  private readonly BP_BASELINE_DIASTOLIC = 0;  // Sin valor base impuesto
+  private readonly BP_PTT_COEFFICIENT = 0.01;  // Valor reducido para influencia mínima
+  private readonly BP_AMPLITUDE_COEFFICIENT = 0.03; // Reducido para correlación más directa
+  private readonly BP_STIFFNESS_FACTOR = 0.005; // Influencia mínima
+  private readonly BP_SMOOTHING_ALPHA = 0.03;  // Suavizado mínimo para valores reales
+  private readonly BP_QUALITY_THRESHOLD = 0.2; // Umbral reducido para aceptar más mediciones reales
+  private readonly BP_CALIBRATION_WINDOW = 3;  // Ventana reducida
+  private readonly BP_MIN_VALID_PTT = 150;     // Ampliado para capturar más mediciones reales
+  private readonly BP_MAX_VALID_PTT = 1300;    // Ampliado para capturar más mediciones reales
 
   private ppgValues: number[] = [];
   private spo2Buffer: number[] = [];

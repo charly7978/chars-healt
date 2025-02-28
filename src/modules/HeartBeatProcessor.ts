@@ -1,31 +1,31 @@
 export class HeartBeatProcessor {
   // ────────── CONFIGURACIONES PRINCIPALES ──────────
   private readonly SAMPLE_RATE = 30;
-  private readonly WINDOW_SIZE = 60;
-  private readonly MIN_BPM = 40;
-  private readonly MAX_BPM = 200; // Se mantiene amplio para no perder picos fuera de rango
-  private readonly SIGNAL_THRESHOLD = 0.40; 
+  private readonly WINDOW_SIZE = 120;
+  private readonly MIN_BPM = 30;
+  private readonly MAX_BPM = 220;
+  private readonly SIGNAL_THRESHOLD = 0.25;
   private readonly MIN_CONFIDENCE = 0.60;
-  private readonly DERIVATIVE_THRESHOLD = -0.03; 
-  private readonly MIN_PEAK_TIME_MS = 400; 
-  private readonly WARMUP_TIME_MS = 3000; 
+  private readonly DERIVATIVE_THRESHOLD = -0.02;
+  private readonly MIN_PEAK_TIME_MS = 250;
+  private readonly WARMUP_TIME_MS = 1500;
 
-  // Parámetros de filtrado
-  private readonly MEDIAN_FILTER_WINDOW = 3; 
-  private readonly MOVING_AVERAGE_WINDOW = 3; 
-  private readonly EMA_ALPHA = 0.4; 
-  private readonly BASELINE_FACTOR = 1.0; 
+  // Parámetros de filtrado optimizados
+  private readonly MEDIAN_FILTER_WINDOW = 7;
+  private readonly MOVING_AVERAGE_WINDOW = 5;
+  private readonly EMA_ALPHA = 0.25;
+  private readonly BASELINE_FACTOR = 0.97;
 
-  // Parámetros de beep
-  private readonly BEEP_PRIMARY_FREQUENCY = 880; 
-  private readonly BEEP_SECONDARY_FREQUENCY = 440; 
-  private readonly BEEP_DURATION = 80; 
-  private readonly BEEP_VOLUME = 0.9; 
-  private readonly MIN_BEEP_INTERVAL_MS = 300;
+  // Parámetros de beep optimizados
+  private readonly BEEP_PRIMARY_FREQUENCY = 800;
+  private readonly BEEP_SECONDARY_FREQUENCY = 400;
+  private readonly BEEP_DURATION = 50;
+  private readonly BEEP_VOLUME = 0.5;
+  private readonly MIN_BEEP_INTERVAL_MS = 200;
 
   // ────────── AUTO-RESET SI LA SEÑAL ES MUY BAJA ──────────
-  private readonly LOW_SIGNAL_THRESHOLD = 0.03;
-  private readonly LOW_SIGNAL_FRAMES = 10;
+  private readonly LOW_SIGNAL_THRESHOLD = 0.015;
+  private readonly LOW_SIGNAL_FRAMES = 20;
   private lowSignalCount = 0;
 
   // Variables internas
