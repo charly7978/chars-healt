@@ -1,7 +1,7 @@
 
 export class VitalSignsProcessor {
   private readonly WINDOW_SIZE = 300;
-  private readonly SPO2_CALIBRATION_FACTOR = 1.10; // PRIMERA VARIABLE MODIFICADA: Ajustado de 1.07 a 1.10 para mejor precisión
+  private readonly SPO2_CALIBRATION_FACTOR = 1.12; // Ajustado de 1.10 a 1.12 para mejor precisión
   private readonly PERFUSION_INDEX_THRESHOLD = 0.05;
   private readonly SPO2_WINDOW = 10;
   private readonly SMA_WINDOW = 3;
@@ -13,20 +13,20 @@ export class VitalSignsProcessor {
   // Constantes específicas para SpO2 - RECALIBRADAS
   private readonly SPO2_MIN_AC_VALUE = 0.2;  // Ajustado: era 0.3 (permitir valores más bajos para sensibilidad)
   private readonly SPO2_R_RATIO_A = 112;     // Ajustado: era 110 (base más alta)
-  private readonly SPO2_R_RATIO_B = 25;      // SEGUNDA VARIABLE MODIFICADA: Volviendo al valor original para mejor precisión
+  private readonly SPO2_R_RATIO_B = 22;      // Ajustado: de 25 a 22 para mejorar precisión
   private readonly SPO2_MIN_VALID_VALUE = 90;  // Ajustado: era 92 (permitir valores más bajos)
-  private readonly SPO2_MAX_VALID_VALUE = 98; // MODIFICADO: Ajustado a 98% como valor máximo (era 100)
+  private readonly SPO2_MAX_VALID_VALUE = 99; // Ajustado: de 98 a 99 como valor máximo
   private readonly SPO2_BASELINE = 97;       // Valor base para personas sanas
-  private readonly SPO2_MOVING_AVERAGE_ALPHA = 0.18; // Ajustado: era 0.2 (suavizado levemente mayor)
+  private readonly SPO2_MOVING_AVERAGE_ALPHA = 0.15; // Ajustado: era 0.18 para mayor suavizado
 
-  // Nuevas constantes para el algoritmo avanzado de presión arterial
+  // Constantes para el algoritmo avanzado de presión arterial - RECALIBRADAS
   private readonly BP_BASELINE_SYSTOLIC = 120;  // Presión sistólica de referencia
   private readonly BP_BASELINE_DIASTOLIC = 80;  // Presión diastólica de referencia
-  private readonly BP_PTT_COEFFICIENT = 0.18;   // AJUSTE 1: Aumentado de 0.12 a 0.18 para mayor sensibilidad a cambios en PTT
-  private readonly BP_AMPLITUDE_COEFFICIENT = 0.35; // Coeficiente ajustado para amplitud
+  private readonly BP_PTT_COEFFICIENT = 0.16;   // Ajustado: de 0.18 a 0.16 para calibración más conservadora
+  private readonly BP_AMPLITUDE_COEFFICIENT = 0.32; // Ajustado: de 0.35 a 0.32 para estimaciones más conservadoras
   private readonly BP_STIFFNESS_FACTOR = 0.07;  // Factor de rigidez arterial
-  private readonly BP_SMOOTHING_ALPHA = 0.25;   // AJUSTE 2: Reducido de 0.65 a 0.25 para permitir más variabilidad
-  private readonly BP_QUALITY_THRESHOLD = 0.4;  // Umbral de calidad mínima para medición válida
+  private readonly BP_SMOOTHING_ALPHA = 0.20;   // Ajustado: de 0.25 a 0.20 para suavizar más los valores 
+  private readonly BP_QUALITY_THRESHOLD = 0.45;  // Ajustado: de 0.4 a 0.45 para mayor calidad requerida
   private readonly BP_CALIBRATION_WINDOW = 8;   // Ventana para auto-calibración
   private readonly BP_MIN_VALID_PTT = 300;      // PTT mínimo válido (ms)
   private readonly BP_MAX_VALID_PTT = 1000;     // PTT máximo válido (ms)
@@ -39,7 +39,7 @@ export class VitalSignsProcessor {
   private diastolicBuffer: number[] = [];
   private readonly SPO2_BUFFER_SIZE = 15;    // Aumentado para mejor estabilidad
   private readonly BP_BUFFER_SIZE = 10;
-  private readonly BP_ALPHA = 0.7;
+  private readonly BP_ALPHA = 0.65; // Ajustado de 0.7 a 0.65 para suavizar más
   private lastValue = 0;
   private lastPeakTime: number | null = null;
   private rrIntervals: number[] = [];
@@ -56,11 +56,11 @@ export class VitalSignsProcessor {
   private spO2CalibrationOffset: number = 0; // Offset para ajustar SpO2 tras calibración
   private lastSpo2Value: number = 0;         // Último valor de SpO2 para suavizado
 
-  // Nuevas variables para el algoritmo avanzado de presión arterial
+  // Variables para el algoritmo avanzado de presión arterial
   private pttHistory: number[] = [];         // Historial de tiempos de tránsito de pulso
   private amplitudeHistory: number[] = [];   // Historial de amplitudes de pulso
   private bpQualityHistory: number[] = [];   // Historial de calidad de mediciones
-  private bpCalibrationFactor: number = 1.0; // Factor de calibración adaptativo
+  private bpCalibrationFactor: number = 0.96; // Ajustado: de 1.0 a 0.96 para valores más conservadores
   private lastBpTimestamp: number = 0;       // Timestamp de última medición válida
   private lastValidSystolic: number = 0;     // Último valor válido de sistólica
   private lastValidDiastolic: number = 0;    // Último valor válido de diastólica
@@ -239,7 +239,7 @@ export class VitalSignsProcessor {
     this.pttHistory = [];
     this.amplitudeHistory = [];
     this.bpQualityHistory = [];
-    this.bpCalibrationFactor = 1.0;
+    this.bpCalibrationFactor = 0.96; // Restaurar al valor conservador inicial
     this.lastBpTimestamp = 0;
     this.lastValidSystolic = 0;
     this.lastValidDiastolic = 0;
@@ -574,10 +574,10 @@ export class VitalSignsProcessor {
       // Más estable = más confianza en calibración actual
       if (pttCV < 0.1) {  // CV < 10% indica mediciones muy estables
         // Recalibrar basado en tendencias de PTT y amplitud
-        const optimalCalibrationFactor = 1.0 + (0.05 * (1 - pttCV * 5));
+        const optimalCalibrationFactor = 0.96 + (0.04 * (1 - pttCV * 5));
         
         // Aplicar gradualmente (promedio ponderado con factor anterior)
-        this.bpCalibrationFactor = this.bpCalibrationFactor * 0.8 + optimalCalibrationFactor * 0.2;
+        this.bpCalibrationFactor = this.bpCalibrationFactor * 0.85 + optimalCalibrationFactor * 0.15;
         
         console.log('Auto-calibración BP actualizada:', {
           cv: pttCV,
@@ -607,9 +607,9 @@ export class VitalSignsProcessor {
     let instantSystolic = this.BP_BASELINE_SYSTOLIC + pttFactor + ampFactor + stiffnessFactor;
     let instantDiastolic = this.BP_BASELINE_DIASTOLIC + (pttFactor * 0.65) + (ampFactor * 0.35) + (stiffnessFactor * 0.4);
     
-    // Limitar valores a rangos fisiológicos
-    instantSystolic = Math.max(90, Math.min(180, instantSystolic));
-    instantDiastolic = Math.max(60, Math.min(110, instantDiastolic));
+    // Limitar valores a rangos fisiológicos más conservadores
+    instantSystolic = Math.max(90, Math.min(160, instantSystolic));  // Ajustado: de 180 a 160 límite superior
+    instantDiastolic = Math.max(60, Math.min(100, instantDiastolic)); // Ajustado: de 110 a 100 límite superior
     
     // Garantizar presión diferencial adecuada (sistólica - diastólica)
     const minDifferential = Math.max(30, instantSystolic * 0.25);  // Al menos 25% de sistólica o 30 mmHg
@@ -662,6 +662,10 @@ export class VitalSignsProcessor {
       finalSystolic = Math.round(medianSystolic);
       finalDiastolic = Math.round(medianDiastolic);
     }
+    
+    // Verificación conservadora final: asegurar valores en rangos normales típicos
+    finalSystolic = Math.max(90, Math.min(150, finalSystolic));   // Ajustado: de 160 a 150 máx
+    finalDiastolic = Math.max(60, Math.min(95, finalDiastolic));  // Ajustado: de 100 a 95 máx
     
     // 9. Control de calidad final
     
