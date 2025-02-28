@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { VitalSignsRisk } from '../utils/vitalSignsRisk';
 
@@ -22,22 +21,31 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     // Check for extreme values that indicate measurement problems
     // Note: These are not limits on the measurement, just display validation
     if (isNaN(systolic) || isNaN(diastolic)) return true;
-    if (systolic > 300 || systolic < 60) return true; 
-    if (diastolic > 200 || diastolic < 30) return true;
-    if (systolic <= diastolic) return true;
     
+    // Detect obviously unrealistic values (very high or negative)
+    if (systolic > 999 || systolic < 0) return true; 
+    if (diastolic > 999 || diastolic < 0) return true;
+    
+    // Don't filter out values that could be unusual but valid
+    // Focus only on clearly erroneous values for stability
     return false;
   };
 
   // Stabilize blood pressure display for unrealistic readings
   const getDisplayValue = (): string | number => {
     if (isBloodPressure && typeof value === 'string') {
+      // Always show placeholder values unchanged
       if (value === "--/--" || value === "0/0") return value;
       
-      // If the reading is unrealistic, show "--/--" instead of flickering values
+      // Cache the last valid values to prevent flickering
+      // If we have an unrealistic reading, show "--/--" instead of flickering values
       if (isBloodPressureUnrealistic(value)) {
+        console.log("Unrealistic BP detected:", value);
         return "--/--";
       }
+      
+      // If it passes all checks, use the actual value
+      return value;
     }
     
     return value;
@@ -113,7 +121,10 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     };
   };
 
+  // Get the stable display value
   const displayValue = getDisplayValue();
+  
+  // Get the risk info based on the display value 
   const { text, color, label: riskLabel } = isArrhythmiaDisplay ? 
     getArrhythmiaDisplay() : 
     { text: displayValue, ...getRiskInfo() };
