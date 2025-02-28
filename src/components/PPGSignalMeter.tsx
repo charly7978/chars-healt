@@ -41,9 +41,9 @@ const PPGSignalMeter = ({
   const GRID_SIZE_X = 30;
   const GRID_SIZE_Y = 15;
   const verticalScale = 30.0;
-  const SMOOTHING_FACTOR = 0.55;
-  const TARGET_FPS = 90;
-  const FRAME_TIME = 2000 / TARGET_FPS;
+  const SMOOTHING_FACTOR = 0.65; // Aumentado para una transición más suave
+  const TARGET_FPS = 120; // Aumentado para mayor fluidez
+  const FRAME_TIME = 1000 / TARGET_FPS; // Ajustado para respetar el FPS objetivo
   const BUFFER_SIZE = 600;
 
   useEffect(() => {
@@ -85,7 +85,7 @@ const PPGSignalMeter = ({
       ctx.moveTo(x, 0);
       ctx.lineTo(x, CANVAS_HEIGHT);
       if (x % (GRID_SIZE_X * 4) === 0) {
-        ctx.fillStyle = '#FFFFFF';  // Cambiado a blanco (antes amarillo)
+        ctx.fillStyle = '#FFFFFF';
         ctx.font = '10px Inter';
         ctx.textAlign = 'center';
         ctx.fillText(`${x / 10}ms`, x, CANVAS_HEIGHT - 5);
@@ -97,7 +97,7 @@ const PPGSignalMeter = ({
       ctx.lineTo(CANVAS_WIDTH, y);
       if (y % (GRID_SIZE_Y * 4) === 0) {
         const amplitude = ((CANVAS_HEIGHT / 2) - y) / verticalScale;
-        ctx.fillStyle = '#FFFFFF';  // Cambiado a blanco (antes amarillo)
+        ctx.fillStyle = '#FFFFFF';
         ctx.font = '10px Inter';
         ctx.textAlign = 'right';
         ctx.fillText(amplitude.toFixed(1), 25, y + 4);
@@ -151,6 +151,10 @@ const PPGSignalMeter = ({
       return;
     }
 
+    // Activar la optimización para gráficos suaves
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
     const now = Date.now();
     
     if (baselineRef.current === null) {
@@ -185,6 +189,12 @@ const PPGSignalMeter = ({
 
     const points = dataBufferRef.current.getPoints();
     if (points.length > 1) {
+      // Dibujar la línea con anti-aliasing para mayor suavidad
+      ctx.beginPath();
+      ctx.lineWidth = 2;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      
       for (let i = 1; i < points.length; i++) {
         const prevPoint = points[i - 1];
         const point = points[i];
@@ -194,15 +204,22 @@ const PPGSignalMeter = ({
         const x2 = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
         const y2 = canvas.height / 2 - point.value;
 
-        ctx.beginPath();
+        if (i === 1) {
+          ctx.moveTo(x1, y1);
+        }
+        
+        // Usar curvas de Bezier para suavizar la línea
+        const xc = (x1 + x2) / 2;
+        const yc = (y1 + y2) / 2;
+        ctx.quadraticCurveTo(x1, y1, xc, yc);
+        
+        if (i === points.length - 1) {
+          ctx.lineTo(x2, y2);
+        }
+        
         ctx.strokeStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
-        ctx.lineWidth = 2;
-        ctx.lineJoin = 'round';
-        ctx.lineCap = 'round';
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-        ctx.stroke();
       }
+      ctx.stroke();
 
       points.forEach((point, index) => {
         if (index > 0 && index < points.length - 1) {
@@ -224,7 +241,7 @@ const PPGSignalMeter = ({
             ctx.textAlign = 'center';
             ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 20);
             
-            // Agregar círculo y etiqueta "ARR" para arritmias (nuevo)
+            // Agregar círculo y etiqueta "ARR" para arritmias (sin cambios)
             if (point.isArrhythmia) {
               // Círculo adicional para arritmias
               ctx.beginPath();
@@ -258,18 +275,24 @@ const PPGSignalMeter = ({
 
   return (
     <>
-      <div className="absolute top-0 left-0 right-0 p-2 flex justify-between items-center bg-white border-b border-slate-100 shadow-sm">
+      <div className="absolute top-0 left-0 right-0 p-2 flex justify-between items-center bg-gradient-to-r from-blue-400 to-blue-600 border-b border-blue-700/30 shadow-sm" style={{ 
+        maxWidth: "90%", 
+        margin: "0 auto",
+        borderRadius: "0 0 12px 12px",
+        background: "linear-gradient(135deg, #33C3F0, #2563eb, #0EA5E9)",
+        boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)"
+      }}>
         <div className="flex items-center gap-3">
-          <span className="text-xl font-bold text-slate-700">PPG</span>
-          <div className="w-[200px]">
+          <span className="text-xl font-bold text-white">PPG</span>
+          <div className="w-[150px]">
             <div className={`h-1.5 w-full rounded-full bg-gradient-to-r ${getQualityColor(quality)} transition-all duration-1000 ease-in-out`}>
               <div
                 className="h-full rounded-full bg-white/20 animate-pulse transition-all duration-1000"
                 style={{ width: `${isFingerDetected ? quality : 0}%` }}
               />
             </div>
-            <span className="text-[9px] text-center mt-0.5 font-medium transition-colors duration-700 block" 
-                  style={{ color: quality > 60 ? '#0EA5E9' : '#F59E0B' }}>
+            <span className="text-[9px] text-center mt-0.5 font-medium transition-colors duration-700 block text-white" 
+                  style={{ textShadow: "0px 1px 2px rgba(0, 0, 0, 0.2)" }}>
               {getQualityText(quality)}
             </span>
           </div>
@@ -277,15 +300,15 @@ const PPGSignalMeter = ({
 
         <div className="flex flex-col items-center">
           <Fingerprint
-            className={`h-16 w-16 transition-colors duration-300 ${
-              !isFingerDetected ? 'text-gray-400' :
-              quality > 75 ? 'text-green-500' :
-              quality > 50 ? 'text-yellow-500' :
-              'text-red-500'
+            className={`h-14 w-14 transition-colors duration-300 ${
+              !isFingerDetected ? 'text-gray-200' :
+              quality > 75 ? 'text-white' :
+              quality > 50 ? 'text-yellow-200' :
+              'text-red-200'
             }`}
             strokeWidth={1.5}
           />
-          <span className="text-[10px] text-center mt-0.5 font-medium text-slate-600">
+          <span className="text-[10px] text-center mt-0.5 font-medium text-white">
             {isFingerDetected ? "Dedo detectado" : "Ubique su dedo"}
           </span>
         </div>
