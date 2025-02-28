@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -463,9 +464,10 @@ const Index = () => {
         />
       </div>
 
-      <div className="fixed bottom-[110px] left-0 right-0 px-4 z-20">
-        <div className="p-4 bg-black/60 rounded-xl">
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      {/* Reducido el tamaño del bloque de displays */}
+      <div className="fixed bottom-[90px] left-0 right-0 px-3 z-20">
+        <div className="p-2 bg-black/60 rounded-lg">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <VitalSign 
               label="FRECUENCIA CARDÍACA"
               value={finalValues ? finalValues.heartRate : heartRate || "--"}
@@ -493,16 +495,13 @@ const Index = () => {
         </div>
       </div>
 
-      {isMonitoring && (
-        <div className="fixed bottom-[120px] left-0 right-0 text-center z-20">
-          <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 40s</span>
-        </div>
-      )}
+      {/* Eliminado el contador de segundos */}
 
-      <div className="fixed bottom-0 left-0 right-0 w-full h-[60px] grid grid-cols-2 gap-px z-50">
+      {/* Reducido levemente la botonera */}
+      <div className="fixed bottom-0 left-0 right-0 w-full h-[55px] grid grid-cols-2 gap-px z-50">
         <button 
           onClick={startMonitoring}
-          className="w-full h-full text-2xl font-bold text-white transition-colors duration-200 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 active:from-blue-700 active:to-blue-800"
+          className="w-full h-full text-xl font-bold text-white transition-colors duration-200 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 active:from-blue-700 active:to-blue-800"
           style={{ 
             backgroundImage: isMonitoring 
               ? 'linear-gradient(135deg, #f87171, #dc2626, #b91c1c)' 
@@ -514,7 +513,7 @@ const Index = () => {
         </button>
         <button 
           onClick={handleReset}
-          className="w-full h-full text-2xl font-bold text-white transition-colors duration-200 bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800 active:from-gray-800 active:to-gray-900"
+          className="w-full h-full text-xl font-bold text-white transition-colors duration-200 bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800 active:from-gray-800 active:to-gray-900"
           style={{ 
             backgroundImage: 'linear-gradient(135deg, #64748b, #475569, #334155)',
             textShadow: '0px 1px 3px rgba(0, 0, 0, 0.3)'
