@@ -14,8 +14,8 @@ export class VitalSignsProcessor {
   private readonly SPO2_MIN_AC_VALUE = 0.2;  // Ajustado: era 0.3 (permitir valores más bajos para sensibilidad)
   private readonly SPO2_R_RATIO_A = 112;     // Ajustado: era 110 (base más alta)
   private readonly SPO2_R_RATIO_B = 22;      // Ajustado: de 25 a 22 para mejorar precisión
-  private readonly SPO2_MIN_VALID_VALUE = 90;  // Ajustado: era 92 (permitir valores más bajos)
-  private readonly SPO2_MAX_VALID_VALUE = 99; // Ajustado: de 98 a 99 como valor máximo
+  private readonly SPO2_MIN_VALID_VALUE = 0;  // ELIMINADO LÍMITE INFERIOR
+  private readonly SPO2_MAX_VALID_VALUE = 999; // ELIMINADO LÍMITE SUPERIOR
   private readonly SPO2_BASELINE = 97;       // Valor base para personas sanas
   private readonly SPO2_MOVING_AVERAGE_ALPHA = 0.08; // Ajustado: era 0.18 para mayor suavizado (reducido a 0.08)
 
@@ -163,7 +163,7 @@ export class VitalSignsProcessor {
       
       // Si el promedio es razonable, usar como base de calibración
       // Ajustar para que el promedio se acerque a 97% (valor normal esperado)
-      if (avgValue > 85 && avgValue < 105) {
+      if (avgValue > 0) { // ELIMINADO FILTRO DE RANGO RAZONABLE
         // Ajustamos para que tienda a estar entre 95-99%
         this.spO2CalibrationOffset = this.SPO2_BASELINE - avgValue;
         console.log('SpO2 calibrado con offset:', this.spO2CalibrationOffset);
@@ -295,16 +295,15 @@ export class VitalSignsProcessor {
       
       // Valor R simulado (en un oxímetro real serían dos longitudes de onda)
       // Para una persona sana con 97-98% de saturación, R ≈ 0.5
-      const R = Math.min(1.0, Math.max(0.3, (perfusionIndex * 1.8) / this.SPO2_CALIBRATION_FACTOR));
+      const R = (perfusionIndex * 1.8) / this.SPO2_CALIBRATION_FACTOR; // ELIMINADO MIN/MAX
 
       // Ecuación de calibración modificada basada en la curva Lambert-Beer
       // Esta relación es aproximadamente lineal en el rango 80-100% de SpO2
       // y tiene forma de SpO2 = A - B * R
       let rawSpO2 = this.SPO2_R_RATIO_A - (this.SPO2_R_RATIO_B * R);
 
-      // Limitar a rango fisiológico posible
-      rawSpO2 = Math.max(this.SPO2_MIN_VALID_VALUE, Math.min(this.SPO2_MAX_VALID_VALUE, rawSpO2));
-
+      // ELIMINADOS límites de rango fisiológico
+      
       console.log("SpO2 Raw calculado:", {
         ac,
         dc,
@@ -350,8 +349,7 @@ export class VitalSignsProcessor {
       let calibratedSpO2 = rawSpO2;
       if (this.spO2Calibrated) {
         calibratedSpO2 = rawSpO2 + this.spO2CalibrationOffset;
-        // Asegurar que esté en rango válido incluso después de calibración
-        calibratedSpO2 = Math.max(this.SPO2_MIN_VALID_VALUE, Math.min(this.SPO2_MAX_VALID_VALUE, calibratedSpO2));
+        // ELIMINADO: Asegurar que esté en rango válido incluso después de calibración
       }
 
       // Filtro de mediana para eliminar valores atípicos
@@ -455,22 +453,20 @@ export class VitalSignsProcessor {
     for (let i = 1; i < peakIndices.length; i++) {
       const timeDiff = (peakIndices[i] - peakIndices[i - 1]) * msPerSample;
       
-      // Filtrar valores atípicos que excedan límites fisiológicos
-      if (timeDiff >= this.BP_MIN_VALID_PTT && timeDiff <= this.BP_MAX_VALID_PTT) {
-        pttValues.push(timeDiff);
-        
-        // Calcular puntuación de calidad para este intervalo
-        const peakAmplitude1 = values[peakIndices[i-1]];
-        const peakAmplitude2 = values[peakIndices[i]];
-        const valleyAmplitude = values[valleyIndices[Math.min(i, valleyIndices.length-1)]];
-        
-        // La calidad depende de la consistencia de amplitudes y la distancia entre picos
-        const amplitudeConsistency = 1 - Math.abs(peakAmplitude1 - peakAmplitude2) / 
-                                 Math.max(peakAmplitude1, peakAmplitude2);
-        
-        const intervalQuality = Math.min(1.0, Math.max(0.1, amplitudeConsistency));
-        pttQualityScores.push(intervalQuality);
-      }
+      // ELIMINADO: Filtrar valores atípicos que excedan límites fisiológicos
+      pttValues.push(timeDiff);
+      
+      // Calcular puntuación de calidad para este intervalo
+      const peakAmplitude1 = values[peakIndices[i-1]];
+      const peakAmplitude2 = values[peakIndices[i]];
+      const valleyAmplitude = values[valleyIndices[Math.min(i, valleyIndices.length-1)]];
+      
+      // La calidad depende de la consistencia de amplitudes y la distancia entre picos
+      const amplitudeConsistency = 1 - Math.abs(peakAmplitude1 - peakAmplitude2) / 
+                               Math.max(peakAmplitude1, peakAmplitude2);
+      
+      const intervalQuality = Math.min(1.0, Math.max(0.1, amplitudeConsistency));
+      pttQualityScores.push(intervalQuality);
     }
     
     if (pttValues.length === 0) {
@@ -496,9 +492,8 @@ export class VitalSignsProcessor {
     
     const weightedPTT = weightSum > 0 ? weightedPttSum / weightSum : 600;
     
-    // Normalizar PTT dentro de rangos fisiológicos
-    const normalizedPTT = Math.max(this.BP_MIN_VALID_PTT, 
-                                Math.min(this.BP_MAX_VALID_PTT, weightedPTT));
+    // ELIMINADO: Normalizar PTT dentro de rangos fisiológicos
+    const normalizedPTT = weightedPTT;
     
     // 3. Cálculo de amplitud y perfusión
     const amplitudeValues: number[] = [];
@@ -542,8 +537,8 @@ export class VitalSignsProcessor {
                         amplitudeValues.reduce((sum, val) => sum + val, 0) / amplitudeValues.length : 
                         0;
     
-    // Normalizar amplitud para tener un valor trabajo estable
-    const normalizedAmplitude = Math.min(100, Math.max(0, meanAmplitude * 5));
+    // ELIMINADO: Normalizar amplitud para tener un valor trabajo estable
+    const normalizedAmplitude = meanAmplitude * 5;
 
     // 4. Almacenar datos para análisis de tendencia
     this.pttHistory.push(normalizedPTT);
@@ -624,24 +619,9 @@ export class VitalSignsProcessor {
     instantSystolic += systolicCycleEffect;
     instantDiastolic += diastolicCycleEffect;
     
-    // Limitar valores a rangos fisiológicos más conservadores
-    instantSystolic = Math.max(90, Math.min(160, instantSystolic));
-    instantDiastolic = Math.max(60, Math.min(100, instantDiastolic));
+    // ELIMINADO: Limitar valores a rangos fisiológicos más conservadores
     
-    // Garantizar presión diferencial adecuada (sistólica - diastólica)
-    const minDifferential = Math.max(30, instantSystolic * 0.25);  // Al menos 25% de sistólica o 30 mmHg
-    const maxDifferential = Math.min(80, instantSystolic * 0.55);  // Máximo 55% de sistólica o 80 mmHg
-    
-    const currentDifferential = instantSystolic - instantDiastolic;
-    
-    if (currentDifferential < minDifferential) {
-      instantDiastolic = instantSystolic - minDifferential;
-    } else if (currentDifferential > maxDifferential) {
-      instantDiastolic = instantSystolic - maxDifferential;
-    }
-    
-    // Nuevamente verificar límites fisiológicos tras el ajuste
-    instantDiastolic = Math.max(60, Math.min(100, instantDiastolic));
+    // ELIMINADO: Garantizar presión diferencial adecuada (sistólica - diastólica)
     
     // Añadir pequeñas fluctuaciones fisiológicas basadas en patrones de respiración
     // (Variación respiratoria natural en presión arterial)
@@ -699,9 +679,7 @@ export class VitalSignsProcessor {
       finalDiastolic = Math.round(medianDiastolic);
     }
     
-    // Verificación conservadora final: asegurar valores en rangos normales típicos
-    finalSystolic = Math.max(90, Math.min(150, finalSystolic));
-    finalDiastolic = Math.max(60, Math.min(95, finalDiastolic));
+    // ELIMINADO: Verificación conservadora final: asegurar valores en rangos normales típicos
     
     // 9. Control de calidad final
     
@@ -785,14 +763,12 @@ export class VitalSignsProcessor {
           v > normalizedValues[i + 2] &&
           derivatives[i-1] > 0 && derivatives[i] < 0) {
         
-        // Verificar altura mínima del pico (25% del rango)
-        if (v > 0.25) {
-          peakIndices.push(i);
-          
-          // Calcular "fuerza" del pico para evaluación de calidad
-          const peakStrength = (v - normalizedValues[i-2]) + (v - normalizedValues[i+2]);
-          signalStrengths.push(peakStrength);
-        }
+        // ELIMINADO: Verificar altura mínima del pico (25% del rango)
+        peakIndices.push(i);
+        
+        // Calcular "fuerza" del pico para evaluación de calidad
+        const peakStrength = (v - normalizedValues[i-2]) + (v - normalizedValues[i+2]);
+        signalStrengths.push(peakStrength);
       }
       
       // Criterio de valle: menor que puntos adyacentes y pendiente cambia de negativa a positiva
