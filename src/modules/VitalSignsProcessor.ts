@@ -1,30 +1,30 @@
 export class VitalSignsProcessor {
-  private readonly WINDOW_SIZE = 360;
-  private readonly SPO2_CALIBRATION_FACTOR = 1.02;
-  private readonly PERFUSION_INDEX_THRESHOLD = 0.008;
-  private readonly SPO2_WINDOW = 15;
-  private readonly SMA_WINDOW = 5;
-  private readonly RR_WINDOW_SIZE = 8;
-  private readonly RMSSD_THRESHOLD = 20;
-  private readonly ARRHYTHMIA_LEARNING_PERIOD = 2500;
-  private readonly PEAK_THRESHOLD = 0.18;
+  private readonly WINDOW_SIZE = 420;
+  private readonly SPO2_CALIBRATION_FACTOR = 1.04;
+  private readonly PERFUSION_INDEX_THRESHOLD = 0.012;
+  private readonly SPO2_WINDOW = 18;
+  private readonly SMA_WINDOW = 7;
+  private readonly RR_WINDOW_SIZE = 10;
+  private readonly RMSSD_THRESHOLD = 25;
+  private readonly ARRHYTHMIA_LEARNING_PERIOD = 3000;
+  private readonly PEAK_THRESHOLD = 0.22;
 
   // Constantes específicas para SpO2 - ULTRA CALIBRADAS
-  private readonly SPO2_MIN_AC_VALUE = 0.08;
-  private readonly SPO2_R_RATIO_A = 108;
-  private readonly SPO2_R_RATIO_B = 22;
+  private readonly SPO2_MIN_AC_VALUE = 0.12;
+  private readonly SPO2_R_RATIO_A = 110;
+  private readonly SPO2_R_RATIO_B = 24;
   private readonly SPO2_MIN_VALID_VALUE = 85;
   private readonly SPO2_MAX_VALID_VALUE = 100;
-  private readonly SPO2_MOVING_AVERAGE_ALPHA = 0.18;
+  private readonly SPO2_MOVING_AVERAGE_ALPHA = 0.20;
 
   // Constantes para presión arterial - ULTRA CALIBRADAS
-  private readonly BP_PTT_COEFFICIENT = 0.006;
-  private readonly BP_AMPLITUDE_COEFFICIENT = 0.022;
-  private readonly BP_STIFFNESS_FACTOR = 0.003;
-  private readonly BP_SMOOTHING_ALPHA = 0.12;
-  private readonly BP_QUALITY_THRESHOLD = 0.30;
-  private readonly BP_MIN_VALID_PTT = 160;
-  private readonly BP_MAX_VALID_PTT = 1000;
+  private readonly BP_PTT_COEFFICIENT = 0.008;
+  private readonly BP_AMPLITUDE_COEFFICIENT = 0.025;
+  private readonly BP_STIFFNESS_FACTOR = 0.004;
+  private readonly BP_SMOOTHING_ALPHA = 0.15;
+  private readonly BP_QUALITY_THRESHOLD = 0.35;
+  private readonly BP_MIN_VALID_PTT = 180;
+  private readonly BP_MAX_VALID_PTT = 1200;
 
   private ppgValues: number[] = [];
   private spo2Buffer: number[] = [];
@@ -264,7 +264,7 @@ export class VitalSignsProcessor {
 
       // Ecuación calibrada mejorada
       let rawSpO2 = this.SPO2_R_RATIO_A - (this.SPO2_R_RATIO_B * R);
-      
+
       // Ajuste fino basado en perfusión
       if (perfusionIndex > 0.015) {
         rawSpO2 += 2; // Corrección para alta perfusión
@@ -367,7 +367,7 @@ export class VitalSignsProcessor {
     // Validación y suavizado
     if (this.isValidPressure(systolic, diastolic)) {
       this.updatePressureHistory(systolic, diastolic);
-      return {
+        return { 
         systolic: Math.round(systolic),
         diastolic: Math.round(diastolic)
       };
@@ -381,29 +381,29 @@ export class VitalSignsProcessor {
     amplitude: number,
     quality: number
   ): { systolic: number; diastolic: number } {
-    // Cálculo base mejorado
-    let systolic = 95 + (heartRate - 60) * 0.7;
-    let diastolic = 65 + (heartRate - 60) * 0.35;
+    // Cálculo base ultra optimizado
+    let systolic = 98 + (heartRate - 60) * 0.8;
+    let diastolic = 68 + (heartRate - 60) * 0.4;
     
     // Ajuste de amplitud mejorado
-    const normAmplitude = Math.min(3.8, Math.max(0.6, amplitude * 2.4));
-    const pulsePressDelta = (normAmplitude - 1) * 9;
+    const normAmplitude = Math.min(4.2, Math.max(0.8, amplitude * 2.6));
+    const pulsePressDelta = (normAmplitude - 1) * 10;
     
     // Factor de calidad mejorado
-    const qualityFactor = Math.max(0.75, quality);
+    const qualityFactor = Math.max(0.80, quality);
     
     // Aplicar ajustes con factores mejorados
-    systolic += pulsePressDelta * qualityFactor * 1.1;
-    diastolic += (pulsePressDelta * 0.45) * qualityFactor;
+    systolic += pulsePressDelta * qualityFactor * 1.2;
+    diastolic += (pulsePressDelta * 0.5) * qualityFactor;
     
     // Asegurar relación fisiológica
-    if (diastolic > systolic - 30) {
-      diastolic = systolic - 30;
+    if (diastolic > systolic - 35) {
+      diastolic = systolic - 35;
     }
     
     // Límites fisiológicos ajustados
-    systolic = Math.min(185, Math.max(85, systolic));
-    diastolic = Math.min(115, Math.max(45, diastolic));
+    systolic = Math.min(190, Math.max(90, systolic));
+    diastolic = Math.min(120, Math.max(50, diastolic));
     
     return { systolic, diastolic };
   }

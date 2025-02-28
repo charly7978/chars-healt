@@ -1,31 +1,31 @@
 export class HeartBeatProcessor {
-  // ────────── CONFIGURACIONES PRINCIPALES OPTIMIZADAS ──────────
+  // ────────── CONFIGURACIONES PRINCIPALES ULTRA OPTIMIZADAS ──────────
   private readonly SAMPLE_RATE = 30;
-  private readonly WINDOW_SIZE = 180;          // Aumentado para mejor análisis
-  private readonly MIN_BPM = 30;              // Ampliado rango
-  private readonly MAX_BPM = 220;             // Ampliado rango
-  private readonly SIGNAL_THRESHOLD = 0.18;    // Ajustado para mejor detección
-  private readonly MIN_CONFIDENCE = 0.60;      // Aumentado para mayor precisión
-  private readonly DERIVATIVE_THRESHOLD = -0.012; // Ajustado para mejor detección
-  private readonly MIN_PEAK_TIME_MS = 180;     // Optimizado
-  private readonly WARMUP_TIME_MS = 800;       // Reducido
+  private readonly WINDOW_SIZE = 210;          // Aumentado para análisis más profundo
+  private readonly MIN_BPM = 30;              // Rango fisiológico mínimo
+  private readonly MAX_BPM = 220;             // Rango fisiológico máximo
+  private readonly SIGNAL_THRESHOLD = 0.22;    // Aumentado para mejor detección
+  private readonly MIN_CONFIDENCE = 0.68;      // Aumentado para mayor precisión
+  private readonly DERIVATIVE_THRESHOLD = -0.015; // Ajustado para mejor detección
+  private readonly MIN_PEAK_TIME_MS = 200;     // Optimizado para ritmo cardíaco real
+  private readonly WARMUP_TIME_MS = 1200;      // Aumentado para mejor estabilización
 
-  // Parámetros de filtrado super optimizados
-  private readonly MEDIAN_FILTER_WINDOW = 7;    // Aumentado
-  private readonly MOVING_AVERAGE_WINDOW = 5;   // Aumentado
-  private readonly EMA_ALPHA = 0.25;           // Ajustado
-  private readonly BASELINE_FACTOR = 0.92;      // Ajustado
+  // Parámetros de filtrado ultra optimizados
+  private readonly MEDIAN_FILTER_WINDOW = 9;    // Aumentado para mejor filtrado
+  private readonly MOVING_AVERAGE_WINDOW = 7;   // Aumentado para suavizado óptimo
+  private readonly EMA_ALPHA = 0.22;           // Ajustado para mejor respuesta
+  private readonly BASELINE_FACTOR = 0.94;      // Ajustado para mejor línea base
 
-  // Parámetros de beep optimizados
-  private readonly BEEP_PRIMARY_FREQUENCY = 800;  // Ajustado
-  private readonly BEEP_SECONDARY_FREQUENCY = 400;// Ajustado
-  private readonly BEEP_DURATION = 35;           // Reducido
-  private readonly BEEP_VOLUME = 0.35;           // Reducido
-  private readonly MIN_BEEP_INTERVAL_MS = 120;   // Reducido
+  // Parámetros de beep optimizados para mejor feedback
+  private readonly BEEP_PRIMARY_FREQUENCY = 880;  // Ajustado para mejor audibilidad
+  private readonly BEEP_SECONDARY_FREQUENCY = 440;// Ajustado para mejor distinción
+  private readonly BEEP_DURATION = 40;           // Aumentado para mejor percepción
+  private readonly BEEP_VOLUME = 0.40;           // Aumentado ligeramente
+  private readonly MIN_BEEP_INTERVAL_MS = 150;   // Ajustado para evitar solapamiento
 
   // ────────── AUTO-RESET OPTIMIZADO ──────────
-  private readonly LOW_SIGNAL_THRESHOLD = 0.010;
-  private readonly LOW_SIGNAL_FRAMES = 12;
+  private readonly LOW_SIGNAL_THRESHOLD = 0.012;
+  private readonly LOW_SIGNAL_FRAMES = 15;
   private lowSignalCount = 0;
 
   // Variables internas
