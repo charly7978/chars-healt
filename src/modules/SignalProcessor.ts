@@ -1,3 +1,4 @@
+
 import { ProcessedSignal, ProcessingError, SignalProcessor } from '../types/signal';
 
 class KalmanFilter {
@@ -148,69 +149,29 @@ export class PPGSignalProcessor implements SignalProcessor {
     let blueSum = 0;
     let count = 0;
     
-    // Optimización: Usar ROI dinámico basado en intensidad
-    const width = imageData.width;
-    const height = imageData.height;
-    let maxIntensity = 0;
-    let roiCenterX = width / 2;
-    let roiCenterY = height / 2;
-
-    // Primera pasada: encontrar el centro de máxima intensidad
-    for (let y = 0; y < height; y += 4) {
-      for (let x = 0; x < width; x += 4) {
-        const i = (y * width + x) * 4;
-        const intensity = data[i] * 0.7 + data[i+1] * 0.2 + data[i+2] * 0.1;
-        if (intensity > maxIntensity) {
-          maxIntensity = intensity;
-          roiCenterX = x;
-          roiCenterY = y;
-        }
-      }
-    }
-
-    // Definir ROI adaptativo alrededor del punto de máxima intensidad
-    const roiSize = Math.min(width, height) * 0.2; // 20% del tamaño menor
-    const startX = Math.max(0, roiCenterX - roiSize/2);
-    const endX = Math.min(width, roiCenterX + roiSize/2);
-    const startY = Math.max(0, roiCenterY - roiSize/2);
-    const endY = Math.min(height, roiCenterY + roiSize/2);
-
-    // Segunda pasada: procesar ROI con pesos gaussianos
+    const startX = Math.floor(imageData.width * 0.375);
+    const endX = Math.floor(imageData.width * 0.625);
+    const startY = Math.floor(imageData.height * 0.375);
+    const endY = Math.floor(imageData.height * 0.625);
+    
     for (let y = startY; y < endY; y++) {
       for (let x = startX; x < endX; x++) {
-        const i = (y * width + x) * 4;
-        
-        // Peso gaussiano basado en la distancia al centro
-        const dx = (x - roiCenterX) / (roiSize/4);
-        const dy = (y - roiCenterY) / (roiSize/4);
-        const weight = Math.exp(-(dx*dx + dy*dy));
-        
-        redSum += data[i] * weight;
-        greenSum += data[i+1] * weight;
-        blueSum += data[i+2] * weight;
-        count += weight;
+        const i = (y * imageData.width + x) * 4;
+        redSum += data[i];     // Canal rojo
+        greenSum += data[i+1]; // Canal verde
+        blueSum += data[i+2];  // Canal azul
+        count++;
       }
     }
     
-    if (count === 0) return 0;
-
     const avgRed = redSum / count;
     const avgGreen = greenSum / count;
     const avgBlue = blueSum / count;
 
-    // Detección mejorada de dedo usando múltiples criterios
-    const isRedDominant = avgRed > (avgGreen * 1.3) && avgRed > (avgBlue * 1.3);
-    const hasGoodIntensity = avgRed > 50 && avgRed < 250;
-    const hasGoodContrast = (avgRed - avgGreen) > 20;
-
-    // Perfusion Index aproximado
-    const perfusionIndex = isRedDominant ? (avgRed - Math.max(avgGreen, avgBlue)) / avgRed : 0;
+    // Verificar dominancia del canal rojo (característico de la detección del dedo)
+    const isRedDominant = avgRed > (avgGreen * 1.2) && avgRed > (avgBlue * 1.2);
     
-    if (isRedDominant && hasGoodIntensity && hasGoodContrast && perfusionIndex > 0.1) {
-      return avgRed;
-    }
-    
-    return 0;
+    return isRedDominant ? avgRed : 0;
   }
 
   private analyzeSignal(filtered: number, rawValue: number): { isFingerDetected: boolean, quality: number } {
