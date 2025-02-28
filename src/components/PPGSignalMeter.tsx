@@ -174,18 +174,15 @@ const PPGSignalMeter = ({
       if (rawArrhythmiaData && now - rawArrhythmiaData.timestamp < 1500) {
         isArrhythmia = true;
         lastArrhythmiaTime.current = now;
-        console.log("Arritmia en gráfico: datos crudos recientes");
       } 
       // Si hubo una arritmia reciente (últimos 4 segundos)
       else if (now - lastArrhythmiaTime.current < 4000) {
         isArrhythmia = true;
-        console.log("Arritmia en gráfico: arritmia reciente");
       }
       // O si la cadena contiene "DETECTADA" recién (sin importar tiempo)
       else {
         isArrhythmia = true;
         lastArrhythmiaTime.current = now;
-        console.log("Arritmia en gráfico: estado indica arritmia");
       }
     }
 
@@ -319,8 +316,6 @@ const PPGSignalMeter = ({
           style={{ zIndex: 10 }}
         />
       </div>
-
-      {/* Eliminados los botones duplicados */}
     </>
   );
 };
