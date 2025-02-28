@@ -26,12 +26,13 @@ export const useVitalSignsProcessor = () => {
       }
       rmssd = Math.sqrt(rmssd / (lastThreeIntervals.length - 1));
       
-      // Criterios para arritmias
+      // Criterios más sensibles para arritmias
       const lastRR = lastThreeIntervals[lastThreeIntervals.length - 1];
       const rrVariation = Math.abs(lastRR - avgRR) / avgRR;
       
-      if (rmssd > 50 && 
-          rrVariation > 0.20 && 
+      // Bajamos los umbrales para detectar más arritmias
+      if (rmssd > 40 && 
+          rrVariation > 0.15 && 
           currentTime - lastArrhythmiaTime.current >= MIN_TIME_BETWEEN_ARRHYTHMIAS &&
           arrhythmiaCounter < MAX_ARRHYTHMIAS_PER_SESSION) {
         
@@ -71,7 +72,7 @@ export const useVitalSignsProcessor = () => {
       };
     }
     
-    // MODIFICADO: Siempre mostrar "SIN ARRITMIAS" desde el principio, nunca CALIBRANDO
+    // Siempre mostrar "SIN ARRITMIAS" desde el principio, nunca CALIBRANDO
     return {
       spo2: result.spo2,
       pressure: result.pressure,

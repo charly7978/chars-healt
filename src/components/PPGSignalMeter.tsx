@@ -165,20 +165,27 @@ const PPGSignalMeter = ({
     const normalizedValue = (baselineRef.current || 0) - smoothedValue;
     const scaledValue = normalizedValue * verticalScale;
     
+    // Mejorar detección de arritmias en el gráfico
     let isArrhythmia = false;
-    if (rawArrhythmiaData && 
-        arrhythmiaStatus?.includes("ARRITMIA") && 
-        now - rawArrhythmiaData.timestamp < 1000) {
-      isArrhythmia = true;
-      lastArrhythmiaTime.current = now;
-    }
-
-    // Si la arritmia está en el estado pero no en el último dato crudo
-    // aún queremos considerarla para puntos recientes
-    if (!isArrhythmia && arrhythmiaStatus?.includes("ARRITMIA")) {
-      // Si hubo una arritmia reciente (últimos 3 segundos)
-      if (now - lastArrhythmiaTime.current < 3000) {
+    
+    // Verificar si hay arritmia detectada en el estado
+    if (arrhythmiaStatus && arrhythmiaStatus.includes("ARRITMIA")) {
+      // Si tenemos datos crudos recientes de arritmia (últimos 1.5 segundos)
+      if (rawArrhythmiaData && now - rawArrhythmiaData.timestamp < 1500) {
         isArrhythmia = true;
+        lastArrhythmiaTime.current = now;
+        console.log("Arritmia en gráfico: datos crudos recientes");
+      } 
+      // Si hubo una arritmia reciente (últimos 4 segundos)
+      else if (now - lastArrhythmiaTime.current < 4000) {
+        isArrhythmia = true;
+        console.log("Arritmia en gráfico: arritmia reciente");
+      }
+      // O si la cadena contiene "DETECTADA" recién (sin importar tiempo)
+      else {
+        isArrhythmia = true;
+        lastArrhythmiaTime.current = now;
+        console.log("Arritmia en gráfico: estado indica arritmia");
       }
     }
 
@@ -194,6 +201,7 @@ const PPGSignalMeter = ({
 
     const points = dataBufferRef.current.getPoints();
     if (points.length > 1) {
+      // Dibujar líneas de la señal
       for (let i = 1; i < points.length; i++) {
         const prevPoint = points[i - 1];
         const point = points[i];
@@ -213,6 +221,7 @@ const PPGSignalMeter = ({
         ctx.stroke();
       }
 
+      // Dibujar puntos y etiquetas en los picos
       points.forEach((point, index) => {
         if (index > 0 && index < points.length - 1) {
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
@@ -222,14 +231,32 @@ const PPGSignalMeter = ({
           
           if (point.value > prevPoint.value && point.value > nextPoint.value) {
             ctx.beginPath();
-            ctx.arc(x, y, 4, 0, Math.PI * 2);
+            // Círculo más grande y visible para arritmias
+            const radius = point.isArrhythmia ? 5 : 4;
+            ctx.arc(x, y, radius, 0, Math.PI * 2);
             ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
             ctx.fill();
+
+            // Si es arritmia, dibujar un círculo exterior adicional
+            if (point.isArrhythmia) {
+              ctx.beginPath();
+              ctx.arc(x, y, radius + 3, 0, Math.PI * 2);
+              ctx.strokeStyle = '#FFFF00';
+              ctx.lineWidth = 1.5;
+              ctx.stroke();
+            }
 
             ctx.font = 'bold 12px Inter';
             ctx.fillStyle = '#C8C8C9';  // Números de picos cardíacos en gris claro
             ctx.textAlign = 'center';
             ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 20);
+            
+            // Etiqueta adicional para arritmias
+            if (point.isArrhythmia) {
+              ctx.font = 'bold 10px Inter';
+              ctx.fillStyle = '#FF6B6B';
+              ctx.fillText("ARR", x, y - 35);
+            }
           }
         }
       });
