@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { HeartBeatProcessor } from '../modules/HeartBeatProcessor';
 
@@ -18,6 +19,7 @@ export const useHeartBeatProcessor = () => {
   const [currentBPM, setCurrentBPM] = useState<number>(0);
   const [confidence, setConfidence] = useState<number>(0);
   const signalBufferRef = useRef<number[]>([]);
+  const audioEnabledRef = useRef<boolean>(true); // Activar el beep por defecto
   
   // Buffers mejorados para filtrado de señal
   const recentValuesRef = useRef<number[]>([]);
@@ -57,6 +59,12 @@ export const useHeartBeatProcessor = () => {
       peakHistoryRef.current = [];
       bpmHistoryRef.current = [];
     };
+  }, []);
+
+  // Función para habilitar/deshabilitar el beep
+  const setAudioEnabled = useCallback((enabled: boolean) => {
+    audioEnabledRef.current = enabled;
+    console.log(`Beep cardíaco ${enabled ? 'activado' : 'desactivado'}`);
   }, []);
 
   // Función mejorada para aplicar filtro de mediana
@@ -288,12 +296,6 @@ export const useHeartBeatProcessor = () => {
       };
     }
 
-    console.log('useHeartBeatProcessor - processSignal:', {
-      inputValue: value,
-      currentProcessor: !!processorRef.current,
-      timestamp: new Date().toISOString()
-    });
-
     // Almacenar señal en buffer para análisis
     signalBufferRef.current.push(value);
     // Limitar tamaño del buffer para controlar memoria
@@ -305,7 +307,8 @@ export const useHeartBeatProcessor = () => {
     const filteredValue = applyMedianFilter(value);
     
     // Procesar la señal con el filtro aplicado
-    const result = processorRef.current.processSignal(filteredValue);
+    // Pasar el estado de audio para que el HeartBeatProcessor sepa si debe emitir sonido
+    const result = processorRef.current.processSignal(filteredValue, audioEnabledRef.current);
     const rrData = processorRef.current.getRRIntervals();
 
     // Validación mejorada de picos para eliminar falsos positivos
@@ -321,17 +324,6 @@ export const useHeartBeatProcessor = () => {
       stabilizedBPM = stabilizeBPM(validatedResult.bpm, validatedResult.confidence);
     }
 
-    console.log('useHeartBeatProcessor - result:', {
-      rawBpm: result.bpm,
-      stabilizedBpm: stabilizedBPM,
-      confidence: result.confidence,
-      isPeak: result.isPeak,
-      validatedIsPeak: validatedResult.isPeak,
-      arrhythmiaCount: result.arrhythmiaCount,
-      rrIntervals: rrData.intervals,
-      timestamp: new Date().toISOString()
-    });
-    
     if (stabilizedBPM > 0) {
       setCurrentBPM(stabilizedBPM);
       setConfidence(validatedResult.confidence);
@@ -409,6 +401,8 @@ export const useHeartBeatProcessor = () => {
     confidence,
     processSignal,
     reset,
-    cleanMemory
+    cleanMemory,
+    setAudioEnabled,
+    audioEnabled: audioEnabledRef.current
   };
 };
