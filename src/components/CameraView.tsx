@@ -59,24 +59,24 @@ const CameraView = ({
         throw new Error('La cámara no está disponible');
       }
 
-      // Intenta obtener la cámara trasera primero con mejor calidad
+      // Intenta obtener la cámara trasera primero
       let stream: MediaStream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { exact: 'environment' },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
             frameRate: { ideal: 30 }
           },
           audio: false
         });
       } catch (err) {
-        // Si falla, intenta con cualquier cámara disponible con buena calidad
+        // Si falla, intenta con cualquier cámara disponible
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
             frameRate: { ideal: 30 }
           },
           audio: false
@@ -150,12 +150,6 @@ const CameraView = ({
       playsInline
       muted
       className="absolute top-0 left-0 min-w-full min-h-full w-auto h-auto z-0 object-cover"
-      style={{
-        filter: 'none', // Eliminar cualquier filtro
-        WebkitFilter: 'none', // Para Safari
-        transform: 'none', // Eliminar transformaciones
-        opacity: 1 // Asegurar opacidad completa
-      }}
     />
   );
 };
