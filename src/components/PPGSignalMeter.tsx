@@ -293,9 +293,9 @@ const PPGSignalMeter = ({
 
   return (
     <>
-      {/* Título colocado en la parte inferior del gráfico */}
-      <div className="absolute bottom-4 left-0 right-0 z-20 p-1">
-        <h1 className="text-sm font-bold text-center">
+      {/* Título alineado a la izquierda y más pequeño */}
+      <div className="absolute top-0 left-0 right-0 z-20 p-1">
+        <h1 className="text-sm font-bold text-left pl-4">
           <span className="text-white">Chars</span>
           <span className="text-[#ea384c]">Healt</span>
         </h1>
