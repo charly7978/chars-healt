@@ -35,16 +35,16 @@ const PPGSignalMeter = ({
   const lastArrhythmiaTime = useRef<number>(0);
   const arrhythmiaCountRef = useRef<number>(0);
   
-  const WINDOW_WIDTH_MS = 2000; // Reducido para que los datos se muevan más rápido en pantalla
-  const CANVAS_WIDTH = 700; // Aumentado para mejor visualización
-  const CANVAS_HEIGHT = 500; // Aumentado para mejor visualización
+  const WINDOW_WIDTH_MS = 3000;
+  const CANVAS_WIDTH = 300;
+  const CANVAS_HEIGHT = 300;
   const GRID_SIZE_X = 30;
   const GRID_SIZE_Y = 30;
   const verticalScale = 35.0;
-  const SMOOTHING_FACTOR = 0.99;
-  const TARGET_FPS = 150;
-  const FRAME_TIME = 4000 / TARGET_FPS;
-  const BUFFER_SIZE = 400;
+  const SMOOTHING_FACTOR = 0.8; // Reducido para que reaccione más rápido
+  const TARGET_FPS = 60; // Ajustado para un mejor rendimiento 
+  const FRAME_TIME = 1000 / TARGET_FPS; // Optimizado para mejor FPS
+  const BUFFER_SIZE = 200; // Reducido para menor uso de memoria
 
   useEffect(() => {
     if (!dataBufferRef.current) {
@@ -145,7 +145,7 @@ const PPGSignalMeter = ({
     }
 
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d', { alpha: false });
+    const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true }); // Optimización clave: rendering desincronizado
     if (!ctx) {
       animationFrameRef.current = requestAnimationFrame(renderSignal);
       return;
@@ -186,63 +186,96 @@ const PPGSignalMeter = ({
 
     const points = dataBufferRef.current.getPoints();
     if (points.length > 1) {
-      for (let i = 1; i < points.length; i++) {
-        const prevPoint = points[i - 1];
-        const point = points[i];
-        
-        const x1 = canvas.width - ((now - prevPoint.time) * canvas.width / WINDOW_WIDTH_MS);
-        const y1 = canvas.height * 0.6 - prevPoint.value;
-        const x2 = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-        const y2 = canvas.height * 0.6 - point.value;
-
+      // Dibujamos solo los puntos visibles para mejorar rendimiento
+      const visiblePoints = points.filter(
+        point => (now - point.time) <= WINDOW_WIDTH_MS
+      );
+      
+      if (visiblePoints.length > 1) {
+        // Optimización: Dibujamos todo el trazo de una vez
         ctx.beginPath();
-        ctx.strokeStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
+        ctx.strokeStyle = '#0EA5E9';
         ctx.lineWidth = 2;
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
+        
+        let firstPoint = true;
+        
+        for (let i = 0; i < visiblePoints.length; i++) {
+          const point = visiblePoints[i];
+          const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
+          const y = canvas.height * 0.6 - point.value;
+          
+          if (firstPoint) {
+            ctx.moveTo(x, y);
+            firstPoint = false;
+          } else {
+            ctx.lineTo(x, y);
+          }
+          
+          // Cambiamos color para puntos de arritmia
+          if (point.isArrhythmia && i < visiblePoints.length - 1) {
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.strokeStyle = '#DC2626';
+            ctx.moveTo(x, y);
+            
+            const nextPoint = visiblePoints[i + 1];
+            const nextX = canvas.width - ((now - nextPoint.time) * canvas.width / WINDOW_WIDTH_MS);
+            const nextY = canvas.height * 0.6 - nextPoint.value;
+            ctx.lineTo(nextX, nextY);
+            ctx.stroke();
+            
+            // Volvemos al color normal
+            ctx.beginPath();
+            ctx.strokeStyle = '#0EA5E9';
+            ctx.moveTo(nextX, nextY);
+            firstPoint = false;
+          }
+        }
+        
         ctx.stroke();
       }
 
-      points.forEach((point, index) => {
-        if (index > 0 && index < points.length - 1) {
+      // Dibujar puntos de pico (optimizado)
+      for (let i = 1; i < visiblePoints.length - 1; i++) {
+        const prevPoint = visiblePoints[i - 1];
+        const point = visiblePoints[i];
+        const nextPoint = visiblePoints[i + 1];
+        
+        // Optimizado: solo procesamos si es un pico
+        if (point.value > prevPoint.value && point.value > nextPoint.value) {
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
           const y = canvas.height * 0.6 - point.value;
-          const prevPoint = points[index - 1];
-          const nextPoint = points[index + 1];
           
-          // Invertir la condición para detectar picos (ahora buscamos valores más altos que los vecinos)
-          if (point.value > prevPoint.value && point.value > nextPoint.value) {
-            // Dibujar círculo para los puntos de pico
-            ctx.beginPath();
-            ctx.arc(x, y, 4, 0, Math.PI * 2);
-            ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
-            ctx.fill();
+          // Dibujar círculo para los puntos de pico
+          ctx.beginPath();
+          ctx.arc(x, y, 4, 0, Math.PI * 2);
+          ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
+          ctx.fill();
 
-            // Dibujar valor del pico
-            ctx.font = 'bold 12px Inter';
-            ctx.fillStyle = '#C0C0C0'; // Gris claro para los números de picos
-            ctx.textAlign = 'center';
-            ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 20);
+          // Dibujar valor del pico
+          ctx.font = 'bold 12px Inter';
+          ctx.fillStyle = '#C0C0C0'; // Gris claro para los números de picos
+          ctx.textAlign = 'center';
+          ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 20);
+          
+          // Agregar círculo y etiqueta "ARR" para arritmias
+          if (point.isArrhythmia) {
+            // Círculo adicional para arritmias
+            ctx.beginPath();
+            ctx.arc(x, y, 8, 0, Math.PI * 2);
+            ctx.strokeStyle = '#FFFF00'; // Círculo amarillo
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
             
-            // Agregar círculo y etiqueta "ARR" para arritmias (nuevo)
-            if (point.isArrhythmia) {
-              // Círculo adicional para arritmias
-              ctx.beginPath();
-              ctx.arc(x, y, 8, 0, Math.PI * 2);
-              ctx.strokeStyle = '#FFFF00'; // Círculo amarillo
-              ctx.lineWidth = 1.5;
-              ctx.stroke();
-              
-              // Etiqueta "ARR"
-              ctx.font = 'bold 10px Inter';
-              ctx.fillStyle = '#FF6B6B'; // Color rojo claro para ARR
-              ctx.fillText("ARR", x, y - 35);
-            }
+            // Etiqueta "ARR"
+            ctx.font = 'bold 10px Inter';
+            ctx.fillStyle = '#FF6B6B'; // Color rojo claro para ARR
+            ctx.fillText("ARR", x, y - 35);
           }
         }
-      });
+      }
     }
 
     lastRenderTimeRef.current = currentTime;
