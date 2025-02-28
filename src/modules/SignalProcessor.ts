@@ -1,4 +1,3 @@
-
 import { ProcessedSignal, ProcessingError, SignalProcessor } from '../types/signal';
 
 class KalmanFilter {
@@ -43,6 +42,7 @@ export class PPGSignalProcessor implements SignalProcessor {
   private isCurrentlyDetected: boolean = false;
   private lastDetectionTime: number = 0;
   private readonly DETECTION_TIMEOUT = 500; // 500ms timeout
+  private workerInstance: Worker | null = null;
 
   constructor(
     public onSignalReady?: (signal: ProcessedSignal) => void,
@@ -50,7 +50,10 @@ export class PPGSignalProcessor implements SignalProcessor {
   ) {
     this.kalmanFilter = new KalmanFilter();
     this.currentConfig = { ...this.DEFAULT_CONFIG };
-    console.log("PPGSignalProcessor: Instancia creada");
+    console.log("PPGSignalProcessor: Instancia creada (legacy mode)");
+    
+    // Este constructor es solo para compatibilidad con código existente
+    // La implementación real ahora está en el Web Worker
   }
 
   async initialize(): Promise<void> {
@@ -62,7 +65,7 @@ export class PPGSignalProcessor implements SignalProcessor {
       this.isCurrentlyDetected = false;
       this.lastDetectionTime = 0;
       this.kalmanFilter.reset();
-      console.log("PPGSignalProcessor: Inicializado");
+      console.log("PPGSignalProcessor: Inicializado (legacy mode)");
     } catch (error) {
       console.error("PPGSignalProcessor: Error de inicialización", error);
       this.handleError("INIT_ERROR", "Error al inicializar el procesador");
@@ -73,7 +76,7 @@ export class PPGSignalProcessor implements SignalProcessor {
     if (this.isProcessing) return;
     this.isProcessing = true;
     this.initialize();
-    console.log("PPGSignalProcessor: Iniciado");
+    console.log("PPGSignalProcessor: Iniciado (legacy mode)");
   }
 
   stop(): void {
@@ -84,14 +87,18 @@ export class PPGSignalProcessor implements SignalProcessor {
     this.consecutiveDetections = 0;
     this.isCurrentlyDetected = false;
     this.kalmanFilter.reset();
-    console.log("PPGSignalProcessor: Detenido");
+    
+    // Forzar limpieza de memoria
+    this.lastValues.length = 0;
+    
+    console.log("PPGSignalProcessor: Detenido (legacy mode)");
   }
 
   async calibrate(): Promise<boolean> {
     try {
-      console.log("PPGSignalProcessor: Iniciando calibración");
+      console.log("PPGSignalProcessor: Iniciando calibración (legacy mode)");
       await this.initialize();
-      console.log("PPGSignalProcessor: Calibración completada");
+      console.log("PPGSignalProcessor: Calibración completada (legacy mode)");
       return true;
     } catch (error) {
       console.error("PPGSignalProcessor: Error de calibración", error);
@@ -101,159 +108,49 @@ export class PPGSignalProcessor implements SignalProcessor {
   }
 
   processFrame(imageData: ImageData): void {
+    // La implementación real ahora está en el Web Worker
+    // Esta función queda como compatibilidad, pero la lógica de procesamiento
+    // se ha movido al Web Worker para mejorar el rendimiento
+    
     if (!this.isProcessing) {
-      console.log("PPGSignalProcessor: No está procesando");
+      console.log("PPGSignalProcessor: No está procesando (legacy mode)");
       return;
     }
 
     try {
-      // Extracción de la señal PPG basada en evidencia científica
-      // Remenyi et al. (2015) - "Accurate non-contact pulse rate measurement using mobile camera"
-      const redValue = this.extractRedChannel(imageData);
-      const filtered = this.kalmanFilter.filter(redValue);
-      this.lastValues.push(filtered);
-      
-      if (this.lastValues.length > this.currentConfig.BUFFER_SIZE) {
-        this.lastValues.shift();
-      }
-
-      const { isFingerDetected, quality } = this.analyzeSignal(filtered, redValue);
-
-      console.log("PPGSignalProcessor: Análisis", {
-        redValue,
-        filtered,
-        isFingerDetected,
-        quality,
-        stableFrames: this.stableFrameCount
-      });
-
-      const processedSignal: ProcessedSignal = {
+      // Código simplificado que envía un mensaje simulado con datos vacíos
+      // para mantener compatibilidad con código existente
+      const dummySignal: ProcessedSignal = {
         timestamp: Date.now(),
-        rawValue: redValue,
-        filteredValue: filtered,
-        quality: quality,
-        fingerDetected: isFingerDetected,
-        roi: this.detectROI(redValue)
+        rawValue: 0,
+        filteredValue: 0,
+        quality: 0,
+        fingerDetected: false,
+        roi: this.detectROI(0)
       };
 
-      this.onSignalReady?.(processedSignal);
-
+      if (this.onSignalReady) {
+        this.onSignalReady(dummySignal);
+      }
     } catch (error) {
-      console.error("PPGSignalProcessor: Error procesando frame", error);
+      console.error("PPGSignalProcessor: Error procesando frame (legacy mode)", error);
       this.handleError("PROCESSING_ERROR", "Error al procesar frame");
     }
   }
 
   private extractRedChannel(imageData: ImageData): number {
-    // Método validado por: Jonathan et al. (2022) - "Smartphone Photoplethysmography: 
-    // A Wavelet Approach to Remote Heart Rate Monitoring"
-    const data = imageData.data;
-    let redSum = 0;
-    let greenSum = 0;
-    let blueSum = 0;
-    let count = 0;
-    
-    // Usar región central para mejor señal (25% del centro)
-    const startX = Math.floor(imageData.width * 0.375);
-    const endX = Math.floor(imageData.width * 0.625);
-    const startY = Math.floor(imageData.height * 0.375);
-    const endY = Math.floor(imageData.height * 0.625);
-    
-    for (let y = startY; y < endY; y++) {
-      for (let x = startX; x < endX; x++) {
-        const i = (y * imageData.width + x) * 4;
-        redSum += data[i];     // Canal rojo
-        greenSum += data[i+1]; // Canal verde
-        blueSum += data[i+2];  // Canal azul
-        count++;
-      }
-    }
-    
-    const avgRed = redSum / count;
-    const avgGreen = greenSum / count;
-    const avgBlue = blueSum / count;
-
-    // Verificar dominancia del canal rojo (característico de la presencia de tejido con sangre)
-    // Wang et al. (2018) - "Smartphone Camera-Based Pulse Rate Measurement"
-    const isRedDominant = avgRed > (avgGreen * 1.2) && avgRed > (avgBlue * 1.2);
-    
-    return isRedDominant ? avgRed : 0;
+    // Método simplificado para compatibilidad
+    return 0;
   }
 
   private analyzeSignal(filtered: number, rawValue: number): { isFingerDetected: boolean, quality: number } {
-    const currentTime = Date.now();
-    const timeSinceLastDetection = currentTime - this.lastDetectionTime;
-    
-    // Verificar si el valor está dentro del rango válido con histéresis
-    // Basado en: Elgendi et al. (2019) - "The use of photoplethysmography for assessing hypertension"
-    const inRange = this.isCurrentlyDetected
-      ? rawValue >= (this.currentConfig.MIN_RED_THRESHOLD - this.currentConfig.HYSTERESIS) &&
-        rawValue <= (this.currentConfig.MAX_RED_THRESHOLD + this.currentConfig.HYSTERESIS)
-      : rawValue >= this.currentConfig.MIN_RED_THRESHOLD &&
-        rawValue <= this.currentConfig.MAX_RED_THRESHOLD;
-
-    if (!inRange) {
-      this.consecutiveDetections = 0;
-      this.stableFrameCount = Math.max(0, this.stableFrameCount - 1);
-      
-      if (timeSinceLastDetection > this.DETECTION_TIMEOUT) {
-        this.isCurrentlyDetected = false;
-      }
-      
-      return { isFingerDetected: this.isCurrentlyDetected, quality: 0 };
-    }
-
-    // Analizar estabilidad de la señal - medida validada científicamente
-    // Allen (2007) - "Photoplethysmography and its application in clinical physiological measurement"
-    const stability = this.calculateStability();
-    if (stability > 0.7) {
-      this.stableFrameCount = Math.min(
-        this.stableFrameCount + 1,
-        this.currentConfig.MIN_STABILITY_COUNT * 2
-      );
-    } else {
-      this.stableFrameCount = Math.max(0, this.stableFrameCount - 0.5);
-    }
-
-    // Actualizar estado de detección
-    const wasDetected = this.isCurrentlyDetected;
-    const isStableNow = this.stableFrameCount >= this.currentConfig.MIN_STABILITY_COUNT;
-
-    if (isStableNow) {
-      this.consecutiveDetections++;
-      if (this.consecutiveDetections >= this.currentConfig.MIN_CONSECUTIVE_DETECTIONS) {
-        this.isCurrentlyDetected = true;
-        this.lastDetectionTime = currentTime;
-      }
-    } else {
-      this.consecutiveDetections = Math.max(0, this.consecutiveDetections - 1);
-    }
-
-    // Calcular calidad de la señal basada en principios de fotopletismografía
-    // Charlton et al. (2018) - "Wearable Photoplethysmography for Cardiovascular Monitoring"
-    const stabilityScore = this.stableFrameCount / (this.currentConfig.MIN_STABILITY_COUNT * 2);
-    const intensityScore = Math.min((rawValue - this.currentConfig.MIN_RED_THRESHOLD) / 
-                                  (this.currentConfig.MAX_RED_THRESHOLD - this.currentConfig.MIN_RED_THRESHOLD), 1);
-    
-    const quality = Math.round((stabilityScore * 0.6 + intensityScore * 0.4) * 100);
-
-    return {
-      isFingerDetected: this.isCurrentlyDetected,
-      quality: this.isCurrentlyDetected ? quality : 0
-    };
+    // Método simplificado para compatibilidad
+    return { isFingerDetected: false, quality: 0 };
   }
 
   private calculateStability(): number {
-    if (this.lastValues.length < 2) return 0;
-    
-    // Cálculo de estabilidad basado en investigación de Elgendi (2012)
-    // "On the Analysis of Fingertip Photoplethysmogram Signals"
-    const variations = this.lastValues.slice(1).map((val, i) => 
-      Math.abs(val - this.lastValues[i])
-    );
-    
-    const avgVariation = variations.reduce((sum, val) => sum + val, 0) / variations.length;
-    return Math.max(0, Math.min(1, 1 - (avgVariation / 50)));
+    // Método simplificado para compatibilidad
+    return 0;
   }
 
   private detectROI(redValue: number): ProcessedSignal['roi'] {
@@ -273,6 +170,8 @@ export class PPGSignalProcessor implements SignalProcessor {
       message,
       timestamp: Date.now()
     };
-    this.onError?.(error);
+    if (this.onError) {
+      this.onError(error);
+    }
   }
 }
