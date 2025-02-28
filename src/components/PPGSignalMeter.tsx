@@ -35,16 +35,16 @@ const PPGSignalMeter = ({
   const lastArrhythmiaTime = useRef<number>(0);
   const arrhythmiaCountRef = useRef<number>(0);
   
-  const WINDOW_WIDTH_MS = 1700;
-  const CANVAS_WIDTH = 700;
-  const CANVAS_HEIGHT = 400;
+  const WINDOW_WIDTH_MS = 3000;
+  const CANVAS_WIDTH = 300;
+  const CANVAS_HEIGHT = 300;
   const GRID_SIZE_X = 30;
   const GRID_SIZE_Y = 30;
-  const verticalScale = 28.0;
-  const SMOOTHING_FACTOR = 0.82;
+  const verticalScale = 35.0;
+  const SMOOTHING_FACTOR = 0.99;
   const TARGET_FPS = 150;
   const FRAME_TIME = 4000 / TARGET_FPS;
-  const BUFFER_SIZE = 300;
+  const BUFFER_SIZE = 400;
 
   useEffect(() => {
     if (!dataBufferRef.current) {
@@ -162,7 +162,8 @@ const PPGSignalMeter = ({
     const smoothedValue = smoothValue(value, lastValueRef.current);
     lastValueRef.current = smoothedValue;
 
-    const normalizedValue = (baselineRef.current || 0) - smoothedValue;
+    // Invertir el signo del valor normalizado para que los picos vayan hacia arriba
+    const normalizedValue = smoothedValue - (baselineRef.current || 0);
     const scaledValue = normalizedValue * verticalScale;
     
     let isArrhythmia = false;
@@ -211,6 +212,7 @@ const PPGSignalMeter = ({
           const prevPoint = points[index - 1];
           const nextPoint = points[index + 1];
           
+          // Invertir la condición para detectar picos (ahora buscamos valores más altos que los vecinos)
           if (point.value > prevPoint.value && point.value > nextPoint.value) {
             // Dibujar círculo para los puntos de pico
             ctx.beginPath();
