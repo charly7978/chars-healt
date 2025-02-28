@@ -1,23 +1,22 @@
-
 export class VitalSignsProcessor {
   private readonly WINDOW_SIZE = 300;
-  private readonly SPO2_CALIBRATION_FACTOR = 1.10; // PRIMERA VARIABLE MODIFICADA: Ajustado de 1.07 a 1.10 para mejor precisión
-  private readonly PERFUSION_INDEX_THRESHOLD = 0.05;
-  private readonly SPO2_WINDOW = 10;
-  private readonly SMA_WINDOW = 3;
-  private readonly RR_WINDOW_SIZE = 5;
-  private readonly RMSSD_THRESHOLD = 25;
-  private readonly ARRHYTHMIA_LEARNING_PERIOD = 3000;
-  private readonly PEAK_THRESHOLD = 0.3;
+  private readonly SPO2_CALIBRATION_FACTOR = 1.12; // Ajustado para mejor precisión
+  private readonly PERFUSION_INDEX_THRESHOLD = 0.08;
+  private readonly SPO2_WINDOW = 12;
+  private readonly SMA_WINDOW = 4;
+  private readonly RR_WINDOW_SIZE = 6;
+  private readonly RMSSD_THRESHOLD = 30;
+  private readonly ARRHYTHMIA_LEARNING_PERIOD = 4000;
+  private readonly PEAK_THRESHOLD = 0.35;
 
-  // Constantes específicas para SpO2 - RECALIBRADAS
-  private readonly SPO2_MIN_AC_VALUE = 0.2;  // Ajustado: era 0.3 (permitir valores más bajos para sensibilidad)
-  private readonly SPO2_R_RATIO_A = 112;     // Ajustado: era 110 (base más alta)
-  private readonly SPO2_R_RATIO_B = 25;      // SEGUNDA VARIABLE MODIFICADA: Volviendo al valor original para mejor precisión
-  private readonly SPO2_MIN_VALID_VALUE = 90;  // Ajustado: era 92 (permitir valores más bajos)
-  private readonly SPO2_MAX_VALID_VALUE = 98; // MODIFICADO: Ajustado a 98% como valor máximo (era 100)
-  private readonly SPO2_BASELINE = 97;       // Valor base para personas sanas
-  private readonly SPO2_MOVING_AVERAGE_ALPHA = 0.18; // Ajustado: era 0.2 (suavizado levemente mayor)
+  // Parámetros SpO2 optimizados
+  private readonly SPO2_MIN_AC_VALUE = 0.25;
+  private readonly SPO2_R_RATIO_A = 115;
+  private readonly SPO2_R_RATIO_B = 30;
+  private readonly SPO2_MIN_VALID_VALUE = 88;
+  private readonly SPO2_MAX_VALID_VALUE = 100;
+  private readonly SPO2_BASELINE = 98;
+  private readonly SPO2_MOVING_AVERAGE_ALPHA = 0.15;
 
   private ppgValues: number[] = [];
   private spo2Buffer: number[] = [];
@@ -146,47 +145,50 @@ export class VitalSignsProcessor {
   }
 
   private detectArrhythmia() {
-    if (this.rrIntervals.length < this.RR_WINDOW_SIZE) return;
+    if (this.rrIntervals.length < this.RR_WINDOW_SIZE) return false;
 
-    const currentTime = Date.now();
-    const recentRR = this.rrIntervals.slice(-this.RR_WINDOW_SIZE);
+    const recentIntervals = this.rrIntervals.slice(-this.RR_WINDOW_SIZE);
     
-    // Calcular RMSSD
-    let sumSquaredDiff = 0;
-    for (let i = 1; i < recentRR.length; i++) {
-      const diff = recentRR[i] - recentRR[i-1];
-      sumSquaredDiff += diff * diff;
-    }
-    
-    const rmssd = Math.sqrt(sumSquaredDiff / (recentRR.length - 1));
-    const avgRR = recentRR.reduce((a, b) => a + b, 0) / recentRR.length;
-    const lastRR = recentRR[recentRR.length - 1];
-    const rrVariation = Math.abs(lastRR - avgRR) / avgRR;
-    
+    // Cálculo mejorado de RMSSD
+    const rmssd = Math.sqrt(
+      recentIntervals.slice(1)
+        .map((rr, i) => Math.pow(rr - recentIntervals[i], 2))
+        .reduce((a, b) => a + b, 0) / (recentIntervals.length - 1)
+    );
+
+    // Cálculo mejorado de variación RR
+    const meanRR = recentIntervals.reduce((a, b) => a + b, 0) / recentIntervals.length;
+    const rrVariation = recentIntervals.map(rr => Math.abs(rr - meanRR))
+      .reduce((a, b) => Math.max(a, b), 0);
+
     this.lastRMSSD = rmssd;
     this.lastRRVariation = rrVariation;
-    
-    // Detectar arritmia basada en umbrales
-    const newArrhythmiaState = rmssd > this.RMSSD_THRESHOLD && rrVariation > 0.20;
-    
-    // Si es una nueva arritmia y ha pasado suficiente tiempo desde la última
-    if (newArrhythmiaState && 
-        currentTime - this.lastArrhythmiaTime > 1000) {
-      this.arrhythmiaCount++;
-      this.lastArrhythmiaTime = currentTime;
-      
-      // Marcar que ya detectamos la primera arritmia
-      this.hasDetectedFirstArrhythmia = true;
-      
-      console.log('VitalSignsProcessor - Nueva arritmia detectada:', {
-        contador: this.arrhythmiaCount,
-        rmssd,
-        rrVariation,
-        timestamp: currentTime
-      });
+
+    const now = Date.now();
+    const timeSinceStart = now - this.measurementStartTime;
+
+    if (timeSinceStart < this.ARRHYTHMIA_LEARNING_PERIOD) {
+      this.baselineRhythm = meanRR;
+      return false;
     }
 
-    this.arrhythmiaDetected = newArrhythmiaState;
+    // Detección mejorada de arritmias
+    const isArrhythmic = 
+      rmssd > this.RMSSD_THRESHOLD ||
+      rrVariation > (meanRR * 0.2) ||
+      Math.abs(meanRR - this.baselineRhythm) > (this.baselineRhythm * 0.25);
+
+    if (isArrhythmic) {
+      this.lastArrhythmiaTime = now;
+      if (!this.arrhythmiaDetected) {
+        this.arrhythmiaCount++;
+        this.arrhythmiaDetected = true;
+      }
+    } else {
+      this.arrhythmiaDetected = false;
+    }
+
+    return isArrhythmic;
   }
 
   public reset() {
@@ -240,45 +242,33 @@ export class VitalSignsProcessor {
 
   // Método para calcular SpO2 sin aplicar calibración ni filtros
   private calculateSpO2Raw(values: number[]): number {
-    if (values.length < 20) return 0;
+    if (values.length < this.SPO2_WINDOW) return 0;
 
-    try {
-      // Características de la onda PPG
-      const dc = this.calculateDC(values);
-      if (dc <= 0) return 0;
+    const { peakIndices, valleyIndices } = this.localFindPeaksAndValleys(values);
+    if (peakIndices.length < 2 || valleyIndices.length < 2) return 0;
 
-      const ac = this.calculateAC(values);
-      if (ac < this.SPO2_MIN_AC_VALUE) return 0;
+    const acComponent = this.calculateAC(values);
+    const dcComponent = this.calculateDC(values);
 
-      // Factor de perfusión (relación entre componente pulsátil y no pulsátil)
-      // Este es un indicador clave de la calidad de la señal
-      const perfusionIndex = ac / dc;
-      
-      // Valor R simulado (en un oxímetro real serían dos longitudes de onda)
-      // Para una persona sana con 97-98% de saturación, R ≈ 0.5
-      const R = Math.min(1.0, Math.max(0.3, (perfusionIndex * 1.8) / this.SPO2_CALIBRATION_FACTOR));
+    if (dcComponent === 0 || acComponent < this.SPO2_MIN_AC_VALUE) return 0;
 
-      // Ecuación de calibración modificada basada en la curva Lambert-Beer
-      // Esta relación es aproximadamente lineal en el rango 80-100% de SpO2
-      // y tiene forma de SpO2 = A - B * R
-      let rawSpO2 = this.SPO2_R_RATIO_A - (this.SPO2_R_RATIO_B * R);
+    // Cálculo mejorado de R
+    const R = (acComponent / dcComponent);
+    
+    // Fórmula empírica mejorada basada en calibración
+    let spo2 = this.SPO2_R_RATIO_A - this.SPO2_R_RATIO_B * R;
+    
+    // Ajuste de calibración
+    if (this.spO2Calibrated) {
+      spo2 += this.spO2CalibrationOffset;
+    }
 
-      // Limitar a rango fisiológico posible
-      rawSpO2 = Math.max(this.SPO2_MIN_VALID_VALUE, Math.min(this.SPO2_MAX_VALID_VALUE, rawSpO2));
-
-      console.log("SpO2 Raw calculado:", {
-        ac,
-        dc,
-        perfusionIndex,
-        R,
-        rawSpO2
-      });
-
-      return Math.round(rawSpO2);
-    } catch (err) {
-      console.error("Error en cálculo de SpO2:", err);
+    // Validación y límites
+    if (spo2 < this.SPO2_MIN_VALID_VALUE || spo2 > this.SPO2_MAX_VALID_VALUE) {
       return 0;
     }
+
+    return Math.round(spo2);
   }
 
   // Método principal para calcular SpO2 con todos los filtros y calibración
@@ -378,90 +368,60 @@ export class VitalSignsProcessor {
     systolic: number;
     diastolic: number;
   } {
-    if (values.length < 30) {
+    if (values.length < this.WINDOW_SIZE) {
       return { systolic: 0, diastolic: 0 };
     }
 
     const { peakIndices, valleyIndices } = this.localFindPeaksAndValleys(values);
-    if (peakIndices.length < 2) {
+    if (peakIndices.length < 3 || valleyIndices.length < 3) {
       return { systolic: 0, diastolic: 0 };
     }
 
-    const fps = 30;
-    const msPerSample = 1000 / fps;
-
-    // Calculate PTT values
-    const pttValues: number[] = [];
-    for (let i = 1; i < peakIndices.length; i++) {
-      const dt = (peakIndices[i] - peakIndices[i - 1]) * msPerSample;
-      pttValues.push(dt);
-    }
-    
-    // Calculate weighted PTT
-    let pttWeightSum = 0;
-    let pttWeightedSum = 0;
-    
-    pttValues.forEach((val, idx) => {
-      const weight = (idx + 1) / pttValues.length;
-      pttWeightedSum += val * weight;
-      pttWeightSum += weight;
-    });
-
-    const calculatedPTT = pttWeightSum > 0 ? pttWeightedSum / pttWeightSum : 600;
-    const normalizedPTT = Math.max(300, Math.min(1200, calculatedPTT));
-    
-    // Calculate amplitude
+    // Cálculo mejorado de amplitud y área bajo la curva
     const amplitude = this.calculateAmplitude(values, peakIndices, valleyIndices);
-    const normalizedAmplitude = Math.min(100, Math.max(0, amplitude * 5));
-
-    // Calculate pressure factors
-    const pttFactor = (600 - normalizedPTT) * 0.08;
-    const ampFactor = normalizedAmplitude * 0.3;
+    const areaUnderCurve = this.calculateAreaUnderCurve(values);
     
-    // Calculate initial pressure values
-    let instantSystolic = 120 + pttFactor + ampFactor;
-    let instantDiastolic = 80 + (pttFactor * 0.5) + (ampFactor * 0.2);
+    // Factores de correlación mejorados
+    const systolicFactor = 2.1;
+    const diastolicFactor = 1.8;
+    const baselinePressure = 90;
 
-    // Clamp values to physiological ranges
-    instantSystolic = Math.max(90, Math.min(180, instantSystolic));
-    instantDiastolic = Math.max(60, Math.min(110, instantDiastolic));
-    
-    // Ensure reasonable differential
-    const differential = instantSystolic - instantDiastolic;
-    if (differential < 20) {
-      instantDiastolic = instantSystolic - 20;
-    } else if (differential > 80) {
-      instantDiastolic = instantSystolic - 80;
+    // Cálculos mejorados
+    let systolic = Math.round(baselinePressure + (amplitude * systolicFactor) + (areaUnderCurve * 0.15));
+    let diastolic = Math.round(baselinePressure - (amplitude * diastolicFactor) + (areaUnderCurve * 0.1));
+
+    // Ajustes basados en la variabilidad
+    const variability = this.calculateSignalVariability(values);
+    systolic += Math.round(variability * 2);
+    diastolic += Math.round(variability * 1.5);
+
+    // Validación y límites
+    systolic = Math.max(90, Math.min(180, systolic));
+    diastolic = Math.max(60, Math.min(120, diastolic));
+
+    // Asegurar que diastólica sea menor que sistólica
+    if (diastolic >= systolic) {
+      diastolic = systolic - 30;
     }
 
-    // Update pressure buffers
-    this.systolicBuffer.push(instantSystolic);
-    this.diastolicBuffer.push(instantDiastolic);
+    return { systolic, diastolic };
+  }
+
+  private calculateAreaUnderCurve(values: number[]): number {
+    let area = 0;
+    const baseline = Math.min(...values);
     
-    if (this.systolicBuffer.length > this.BP_BUFFER_SIZE) {
-      this.systolicBuffer.shift();
-      this.diastolicBuffer.shift();
+    for (let i = 1; i < values.length; i++) {
+      const height = ((values[i] + values[i-1]) / 2) - baseline;
+      area += height;
     }
+    
+    return area / values.length;
+  }
 
-    // Calculate final smoothed values
-    let finalSystolic = 0;
-    let finalDiastolic = 0;
-    let smoothingWeightSum = 0;
-
-    for (let i = 0; i < this.systolicBuffer.length; i++) {
-      const weight = Math.pow(this.BP_ALPHA, this.systolicBuffer.length - 1 - i);
-      finalSystolic += this.systolicBuffer[i] * weight;
-      finalDiastolic += this.diastolicBuffer[i] * weight;
-      smoothingWeightSum += weight;
-    }
-
-    finalSystolic = smoothingWeightSum > 0 ? finalSystolic / smoothingWeightSum : instantSystolic;
-    finalDiastolic = smoothingWeightSum > 0 ? finalDiastolic / smoothingWeightSum : instantDiastolic;
-
-    return {
-      systolic: Math.round(finalSystolic),
-      diastolic: Math.round(finalDiastolic)
-    };
+  private calculateSignalVariability(values: number[]): number {
+    const diffs = values.slice(1).map((v, i) => Math.abs(v - values[i]));
+    return diffs.reduce((a, b) => a + b, 0) / diffs.length;
   }
 
   private localFindPeaksAndValleys(values: number[]) {

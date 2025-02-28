@@ -1,31 +1,31 @@
 export class HeartBeatProcessor {
   // ────────── CONFIGURACIONES PRINCIPALES ──────────
   private readonly SAMPLE_RATE = 30;
-  private readonly WINDOW_SIZE = 100;
-  private readonly MIN_BPM = 40;
-  private readonly MAX_BPM = 200;
-  private readonly SIGNAL_THRESHOLD = 0.25;
-  private readonly MIN_CONFIDENCE = 0.50;
-  private readonly DERIVATIVE_THRESHOLD = -0.02;
-  private readonly MIN_PEAK_TIME_MS = 300;
-  private readonly WARMUP_TIME_MS = 2000;
+  private readonly WINDOW_SIZE = 150;
+  private readonly MIN_BPM = 30;
+  private readonly MAX_BPM = 220;
+  private readonly SIGNAL_THRESHOLD = 0.35;
+  private readonly MIN_CONFIDENCE = 0.65;
+  private readonly DERIVATIVE_THRESHOLD = -0.015;
+  private readonly MIN_PEAK_TIME_MS = 250;
+  private readonly WARMUP_TIME_MS = 3000;
 
   // Parámetros de filtrado mejorados
-  private readonly MEDIAN_FILTER_WINDOW = 5;
-  private readonly MOVING_AVERAGE_WINDOW = 5;
-  private readonly EMA_ALPHA = 0.3;
-  private readonly BASELINE_FACTOR = 0.95;
+  private readonly MEDIAN_FILTER_WINDOW = 7;
+  private readonly MOVING_AVERAGE_WINDOW = 7;
+  private readonly EMA_ALPHA = 0.25;
+  private readonly BASELINE_FACTOR = 0.97;
 
   // Parámetros de beep optimizados para sonido médico profesional
-  private readonly BEEP_PRIMARY_FREQUENCY = 660; // Frecuencia estándar de monitores médicos
-  private readonly BEEP_SECONDARY_FREQUENCY = 440;
-  private readonly BEEP_DURATION = 60; // Duración más corta para sonido más preciso
-  private readonly BEEP_VOLUME = 0.8; // Volumen más moderado
-  private readonly MIN_BEEP_INTERVAL_MS = 200;
+  private readonly BEEP_PRIMARY_FREQUENCY = 800;
+  private readonly BEEP_SECONDARY_FREQUENCY = 600;
+  private readonly BEEP_DURATION = 50;
+  private readonly BEEP_VOLUME = 1.0;
+  private readonly MIN_BEEP_INTERVAL_MS = 250;
 
   // ────────── AUTO-RESET SI LA SEÑAL ES MUY BAJA ──────────
-  private readonly LOW_SIGNAL_THRESHOLD = 0.02;
-  private readonly LOW_SIGNAL_FRAMES = 15;
+  private readonly LOW_SIGNAL_THRESHOLD = 0.03;
+  private readonly LOW_SIGNAL_FRAMES = 20;
   private lowSignalCount = 0;
 
   // Variables internas
@@ -50,13 +50,13 @@ export class HeartBeatProcessor {
   private peakCandidateValue: number = 0;
   
   // Nuevas variables para el filtrado avanzado de falsos positivos
-  private readonly SIMILARITY_THRESHOLD = 0.70;
-  private readonly TEMPLATE_SIZE = 12;
-  private readonly MIN_PEAKS_FOR_TEMPLATE = 3;
-  private readonly MAX_JITTER_MS = 80;
+  private readonly SIMILARITY_THRESHOLD = 0.80;
+  private readonly TEMPLATE_SIZE = 15;
+  private readonly MIN_PEAKS_FOR_TEMPLATE = 4;
+  private readonly MAX_JITTER_MS = 60;
   private waveformTemplates: number[][] = [];
   private lastValidPeakTimes: number[] = [];
-  private readonly ADAPTIVE_REJECTION_FACTOR = 0.5;
+  private readonly ADAPTIVE_REJECTION_FACTOR = 0.6;
 
   constructor() {
     this.initAudio();
@@ -389,49 +389,72 @@ export class HeartBeatProcessor {
     isPeak: boolean;
     confidence: number;
   } {
-    const now = Date.now();
-    const timeSinceLastPeak = this.lastPeakTime
-      ? now - this.lastPeakTime
-      : Number.MAX_VALUE;
+    // Mejorada la detección de picos
+    const isPotentialPeak = derivative < this.DERIVATIVE_THRESHOLD && 
+                          Math.abs(normalizedValue) > this.SIGNAL_THRESHOLD;
 
-    if (timeSinceLastPeak < this.MIN_PEAK_TIME_MS) {
+    if (!isPotentialPeak) {
+      this.peakCandidateIndex = null;
+      this.peakCandidateValue = 0;
       return { isPeak: false, confidence: 0 };
     }
 
-    // Detección más precisa de picos
-    const isOverThreshold =
-      derivative < this.DERIVATIVE_THRESHOLD &&
-      normalizedValue > this.SIGNAL_THRESHOLD &&
-      this.lastValue > this.baseline * 0.98 &&
-      this.values.length >= 3 &&
-      this.values[1] > this.values[0] && // Confirmar tendencia ascendente
-      this.values[1] > this.values[2];    // Confirmar pico local
+    const now = Date.now();
+    if (this.lastPeakTime && (now - this.lastPeakTime) < this.MIN_PEAK_TIME_MS) {
+      return { isPeak: false, confidence: 0 };
+    }
 
-    // Cálculo de confianza mejorado
-    const amplitudeConfidence = Math.min(
-      Math.max(Math.abs(normalizedValue) / (this.SIGNAL_THRESHOLD * 1.5), 0),
-      1
-    );
+    // Análisis de forma de onda mejorado
+    const waveformQuality = this.analyzeWaveformQuality(normalizedValue);
+    const timingQuality = this.analyzeTimingQuality(now);
+    const amplitudeQuality = this.analyzeAmplitudeQuality(normalizedValue);
+
+    const confidence = (waveformQuality * 0.4 + timingQuality * 0.3 + amplitudeQuality * 0.3);
+
+    if (confidence >= this.MIN_CONFIDENCE) {
+      this.peakConfirmationBuffer.push(normalizedValue);
+      if (this.peakConfirmationBuffer.length > 5) {
+        this.peakConfirmationBuffer.shift();
+      }
+      
+      return { isPeak: true, confidence };
+    }
+
+    return { isPeak: false, confidence: 0 };
+  }
+
+  private analyzeWaveformQuality(value: number): number {
+    const recentValues = this.signalBuffer.slice(-10);
+    if (recentValues.length < 10) return 0;
+
+    const meanValue = recentValues.reduce((a, b) => a + b, 0) / recentValues.length;
+    const variance = recentValues.reduce((a, b) => a + Math.pow(b - meanValue, 2), 0) / recentValues.length;
+    const standardDeviation = Math.sqrt(variance);
+
+    // Calidad basada en la forma de onda
+    const normalizedStdDev = Math.min(standardDeviation / this.SIGNAL_THRESHOLD, 1);
+    return Math.max(0, 1 - normalizedStdDev);
+  }
+
+  private analyzeTimingQuality(currentTime: number): number {
+    if (!this.lastPeakTime) return 1;
+
+    const timeSinceLastPeak = currentTime - this.lastPeakTime;
+    const expectedInterval = 60000 / this.smoothBPM;
+    const tolerance = expectedInterval * 0.2;
+
+    const deviation = Math.abs(timeSinceLastPeak - expectedInterval);
+    return Math.max(0, 1 - (deviation / tolerance));
+  }
+
+  private analyzeAmplitudeQuality(value: number): number {
+    const recentPeaks = this.peakConfirmationBuffer.slice(-3);
+    if (recentPeaks.length < 3) return 1;
+
+    const meanPeak = recentPeaks.reduce((a, b) => a + b, 0) / recentPeaks.length;
+    const deviation = Math.abs(value - meanPeak);
     
-    const derivativeConfidence = Math.min(
-      Math.max(Math.abs(derivative) / Math.abs(this.DERIVATIVE_THRESHOLD), 0),
-      1
-    );
-
-    // Añadir factor de estabilidad
-    const stabilityConfidence = this.calculateStabilityConfidence();
-
-    // Confianza ponderada
-    const confidence = (
-      amplitudeConfidence * 0.4 + 
-      derivativeConfidence * 0.4 + 
-      stabilityConfidence * 0.2
-    );
-
-    return { 
-      isPeak: isOverThreshold && confidence > this.MIN_CONFIDENCE,
-      confidence 
-    };
+    return Math.max(0, 1 - (deviation / meanPeak));
   }
 
   private calculateStabilityConfidence(): number {
