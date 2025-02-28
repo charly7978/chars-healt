@@ -293,9 +293,12 @@ const PPGSignalMeter = ({
 
   return (
     <>
-      {/* Título alineado a la izquierda y más pequeño */}
-      <div className="absolute top-0 left-0 right-0 z-20 p-1">
-        <h1 className="text-sm font-bold text-red-600 text-left pl-4">PPG SEÑAL CARDIACA</h1>
+      {/* Título colocado en la parte inferior del gráfico */}
+      <div className="absolute bottom-4 left-0 right-0 z-20 p-1">
+        <h1 className="text-sm font-bold text-center">
+          <span className="text-white">Chars</span>
+          <span className="text-[#ea384c]">Healt</span>
+        </h1>
       </div>
 
       {/* Sensor de calidad subido un poco y huella desplazada más al margen derecho y reducida */}
@@ -337,11 +340,6 @@ const PPGSignalMeter = ({
           className="w-full h-[calc(50vh)] mt-0 absolute top-0 left-0 right-0"
           style={{ zIndex: 10 }}
         />
-        
-        {/* Título "Cars-Health" debajo del gráfico */}
-        <div className="absolute bottom-2 left-0 right-0 text-center z-20">
-          <h2 className="text-white font-medium text-sm">Cars-Health</h2>
-        </div>
       </div>
     </>
   );
