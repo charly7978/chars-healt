@@ -204,7 +204,7 @@ export class VitalSignsProcessor {
     this.hasDetectedFirstArrhythmia = false;
     this.arrhythmiaDetected = false;
     this.arrhythmiaCount = 0;
-    this.measurementStartTime = Date.now();  // Corregido: quité la anotación de tipo
+    this.measurementStartTime = Date.now();  // Corregido: eliminada la anotación de tipo
     this.lastRMSSD = 0;
     this.lastRRVariation = 0;
     this.lastArrhythmiaTime = 0;
