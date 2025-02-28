@@ -19,32 +19,30 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     const [systolic, diastolic] = bpString.split('/').map(Number);
     
     // Check for extreme values that indicate measurement problems
-    // Note: These are not limits on the measurement, just display validation
     if (isNaN(systolic) || isNaN(diastolic)) return true;
     
-    // Detect obviously unrealistic values (very high or negative)
-    if (systolic > 999 || systolic < 0) return true; 
-    if (diastolic > 999 || diastolic < 0) return true;
+    // Ranges based on published medical guidelines
+    // American Heart Association and European Society of Hypertension
+    if (systolic > 300 || systolic < 60) return true;
+    if (diastolic > 200 || diastolic < 30) return true;
+    if (systolic <= diastolic) return true;
     
-    // Don't filter out values that could be unusual but valid
-    // Focus only on clearly erroneous values for stability
     return false;
   };
 
-  // Stabilize blood pressure display for unrealistic readings
+  // Process blood pressure display for stable, realistic readings
   const getDisplayValue = (): string | number => {
     if (isBloodPressure && typeof value === 'string') {
       // Always show placeholder values unchanged
       if (value === "--/--" || value === "0/0") return value;
       
-      // Cache the last valid values to prevent flickering
-      // If we have an unrealistic reading, show "--/--" instead of flickering values
+      // Filter out clearly unrealistic readings
       if (isBloodPressureUnrealistic(value)) {
-        console.log("Unrealistic BP detected:", value);
+        console.log("Medically unrealistic BP filtered:", value);
         return "--/--";
       }
       
-      // If it passes all checks, use the actual value
+      // This is a valid reading within medical ranges
       return value;
     }
     
@@ -121,10 +119,10 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     };
   };
 
-  // Get the stable display value
+  // Get the medically valid display value
   const displayValue = getDisplayValue();
   
-  // Get the risk info based on the display value 
+  // Get the risk info based on the medically valid display value 
   const { text, color, label: riskLabel } = isArrhythmiaDisplay ? 
     getArrhythmiaDisplay() : 
     { text: displayValue, ...getRiskInfo() };
