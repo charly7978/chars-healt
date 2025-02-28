@@ -416,18 +416,50 @@ const Index = () => {
               signalQuality: lastSignal.quality
             });
             
+            // Forzar actualización de SpO2 incluso si el valor no ha cambiado
+            // Esto asegura que la UI siempre muestre el valor más reciente
+            const forceUpdate = (prev: number) => {
+              // Si el valor es el mismo, añadir y luego quitar 1 para forzar actualización visual
+              if (vitals.spo2 === prev && vitals.spo2 > 0) {
+                setTimeout(() => {
+                  setVitalSigns(current => ({
+                    ...current,
+                    spo2: vitals.spo2 + 1
+                  }));
+                  
+                  // Volver al valor real después de un breve momento
+                  setTimeout(() => {
+                    setVitalSigns(current => ({
+                      ...current,
+                      spo2: vitals.spo2
+                    }));
+                  }, 100);
+                }, 0);
+                return prev;
+              }
+              return vitals.spo2;
+            };
+            
             if (vitals.spo2 > 0) {
               console.log("Index - Actualizando SpO2:", vitals.spo2);
+              // Actualización inmediata para evitar retrasos en la UI
               setVitalSigns(current => {
                 const newState = {
                   ...current,
-                  spo2: vitals.spo2
+                  spo2: forceUpdate(current.spo2)
                 };
                 
                 setTimeout(() => {
                   const element = document.getElementById('spo2-value');
                   if (element) {
                     element.textContent = vitals.spo2.toString();
+                    element.style.transition = 'color 0.3s';
+                    element.style.color = '#ffcc00';
+                    
+                    setTimeout(() => {
+                      if (element) element.style.color = '';
+                    }, 300);
+                    
                     console.log("Index - SpO2 actualizado en DOM:", vitals.spo2);
                   } else {
                     console.warn("Index - No se encontró el elemento spo2-value en el DOM");
@@ -465,9 +497,9 @@ const Index = () => {
               setArrhythmiaCount(count || "0");
             }
           }
+          
+          setSignalQuality(lastSignal.quality);
         }
-        
-        setSignalQuality(lastSignal.quality);
       } catch (error) {
         console.error("Error procesando señal:", error);
       }

@@ -140,6 +140,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
             <span 
               className={`${isArrhythmiaDisplay ? 'text-base' : 'text-xl'} font-bold transition-colors duration-300 text-white`}
               style={{ color: color || '#FFFFFF' }}
+              id={label === "SPO2" ? "spo2-value" : undefined}
             >
               {isArrhythmiaDisplay ? text : displayValue}
             </span>
