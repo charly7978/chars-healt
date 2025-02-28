@@ -1,3 +1,4 @@
+
 export class HeartBeatProcessor {
   // ────────── CONFIGURACIONES PRINCIPALES SUPER OPTIMIZADAS ──────────
   private readonly SAMPLE_RATE = 30;
@@ -19,8 +20,8 @@ export class HeartBeatProcessor {
   // Parámetros de beep optimizados
   private readonly BEEP_PRIMARY_FREQUENCY = 800;  // Ajustado
   private readonly BEEP_SECONDARY_FREQUENCY = 400;// Ajustado
-  private readonly BEEP_DURATION = 35;           // Reducido
-  private readonly BEEP_VOLUME = 0.35;           // Reducido
+  private readonly BEEP_DURATION = 50;           // Aumentado para que sea más audible
+  private readonly BEEP_VOLUME = 0.40;           // Aumentado para que sea más audible
   private readonly MIN_BEEP_INTERVAL_MS = 120;   // Reducido
 
   // ────────── AUTO-RESET OPTIMIZADO ──────────
@@ -68,7 +69,7 @@ export class HeartBeatProcessor {
     try {
       this.audioContext = new AudioContext();
       await this.audioContext.resume();
-      await this.playBeep(0.01);
+      await this.playBeep(0.01); // Prueba inicial de bajo volumen
       console.log("HeartBeatProcessor: Audio Context Initialized");
     } catch (error) {
       console.error("HeartBeatProcessor: Error initializing audio", error);
@@ -242,7 +243,8 @@ export class HeartBeatProcessor {
     return normalizedStability;
   }
 
-  public processSignal(value: number): {
+  // Función modificada para aceptar el parámetro de audio activado
+  public processSignal(value: number, audioEnabled: boolean = true): {
     bpm: number;
     confidence: number;
     isPeak: boolean;
@@ -321,7 +323,13 @@ export class HeartBeatProcessor {
       if (timeSinceLastPeak >= this.MIN_PEAK_TIME_MS) {
         this.previousPeakTime = this.lastPeakTime;
         this.lastPeakTime = now;
-        this.playBeep(Math.min(0.12 + (qualityScore * 0.05), 0.2)); // Volumen adaptativo basado en calidad
+        
+        // Sólo reproducir el beep si el audio está habilitado
+        if (audioEnabled) {
+          // Volumen adaptativo basado en calidad
+          this.playBeep(Math.min(0.12 + (qualityScore * 0.05), 0.2));
+        }
+        
         this.updateBPM();
       }
     }
