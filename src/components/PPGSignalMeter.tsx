@@ -72,11 +72,11 @@ const PPGSignalMeter = ({
   }, []);
 
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
-    // Fondo negro (cambiado)
+    // Fondo negro (sin cambios)
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    // Cuadrícula blanca (cambiado)
+    // Cuadrícula blanca (sin cambios)
     ctx.beginPath();
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
     ctx.lineWidth = 0.5;
@@ -85,7 +85,7 @@ const PPGSignalMeter = ({
       ctx.moveTo(x, 0);
       ctx.lineTo(x, CANVAS_HEIGHT);
       if (x % (GRID_SIZE_X * 4) === 0) {
-        ctx.fillStyle = '#FFFF00';  // Números de referencia amarillos (cambiado)
+        ctx.fillStyle = '#FFFFFF';  // Cambiado a blanco (antes amarillo)
         ctx.font = '10px Inter';
         ctx.textAlign = 'center';
         ctx.fillText(`${x / 10}ms`, x, CANVAS_HEIGHT - 5);
@@ -97,7 +97,7 @@ const PPGSignalMeter = ({
       ctx.lineTo(CANVAS_WIDTH, y);
       if (y % (GRID_SIZE_Y * 4) === 0) {
         const amplitude = ((CANVAS_HEIGHT / 2) - y) / verticalScale;
-        ctx.fillStyle = '#FFFF00';  // Números de referencia amarillos (cambiado)
+        ctx.fillStyle = '#FFFFFF';  // Cambiado a blanco (antes amarillo)
         ctx.font = '10px Inter';
         ctx.textAlign = 'right';
         ctx.fillText(amplitude.toFixed(1), 25, y + 4);
@@ -105,9 +105,9 @@ const PPGSignalMeter = ({
     }
     ctx.stroke();
 
-    // Líneas principales más visibles
+    // Líneas principales más visibles (sin cambios)
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';  // Líneas blancas (cambiado)
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
     ctx.lineWidth = 1;
 
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X * 4) {
@@ -121,9 +121,9 @@ const PPGSignalMeter = ({
     }
     ctx.stroke();
 
-    // Línea central más visible
+    // Línea central más visible (sin cambios)
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';  // Línea central blanca (cambiado)
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
     ctx.lineWidth = 1.5;
     ctx.moveTo(0, CANVAS_HEIGHT / 2);
     ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT / 2);
@@ -212,15 +212,32 @@ const PPGSignalMeter = ({
           const nextPoint = points[index + 1];
           
           if (point.value > prevPoint.value && point.value > nextPoint.value) {
+            // Dibujar círculo para los puntos de pico
             ctx.beginPath();
             ctx.arc(x, y, 4, 0, Math.PI * 2);
             ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
             ctx.fill();
 
+            // Dibujar valor del pico
             ctx.font = 'bold 12px Inter';
-            ctx.fillStyle = '#C0C0C0';  // Números de picos cardíacos en gris claro (cambiado)
+            ctx.fillStyle = '#C0C0C0'; // Gris claro para los números de picos
             ctx.textAlign = 'center';
             ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 20);
+            
+            // Agregar círculo y etiqueta "ARR" para arritmias (nuevo)
+            if (point.isArrhythmia) {
+              // Círculo adicional para arritmias
+              ctx.beginPath();
+              ctx.arc(x, y, 8, 0, Math.PI * 2);
+              ctx.strokeStyle = '#FFFF00'; // Círculo amarillo
+              ctx.lineWidth = 1.5;
+              ctx.stroke();
+              
+              // Etiqueta "ARR"
+              ctx.font = 'bold 10px Inter';
+              ctx.fillStyle = '#FF6B6B'; // Color rojo claro para ARR
+              ctx.fillText("ARR", x, y - 35);
+            }
           }
         }
       });

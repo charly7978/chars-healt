@@ -95,18 +95,18 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
         <div className="flex flex-col items-center gap-1">
           <div className="flex items-baseline gap-1 justify-center">
             <span 
-              className={`${isArrhythmiaDisplay ? 'text-base' : 'text-xl'} font-bold transition-colors duration-300`}
+              className={`${isArrhythmiaDisplay ? 'text-base' : 'text-xl'} font-bold transition-colors duration-300 text-white`}
               style={{ color }}
             >
               {isArrhythmiaDisplay ? text : value}
             </span>
             {!isArrhythmiaDisplay && unit && (
-              <span className="text-slate-600 text-xs">{unit}</span>
+              <span className="text-slate-200 text-xs">{unit}</span>
             )}
           </div>
           {riskLabel && (
             <span 
-              className="text-[10px] font-semibold tracking-wider mt-1"
+              className="text-[10px] font-semibold tracking-wider mt-1 text-white"
               style={{ color }}
             >
               {riskLabel}
