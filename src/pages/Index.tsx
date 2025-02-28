@@ -512,9 +512,9 @@ const Index = () => {
 
         <div className="flex-1 mt-4" />
 
-        {/* Displays */}
+        {/* Displays - AQUÍ ESTÁ EL CAMBIO: Eliminado el fondo gris bg-black */}
         <div className="w-full px-4 mb-24">
-          <div className="bg-black rounded-xl p-4">
+          <div className="rounded-xl p-4">
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <VitalSign 
                 label="FRECUENCIA CARDÍACA"
