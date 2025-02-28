@@ -189,11 +189,12 @@ const PPGSignalMeter = ({
 
     const points = dataBufferRef.current.getPoints();
     if (points.length > 1) {
-      // Dibujar la línea con anti-aliasing para mayor suavidad
+      // Dibujar la línea principal siempre en azul
       ctx.beginPath();
       ctx.lineWidth = 2;
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
+      ctx.strokeStyle = '#0EA5E9'; // Siempre azul para la línea principal
       
       for (let i = 1; i < points.length; i++) {
         const prevPoint = points[i - 1];
@@ -216,8 +217,6 @@ const PPGSignalMeter = ({
         if (i === points.length - 1) {
           ctx.lineTo(x2, y2);
         }
-        
-        ctx.strokeStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
       }
       ctx.stroke();
 
@@ -229,10 +228,13 @@ const PPGSignalMeter = ({
           const nextPoint = points[index + 1];
           
           if (point.value > prevPoint.value && point.value > nextPoint.value) {
+            // Determinar el color según si es arritmia o no
+            const circleColor = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
+            
             // Dibujar círculo para los puntos de pico
             ctx.beginPath();
             ctx.arc(x, y, 4, 0, Math.PI * 2);
-            ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
+            ctx.fillStyle = circleColor;
             ctx.fill();
 
             // Dibujar valor del pico
@@ -241,7 +243,7 @@ const PPGSignalMeter = ({
             ctx.textAlign = 'center';
             ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 20);
             
-            // Agregar círculo y etiqueta "ARR" para arritmias (sin cambios)
+            // Agregar círculo y etiqueta "ARR" solo para arritmias
             if (point.isArrhythmia) {
               // Círculo adicional para arritmias
               ctx.beginPath();
