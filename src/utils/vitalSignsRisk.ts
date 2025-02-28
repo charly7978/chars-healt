@@ -20,17 +20,14 @@ interface SegmentCount {
 }
 
 export class VitalSignsRisk {
-  private static readonly STABILITY_WINDOW = 3000; // 3 segundos
+  private static readonly STABILITY_WINDOW = 3000; // Reducido de 4000 a 3000 (3 segundos)
   private static readonly MEASUREMENT_WINDOW = 40000; // 40 segundos para análisis final
-  private static readonly SMOOTHING_FACTOR = 0.15; // Factor de suavizado
+  private static readonly SMOOTHING_FACTOR = 0.15; // Factor de suavizado (reducido para más suavidad)
   
   // Nuevos factores de suavizado para diferentes variables
-  private static readonly BPM_SMOOTHING_ALPHA = 0.15;  // Para frecuencia cardíaca
-  private static readonly SPO2_SMOOTHING_ALPHA = 0.20; // Para SpO2
-  private static readonly BP_SMOOTHING_ALPHA = 0.05;   // Para presión arterial - muy suave
-  
-  // Número mínimo de muestras necesarias para evaluación estable
-  private static readonly MIN_SAMPLES_FOR_EVALUATION = 5;
+  private static readonly BPM_SMOOTHING_ALPHA = 0.15;  // Más bajo = más suave
+  private static readonly SPO2_SMOOTHING_ALPHA = 0.20; // Ligeramente más responsivo
+  private static readonly BP_SMOOTHING_ALPHA = 0.05;   // Reducido a 0.05 para una suavidad extrema
   
   // Buffer para promedio móvil ponderado exponencialmente (EWMA)
   private static recentBpmValues: number[] = [];
@@ -74,19 +71,6 @@ export class VitalSignsRisk {
     }
   }
 
-  // NUEVOS MÉTODOS para verificar si tenemos suficientes datos para evaluación
-  static hasSufficientDataForBPM(): boolean {
-    return this.bpmHistory.length >= this.MIN_SAMPLES_FOR_EVALUATION;
-  }
-  
-  static hasSufficientDataForSPO2(): boolean {
-    return this.spo2History.length >= this.MIN_SAMPLES_FOR_EVALUATION;
-  }
-  
-  static hasSufficientDataForBP(): boolean {
-    return this.bpHistory.length >= this.MIN_SAMPLES_FOR_EVALUATION;
-  }
-
   static updateBPMHistory(value: number) {
     // Añadir al buffer de EWMA
     this.recentBpmValues.push(value);
@@ -107,11 +91,8 @@ export class VitalSignsRisk {
   }
 
   static updateSPO2History(value: number) {
-    // Limitar el valor de SpO2 a un máximo de 100%
-    const clampedValue = Math.min(100, Math.max(0, value));
-    
     // Añadir al buffer de EWMA
-    this.recentSpo2Values.push(clampedValue);
+    this.recentSpo2Values.push(value);
     if (this.recentSpo2Values.length > this.EWMA_WINDOW_SIZE) {
       this.recentSpo2Values.shift();
     }
@@ -237,8 +218,8 @@ export class VitalSignsRisk {
     const sum = validReadings.reduce((total, check) => total + check.value, 0);
     const avg = sum / validReadings.length;
     
-    // NUEVO: Asegurar que el SpO2 promedio nunca exceda el 100%
-    return Math.min(100, Math.round(avg));
+    // Retornamos directamente el valor calculado sin forzar un máximo de 98
+    return Math.round(avg);
   }
 
   // Función para calcular el promedio del historial de presión arterial
@@ -288,96 +269,66 @@ export class VitalSignsRisk {
       if (this.bpmSegmentHistory.length > 0) {
         return this.getMostFrequentSegment(this.bpmSegmentHistory);
       }
-      
-      // Si aún no hay datos, usar valor actual
-      return this.evaluateBpm(bpm);
     }
 
-    // Si no hay suficientes datos, mostrar "EVALUANDO..."
-    if (!this.hasSufficientDataForBPM()) {
-      return { color: '#FFFFFF', label: 'EVALUANDO...' };
-    }
+    // Procesamiento normal para lecturas en tiempo real
+    let currentSegment: RiskSegment;
 
-    // Verificar si el valor se mantiene estable en algún rango
     if (this.isStableValue(this.bpmHistory, [140, 300])) {
-      const segment = { color: '#ea384c', label: 'TAQUICARDIA' };
-      this.bpmSegmentHistory.push(segment);
-      return segment;
+      currentSegment = { color: '#ea384c', label: 'TAQUICARDIA' };
     } else if (this.isStableValue(this.bpmHistory, [110, 139])) {
-      const segment = { color: '#F97316', label: 'LEVE TAQUICARDIA' };
-      this.bpmSegmentHistory.push(segment);
-      return segment;
+      currentSegment = { color: '#F97316', label: 'LEVE TAQUICARDIA' };
     } else if (this.isStableValue(this.bpmHistory, [50, 110])) {
-      const segment = { color: '#0EA5E9', label: 'NORMAL' };
-      this.bpmSegmentHistory.push(segment);
-      return segment;
+      currentSegment = { color: '#0EA5E9', label: 'NORMAL' };
     } else if (this.isStableValue(this.bpmHistory, [40, 49])) {
-      const segment = { color: '#F97316', label: 'BRADICARDIA' };
-      this.bpmSegmentHistory.push(segment);
-      return segment;
+      currentSegment = { color: '#F97316', label: 'BRADICARDIA' };
     } else if (this.isStableValue(this.bpmHistory, [0, 39])) {
-      const segment = { color: '#ea384c', label: 'BRADICARDIA SEVERA' };
-      this.bpmSegmentHistory.push(segment);
-      return segment;
-    }
-    
-    // Si no es estable en ningún rango, mostrar "EVALUANDO..."
-    return { color: '#FFFFFF', label: 'EVALUANDO...' };
-  }
-
-  // Método para evaluación directa de BPM (sin historia)
-  private static evaluateBpm(bpm: number): RiskSegment {
-    if (bpm >= 140) {
-      return { color: '#ea384c', label: 'TAQUICARDIA' };
-    } else if (bpm >= 110) {
-      return { color: '#F97316', label: 'LEVE TAQUICARDIA' };
-    } else if (bpm >= 50) {
-      return { color: '#0EA5E9', label: 'NORMAL' };
-    } else if (bpm >= 40) {
-      return { color: '#F97316', label: 'BRADICARDIA' };
+      currentSegment = { color: '#ea384c', label: 'BRADICARDIA SEVERA' };
     } else {
-      return { color: '#ea384c', label: 'BRADICARDIA SEVERA' };
+      currentSegment = { color: '#FFFFFF', label: 'EVALUANDO...' };
     }
+
+    // Guardar el segmento actual para análisis final
+    if (currentSegment.label !== 'EVALUANDO...') {
+      this.bpmSegmentHistory.push(currentSegment);
+    }
+
+    return currentSegment;
   }
 
   static getSPO2Risk(spo2: number, isFinalReading: boolean = false): RiskSegment {
     if (spo2 <= 0) return { color: '#FFFFFF', label: '' };
     
-    // Asegurar que el valor nunca exceda el 100%
-    const clampedSpo2 = Math.min(100, spo2);
-    
-    this.updateSPO2History(clampedSpo2);
+    this.updateSPO2History(spo2);
     
     // Si es lectura final, siempre calculamos el promedio
     if (isFinalReading) {
       const avgSPO2 = this.getAverageSPO2();
       if (avgSPO2 > 0) {
-        // Determinar el riesgo basado en el promedio final
-        return this.evaluateSpo2(avgSPO2);
+        // Determinar el riesgo basado en el promedio
+        if (avgSPO2 < 90) {
+          return { color: '#ea384c', label: 'INSUFICIENCIA RESPIRATORIA' };
+        } else if (avgSPO2 <= 92) {
+          return { color: '#F97316', label: 'LEVE INSUFICIENCIA RESPIRATORIA' };
+        } else {
+          return { color: '#0EA5E9', label: 'NORMAL' };
+        }
       }
-      
-      // Si no hay promedio, usar el valor actual
-      return this.evaluateSpo2(clampedSpo2);
     }
     
-    // Si no hay suficientes datos, mostrar "EVALUANDO..."
-    if (!this.hasSufficientDataForSPO2()) {
-      return { color: '#FFFFFF', label: 'EVALUANDO...' };
-    }
-    
-    // Evaluar directamente con el valor actual
-    return this.evaluateSpo2(clampedSpo2);
-  }
-  
-  // Método para evaluación directa de SpO2 (sin historia)
-  private static evaluateSpo2(spo2: number): RiskSegment {
+    // Procesamiento normal para lecturas en tiempo real
+    let currentSegment: RiskSegment;
+
+    // Corregido: ahora evaluamos inmediatamente el valor actual
     if (spo2 < 90) {
-      return { color: '#ea384c', label: 'INSUFICIENCIA RESPIRATORIA' };
+      currentSegment = { color: '#ea384c', label: 'INSUFICIENCIA RESPIRATORIA' };
     } else if (spo2 <= 92) {
-      return { color: '#F97316', label: 'LEVE INSUFICIENCIA RESPIRATORIA' };
+      currentSegment = { color: '#F97316', label: 'LEVE INSUFICIENCIA RESPIRATORIA' };
     } else {
-      return { color: '#0EA5E9', label: 'NORMAL' };
+      currentSegment = { color: '#0EA5E9', label: 'NORMAL' };
     }
+    
+    return currentSegment;
   }
 
   static getBPRisk(pressure: string, isFinalReading: boolean = false): RiskSegment {
@@ -397,31 +348,32 @@ export class VitalSignsRisk {
       const avgBP = this.getAverageBP();
       
       if (avgBP.systolic > 0 && avgBP.diastolic > 0) {
-        // Determinar el riesgo basado en el promedio final
-        return this.evaluateBp(avgBP.systolic, avgBP.diastolic);
+        // Determinar el riesgo basado en el promedio
+        if (avgBP.systolic >= 160 || avgBP.diastolic >= 100) {
+          return { color: '#ea384c', label: 'PRESIÓN ALTA' };
+        } else if (avgBP.systolic >= 140 || avgBP.diastolic >= 90) {
+          return { color: '#F97316', label: 'LEVE PRESIÓN ALTA' };
+        } else if (avgBP.systolic >= 110 && avgBP.systolic <= 139 && 
+                 avgBP.diastolic >= 70 && avgBP.diastolic <= 89) {
+          return { color: '#0EA5E9', label: 'PRESIÓN NORMAL' };
+        } else if (avgBP.systolic < 110 || avgBP.diastolic < 70) {
+          return { color: '#F97316', label: 'PRESIÓN BAJA' };
+        }
       }
       
-      // Si no hay promedio, usar los valores actuales
-      return this.evaluateBp(systolic, diastolic);
+      // Si no hay suficientes datos para calcular el promedio, usar el historial de segmentos
+      if (this.bpSegmentHistory.length > 0) {
+        return this.getMostFrequentSegment(this.bpSegmentHistory);
+      }
     }
 
-    // Si no hay suficientes datos, mostrar "EVALUANDO..."
-    if (!this.hasSufficientDataForBP()) {
-      return { color: '#FFFFFF', label: 'EVALUANDO...' };
-    }
-    
-    // Si hay datos suficientes pero no son estables en ningún rango
-    return this.evaluateBp(systolic, diastolic);
-  }
-  
-  // Método para evaluación directa de BP (sin historia)
-  private static evaluateBp(systolic: number, diastolic: number): RiskSegment {
+    // Procesamiento normal para lecturas en tiempo real - evaluamos inmediatamente
     if (systolic >= 160 || diastolic >= 100) {
       return { color: '#ea384c', label: 'PRESIÓN ALTA' };
     } else if (systolic >= 140 || diastolic >= 90) {
       return { color: '#F97316', label: 'LEVE PRESIÓN ALTA' };
     } else if (systolic >= 110 && systolic <= 139 && 
-              diastolic >= 70 && diastolic <= 89) {
+               diastolic >= 70 && diastolic <= 89) {
       return { color: '#0EA5E9', label: 'PRESIÓN NORMAL' };
     } else if (systolic < 110 || diastolic < 70) {
       return { color: '#F97316', label: 'PRESIÓN BAJA' };

@@ -215,7 +215,6 @@ export class VitalSignsProcessor {
 
     const R = (ac / dc) / this.SPO2_CALIBRATION_FACTOR;
     
-    // Modificado: Limitar el rango máximo a 100%
     let spO2 = Math.round(98 - (15 * R));
     
     if (perfusionIndex > 0.15) {
@@ -224,8 +223,7 @@ export class VitalSignsProcessor {
       spO2 = Math.max(0, spO2 - 1);
     }
 
-    // NUEVO: Asegurar que el SpO2 nunca supere el 100%
-    spO2 = Math.min(100, Math.max(0, spO2));
+    spO2 = Math.min(98, spO2);
 
     this.spo2Buffer.push(spO2);
     if (this.spo2Buffer.length > this.SPO2_BUFFER_SIZE) {
@@ -235,9 +233,6 @@ export class VitalSignsProcessor {
     if (this.spo2Buffer.length > 0) {
       const sum = this.spo2Buffer.reduce((a, b) => a + b, 0);
       spO2 = Math.round(sum / this.spo2Buffer.length);
-      
-      // NUEVO: Asegurar nuevamente que el promedio nunca supere el 100%
-      spO2 = Math.min(100, Math.max(0, spO2));
     }
 
     return spO2;
@@ -303,9 +298,6 @@ export class VitalSignsProcessor {
       instantDiastolic = instantSystolic - 80;
     }
 
-    // NUEVO: Usar un factor de suavizado más agresivo para BP
-    const BP_DYNAMIC_ALPHA = 0.15; // Reducido significativamente (era 0.7)
-
     // Update pressure buffers
     this.systolicBuffer.push(instantSystolic);
     this.diastolicBuffer.push(instantDiastolic);
@@ -315,13 +307,13 @@ export class VitalSignsProcessor {
       this.diastolicBuffer.shift();
     }
 
-    // Calculate final smoothed values with specific variable names and new alpha
+    // Calculate final smoothed values with specific variable names
     let finalSystolic = 0;
     let finalDiastolic = 0;
     let smoothingWeightSum = 0;
 
     for (let i = 0; i < this.systolicBuffer.length; i++) {
-      const weight = Math.pow(BP_DYNAMIC_ALPHA, this.systolicBuffer.length - 1 - i);
+      const weight = Math.pow(this.BP_ALPHA, this.systolicBuffer.length - 1 - i);
       finalSystolic += this.systolicBuffer[i] * weight;
       finalDiastolic += this.diastolicBuffer[i] * weight;
       smoothingWeightSum += weight;
