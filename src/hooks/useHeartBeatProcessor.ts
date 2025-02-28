@@ -19,13 +19,41 @@ export const useHeartBeatProcessor = () => {
   const [currentBPM, setCurrentBPM] = useState<number>(0);
   const [confidence, setConfidence] = useState<number>(0);
   const signalBufferRef = useRef<number[]>([]);
+  const audioContextRef = useRef<AudioContext | null>(null);
 
   useEffect(() => {
     console.log('useHeartBeatProcessor: Creando nueva instancia de HeartBeatProcessor');
     processorRef.current = new HeartBeatProcessor();
     
+    // Inicializar contexto de audio aquí para que responda a la interacción del usuario
+    try {
+      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      console.log('useHeartBeatProcessor: Audio Context creado:', audioContextRef.current.state);
+      
+      // Intentar activar el contexto de audio inmediatamente
+      if (audioContextRef.current.state === 'suspended') {
+        audioContextRef.current.resume().then(() => {
+          console.log('useHeartBeatProcessor: Audio Context resumed');
+        }).catch(err => {
+          console.error('useHeartBeatProcessor: Error resuming Audio Context:', err);
+        });
+      }
+      
+      // Hacer un beep de prueba silencioso para activar el audio
+      const oscillator = audioContextRef.current.createOscillator();
+      const gainNode = audioContextRef.current.createGain();
+      gainNode.gain.value = 0.01;
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContextRef.current.destination);
+      oscillator.start();
+      oscillator.stop(audioContextRef.current.currentTime + 0.1);
+    } catch (e) {
+      console.error('useHeartBeatProcessor: Error inicializando Audio Context:', e);
+    }
+    
     if (typeof window !== 'undefined') {
       (window as any).heartBeatProcessor = processorRef.current;
+      (window as any).audioContext = audioContextRef.current;
     }
 
     return () => {
@@ -33,8 +61,13 @@ export const useHeartBeatProcessor = () => {
       if (processorRef.current) {
         processorRef.current = null;
       }
+      if (audioContextRef.current) {
+        audioContextRef.current.close().catch(e => console.error('Error cerrando AudioContext:', e));
+        audioContextRef.current = null;
+      }
       if (typeof window !== 'undefined') {
         (window as any).heartBeatProcessor = undefined;
+        (window as any).audioContext = undefined;
       }
       // Limpiar buffer
       signalBufferRef.current = [];
@@ -56,12 +89,6 @@ export const useHeartBeatProcessor = () => {
       };
     }
 
-    console.log('useHeartBeatProcessor - processSignal:', {
-      inputValue: value,
-      currentProcessor: !!processorRef.current,
-      timestamp: new Date().toISOString()
-    });
-
     // Almacenar señal en buffer para análisis
     signalBufferRef.current.push(value);
     // Limitar tamaño del buffer para controlar memoria
@@ -71,15 +98,43 @@ export const useHeartBeatProcessor = () => {
 
     const result = processorRef.current.processSignal(value);
     const rrData = processorRef.current.getRRIntervals();
-
-    console.log('useHeartBeatProcessor - result:', {
-      bpm: result.bpm,
-      confidence: result.confidence,
-      isPeak: result.isPeak,
-      arrhythmiaCount: result.arrhythmiaCount,
-      rrIntervals: rrData.intervals,
-      timestamp: new Date().toISOString()
-    });
+    
+    // Si se detecta un pico, intentar reproducir el beep aquí
+    if (result.isPeak && audioContextRef.current) {
+      try {
+        // Asegurarse que el contexto de audio esté activo
+        if (audioContextRef.current.state === 'suspended') {
+          audioContextRef.current.resume();
+        }
+        
+        const oscillator = audioContextRef.current.createOscillator();
+        const gainNode = audioContextRef.current.createGain();
+        
+        oscillator.type = 'sine';
+        oscillator.frequency.value = 800; // Frecuencia del beep
+        
+        gainNode.gain.setValueAtTime(0, audioContextRef.current.currentTime);
+        gainNode.gain.linearRampToValueAtTime(0.5, audioContextRef.current.currentTime + 0.01);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContextRef.current.currentTime + 0.1);
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContextRef.current.destination);
+        
+        oscillator.start();
+        oscillator.stop(audioContextRef.current.currentTime + 0.1);
+      } catch (e) {
+        console.error('Error reproduciendo beep:', e);
+        
+        // Plan B: Usar el API Audio si Web Audio API falla
+        try {
+          const audio = new Audio("data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAAPuUdcAAAAgD///wQAAAA=");
+          audio.volume = 0.5;
+          audio.play().catch(err => console.error("Error en audio alternativo:", err));
+        } catch (audioErr) {
+          console.error("Error en audio alternativo:", audioErr);
+        }
+      }
+    }
     
     if (result.bpm > 0) {
       setCurrentBPM(result.bpm);
