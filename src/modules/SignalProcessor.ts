@@ -1,21 +1,17 @@
 import { ProcessedSignal, ProcessingError, SignalProcessor } from '../types/signal';
 
 class KalmanFilter {
-  private R: number = 0.01;  // Ruido de medición (ajustado para mejor rendimiento)
-  private Q: number = 0.08;  // Ruido del proceso (reducido para mayor estabilidad)
-  private P: number = 1;     // Estimación inicial de error
-  private X: number = 0;     // Estado inicial
-  private K: number = 0;     // Ganancia de Kalman
+  private R: number = 0.01;  // Ruido de medición (ajustado)
+  private Q: number = 0.08;  // Ruido de proceso (reducido para mejor estabilidad)
+  private P: number = 1;
+  private X: number = 0;
+  private K: number = 0;
 
   filter(measurement: number): number {
-    // Predicción
     this.P = this.P + this.Q;
-    
-    // Actualización
     this.K = this.P / (this.P + this.R);
     this.X = this.X + this.K * (measurement - this.X);
     this.P = (1 - this.K) * this.P;
-    
     return this.X;
   }
 
@@ -30,17 +26,17 @@ export class PPGSignalProcessor implements SignalProcessor {
   private kalmanFilter: KalmanFilter;
   private lastValues: number[] = [];
   private readonly DEFAULT_CONFIG = {
-    BUFFER_SIZE: 18,           // Aumentado para mejor análisis de señal
+    BUFFER_SIZE: 20,           // Aumentado para mejor análisis
     MIN_RED_THRESHOLD: 35,     // Reducido para mayor sensibilidad
-    MAX_RED_THRESHOLD: 255,    // Aumentado para captar señal más intensa
-    STABILITY_WINDOW: 8,       // Aumentado para análisis de estabilidad más robusto
-    MIN_STABILITY_COUNT: 4,    // Mínimo de muestras estables
-    HYSTERESIS: 8,             // Aumentado para evitar fluctuaciones en detección
-    MIN_CONSECUTIVE_DETECTIONS: 3,  // Mínimo de detecciones consecutivas necesarias
-    RED_DOMINANCE_FACTOR: 1.15,    // Reducido para mayor sensibilidad
-    STABILITY_THRESHOLD: 0.65,     // Umbral para considerar señal estable
-    INTENSITY_WEIGHT: 0.45,        // Peso de intensidad en cálculo de calidad
-    STABILITY_WEIGHT: 0.55         // Peso de estabilidad en cálculo de calidad
+    MAX_RED_THRESHOLD: 255,    // Aumentado para captar señales más fuertes
+    STABILITY_WINDOW: 8,       // Aumentado para mejor análisis
+    MIN_STABILITY_COUNT: 5,    // Aumentado para confirmación más robusta
+    HYSTERESIS: 8,             // Aumentado para evitar fluctuaciones
+    MIN_CONSECUTIVE_DETECTIONS: 4,  // Aumentado para reducir falsos positivos
+    RED_DOMINANCE_FACTOR: 1.25,    // Nuevo: factor para determinar dominancia del rojo
+    STABILITY_THRESHOLD: 0.75,     // Nuevo: umbral para considerar señal estable
+    QUALITY_DECAY_FACTOR: 0.92,    // Nuevo: factor de decaimiento para calidad
+    SIGNAL_VARIANCE_THRESHOLD: 0.05 // Nuevo: umbral de varianza para señal válida
   };
 
   private currentConfig: typeof this.DEFAULT_CONFIG;
@@ -49,12 +45,10 @@ export class PPGSignalProcessor implements SignalProcessor {
   private consecutiveDetections: number = 0;
   private isCurrentlyDetected: boolean = false;
   private lastDetectionTime: number = 0;
-  private readonly DETECTION_TIMEOUT = 600; // Aumentado para mayor estabilidad
-  private signalQualityHistory: number[] = []; // Historial de calidad de señal
-  private redValueHistory: number[] = []; // Historial de valores rojos
-  private adaptiveMinThreshold: number; // Umbral mínimo adaptativo
-  private adaptiveMaxThreshold: number; // Umbral máximo adaptativo
-  private readonly ADAPTIVE_THRESHOLD_ALPHA = 0.15; // Factor de adaptación de umbrales
+  private readonly DETECTION_TIMEOUT = 600; // Aumentado a 600ms
+  private qualityHistory: number[] = [];    // Nuevo: historial de calidad
+  private varianceBuffer: number[] = [];    // Nuevo: buffer para calcular varianza
+  private redDominanceHistory: boolean[] = []; // Nuevo: historial de dominancia del rojo
 
   constructor(
     public onSignalReady?: (signal: ProcessedSignal) => void,
@@ -62,9 +56,7 @@ export class PPGSignalProcessor implements SignalProcessor {
   ) {
     this.kalmanFilter = new KalmanFilter();
     this.currentConfig = { ...this.DEFAULT_CONFIG };
-    this.adaptiveMinThreshold = this.currentConfig.MIN_RED_THRESHOLD;
-    this.adaptiveMaxThreshold = this.currentConfig.MAX_RED_THRESHOLD;
-    console.log("PPGSignalProcessor: Instancia creada con configuración optimizada");
+    console.log("PPGSignalProcessor: Instancia creada");
   }
 
   async initialize(): Promise<void> {
@@ -75,12 +67,11 @@ export class PPGSignalProcessor implements SignalProcessor {
       this.consecutiveDetections = 0;
       this.isCurrentlyDetected = false;
       this.lastDetectionTime = 0;
-      this.signalQualityHistory = [];
-      this.redValueHistory = [];
-      this.adaptiveMinThreshold = this.currentConfig.MIN_RED_THRESHOLD;
-      this.adaptiveMaxThreshold = this.currentConfig.MAX_RED_THRESHOLD;
+      this.qualityHistory = [];
+      this.varianceBuffer = [];
+      this.redDominanceHistory = [];
       this.kalmanFilter.reset();
-      console.log("PPGSignalProcessor: Inicializado con parámetros optimizados");
+      console.log("PPGSignalProcessor: Inicializado");
     } catch (error) {
       console.error("PPGSignalProcessor: Error de inicialización", error);
       this.handleError("INIT_ERROR", "Error al inicializar el procesador");
@@ -101,8 +92,9 @@ export class PPGSignalProcessor implements SignalProcessor {
     this.lastStableValue = 0;
     this.consecutiveDetections = 0;
     this.isCurrentlyDetected = false;
-    this.signalQualityHistory = [];
-    this.redValueHistory = [];
+    this.qualityHistory = [];
+    this.varianceBuffer = [];
+    this.redDominanceHistory = [];
     this.kalmanFilter.reset();
     console.log("PPGSignalProcessor: Detenido");
   }
@@ -111,11 +103,6 @@ export class PPGSignalProcessor implements SignalProcessor {
     try {
       console.log("PPGSignalProcessor: Iniciando calibración");
       await this.initialize();
-      
-      // Reiniciar umbrales adaptativos a valores por defecto
-      this.adaptiveMinThreshold = this.currentConfig.MIN_RED_THRESHOLD;
-      this.adaptiveMaxThreshold = this.currentConfig.MAX_RED_THRESHOLD;
-      
       console.log("PPGSignalProcessor: Calibración completada");
       return true;
     } catch (error) {
@@ -132,58 +119,53 @@ export class PPGSignalProcessor implements SignalProcessor {
     }
 
     try {
-      // Extracción optimizada de la señal PPG
-      const { redValue, redDominance } = this.extractRedChannel(imageData);
+      // Extracción mejorada de la señal PPG
+      const { redValue, isRedDominant, redRatio } = this.extractRedChannel(imageData);
       
-      // Aplicar filtro de Kalman para suavizar la señal
+      // Actualizar historial de dominancia del rojo
+      this.redDominanceHistory.push(isRedDominant);
+      if (this.redDominanceHistory.length > 10) {
+        this.redDominanceHistory.shift();
+      }
+      
+      // Aplicar filtro Kalman para suavizar la señal
       const filtered = this.kalmanFilter.filter(redValue);
-      
-      // Almacenar valor filtrado para análisis
       this.lastValues.push(filtered);
+      
       if (this.lastValues.length > this.currentConfig.BUFFER_SIZE) {
         this.lastValues.shift();
       }
       
-      // Almacenar valor rojo para análisis de umbrales adaptativos
-      this.redValueHistory.push(redValue);
-      if (this.redValueHistory.length > 30) { // Mantener historial de 30 frames
-        this.redValueHistory.shift();
+      // Actualizar buffer de varianza
+      this.varianceBuffer.push(filtered);
+      if (this.varianceBuffer.length > 15) {
+        this.varianceBuffer.shift();
       }
 
-      // Actualizar umbrales adaptativos si tenemos suficientes datos
-      if (this.redValueHistory.length >= 15) {
-        this.updateAdaptiveThresholds();
-      }
+      // Análisis mejorado de la señal
+      const { isFingerDetected, quality } = this.analyzeSignal(filtered, redValue, isRedDominant, redRatio);
 
-      // Analizar señal con umbrales adaptativos
-      const { isFingerDetected, quality } = this.analyzeSignal(filtered, redValue, redDominance);
-      
-      // Almacenar calidad para análisis de tendencia
-      if (isFingerDetected) {
-        this.signalQualityHistory.push(quality);
-        if (this.signalQualityHistory.length > 10) {
-          this.signalQualityHistory.shift();
-        }
+      // Actualizar historial de calidad
+      this.qualityHistory.push(quality);
+      if (this.qualityHistory.length > 10) {
+        this.qualityHistory.shift();
       }
-
-      // Calcular calidad de tendencia (más estable)
-      const trendQuality = this.calculateTrendQuality(quality);
 
       console.log("PPGSignalProcessor: Análisis", {
         redValue,
         filtered,
         isFingerDetected,
-        quality: trendQuality,
+        quality,
         stableFrames: this.stableFrameCount,
-        adaptiveMin: Math.round(this.adaptiveMinThreshold),
-        adaptiveMax: Math.round(this.adaptiveMaxThreshold)
+        redDominant: isRedDominant,
+        redRatio
       });
 
       const processedSignal: ProcessedSignal = {
         timestamp: Date.now(),
         rawValue: redValue,
         filteredValue: filtered,
-        quality: trendQuality,
+        quality: quality,
         fingerDetected: isFingerDetected,
         roi: this.detectROI(redValue)
       };
@@ -196,7 +178,7 @@ export class PPGSignalProcessor implements SignalProcessor {
     }
   }
 
-  private extractRedChannel(imageData: ImageData): { redValue: number, redDominance: boolean } {
+  private extractRedChannel(imageData: ImageData): { redValue: number, isRedDominant: boolean, redRatio: number } {
     const data = imageData.data;
     let redSum = 0;
     let greenSum = 0;
@@ -209,76 +191,91 @@ export class PPGSignalProcessor implements SignalProcessor {
     const startY = Math.floor(imageData.height * 0.35);
     const endY = Math.floor(imageData.height * 0.65);
     
-    // Muestreo optimizado para rendimiento (no procesar todos los píxeles)
-    const sampleStep = Math.max(1, Math.floor((endX - startX) * (endY - startY) / 10000));
+    // Muestreo optimizado para rendimiento y precisión
+    const sampleStep = Math.max(1, Math.floor((endX - startX) * (endY - startY) / 12000));
+    
+    // Acumuladores para análisis de varianza (importante para SpO2)
+    let redSquaredSum = 0;
+    let redGreenRatioSum = 0;
+    let redBlueRatioSum = 0;
     
     for (let y = startY; y < endY; y += sampleStep) {
       for (let x = startX; x < endX; x += sampleStep) {
         const i = (y * imageData.width + x) * 4;
-        redSum += data[i];     // Canal rojo
-        greenSum += data[i+1]; // Canal verde
-        blueSum += data[i+2];  // Canal azul
+        const r = data[i];     // Canal rojo
+        const g = data[i+1];   // Canal verde
+        const b = data[i+2];   // Canal azul
+        
+        redSum += r;
+        greenSum += g;
+        blueSum += b;
+        
+        // Acumular datos para análisis de varianza
+        redSquaredSum += r * r;
+        
+        // Calcular ratios por pixel (importante para SpO2)
+        if (g > 0) redGreenRatioSum += r / g;
+        if (b > 0) redBlueRatioSum += r / b;
+        
         count++;
       }
     }
     
-    if (count === 0) return { redValue: 0, redDominance: false };
+    if (count === 0) return { redValue: 0, isRedDominant: false, redRatio: 0 };
     
     const avgRed = redSum / count;
     const avgGreen = greenSum / count;
     const avgBlue = blueSum / count;
-
-    // Verificar dominancia del canal rojo (característico de la presencia de tejido con sangre)
-    const redDominanceFactor = this.currentConfig.RED_DOMINANCE_FACTOR;
-    const isRedDominant = avgRed > (avgGreen * redDominanceFactor) && 
-                          avgRed > (avgBlue * redDominanceFactor);
+    
+    // Calcular varianza del canal rojo (importante para calidad de señal)
+    const redVariance = (redSquaredSum / count) - (avgRed * avgRed);
+    
+    // Verificar dominancia del canal rojo con criterios mejorados
+    const redToGreenRatio = avgRed / (avgGreen || 1);
+    const redToBlueRatio = avgRed / (avgBlue || 1);
+    
+    // Criterios más precisos para detección de tejido con sangre
+    const isRedDominant = 
+      redToGreenRatio > this.currentConfig.RED_DOMINANCE_FACTOR && 
+      redToBlueRatio > this.currentConfig.RED_DOMINANCE_FACTOR &&
+      redVariance > 5; // Debe haber cierta varianza en el canal rojo
+    
+    // Calcular ratio promedio para análisis de calidad y SpO2
+    const pixelRedRatio = (redGreenRatioSum + redBlueRatioSum) / (2 * count);
+    const redRatio = (redToGreenRatio + redToBlueRatio) / 2;
+    
+    // Valor ajustado para mejor precisión en SpO2
+    const adjustedRedValue = isRedDominant ? 
+      avgRed * (1 + Math.min(0.2, Math.sqrt(redVariance) / 100)) : 0;
     
     return { 
-      redValue: isRedDominant ? avgRed : 0,
-      redDominance: isRedDominant
+      redValue: adjustedRedValue, 
+      isRedDominant, 
+      redRatio: pixelRedRatio > 0 ? pixelRedRatio : redRatio 
     };
   }
 
-  private updateAdaptiveThresholds(): void {
-    if (this.redValueHistory.length < 15) return;
-    
-    // Ordenar valores para análisis estadístico
-    const sortedValues = [...this.redValueHistory].sort((a, b) => a - b);
-    
-    // Usar percentiles para determinar umbrales adaptativos
-    const p10 = sortedValues[Math.floor(sortedValues.length * 0.1)];
-    const p90 = sortedValues[Math.floor(sortedValues.length * 0.9)];
-    
-    // Actualizar umbrales con suavizado exponencial
-    this.adaptiveMinThreshold = this.adaptiveMinThreshold * (1 - this.ADAPTIVE_THRESHOLD_ALPHA) + 
-                               Math.max(this.currentConfig.MIN_RED_THRESHOLD * 0.8, p10) * this.ADAPTIVE_THRESHOLD_ALPHA;
-    
-    this.adaptiveMaxThreshold = this.adaptiveMaxThreshold * (1 - this.ADAPTIVE_THRESHOLD_ALPHA) + 
-                               Math.min(this.currentConfig.MAX_RED_THRESHOLD, p90 * 1.1) * this.ADAPTIVE_THRESHOLD_ALPHA;
-  }
-
-  private analyzeSignal(filtered: number, rawValue: number, redDominance: boolean): { isFingerDetected: boolean, quality: number } {
+  private analyzeSignal(
+    filtered: number, 
+    rawValue: number, 
+    isRedDominant: boolean,
+    redRatio: number
+  ): { isFingerDetected: boolean, quality: number } {
     const currentTime = Date.now();
     const timeSinceLastDetection = currentTime - this.lastDetectionTime;
     
-    // Si no hay dominancia de rojo, no hay dedo
-    if (!redDominance) {
-      this.consecutiveDetections = 0;
-      this.stableFrameCount = Math.max(0, this.stableFrameCount - 1);
-      
-      if (timeSinceLastDetection > this.DETECTION_TIMEOUT) {
-        this.isCurrentlyDetected = false;
-      }
-      
-      return { isFingerDetected: this.isCurrentlyDetected, quality: 0 };
-    }
+    // Verificar consistencia de dominancia del rojo (indicador clave de presencia de dedo)
+    const redDominanceConsistency = this.redDominanceHistory.filter(Boolean).length / 
+                                   Math.max(1, this.redDominanceHistory.length);
     
-    // Verificar si el valor está dentro del rango válido con histéresis
+    // Verificar si el valor está dentro del rango válido con histéresis mejorada
     const inRange = this.isCurrentlyDetected
-      ? rawValue >= (this.adaptiveMinThreshold - this.currentConfig.HYSTERESIS) &&
-        rawValue <= (this.adaptiveMaxThreshold + this.currentConfig.HYSTERESIS)
-      : rawValue >= this.adaptiveMinThreshold &&
-        rawValue <= this.adaptiveMaxThreshold;
+      ? rawValue >= (this.currentConfig.MIN_RED_THRESHOLD - this.currentConfig.HYSTERESIS) &&
+        rawValue <= (this.currentConfig.MAX_RED_THRESHOLD + this.currentConfig.HYSTERESIS) &&
+        redDominanceConsistency > 0.7
+      : rawValue >= this.currentConfig.MIN_RED_THRESHOLD &&
+        rawValue <= this.currentConfig.MAX_RED_THRESHOLD &&
+        redDominanceConsistency > 0.8;
 
     if (!inRange) {
       this.consecutiveDetections = Math.max(0, this.consecutiveDetections - 1);
@@ -291,9 +288,14 @@ export class PPGSignalProcessor implements SignalProcessor {
       return { isFingerDetected: this.isCurrentlyDetected, quality: 0 };
     }
 
-    // Analizar estabilidad de la señal con método mejorado
+    // Analizar estabilidad de la señal con métodos mejorados
     const stability = this.calculateStability();
-    if (stability > this.currentConfig.STABILITY_THRESHOLD) {
+    const variance = this.calculateVariance();
+    
+    // Verificar si la señal tiene suficiente varianza (indicador de pulso)
+    const hasAdequateVariance = variance > this.currentConfig.SIGNAL_VARIANCE_THRESHOLD;
+    
+    if (stability > this.currentConfig.STABILITY_THRESHOLD && hasAdequateVariance) {
       this.stableFrameCount = Math.min(
         this.stableFrameCount + 1,
         this.currentConfig.MIN_STABILITY_COUNT * 2
@@ -306,71 +308,87 @@ export class PPGSignalProcessor implements SignalProcessor {
     const wasDetected = this.isCurrentlyDetected;
     const isStableNow = this.stableFrameCount >= this.currentConfig.MIN_STABILITY_COUNT;
 
-    if (isStableNow) {
+    if (isStableNow && isRedDominant && redRatio > 1.3) {
       this.consecutiveDetections++;
       if (this.consecutiveDetections >= this.currentConfig.MIN_CONSECUTIVE_DETECTIONS) {
         this.isCurrentlyDetected = true;
         this.lastDetectionTime = currentTime;
       }
     } else {
-      this.consecutiveDetections = Math.max(0, this.consecutiveDetections - 1);
+      this.consecutiveDetections = Math.max(0, this.consecutiveDetections - 0.5);
       if (this.consecutiveDetections === 0 && timeSinceLastDetection > this.DETECTION_TIMEOUT) {
         this.isCurrentlyDetected = false;
       }
     }
 
-    // Calcular calidad de la señal con método mejorado
+    // Calcular calidad de la señal con múltiples factores
     const stabilityScore = Math.min(1, this.stableFrameCount / (this.currentConfig.MIN_STABILITY_COUNT * 2));
+    const intensityScore = Math.min((rawValue - this.currentConfig.MIN_RED_THRESHOLD) / 
+                                  (this.currentConfig.MAX_RED_THRESHOLD - this.currentConfig.MIN_RED_THRESHOLD), 1);
+    const varianceScore = Math.min(variance / (this.currentConfig.SIGNAL_VARIANCE_THRESHOLD * 3), 1);
+    const redDominanceScore = Math.min((redRatio - 1) / 0.5, 1);
     
-    // Calcular score de intensidad normalizado al rango adaptativo
-    const intensityScore = Math.min(
-      Math.max(
-        (rawValue - this.adaptiveMinThreshold) / 
-        (this.adaptiveMaxThreshold - this.adaptiveMinThreshold), 
-        0
-      ), 
-      1
+    // Combinar factores con pesos optimizados
+    const rawQuality = Math.round(
+      (stabilityScore * 0.35 + 
+       intensityScore * 0.25 + 
+       varianceScore * 0.25 + 
+       redDominanceScore * 0.15) * 100
     );
     
-    // Calcular calidad ponderada
-    const quality = Math.round(
-      (stabilityScore * this.currentConfig.STABILITY_WEIGHT + 
-       intensityScore * this.currentConfig.INTENSITY_WEIGHT) * 100
-    );
-
+    // Suavizar calidad para evitar fluctuaciones
+    const smoothedQuality = this.calculateSmoothedQuality(rawQuality);
+    
     return {
       isFingerDetected: this.isCurrentlyDetected,
-      quality: this.isCurrentlyDetected ? quality : 0
+      quality: this.isCurrentlyDetected ? smoothedQuality : 0
     };
   }
 
   private calculateStability(): number {
     if (this.lastValues.length < 3) return 0;
     
-    // Cálculo de estabilidad mejorado basado en variaciones relativas
+    // Cálculo de estabilidad mejorado basado en tendencia y variación
     const variations = this.lastValues.slice(1).map((val, i) => 
-      Math.abs(val - this.lastValues[i]) / Math.max(1, this.lastValues[i])
+      Math.abs(val - this.lastValues[i])
     );
     
     const avgVariation = variations.reduce((sum, val) => sum + val, 0) / variations.length;
     
-    // Convertir a score de estabilidad (menor variación = mayor estabilidad)
-    return Math.max(0, Math.min(1, 1 - (avgVariation * 20)));
+    // Analizar tendencia (pendiente)
+    const firstHalf = this.lastValues.slice(0, Math.floor(this.lastValues.length / 2));
+    const secondHalf = this.lastValues.slice(Math.floor(this.lastValues.length / 2));
+    
+    const firstAvg = firstHalf.reduce((sum, val) => sum + val, 0) / firstHalf.length;
+    const secondAvg = secondHalf.reduce((sum, val) => sum + val, 0) / secondHalf.length;
+    
+    // Penalizar cambios bruscos de tendencia
+    const trendPenalty = Math.abs(secondAvg - firstAvg) > 30 ? 0.3 : 0;
+    
+    return Math.max(0, Math.min(1, 1 - (avgVariation / 40) - trendPenalty));
   }
 
-  private calculateTrendQuality(currentQuality: number): number {
-    // Si no hay historial, usar calidad actual
-    if (this.signalQualityHistory.length === 0) {
-      return currentQuality;
-    }
+  private calculateVariance(): number {
+    if (this.varianceBuffer.length < 5) return 0;
     
-    // Calcular calidad promedio con mayor peso a valores recientes
-    let weightedSum = currentQuality * 2; // Doble peso al valor actual
-    let weightSum = 2;
+    const mean = this.varianceBuffer.reduce((sum, val) => sum + val, 0) / this.varianceBuffer.length;
     
-    for (let i = this.signalQualityHistory.length - 1; i >= 0; i--) {
-      const weight = 1 + (i / this.signalQualityHistory.length); // Peso decreciente con antigüedad
-      weightedSum += this.signalQualityHistory[i] * weight;
+    const squaredDiffs = this.varianceBuffer.map(val => Math.pow(val - mean, 2));
+    const variance = squaredDiffs.reduce((sum, val) => sum + val, 0) / squaredDiffs.length;
+    
+    return variance;
+  }
+
+  private calculateSmoothedQuality(rawQuality: number): number {
+    if (this.qualityHistory.length === 0) return rawQuality;
+    
+    // Calcular promedio ponderado dando más peso a valores recientes
+    let weightedSum = rawQuality; // El valor actual tiene peso 1
+    let weightSum = 1;
+    
+    for (let i = this.qualityHistory.length - 1; i >= 0; i--) {
+      const weight = this.currentConfig.QUALITY_DECAY_FACTOR ** (this.qualityHistory.length - i);
+      weightedSum += this.qualityHistory[i] * weight;
       weightSum += weight;
     }
     
@@ -378,8 +396,8 @@ export class PPGSignalProcessor implements SignalProcessor {
   }
 
   private detectROI(redValue: number): ProcessedSignal['roi'] {
-    // Región de interés adaptativa basada en la intensidad de la señal
-    const size = Math.max(50, Math.min(100, redValue / 2));
+    // ROI adaptativa basada en la intensidad de la señal
+    const size = Math.min(100, Math.max(50, Math.round(redValue / 2)));
     
     return {
       x: 0,

@@ -22,22 +22,20 @@ export const useHeartBeatProcessor = () => {
   // Buffers mejorados para filtrado de señal
   const recentValuesRef = useRef<number[]>([]);
   const recentConfidencesRef = useRef<number[]>([]);
-  const peakValuesRef = useRef<number[]>([]);
-  const bpmHistoryRef = useRef<number[]>([]);
-  const confidenceHistoryRef = useRef<number[]>([]);
-  const lastValidBpmTimeRef = useRef<number>(0);
+  const peakHistoryRef = useRef<{time: number, value: number}[]>([]);
+  const bpmHistoryRef = useRef<{time: number, bpm: number, confidence: number}[]>([]);
   
   // Parámetros optimizados
   const MIN_CONFIDENCE_THRESHOLD = 0.70; // Aumentado para reducir falsos positivos
-  const MEDIAN_FILTER_WINDOW = 7; // Tamaño de ventana para filtro de mediana
-  const BPM_STABILITY_THRESHOLD = 8; // Máxima variación permitida para BPM estable
-  const MIN_CONFIDENCE_FOR_STABLE_BPM = 0.75; // Confianza mínima para considerar BPM estable
-  const MAX_BPM_HISTORY = 15; // Tamaño máximo del historial de BPM
-  const BPM_SMOOTHING_FACTOR = 0.25; // Factor de suavizado para BPM (menor = más estable)
-  const MIN_TIME_BETWEEN_BPM_UPDATES = 500; // Tiempo mínimo entre actualizaciones de BPM (ms)
+  const MEDIAN_FILTER_WINDOW = 7;        // Tamaño de ventana para filtro de mediana
+  const CONFIDENCE_HISTORY_SIZE = 15;    // Historial de confianza para análisis
+  const PEAK_HISTORY_SIZE = 20;          // Historial de picos para análisis
+  const BPM_HISTORY_SIZE = 15;           // Historial de BPM para estabilidad
+  const BPM_OUTLIER_THRESHOLD = 0.30;    // Umbral para detección de valores atípicos (30%)
+  const SIGNAL_QUALITY_THRESHOLD = 0.65; // Umbral mínimo de calidad de señal
 
   useEffect(() => {
-    console.log('useHeartBeatProcessor: Creando nueva instancia optimizada de HeartBeatProcessor');
+    console.log('useHeartBeatProcessor: Creando nueva instancia de HeartBeatProcessor');
     processorRef.current = new HeartBeatProcessor();
     
     if (typeof window !== 'undefined') {
@@ -52,18 +50,16 @@ export const useHeartBeatProcessor = () => {
       if (typeof window !== 'undefined') {
         (window as any).heartBeatProcessor = undefined;
       }
-      
       // Limpiar buffers
       signalBufferRef.current = [];
       recentValuesRef.current = [];
       recentConfidencesRef.current = [];
-      peakValuesRef.current = [];
+      peakHistoryRef.current = [];
       bpmHistoryRef.current = [];
-      confidenceHistoryRef.current = [];
     };
   }, []);
 
-  // Función mejorada para aplicar filtro de mediana a la señal
+  // Función mejorada para aplicar filtro de mediana
   const applyMedianFilter = useCallback((value: number): number => {
     recentValuesRef.current.push(value);
     
@@ -80,8 +76,50 @@ export const useHeartBeatProcessor = () => {
     return value;
   }, [MEDIAN_FILTER_WINDOW]);
 
+  // Nueva función para calcular la calidad de la señal
+  const calculateSignalQuality = useCallback((value: number, confidence: number): number => {
+    // Factores que contribuyen a la calidad
+    const amplitudeFactor = Math.min(Math.abs(value) / 0.5, 1);
+    const confidenceFactor = confidence;
+    
+    // Estabilidad basada en la varianza de los últimos valores
+    let stabilityFactor = 1;
+    if (recentValuesRef.current.length >= 5) {
+      const recentValues = recentValuesRef.current.slice(-5);
+      const mean = recentValues.reduce((sum, val) => sum + val, 0) / recentValues.length;
+      const variance = recentValues.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / recentValues.length;
+      const normalizedStability = Math.max(0, Math.min(1, 1 - (variance / 0.1)));
+      stabilityFactor = normalizedStability;
+    }
+    
+    // Consistencia de picos
+    let peakConsistencyFactor = 0.5;
+    if (peakHistoryRef.current.length >= 3) {
+      const recentPeaks = peakHistoryRef.current.slice(-3);
+      const intervals = [];
+      for (let i = 1; i < recentPeaks.length; i++) {
+        intervals.push(recentPeaks[i].time - recentPeaks[i-1].time);
+      }
+      
+      if (intervals.length >= 2) {
+        const intervalVariation = Math.abs(intervals[1] - intervals[0]) / Math.max(intervals[0], 1);
+        peakConsistencyFactor = Math.max(0, Math.min(1, 1 - intervalVariation));
+      }
+    }
+    
+    // Combinar factores con pesos optimizados
+    return (
+      amplitudeFactor * 0.3 + 
+      confidenceFactor * 0.3 + 
+      stabilityFactor * 0.2 + 
+      peakConsistencyFactor * 0.2
+    );
+  }, []);
+
   // Función mejorada para validar si un pico es genuino
   const validatePeak = useCallback((result: HeartBeatResult): HeartBeatResult => {
+    const currentTime = Date.now();
+    
     // Si no es un pico, no hay nada que validar
     if (!result.isPeak) {
       return result;
@@ -92,11 +130,17 @@ export const useHeartBeatProcessor = () => {
       return { ...result, isPeak: false };
     }
     
+    // Almacenar confianza para análisis
+    recentConfidencesRef.current.push(result.confidence);
+    if (recentConfidencesRef.current.length > CONFIDENCE_HISTORY_SIZE) {
+      recentConfidencesRef.current.shift();
+    }
+    
     // Verificar la consistencia de los últimos valores de confianza
-    if (recentConfidencesRef.current.length >= 3) {
+    if (recentConfidencesRef.current.length >= 5) {
       const avgConfidence = recentConfidencesRef.current
-        .slice(-3)
-        .reduce((sum, conf) => sum + conf, 0) / 3;
+        .slice(-5)
+        .reduce((sum, conf) => sum + conf, 0) / 5;
       
       // Si la confianza promedio es baja, es probable que sea un falso positivo
       if (avgConfidence < MIN_CONFIDENCE_THRESHOLD * 0.9) {
@@ -104,78 +148,127 @@ export const useHeartBeatProcessor = () => {
       }
     }
     
-    // Si es un pico válido, almacenar su valor filtrado para análisis
-    if (result.filteredValue !== undefined) {
-      peakValuesRef.current.push(result.filteredValue);
-      if (peakValuesRef.current.length > 10) {
-        peakValuesRef.current.shift();
+    // Verificar consistencia temporal con picos anteriores
+    if (peakHistoryRef.current.length >= 2) {
+      const lastPeakTime = peakHistoryRef.current[peakHistoryRef.current.length - 1].time;
+      const timeSinceLastPeak = currentTime - lastPeakTime;
+      
+      // Calcular intervalo promedio entre picos recientes
+      let avgInterval = 0;
+      let intervalCount = 0;
+      
+      for (let i = 1; i < peakHistoryRef.current.length; i++) {
+        const interval = peakHistoryRef.current[i].time - peakHistoryRef.current[i-1].time;
+        if (interval > 200 && interval < 2000) { // Rango válido para intervalos RR (30-300 BPM)
+          avgInterval += interval;
+          intervalCount++;
+        }
+      }
+      
+      if (intervalCount > 0) {
+        avgInterval /= intervalCount;
+        
+        // Si el tiempo desde el último pico es demasiado corto (menos del 70% del intervalo promedio)
+        // probablemente es un falso positivo
+        if (timeSinceLastPeak < avgInterval * 0.7) {
+          return { ...result, isPeak: false };
+        }
       }
     }
     
-    // Si pasa todas las validaciones, es un pico genuino
+    // Si pasa todas las validaciones, registrar el pico
+    if (result.filteredValue !== undefined) {
+      peakHistoryRef.current.push({
+        time: currentTime,
+        value: result.filteredValue
+      });
+      
+      if (peakHistoryRef.current.length > PEAK_HISTORY_SIZE) {
+        peakHistoryRef.current.shift();
+      }
+    }
+    
+    // Calcular calidad de señal
+    const signalQuality = calculateSignalQuality(
+      result.filteredValue || 0, 
+      result.confidence
+    );
+    
+    // Rechazar picos con calidad de señal muy baja
+    if (signalQuality < SIGNAL_QUALITY_THRESHOLD) {
+      return { ...result, isPeak: false };
+    }
+    
+    // Es un pico genuino
     return result;
-  }, [MIN_CONFIDENCE_THRESHOLD]);
+  }, [MIN_CONFIDENCE_THRESHOLD, CONFIDENCE_HISTORY_SIZE, PEAK_HISTORY_SIZE, SIGNAL_QUALITY_THRESHOLD, calculateSignalQuality]);
 
-  // Función mejorada para estabilizar el BPM
-  const stabilizeBPM = useCallback((bpm: number, confidence: number): number => {
+  // Función mejorada para estabilizar BPM
+  const stabilizeBPM = useCallback((instantBPM: number, confidence: number): number => {
     const currentTime = Date.now();
     
-    // No actualizar si el tiempo desde la última actualización es muy corto
-    if (currentTime - lastValidBpmTimeRef.current < MIN_TIME_BETWEEN_BPM_UPDATES) {
-      return currentBPM;
+    // Registrar BPM en historial
+    bpmHistoryRef.current.push({
+      time: currentTime,
+      bpm: instantBPM,
+      confidence
+    });
+    
+    if (bpmHistoryRef.current.length > BPM_HISTORY_SIZE) {
+      bpmHistoryRef.current.shift();
     }
     
-    // Almacenar BPM y confianza en historial
-    if (bpm > 0) {
-      bpmHistoryRef.current.push(bpm);
-      confidenceHistoryRef.current.push(confidence);
-      
-      if (bpmHistoryRef.current.length > MAX_BPM_HISTORY) {
-        bpmHistoryRef.current.shift();
-        confidenceHistoryRef.current.shift();
-      }
-    }
-    
-    // Si no hay suficientes datos, devolver el BPM actual
+    // Si no hay suficiente historial, devolver el valor actual
     if (bpmHistoryRef.current.length < 3) {
-      return bpm > 0 ? bpm : currentBPM;
+      return instantBPM;
     }
     
-    // Calcular BPM ponderado por confianza
+    // Calcular BPM promedio ponderado por confianza
     let totalWeight = 0;
     let weightedSum = 0;
     
-    // Dar más peso a valores recientes y con mayor confianza
-    for (let i = 0; i < bpmHistoryRef.current.length; i++) {
+    // Dar más peso a valores recientes y con alta confianza
+    bpmHistoryRef.current.forEach((item, index) => {
       // Factor de recencia: valores más recientes tienen más peso
-      const recencyFactor = 0.5 + (i / bpmHistoryRef.current.length) * 0.5;
-      
-      // Peso combinado: confianza * recencia
-      const weight = confidenceHistoryRef.current[i] * recencyFactor;
+      const recencyFactor = (index + 1) / bpmHistoryRef.current.length;
+      // Peso combinado
+      const weight = item.confidence * recencyFactor;
       
       totalWeight += weight;
-      weightedSum += bpmHistoryRef.current[i] * weight;
+      weightedSum += item.bpm * weight;
+    });
+    
+    if (totalWeight === 0) return instantBPM;
+    
+    const avgBPM = weightedSum / totalWeight;
+    
+    // Detectar y filtrar valores atípicos
+    if (Math.abs(instantBPM - avgBPM) / avgBPM > BPM_OUTLIER_THRESHOLD) {
+      console.log(`useHeartBeatProcessor: Valor atípico filtrado - BPM: ${instantBPM}, Promedio: ${avgBPM}`);
+      return avgBPM;
     }
     
-    // Calcular BPM ponderado
-    const weightedBPM = totalWeight > 0 ? weightedSum / totalWeight : bpm;
+    // Aplicar suavizado adaptativo
+    // Más suavizado cuando hay más historia y mayor variabilidad
+    const variability = calculateBPMVariability();
+    const adaptiveFactor = Math.min(0.3, 0.1 + variability * 0.2);
     
-    // Aplicar suavizado exponencial para evitar cambios bruscos
-    const smoothedBPM = currentBPM > 0 
-      ? currentBPM * (1 - BPM_SMOOTHING_FACTOR) + weightedBPM * BPM_SMOOTHING_FACTOR
-      : weightedBPM;
+    return Math.round(instantBPM * adaptiveFactor + avgBPM * (1 - adaptiveFactor));
+  }, [BPM_HISTORY_SIZE, BPM_OUTLIER_THRESHOLD]);
+
+  // Nueva función para calcular la variabilidad del BPM
+  const calculateBPMVariability = useCallback((): number => {
+    if (bpmHistoryRef.current.length < 3) return 0;
     
-    // Verificar estabilidad
-    const bpmDiff = Math.abs(smoothedBPM - currentBPM);
-    const isStable = bpmDiff <= BPM_STABILITY_THRESHOLD && confidence >= MIN_CONFIDENCE_FOR_STABLE_BPM;
+    const bpmValues = bpmHistoryRef.current.map(item => item.bpm);
+    const mean = bpmValues.reduce((sum, val) => sum + val, 0) / bpmValues.length;
     
-    // Actualizar tiempo de última actualización válida
-    if (isStable || currentBPM === 0) {
-      lastValidBpmTimeRef.current = currentTime;
-    }
+    const squaredDiffs = bpmValues.map(val => Math.pow(val - mean, 2));
+    const variance = squaredDiffs.reduce((sum, val) => sum + val, 0) / bpmValues.length;
     
-    return Math.round(smoothedBPM);
-  }, [currentBPM, BPM_SMOOTHING_FACTOR, BPM_STABILITY_THRESHOLD, MIN_CONFIDENCE_FOR_STABLE_BPM, MIN_TIME_BETWEEN_BPM_UPDATES, MAX_BPM_HISTORY]);
+    // Normalizar variabilidad entre 0 y 1
+    return Math.min(1, Math.sqrt(variance) / 10);
+  }, []);
 
   const processSignal = useCallback((value: number): HeartBeatResult => {
     if (!processorRef.current) {
@@ -192,6 +285,12 @@ export const useHeartBeatProcessor = () => {
       };
     }
 
+    console.log('useHeartBeatProcessor - processSignal:', {
+      inputValue: value,
+      currentProcessor: !!processorRef.current,
+      timestamp: new Date().toISOString()
+    });
+
     // Almacenar señal en buffer para análisis
     signalBufferRef.current.push(value);
     // Limitar tamaño del buffer para controlar memoria
@@ -199,34 +298,47 @@ export const useHeartBeatProcessor = () => {
       signalBufferRef.current = signalBufferRef.current.slice(-300);
     }
 
-    // Aplicar filtrado adicional para reducir ruido
+    // Aplicar filtrado mejorado para reducir ruido
     const filteredValue = applyMedianFilter(value);
     
     // Procesar la señal con el filtro aplicado
     const result = processorRef.current.processSignal(filteredValue);
     const rrData = processorRef.current.getRRIntervals();
 
-    // Almacenar valores de confianza para validación
-    recentConfidencesRef.current.push(result.confidence);
-    if (recentConfidencesRef.current.length > 10) {
-      recentConfidencesRef.current.shift();
+    // Validación mejorada de picos para eliminar falsos positivos
+    const validatedResult = validatePeak({
+      ...result,
+      rrData
+    });
+
+    // Estabilizar BPM si es un valor válido
+    let stabilizedBPM = validatedResult.bpm;
+    if (validatedResult.bpm > 0 && validatedResult.confidence > MIN_CONFIDENCE_THRESHOLD * 0.8) {
+      stabilizedBPM = stabilizeBPM(validatedResult.bpm, validatedResult.confidence);
     }
 
-    // Validación de picos para eliminar falsos positivos
-    const validatedResult = validatePeak(result);
-
-    // Si es un pico válido, actualizar BPM
-    if (validatedResult.isPeak && validatedResult.bpm > 0) {
-      const stabilizedBPM = stabilizeBPM(validatedResult.bpm, validatedResult.confidence);
+    console.log('useHeartBeatProcessor - result:', {
+      rawBpm: result.bpm,
+      stabilizedBpm: stabilizedBPM,
+      confidence: result.confidence,
+      isPeak: result.isPeak,
+      validatedIsPeak: validatedResult.isPeak,
+      arrhythmiaCount: result.arrhythmiaCount,
+      rrIntervals: rrData.intervals,
+      timestamp: new Date().toISOString()
+    });
+    
+    if (stabilizedBPM > 0) {
       setCurrentBPM(stabilizedBPM);
       setConfidence(validatedResult.confidence);
     }
 
     return {
       ...validatedResult,
+      bpm: stabilizedBPM,
       rrData
     };
-  }, [applyMedianFilter, validatePeak, stabilizeBPM]);
+  }, [applyMedianFilter, validatePeak, stabilizeBPM, MIN_CONFIDENCE_THRESHOLD]);
 
   const reset = useCallback(() => {
     console.log('useHeartBeatProcessor: Reseteando processor');
@@ -240,10 +352,8 @@ export const useHeartBeatProcessor = () => {
     signalBufferRef.current = [];
     recentValuesRef.current = [];
     recentConfidencesRef.current = [];
-    peakValuesRef.current = [];
+    peakHistoryRef.current = [];
     bpmHistoryRef.current = [];
-    confidenceHistoryRef.current = [];
-    lastValidBpmTimeRef.current = 0;
     
     // Forzar garbage collection si está disponible
     if (window.gc) {
@@ -270,10 +380,8 @@ export const useHeartBeatProcessor = () => {
     signalBufferRef.current = [];
     recentValuesRef.current = [];
     recentConfidencesRef.current = [];
-    peakValuesRef.current = [];
+    peakHistoryRef.current = [];
     bpmHistoryRef.current = [];
-    confidenceHistoryRef.current = [];
-    lastValidBpmTimeRef.current = 0;
     
     // Recrear el procesador para asegurar limpieza completa
     processorRef.current = new HeartBeatProcessor();
