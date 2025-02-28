@@ -10,18 +10,18 @@ export class VitalSignsProcessor {
   private readonly PEAK_THRESHOLD = 0.3;
 
   // Constantes específicas para SpO2 - RECALIBRADAS CON VALORES MÉDICOS PRECISOS
-  private readonly SPO2_MIN_AC_VALUE = 0.10;  // Reducido para mayor sensibilidad
+  private readonly SPO2_MIN_AC_VALUE = 0.15;  // Aumentado para exigir mejor señal
   private readonly SPO2_R_RATIO_A = 100.5;    // Ajustado para máximo de 98%
   private readonly SPO2_R_RATIO_B = 16.5;     // Coeficiente ajustado para mejor precisión
   private readonly SPO2_MIN_VALID_VALUE = 85; // Mínimo valor válido de SpO2
   private readonly SPO2_MAX_VALID_VALUE = 98; // Máximo valor normal de SpO2
   private readonly SPO2_BASELINE = 96;        // Valor base típico para personas sanas
-  private readonly SPO2_MOVING_AVERAGE_ALPHA = 0.35; // Aumentado para dar más peso a nuevos valores
+  private readonly SPO2_MOVING_AVERAGE_ALPHA = 0.10; // Reducido para mayor estabilidad
 
-  // Nuevos parámetros para mejor estabilidad
-  private readonly SPO2_STABILITY_THRESHOLD = 0.6;   // Reducido para aceptar más lecturas
-  private readonly SPO2_MIN_VALID_READINGS = 3;      // Reducido para actualizar más rápido
-  private readonly SPO2_MAX_MOVEMENT_TOLERANCE = 0.35; // Aumentado para tolerar más movimiento
+  // Parámetros para mejor estabilidad
+  private readonly SPO2_STABILITY_THRESHOLD = 0.65;   // Aumentado para exigir mejor calidad
+  private readonly SPO2_MIN_VALID_READINGS = 5;      // Aumentado para mayor estabilidad
+  private readonly SPO2_MAX_MOVEMENT_TOLERANCE = 0.3; // Reducido para rechazar movimiento
 
   // Constantes para el algoritmo de presión arterial - RECALIBRADAS PARA PRECISIÓN REAL
   private readonly BP_BASELINE_SYSTOLIC = 120;  // Presión sistólica de referencia
@@ -135,31 +135,18 @@ export class VitalSignsProcessor {
       arrhythmiaStatus = `SIN ARRITMIAS|${this.arrhythmiaCount}`;
     }
 
-    // Calcular SpO2 con valores dinámicos
+    // Calcular SpO2 con valores reales (sin variaciones artificiales)
     let spo2 = 0;
     if (this.ppgValues.length >= 60) {
       spo2 = this.calculateSpO2(this.ppgValues.slice(-60));
       
-      // Forzar variación natural para evitar valores clavados - MEJORADO
+      // NO añadir variaciones artificiales - usar solo el valor real calculado
       if (spo2 > 0) {
-        // Variación fisiológica natural más pronunciada (±2%)
-        const variationBase = Math.sin(this.measurementCount / 5) * 1.5;
-        const randomComponent = (Math.random() - 0.5) * 1.0;
-        const variation = variationBase + randomComponent;
-        
-        spo2 = Math.max(this.SPO2_MIN_VALID_VALUE, 
-                       Math.min(this.SPO2_MAX_VALID_VALUE, 
-                              Math.round(spo2 + variation)));
-        
-        console.log("VitalSignsProcessor - SpO2 con variación natural:", {
-          original: this.lastSpo2Value,
-          conVariacion: spo2,
-          variation
-        });
+        console.log("VitalSignsProcessor - SpO2 real calculado:", spo2);
       }
     }
     
-    // Calcular presión arterial - ahora sin variaciones aleatorias
+    // Calcular presión arterial
     const bp = this.calculateBloodPressure(this.ppgValues.slice(-60));
     const pressure = `${bp.systolic}/${bp.diastolic}`;
 
@@ -321,7 +308,7 @@ export class VitalSignsProcessor {
       const ac = this.calculateAC(values);
       const dc = this.calculateDC(values);
 
-      // Verificación más estricta de la calidad de señal
+      // Verificación de la calidad de señal
       if (ac < this.SPO2_MIN_AC_VALUE || dc === 0) {
         return 0;
       }
@@ -332,39 +319,21 @@ export class VitalSignsProcessor {
       // Ecuación ajustada para rango más preciso (85-98%)
       let spo2 = this.SPO2_R_RATIO_A - (this.SPO2_R_RATIO_B * R);
       
-      // Verificar calidad de señal - MENOS ESTRICTO
+      // Verificar calidad de señal
       const signalQuality = this.calculateSignalQuality(values);
       if (signalQuality < this.SPO2_STABILITY_THRESHOLD) {
         console.log("Calidad de señal insuficiente:", signalQuality);
-        // Retornar un valor basado en el último pero con variación para evitar estancamiento
-        if (this.lastSpo2Value > 0) {
-          // Usar variación fisiológica natural en lugar de aleatoria simple
-          const variation = this.generatePhysiologicalVariation();
-          return Math.round(Math.max(this.SPO2_MIN_VALID_VALUE, 
-                                   Math.min(this.SPO2_MAX_VALID_VALUE, 
-                                          this.lastSpo2Value + variation)));
-        }
-        return 0;
+        return 0; // No devolver valores si la calidad es baja
       }
 
-      // Detección de movimiento mejorada - MENOS ESTRICTO
+      // Detección de movimiento
       const movement = this.detectMovement(values);
       if (movement > this.SPO2_MAX_MOVEMENT_TOLERANCE) {
-        console.log("Movimiento detectado:", movement);
-        // Retornar un valor basado en el último pero con variación para evitar estancamiento
-        if (this.lastSpo2Value > 0) {
-          // Usar variación fisiológica natural en lugar de aleatoria simple
-          const variation = this.generatePhysiologicalVariation();
-          return Math.round(Math.max(this.SPO2_MIN_VALID_VALUE, 
-                                   Math.min(this.SPO2_MAX_VALID_VALUE, 
-                                          this.lastSpo2Value + variation)));
-        }
-        return 0;
+        console.log("Movimiento excesivo detectado:", movement);
+        return 0; // No devolver valores durante movimiento
       }
 
-      // Añadir variación natural basada en la respiración - MEJORADA
-      const physiologicalVariation = this.generatePhysiologicalVariation();
-      spo2 += physiologicalVariation;
+      // NO añadir variaciones artificiales - usar solo el valor real calculado
 
       // Aplicar límites fisiológicos estrictos
       spo2 = Math.max(this.SPO2_MIN_VALID_VALUE, 
@@ -377,8 +346,7 @@ export class VitalSignsProcessor {
         R,
         rawSpo2: spo2,
         signalQuality,
-        movement,
-        physiologicalVariation
+        movement
       });
 
       return Math.round(spo2);
@@ -407,23 +375,6 @@ export class VitalSignsProcessor {
     return Math.min(stability * strength, 1);
   }
 
-  // Nueva función para generar variaciones fisiológicas naturales en SpO2
-  private generatePhysiologicalVariation(): number {
-    // Componente de respiración (ciclo lento)
-    const breathingCycle = Math.sin((this.measurementCount % 30) / 30 * Math.PI * 2);
-    const breathingEffect = breathingCycle * 1.2;
-    
-    // Componente de actividad cardíaca (ciclo más rápido)
-    const heartCycle = Math.sin((this.measurementCount % 8) / 8 * Math.PI * 2);
-    const heartEffect = heartCycle * 0.5;
-    
-    // Componente aleatorio pequeño (ruido natural)
-    const randomNoise = (Math.random() - 0.5) * 0.8;
-    
-    // Combinar todos los efectos
-    return breathingEffect + heartEffect + randomNoise;
-  }
-
   private detectMovement(values: number[]): number {
     if (values.length < 3) return 1;
     
@@ -444,41 +395,32 @@ export class VitalSignsProcessor {
     // Obtener SpO2 raw con nueva calibración
       const rawSpO2 = this.calculateSpO2Raw(values);
     
-    // Validación más estricta - MODIFICADA PARA EVITAR ESTANCAMIENTO
+    // Validación
     if (rawSpO2 === 0) {
-      // Si no hay valor válido pero tenemos un valor anterior, retornar con variación
-      if (this.lastSpo2Value > 0) {
-        // Usar variación fisiológica natural en lugar de aleatoria simple
-        const variation = this.generatePhysiologicalVariation();
-        return Math.round(Math.max(this.SPO2_MIN_VALID_VALUE, 
-                                 Math.min(this.SPO2_MAX_VALID_VALUE, 
-                                        this.lastSpo2Value + variation)));
+        return 0;
       }
-      return 0;
-    }
 
     // Buffer para promediar valores
     this.spo2Buffer.push(rawSpO2);
-    if (this.spo2Buffer.length > this.SPO2_MIN_VALID_READINGS) {
+    if (this.spo2Buffer.length > this.SPO2_BUFFER_SIZE) {
         this.spo2Buffer.shift();
       }
 
-    // Solo proceder si tenemos suficientes lecturas válidas - MENOS ESTRICTO
+    // Solo proceder si tenemos suficientes lecturas válidas
     if (this.spo2Buffer.length < this.SPO2_MIN_VALID_READINGS) {
-      // Si no tenemos suficientes lecturas pero tenemos un valor raw, usarlo directamente
-      if (rawSpO2 > 0) {
-        this.lastSpo2Value = rawSpO2;
-        return rawSpO2;
-      }
       return 0;
     }
 
-    // Calcular promedio móvil exponencial con nuevos parámetros - MÁS PESO A NUEVOS VALORES
+    // Usar mediana en lugar de promedio para mayor estabilidad
+    const sortedValues = [...this.spo2Buffer].sort((a, b) => a - b);
+    const medianValue = sortedValues[Math.floor(sortedValues.length / 2)];
+    
+    // Calcular promedio móvil exponencial para estabilidad sin perder precisión
     let smoothedValue;
     if (this.lastSpo2Value === 0) {
-      smoothedValue = rawSpO2;
+      smoothedValue = medianValue;
         } else {
-      smoothedValue = (this.SPO2_MOVING_AVERAGE_ALPHA * rawSpO2) +
+      smoothedValue = (this.SPO2_MOVING_AVERAGE_ALPHA * medianValue) +
                      ((1 - this.SPO2_MOVING_AVERAGE_ALPHA) * this.lastSpo2Value);
     }
 
@@ -493,6 +435,7 @@ export class VitalSignsProcessor {
     // Logging para depuración
     console.log("SpO2 Final calculado:", {
         raw: rawSpO2,
+      median: medianValue,
       smoothed: smoothedValue,
       final: finalValue,
       bufferSize: this.spo2Buffer.length
@@ -1091,7 +1034,7 @@ export class VitalSignsProcessor {
     
     if (peakIndices.length === 0 || valleyIndices.length === 0) {
       // Si no se encuentran picos/valles, usar el método simple
-      return Math.max(...values) - Math.min(...values);
+    return Math.max(...values) - Math.min(...values);
     }
     
     // Calcular la amplitud media entre picos y valles
