@@ -35,9 +35,9 @@ const PPGSignalMeter = ({
   const lastArrhythmiaTime = useRef<number>(0);
   const arrhythmiaCountRef = useRef<number>(0);
   
-  const WINDOW_WIDTH_MS = 2000;
-  const CANVAS_WIDTH = 700;
-  const CANVAS_HEIGHT = 500;
+  const WINDOW_WIDTH_MS = 2000; // Reducido para que los datos se muevan más rápido en pantalla
+  const CANVAS_WIDTH = 700; // Aumentado para mejor visualización
+  const CANVAS_HEIGHT = 500; // Aumentado para mejor visualización
   const GRID_SIZE_X = 30;
   const GRID_SIZE_Y = 30;
   const verticalScale = 35.0;
