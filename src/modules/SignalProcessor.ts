@@ -26,13 +26,13 @@ export class PPGSignalProcessor implements SignalProcessor {
   private kalmanFilter: KalmanFilter;
   private lastValues: number[] = [];
   private readonly DEFAULT_CONFIG = {
-    BUFFER_SIZE: 60,           // Optimizado para mejor análisis
+    BUFFER_SIZE: 60,           // Aumentado para mejor análisis
     MIN_RED_THRESHOLD: 20,     // Reducido para mejor sensibilidad
     MAX_RED_THRESHOLD: 255,    // Máximo valor posible
-    STABILITY_WINDOW: 20,      // Aumentado para mejor estabilidad
-    MIN_STABILITY_COUNT: 10,   // Aumentado para reducir falsos positivos
-    HYSTERESIS: 18,           // Aumentado para mejor estabilidad
-    MIN_CONSECUTIVE_DETECTIONS: 8  // Aumentado para mayor robustez
+    STABILITY_WINDOW: 12,      // Optimizado para estabilidad
+    MIN_STABILITY_COUNT: 6,    // Ajustado para reducir falsos positivos
+    HYSTERESIS: 12,           // Optimizado para estabilidad
+    MIN_CONSECUTIVE_DETECTIONS: 4  // Reducido para respuesta más rápida
   };
 
   private currentConfig: typeof this.DEFAULT_CONFIG;
@@ -41,9 +41,9 @@ export class PPGSignalProcessor implements SignalProcessor {
   private consecutiveDetections: number = 0;
   private isCurrentlyDetected: boolean = false;
   private lastDetectionTime: number = 0;
-  private readonly DETECTION_TIMEOUT = 350;     // Optimizado para respuesta más rápida
-  private readonly MIN_SIGNAL_AMPLITUDE = 0.12; // Ajustado para mejor sensibilidad
-  private readonly QUALITY_THRESHOLD = 0.70;    // Aumentado para mayor precisión
+  private readonly DETECTION_TIMEOUT = 300;     // Reducido para respuesta más rápida
+  private readonly MIN_SIGNAL_AMPLITUDE = 0.06; // Ajustado para mejor sensibilidad
+  private readonly QUALITY_THRESHOLD = 0.60;    // Ajustado para precisión
 
   constructor(
     public onSignalReady?: (signal: ProcessedSignal) => void,
@@ -173,13 +173,16 @@ export class PPGSignalProcessor implements SignalProcessor {
     const avgBlue = blueSum / count;
 
     // Mejorada la detección de tejido con sangre
-    const isRedDominant = avgRed > (avgGreen * 1.5) && avgRed > (avgBlue * 1.5);
+    const isRedDominant = avgRed > (avgGreen * 1.3) && avgRed > (avgBlue * 1.3);
     const hasGoodIntensity = avgRed > this.currentConfig.MIN_RED_THRESHOLD;
     
     return (isRedDominant && hasGoodIntensity) ? avgRed : 0;
   }
 
-  private analyzeSignal(filtered: number, rawValue: number): { isFingerDetected: boolean, quality: number } {
+  private analyzeSignal(filtered: number, rawValue: number): { 
+    isFingerDetected: boolean, 
+    quality: number 
+  } {
     const currentTime = Date.now();
     const timeSinceLastDetection = currentTime - this.lastDetectionTime;
     
@@ -200,23 +203,22 @@ export class PPGSignalProcessor implements SignalProcessor {
       
       return { 
         isFingerDetected: this.isCurrentlyDetected, 
-        quality: this.isCurrentlyDetected ? Math.max(0, this.stableFrameCount * 10) : 0 
+        quality: this.isCurrentlyDetected ? Math.max(0, this.stableFrameCount * 8) : 0 
       };
     }
 
     // Análisis de estabilidad mejorado
     const stability = this.calculateStability();
-    if (stability > 0.8) { // Aumentado el umbral de estabilidad
+    if (stability > 0.75) { // Ajustado el umbral de estabilidad
       this.stableFrameCount = Math.min(
         this.stableFrameCount + 1,
         this.currentConfig.MIN_STABILITY_COUNT * 2
       );
     } else {
-      this.stableFrameCount = Math.max(0, this.stableFrameCount - 0.5);
+      this.stableFrameCount = Math.max(0, this.stableFrameCount - 0.7);
     }
 
     // Actualización mejorada del estado de detección
-    const wasDetected = this.isCurrentlyDetected;
     const isStableNow = this.stableFrameCount >= this.currentConfig.MIN_STABILITY_COUNT;
 
     if (isStableNow) {
@@ -230,15 +232,15 @@ export class PPGSignalProcessor implements SignalProcessor {
     }
 
     // Cálculo mejorado de la calidad de señal
-    const stabilityScore = Math.pow(this.stableFrameCount / (this.currentConfig.MIN_STABILITY_COUNT * 2), 1.5);
+    const stabilityScore = Math.pow(this.stableFrameCount / (this.currentConfig.MIN_STABILITY_COUNT * 2), 1.3);
     const intensityScore = Math.min(
       (rawValue - this.currentConfig.MIN_RED_THRESHOLD) / 
       (this.currentConfig.MAX_RED_THRESHOLD - this.currentConfig.MIN_RED_THRESHOLD), 
       1
     );
     
-    // Ponderación ajustada para favorecer la estabilidad
-    const quality = Math.round((stabilityScore * 0.7 + intensityScore * 0.3) * 100);
+    // Ponderación ajustada
+    const quality = Math.round((stabilityScore * 0.65 + intensityScore * 0.35) * 100);
 
     return {
       isFingerDetected: this.isCurrentlyDetected,
@@ -257,8 +259,8 @@ export class PPGSignalProcessor implements SignalProcessor {
     const avgVariation = variations.reduce((sum, val) => sum + val, 0) / variations.length;
     const maxVariation = Math.max(...variations);
     
-    // Combinar variación promedio y máxima para mejor estabilidad
-    const stabilityScore = 1 - (avgVariation / 50) * 0.7 - (maxVariation / 100) * 0.3;
+    // Mejorada la fórmula de estabilidad
+    const stabilityScore = 1 - (avgVariation / 40) * 0.65 - (maxVariation / 80) * 0.35;
     return Math.max(0, Math.min(1, stabilityScore));
   }
 

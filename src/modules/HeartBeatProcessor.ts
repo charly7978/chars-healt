@@ -4,28 +4,28 @@ export class HeartBeatProcessor {
   private readonly WINDOW_SIZE = 150;
   private readonly MIN_BPM = 35;
   private readonly MAX_BPM = 200;
-  private readonly SIGNAL_THRESHOLD = 0.22;
-  private readonly MIN_CONFIDENCE = 0.65;
-  private readonly DERIVATIVE_THRESHOLD = -0.018;
-  private readonly MIN_PEAK_TIME_MS = 280;
-  private readonly WARMUP_TIME_MS = 1200;
+  private readonly SIGNAL_THRESHOLD = 0.20;
+  private readonly MIN_CONFIDENCE = 0.55;
+  private readonly DERIVATIVE_THRESHOLD = -0.015;
+  private readonly MIN_PEAK_TIME_MS = 200;
+  private readonly WARMUP_TIME_MS = 1000;
 
   // Parámetros de filtrado optimizados
-  private readonly MEDIAN_FILTER_WINDOW = 9;
-  private readonly MOVING_AVERAGE_WINDOW = 7;
-  private readonly EMA_ALPHA = 0.22;
+  private readonly MEDIAN_FILTER_WINDOW = 5;
+  private readonly MOVING_AVERAGE_WINDOW = 3;
+  private readonly EMA_ALPHA = 0.3;
   private readonly BASELINE_FACTOR = 0.95;
 
   // Parámetros de beep optimizados
-  private readonly BEEP_PRIMARY_FREQUENCY = 880;
-  private readonly BEEP_SECONDARY_FREQUENCY = 440;
-  private readonly BEEP_DURATION = 60;
-  private readonly BEEP_VOLUME = 0.6;
-  private readonly MIN_BEEP_INTERVAL_MS = 250;
+  private readonly BEEP_PRIMARY_FREQUENCY = 1000;
+  private readonly BEEP_SECONDARY_FREQUENCY = 500;
+  private readonly BEEP_DURATION = 40;
+  private readonly BEEP_VOLUME = 0.4;
+  private readonly MIN_BEEP_INTERVAL_MS = 150;
 
   // ────────── AUTO-RESET SI LA SEÑAL ES MUY BAJA ──────────
   private readonly LOW_SIGNAL_THRESHOLD = 0.012;
-  private readonly LOW_SIGNAL_FRAMES = 25;
+  private readonly LOW_SIGNAL_FRAMES = 15;
   private lowSignalCount = 0;
 
   // Variables internas
@@ -265,18 +265,21 @@ export class HeartBeatProcessor {
     const isOverThreshold =
       derivative < this.DERIVATIVE_THRESHOLD &&
       normalizedValue > this.SIGNAL_THRESHOLD &&
-      this.lastValue > this.baseline * 0.97;
+      this.lastValue > this.baseline * 0.95;
 
     const amplitudeConfidence = Math.min(
-      Math.max(Math.abs(normalizedValue) / (this.SIGNAL_THRESHOLD * 1.6), 0),
+      Math.max(Math.abs(normalizedValue) / (this.SIGNAL_THRESHOLD * 1.5), 0),
       1
     );
     const derivativeConfidence = Math.min(
-      Math.max(Math.abs(derivative) / Math.abs(this.DERIVATIVE_THRESHOLD * 0.75), 0),
+      Math.max(Math.abs(derivative) / Math.abs(this.DERIVATIVE_THRESHOLD * 0.7), 0),
       1
     );
 
-    const confidence = (amplitudeConfidence * 0.7 + derivativeConfidence * 0.3);
+    const confidence = (
+      amplitudeConfidence * 0.6 + 
+      derivativeConfidence * 0.4
+    );
 
     return { isPeak: isOverThreshold, confidence };
   }
@@ -294,10 +297,11 @@ export class HeartBeatProcessor {
     if (isPeak && !this.lastConfirmedPeak && confidence >= this.MIN_CONFIDENCE) {
       if (this.peakConfirmationBuffer.length >= 3) {
         const len = this.peakConfirmationBuffer.length;
-        const goingDown1 =
-          this.peakConfirmationBuffer[len - 1] < this.peakConfirmationBuffer[len - 2];
-        const goingDown2 =
-          this.peakConfirmationBuffer[len - 2] < this.peakConfirmationBuffer[len - 3];
+        
+        const goingDown1 = this.peakConfirmationBuffer[len - 1] < 
+                         this.peakConfirmationBuffer[len - 2] * 0.95;
+        const goingDown2 = this.peakConfirmationBuffer[len - 2] < 
+                         this.peakConfirmationBuffer[len - 3] * 0.95;
 
         if (goingDown1 && goingDown2) {
           this.lastConfirmedPeak = true;
