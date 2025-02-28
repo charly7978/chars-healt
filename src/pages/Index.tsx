@@ -33,67 +33,69 @@ const Index = () => {
 
   return (
     <div 
-      className="fixed inset-0" 
+      className="fixed inset-0 flex flex-col bg-black" 
       style={{ 
-        height: '100dvh',
-        minHeight: '100vh',
-        touchAction: 'none',
-        overscrollBehavior: 'none',
-        WebkitOverflowScrolling: 'touch',
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
+        height: 'calc(100vh + env(safe-area-inset-bottom))',
+        paddingTop: 'env(safe-area-inset-top)',
+        paddingBottom: 'env(safe-area-inset-bottom)'
       }}
     >
       {/* Componentes invisibles que manejan efectos */}
       <ImmersiveMode />
       <FlashManager isMonitoring={isMonitoring} isCameraOn={isCameraOn} />
 
-      {/* Vista de cámara */}
-      <CameraView 
-        onStreamReady={handleStreamReady}
-        isMonitoring={isCameraOn}
-        isFingerDetected={isMonitoring ? lastSignal?.fingerDetected : false}
-        signalQuality={isMonitoring ? signalQuality : 0}
-      />
+      <div className="flex-1 relative">
+        <div className="absolute inset-0">
+          <CameraView 
+            onStreamReady={handleStreamReady}
+            isMonitoring={isCameraOn}
+            isFingerDetected={lastSignal?.fingerDetected}
+            signalQuality={signalQuality}
+          />
+        </div>
 
-      {/* Contenido principal */}
-      <div className="flex-1 flex flex-col z-10">
-        <PPGSignalMeter 
-          value={isMonitoring ? lastSignal?.filteredValue || 0 : 0}
-          quality={isMonitoring ? lastSignal?.quality || 0 : 0}
-          isFingerDetected={isMonitoring ? lastSignal?.fingerDetected || false : false}
-          onStartMeasurement={startMonitoring}
-          onReset={handleReset}
-          arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
-          rawArrhythmiaData={lastArrhythmiaData}
-        />
+        <div className="relative z-10 h-full flex flex-col">
+          <div className="flex-1">
+            <PPGSignalMeter 
+              value={lastSignal?.filteredValue || 0}
+              quality={lastSignal?.quality || 0}
+              isFingerDetected={lastSignal?.fingerDetected || false}
+              onStartMeasurement={startMonitoring}
+              onReset={handleReset}
+              arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
+              rawArrhythmiaData={lastArrhythmiaData}
+            />
+          </div>
+
+          <div className="absolute bottom-[200px] left-0 right-0 px-4">
+            <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4">
+              <div className="grid grid-cols-4 gap-2">
+                <VitalSignsDisplay 
+                  finalValues={finalValues}
+                  currentValues={{
+                    heartRate,
+                    spo2: vitalSigns.spo2,
+                    pressure: vitalSigns.pressure,
+                    arrhythmiaStatus: vitalSigns.arrhythmiaStatus
+                  }}
+                  isFinalReading={measurementComplete}
+                />
+              </div>
+            </div>
+          </div>
+
+          <ElapsedTimeDisplay 
+            elapsedTime={elapsedTime}
+            isMonitoring={isMonitoring}
+          />
+
+          <MeasurementControls 
+            isMonitoring={isMonitoring}
+            onStart={startMonitoring}
+            onReset={handleReset}
+          />
+        </div>
       </div>
-
-      {/* Muestra de signos vitales */}
-      <VitalSignsDisplay 
-        finalValues={finalValues}
-        currentValues={{
-          heartRate,
-          spo2: vitalSigns.spo2,
-          pressure: vitalSigns.pressure,
-          arrhythmiaStatus: vitalSigns.arrhythmiaStatus
-        }}
-        isFinalReading={measurementComplete}
-      />
-
-      {/* Display de tiempo transcurrido */}
-      <ElapsedTimeDisplay 
-        elapsedTime={elapsedTime}
-        isMonitoring={isMonitoring}
-      />
-
-      {/* Controles de medición */}
-      <MeasurementControls 
-        isMonitoring={isMonitoring}
-        onStart={startMonitoring}
-        onReset={handleReset}
-      />
     </div>
   );
 };

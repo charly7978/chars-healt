@@ -23,35 +23,27 @@ const VitalSignsDisplay: React.FC<VitalSignsDisplayProps> = ({
   isFinalReading
 }) => {
   return (
-    <div className="fixed bottom-[65px] left-0 right-0 px-3 z-20">
-      <div className="p-2 bg-black/60 rounded-lg">
-        <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
-          <VitalSign 
-            label="FRECUENCIA CARDÍACA"
-            value={finalValues ? finalValues.heartRate : currentValues.heartRate || "--"}
-            unit="BPM"
-            isFinalReading={isFinalReading}
-          />
-          <VitalSign 
-            label="SPO2"
-            value={finalValues ? finalValues.spo2 : currentValues.spo2 || "--"}
-            unit="%"
-            isFinalReading={isFinalReading}
-          />
-          <VitalSign 
-            label="PRESIÓN ARTERIAL"
-            value={finalValues ? finalValues.pressure : currentValues.pressure}
-            unit="mmHg"
-            isFinalReading={isFinalReading}
-          />
-          <VitalSign 
-            label="ARRITMIAS"
-            value={currentValues.arrhythmiaStatus}
-            isFinalReading={isFinalReading}
-          />
-        </div>
-      </div>
-    </div>
+    <>
+      <VitalSign 
+        label="FRECUENCIA CARDÍACA"
+        value={finalValues ? finalValues.heartRate : currentValues.heartRate || "--"}
+        unit="BPM"
+      />
+      <VitalSign 
+        label="SPO2"
+        value={finalValues ? finalValues.spo2 : currentValues.spo2 || "--"}
+        unit="%"
+      />
+      <VitalSign 
+        label="PRESIÓN ARTERIAL"
+        value={finalValues ? finalValues.pressure : currentValues.pressure}
+        unit="mmHg"
+      />
+      <VitalSign 
+        label="ARRITMIAS"
+        value={currentValues.arrhythmiaStatus}
+      />
+    </>
   );
 };
 
