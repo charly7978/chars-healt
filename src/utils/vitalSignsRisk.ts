@@ -1,4 +1,5 @@
 
+
 interface RiskSegment {
   color: string;
   label: string;
@@ -308,7 +309,7 @@ export class VitalSignsRisk {
         } else if (avgBPM >= 110) {
           return { color: '#F97316', label: 'LEVE TAQUICARDIA' };
         } else if (avgBPM >= 50) {
-          return { color: '#FFFFFF', label: 'NORMAL' };
+          return { color: '#0EA5E9', label: 'NORMAL' }; // Cambiado a azul (era #FFFFFF)
         } else if (avgBPM >= 40) {
           return { color: '#F97316', label: 'BRADICARDIA' };
         }
@@ -328,7 +329,7 @@ export class VitalSignsRisk {
     } else if (this.isStableValue(this.bpmHistory, [110, 139])) {
       currentSegment = { color: '#F97316', label: 'LEVE TAQUICARDIA' };
     } else if (this.isStableValue(this.bpmHistory, [50, 110])) {
-      currentSegment = { color: '#FFFFFF', label: 'NORMAL' };
+      currentSegment = { color: '#0EA5E9', label: 'NORMAL' }; // Cambiado a azul (era #FFFFFF)
     } else if (this.isStableValue(this.bpmHistory, [40, 49])) {
       currentSegment = { color: '#F97316', label: 'BRADICARDIA' };
     } else {
@@ -505,3 +506,4 @@ export class VitalSignsRisk {
     this.recentDiastolicValues = [];
   }
 }
+

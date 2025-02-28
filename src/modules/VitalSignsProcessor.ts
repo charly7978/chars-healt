@@ -1,7 +1,6 @@
-
 export class VitalSignsProcessor {
   private readonly WINDOW_SIZE = 300;
-  private readonly SPO2_CALIBRATION_FACTOR = 1.07; // Ajustado: era 1.02
+  private readonly SPO2_CALIBRATION_FACTOR = 1.10; // PRIMERA VARIABLE MODIFICADA: Ajustado de 1.07 a 1.10 para mejor precisión
   private readonly PERFUSION_INDEX_THRESHOLD = 0.05;
   private readonly SPO2_WINDOW = 10;
   private readonly SMA_WINDOW = 3;
@@ -13,7 +12,7 @@ export class VitalSignsProcessor {
   // Constantes específicas para SpO2 - RECALIBRADAS
   private readonly SPO2_MIN_AC_VALUE = 0.2;  // Ajustado: era 0.3 (permitir valores más bajos para sensibilidad)
   private readonly SPO2_R_RATIO_A = 112;     // Ajustado: era 110 (base más alta)
-  private readonly SPO2_R_RATIO_B = 22;      // Ajustado: era 25 (menor reducción por R)
+  private readonly SPO2_R_RATIO_B = 25;      // SEGUNDA VARIABLE MODIFICADA: Volviendo al valor original para mejor precisión
   private readonly SPO2_MIN_VALID_VALUE = 90;  // Ajustado: era 92 (permitir valores más bajos)
   private readonly SPO2_MAX_VALID_VALUE = 100; // Valor máximo fisiológico válido
   private readonly SPO2_BASELINE = 97;       // Valor base para personas sanas
@@ -205,7 +204,6 @@ export class VitalSignsProcessor {
     this.hasDetectedFirstArrhythmia = false;
     this.arrhythmiaDetected = false;
     this.arrhythmiaCount = 0;
-    // Error corregido: Se eliminó la anotación de tipo incorrecta
     this.measurementStartTime = Date.now();
     this.lastRMSSD = 0;
     this.lastRRVariation = 0;
