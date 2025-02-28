@@ -190,6 +190,7 @@ export class VitalSignsProcessor {
   }
 
   public reset() {
+    // Reiniciamos todos los valores a su estado inicial
     this.ppgValues = [];
     this.spo2Buffer = [];
     this.spo2RawBuffer = [];
@@ -204,7 +205,8 @@ export class VitalSignsProcessor {
     this.hasDetectedFirstArrhythmia = false;
     this.arrhythmiaDetected = false;
     this.arrhythmiaCount = 0;
-    this.measurementStartTime = Date.now();  // Corregido: eliminada la anotación de tipo
+    // Error corregido: Se eliminó la anotación de tipo incorrecta
+    this.measurementStartTime = Date.now();
     this.lastRMSSD = 0;
     this.lastRRVariation = 0;
     this.lastArrhythmiaTime = 0;
