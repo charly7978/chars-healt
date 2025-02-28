@@ -84,10 +84,9 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     getArrhythmiaDisplay() : 
     { text: value, ...getRiskInfo() };
 
-  // Cambio radical para eliminar cualquier forma de fondo y hacerlo completamente transparente
   return (
-    <div className="bg-transparent p-4 rounded-xl border-0">
-      <div>
+    <div className="relative overflow-hidden group bg-transparent backdrop-blur-sm rounded-xl border border-indigo-500/20 p-4 shadow-lg">
+      <div className="relative z-10">
         <h3 className="text-blue-100/80 text-xs font-medium tracking-wider mb-2">{label}</h3>
         <div className="flex flex-col items-center gap-1">
           <div className="flex items-baseline gap-1 justify-center">
