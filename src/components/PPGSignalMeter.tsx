@@ -76,16 +76,16 @@ const PPGSignalMeter = ({
     ctx.fillStyle = '#222222';
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    // Cuadrícula blanca
+    // Cuadrícula gris claro
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.strokeStyle = 'rgba(200, 200, 201, 0.15)';
     ctx.lineWidth = 0.5;
 
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X) {
       ctx.moveTo(x, 0);
       ctx.lineTo(x, CANVAS_HEIGHT);
       if (x % (GRID_SIZE_X * 4) === 0) {
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.fillStyle = '#FFFFFF';  // Números de referencia blancos
         ctx.font = '10px Inter';
         ctx.textAlign = 'center';
         ctx.fillText(`${x / 10}ms`, x, CANVAS_HEIGHT - 5);
@@ -97,7 +97,7 @@ const PPGSignalMeter = ({
       ctx.lineTo(CANVAS_WIDTH, y);
       if (y % (GRID_SIZE_Y * 4) === 0) {
         const amplitude = ((CANVAS_HEIGHT / 2) - y) / verticalScale;
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.fillStyle = '#FFFFFF';  // Números de referencia blancos
         ctx.font = '10px Inter';
         ctx.textAlign = 'right';
         ctx.fillText(amplitude.toFixed(1), 25, y + 4);
@@ -107,7 +107,7 @@ const PPGSignalMeter = ({
 
     // Líneas principales más visibles
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+    ctx.strokeStyle = 'rgba(200, 200, 201, 0.25)';
     ctx.lineWidth = 1;
 
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X * 4) {
@@ -123,7 +123,7 @@ const PPGSignalMeter = ({
 
     // Línea central más visible
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+    ctx.strokeStyle = 'rgba(200, 200, 201, 0.35)';
     ctx.lineWidth = 1.5;
     ctx.moveTo(0, CANVAS_HEIGHT / 2);
     ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT / 2);
@@ -227,7 +227,7 @@ const PPGSignalMeter = ({
             ctx.fill();
 
             ctx.font = 'bold 12px Inter';
-            ctx.fillStyle = '#FFFFFF';  // Texto blanco para fondo oscuro
+            ctx.fillStyle = '#C8C8C9';  // Números de picos cardíacos en gris claro
             ctx.textAlign = 'center';
             ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 20);
           }

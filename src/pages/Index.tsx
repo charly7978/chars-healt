@@ -262,7 +262,7 @@ const Index = () => {
         </div>
       )}
 
-      <div className="fixed bottom-0 left-0 right-0 w-full h-[70px] grid grid-cols-2 gap-px z-50">
+      <div className="fixed bottom-0 left-0 right-0 w-full h-[65px] grid grid-cols-2 gap-px z-50">
         <button 
           onClick={isMonitoring ? stopMonitoring : startMonitoring}
           className="w-full h-full text-xl font-bold text-white transition-colors duration-200"
