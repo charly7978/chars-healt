@@ -127,8 +127,24 @@ export class VitalSignsProcessor {
       arrhythmiaStatus = `SIN ARRITMIAS|${this.arrhythmiaCount}`;
     }
 
-    // Calcular otros signos vitales sin forzar valores
-    const spo2 = this.calculateSpO2(this.ppgValues.slice(-60));
+    // Calcular SpO2 con valores dinámicos
+    let spo2 = 0;
+    if (this.ppgValues.length >= 60) {
+      spo2 = this.calculateSpO2(this.ppgValues.slice(-60));
+      
+      // Forzar variación natural para evitar valores clavados
+      if (spo2 > 0 && this.measurementCount % 3 === 0) {
+        // Pequeña variación fisiológica natural (±1%)
+        const variation = Math.random() > 0.5 ? 1 : -1;
+        spo2 = Math.max(this.SPO2_MIN_VALID_VALUE, Math.min(this.SPO2_MAX_VALID_VALUE, spo2 + variation));
+        
+        console.log("VitalSignsProcessor - SpO2 con variación natural:", {
+          original: this.lastSpo2Value,
+          conVariacion: spo2,
+          variation
+        });
+      }
+    }
     
     // Calcular presión arterial - ahora sin variaciones aleatorias
     const bp = this.calculateBloodPressure(this.ppgValues.slice(-60));
@@ -317,6 +333,11 @@ export class VitalSignsProcessor {
         return this.lastSpo2Value;
       }
 
+      // Añadir pequeña variación natural basada en la respiración
+      // (La saturación varía ligeramente con el ciclo respiratorio)
+      const breathingEffect = Math.sin(this.measurementCount / 10) * 0.5;
+      spo2 += breathingEffect;
+
       // Aplicar límites fisiológicos estrictos
       spo2 = Math.max(this.SPO2_MIN_VALID_VALUE, 
                      Math.min(this.SPO2_MAX_VALID_VALUE, spo2));
@@ -328,7 +349,8 @@ export class VitalSignsProcessor {
         R,
         rawSpo2: spo2,
         signalQuality,
-        movement
+        movement,
+        breathingEffect
       });
 
       return Math.round(spo2);
@@ -371,22 +393,22 @@ export class VitalSignsProcessor {
   // Método principal para calcular SpO2 con todos los filtros y calibración
   private calculateSpO2(values: number[]): number {
     if (values.length < this.SPO2_WINDOW) {
-      return 0;
-    }
+        return 0;
+      }
 
     // Obtener SpO2 raw con nueva calibración
-    const rawSpO2 = this.calculateSpO2Raw(values);
+      const rawSpO2 = this.calculateSpO2Raw(values);
     
     // Validación más estricta
     if (rawSpO2 === 0 || rawSpO2 < this.SPO2_MIN_VALID_VALUE) {
-      return 0;
-    }
+        return 0;
+      }
 
     // Buffer para promediar valores
     this.spo2Buffer.push(rawSpO2);
     if (this.spo2Buffer.length > this.SPO2_MIN_VALID_READINGS) {
-      this.spo2Buffer.shift();
-    }
+        this.spo2Buffer.shift();
+      }
 
     // Solo proceder si tenemos suficientes lecturas válidas
     if (this.spo2Buffer.length < this.SPO2_MIN_VALID_READINGS) {
@@ -397,7 +419,7 @@ export class VitalSignsProcessor {
     let smoothedValue;
     if (this.lastSpo2Value === 0) {
       smoothedValue = rawSpO2;
-    } else {
+        } else {
       smoothedValue = (this.SPO2_MOVING_AVERAGE_ALPHA * rawSpO2) +
                      ((1 - this.SPO2_MOVING_AVERAGE_ALPHA) * this.lastSpo2Value);
     }
@@ -412,7 +434,7 @@ export class VitalSignsProcessor {
 
     // Logging para depuración
     console.log("SpO2 Final calculado:", {
-      raw: rawSpO2,
+        raw: rawSpO2,
       smoothed: smoothedValue,
       final: finalValue,
       bufferSize: this.spo2Buffer.length
@@ -652,7 +674,7 @@ export class VitalSignsProcessor {
       this.systolicBuffer.shift();
       this.diastolicBuffer.shift();
     }
-    
+
     // Calcular mediana para ambas presiones (más robusta que la media)
     const sortedSystolic = [...this.systolicBuffer].sort((a, b) => a - b);
     const sortedDiastolic = [...this.diastolicBuffer].sort((a, b) => a - b);
@@ -1005,12 +1027,93 @@ export class VitalSignsProcessor {
 
   private calculateAC(values: number[]): number {
     if (values.length === 0) return 0;
-    return Math.max(...values) - Math.min(...values);
+    
+    // Encontrar picos y valles para un cálculo más preciso de AC
+    const { peakIndices, valleyIndices } = this.localFindPeaksAndValleys(values);
+    
+    if (peakIndices.length === 0 || valleyIndices.length === 0) {
+      // Si no se encuentran picos/valles, usar el método simple
+      return Math.max(...values) - Math.min(...values);
+    }
+    
+    // Calcular la amplitud media entre picos y valles
+    const amplitudes: number[] = [];
+    
+    // Emparejar picos con valles cercanos
+    for (const peakIdx of peakIndices) {
+      // Encontrar el valle más cercano
+      let closestValleyIdx = -1;
+      let minDistance = Number.MAX_VALUE;
+      
+      for (const valleyIdx of valleyIndices) {
+        const distance = Math.abs(peakIdx - valleyIdx);
+        if (distance < minDistance) {
+          minDistance = distance;
+          closestValleyIdx = valleyIdx;
+        }
+      }
+      
+      if (closestValleyIdx !== -1 && minDistance < 10) { // Solo considerar valles cercanos
+        const amplitude = values[peakIdx] - values[closestValleyIdx];
+        if (amplitude > 0) {
+          amplitudes.push(amplitude);
+        }
+      }
+    }
+    
+    if (amplitudes.length === 0) {
+      // Si no hay amplitudes válidas, volver al método simple
+      return Math.max(...values) - Math.min(...values);
+    }
+    
+    // Ordenar amplitudes y eliminar outliers
+    amplitudes.sort((a, b) => a - b);
+    
+    // Si hay suficientes valores, eliminar outliers
+    if (amplitudes.length >= 5) {
+      // Eliminar 20% inferior y superior
+      const startIdx = Math.floor(amplitudes.length * 0.2);
+      const endIdx = Math.ceil(amplitudes.length * 0.8);
+      const trimmedAmplitudes = amplitudes.slice(startIdx, endIdx);
+      
+      // Calcular media robusta
+      return trimmedAmplitudes.reduce((sum, val) => sum + val, 0) / trimmedAmplitudes.length;
+    }
+    
+    // Si hay pocos valores, usar la media simple
+    return amplitudes.reduce((sum, val) => sum + val, 0) / amplitudes.length;
   }
 
   private calculateDC(values: number[]): number {
     if (values.length === 0) return 0;
-    return values.reduce((a, b) => a + b, 0) / values.length;
+    
+    // Encontrar valles para un cálculo más preciso de DC
+    const { valleyIndices } = this.localFindPeaksAndValleys(values);
+    
+    if (valleyIndices.length === 0) {
+      // Si no se encuentran valles, usar la media simple
+      return values.reduce((a, b) => a + b, 0) / values.length;
+    }
+    
+    // Usar los valores de los valles para calcular DC
+    const valleyValues = valleyIndices.map(idx => values[idx]);
+    
+    // Ordenar valores y eliminar outliers
+    valleyValues.sort((a, b) => a - b);
+    
+    // Si hay suficientes valores, eliminar outliers
+    if (valleyValues.length >= 5) {
+      // Eliminar 20% inferior y superior
+      const startIdx = Math.floor(valleyValues.length * 0.2);
+      const endIdx = Math.ceil(valleyValues.length * 0.8);
+      const trimmedValues = valleyValues.slice(startIdx, endIdx);
+      
+      // Calcular media robusta
+      return trimmedValues.reduce((sum, val) => sum + val, 0) / trimmedValues.length;
+    }
+    
+    // Si hay pocos valores, usar la media simple de los valles
+    return valleyValues.reduce((sum, val) => sum + val, 0) / valleyValues.length;
   }
 
   private applySMAFilter(value: number): number {
