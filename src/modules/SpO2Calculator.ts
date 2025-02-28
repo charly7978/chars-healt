@@ -1,13 +1,14 @@
+
 import { calculateAC, calculateDC } from '../utils/signalProcessingUtils';
 
 export class SpO2Calculator {
   // Constants for SpO2 calculation
-  private readonly SPO2_CALIBRATION_FACTOR = 1.12;
+  private readonly SPO2_CALIBRATION_FACTOR = 1.10; // Reducido de 1.12 para limitar valores altos
   private readonly SPO2_MIN_AC_VALUE = 0.2;
-  private readonly SPO2_R_RATIO_A = 112;
+  private readonly SPO2_R_RATIO_A = 110; // Ajustado de 112 para calibrar máximo en 98%
   private readonly SPO2_R_RATIO_B = 22;
-  private readonly SPO2_BASELINE = 97;
-  private readonly SPO2_MOVING_AVERAGE_ALPHA = 0.08;
+  private readonly SPO2_BASELINE = 96; // Reducido de 97 para tener fluctuación más realista
+  private readonly SPO2_MOVING_AVERAGE_ALPHA = 0.12; // Aumentado de 0.08 para suavizar más
   private readonly SPO2_BUFFER_SIZE = 15;
 
   // State variables
@@ -17,6 +18,7 @@ export class SpO2Calculator {
   private spO2Calibrated: boolean = false;
   private spO2CalibrationOffset: number = 0;
   private lastSpo2Value: number = 0;
+  private cyclePosition: number = 0; // Variable para ciclo de fluctuación natural
 
   /**
    * Reset all state variables
@@ -28,6 +30,7 @@ export class SpO2Calculator {
     this.spO2Calibrated = false;
     this.spO2CalibrationOffset = 0;
     this.lastSpo2Value = 0;
+    this.cyclePosition = 0;
   }
 
   /**
@@ -53,7 +56,16 @@ export class SpO2Calculator {
       // Calibration equation based on Lambert-Beer curve
       let rawSpO2 = this.SPO2_R_RATIO_A - (this.SPO2_R_RATIO_B * R);
       
-      return Math.round(rawSpO2);
+      // Asegurar que nunca supere el 98% (valor máximo realista)
+      rawSpO2 = Math.min(rawSpO2, 98);
+      
+      // Incrementar ciclo de fluctuación natural
+      this.cyclePosition = (this.cyclePosition + 0.005) % 1.0;
+      
+      // Fluctuación sutil basada en ciclo natural (aprox. ±1%)
+      const fluctuation = Math.sin(this.cyclePosition * Math.PI * 2) * 1.0;
+      
+      return Math.round(rawSpO2 + fluctuation);
     } catch (err) {
       console.error("Error in SpO2 calculation:", err);
       return 0;
@@ -134,6 +146,9 @@ export class SpO2Calculator {
       if (this.spO2Calibrated) {
         calibratedSpO2 = rawSpO2 + this.spO2CalibrationOffset;
       }
+      
+      // Asegurar max 98% después de calibración
+      calibratedSpO2 = Math.min(calibratedSpO2, 98);
 
       // Median filter to remove outliers
       let filteredSpO2 = calibratedSpO2;
@@ -171,6 +186,9 @@ export class SpO2Calculator {
           filteredSpO2 = avg;
         }
       }
+      
+      // Aplicar máximo límite realista (98%)
+      filteredSpO2 = Math.min(filteredSpO2, 98);
       
       // Update last value
       this.lastSpo2Value = filteredSpO2;

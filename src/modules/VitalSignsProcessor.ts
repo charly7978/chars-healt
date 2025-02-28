@@ -8,6 +8,8 @@ export class VitalSignsProcessor {
   private readonly WINDOW_SIZE = 300;
   private ppgValues: number[] = [];
   private readonly SMA_WINDOW = 3;
+  private readonly BPM_SMOOTHING_ALPHA = 0.18; // Aumentado para suavizar más el BPM
+  private lastBPM: number = 0;
   
   // Specialized modules for each vital sign
   private spO2Calculator: SpO2Calculator;
@@ -31,7 +33,15 @@ export class VitalSignsProcessor {
 
     // Update RR intervals if available
     if (rrData?.intervals && rrData.intervals.length > 0) {
-      this.arrhythmiaDetector.updateIntervals(rrData.intervals, rrData.lastPeakTime);
+      // Ajuste ligero en sensibilidad de arritmias: filter outliers from RR data
+      const validIntervals = rrData.intervals.filter(interval => {
+        // Slightly stricter filter to reduce false positives
+        return interval >= 350 && interval <= 1800; // Válido para 33-170 BPM
+      });
+      
+      if (validIntervals.length > 0) {
+        this.arrhythmiaDetector.updateIntervals(validIntervals, rrData.lastPeakTime);
+      }
     }
 
     // Process PPG signal
@@ -81,10 +91,33 @@ export class VitalSignsProcessor {
   }
 
   /**
+   * Suavizar el BPM para fluctuaciones más naturales
+   * @param rawBPM Valor BPM sin procesar
+   */
+  public smoothBPM(rawBPM: number): number {
+    if (rawBPM <= 0) return 0;
+    
+    if (this.lastBPM <= 0) {
+      this.lastBPM = rawBPM;
+      return rawBPM;
+    }
+    
+    // Aplicar suavizado exponencial
+    const smoothed = Math.round(
+      this.BPM_SMOOTHING_ALPHA * rawBPM + 
+      (1 - this.BPM_SMOOTHING_ALPHA) * this.lastBPM
+    );
+    
+    this.lastBPM = smoothed;
+    return smoothed;
+  }
+
+  /**
    * Reset all processors
    */
   public reset() {
     this.ppgValues = [];
+    this.lastBPM = 0;
     this.spO2Calculator.reset();
     this.bpCalculator.reset();
     this.arrhythmiaDetector.reset();

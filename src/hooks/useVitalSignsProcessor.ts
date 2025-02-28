@@ -43,6 +43,22 @@ export const useVitalSignsProcessor = () => {
     
     if (rrData) {
       signalHistory.addRRData(rrData);
+      
+      // Smoothing BPM here
+      if (rrData.intervals && rrData.intervals.length > 0) {
+        // Calculate raw BPM from intervals
+        const avgInterval = rrData.intervals.reduce((sum, val) => sum + val, 0) / rrData.intervals.length;
+        const rawBPM = Math.round(60000 / avgInterval);
+        
+        // Apply smoothing through processor
+        const smoothedBPM = processor.smoothBPM(rawBPM);
+        
+        // Replace first interval with smoothed value to propagate to heart rate display
+        if (rrData.intervals.length > 0 && smoothedBPM > 0) {
+          const newInterval = Math.round(60000 / smoothedBPM);
+          rrData.intervals[0] = newInterval;
+        }
+      }
     }
     
     // Get base results from the core processor

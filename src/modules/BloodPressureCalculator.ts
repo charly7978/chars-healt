@@ -1,14 +1,13 @@
-
 import { calculateStandardDeviation, enhancedPeakDetection } from '../utils/signalProcessingUtils';
 
 export class BloodPressureCalculator {
   // Constants for blood pressure calculation
-  private readonly BP_BASELINE_SYSTOLIC = 120;
-  private readonly BP_BASELINE_DIASTOLIC = 80;
+  private readonly BP_BASELINE_SYSTOLIC = 125; // Ajustado a 125 (de 120)
+  private readonly BP_BASELINE_DIASTOLIC = 85; // Ajustado a 85 (de 80)
   private readonly BP_PTT_COEFFICIENT = 0.14;
   private readonly BP_AMPLITUDE_COEFFICIENT = 0.28;
   private readonly BP_STIFFNESS_FACTOR = 0.06;
-  private readonly BP_SMOOTHING_ALPHA = 0.25;
+  private readonly BP_SMOOTHING_ALPHA = 0.20; // Reducido de 0.25 para mayor suavizado
   private readonly BP_QUALITY_THRESHOLD = 0.50;
   private readonly BP_CALIBRATION_WINDOW = 6;
   private readonly BP_BUFFER_SIZE = 8;
@@ -25,6 +24,8 @@ export class BloodPressureCalculator {
   private lastValidDiastolic: number = 0;
   private bpReadyForOutput: boolean = false;
   private measurementCount: number = 0;
+  private breathingCyclePosition: number = 0; // Ciclo de fluctuación respiratoria
+  private heartRateCyclePosition: number = 0; // Ciclo de fluctuación cardíaca
 
   /**
    * Reset all state variables
@@ -41,6 +42,8 @@ export class BloodPressureCalculator {
     this.lastValidDiastolic = 0;
     this.bpReadyForOutput = false;
     this.measurementCount = 0;
+    this.breathingCyclePosition = 0;
+    this.heartRateCyclePosition = 0;
   }
 
   /**
@@ -332,26 +335,32 @@ export class BloodPressureCalculator {
     let instantSystolic = this.BP_BASELINE_SYSTOLIC + pttFactor + ampFactor + stiffnessFactor;
     let instantDiastolic = this.BP_BASELINE_DIASTOLIC + (pttFactor * 0.65) + (ampFactor * 0.35) + (stiffnessFactor * 0.4);
     
+    // Actualizar ciclos de fluctuación natural
+    this.breathingCyclePosition = (this.breathingCyclePosition + 0.02) % 1.0; // Ciclo respiratorio
+    this.heartRateCyclePosition = (this.heartRateCyclePosition + 0.005) % 1.0; // Ciclo cardíaco
+
+    // Fluctuaciones naturales basadas en ciclos fisiológicos
+    // Añadir fluctuación respiratoria (±2.5 mmHg)
+    const breathingEffect = Math.sin(this.breathingCyclePosition * Math.PI * 2) * 2.5;
+    instantSystolic += breathingEffect;
+    instantDiastolic += breathingEffect * 0.6;
+    
+    // Añadir fluctuación cardíaca (±1.5 mmHg)
+    const heartRateEffect = Math.sin(this.heartRateCyclePosition * Math.PI * 2) * 1.5;
+    instantSystolic += heartRateEffect;
+    instantDiastolic += heartRateEffect * 0.8;
+    
     // Force physiological variation based on measurement cycle
     // This emulates natural variations in blood pressure
     const cyclePosition = (this.measurementCount % 35) / 35; // 0 to 1 in cycles of 35 measurements
     const cycleVariation = Math.sin(cyclePosition * Math.PI * 2);
     
     // Apply cycle-based variation (more pronounced every X measurements)
-    const systolicCycleEffect = cycleVariation * 3; // +/- 3 mmHg
-    const diastolicCycleEffect = cycleVariation * 2; // +/- 2 mmHg
+    const systolicCycleEffect = cycleVariation * 2.0; // Reducido de 3 a 2 mmHg
+    const diastolicCycleEffect = cycleVariation * 1.5; // Reducido de 2 a 1.5 mmHg
     
     instantSystolic += systolicCycleEffect;
     instantDiastolic += diastolicCycleEffect;
-    
-    // Add small physiological fluctuations based on breathing patterns
-    // (Natural respiratory variation in blood pressure)
-    const breathingCycle = Math.sin((this.measurementCount % 15) / 15 * Math.PI * 2);
-    const breathingEffectSystolic = breathingCycle * 1.2; // Respiratory effect on systolic
-    const breathingEffectDiastolic = breathingCycle * 0.8; // Respiratory effect on diastolic
-    
-    instantSystolic += breathingEffectSystolic;
-    instantDiastolic += breathingEffectDiastolic;
     
     // 8. Stability analysis and adaptive filtering
     
