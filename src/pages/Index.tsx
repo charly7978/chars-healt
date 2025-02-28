@@ -5,6 +5,7 @@ import { useSignalProcessor } from "@/hooks/useSignalProcessor";
 import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
+import { VitalSignsRisk } from '@/utils/vitalSignsRisk';
 
 interface VitalSigns {
   spo2: number;
@@ -35,84 +36,196 @@ const Index = () => {
     spo2: number,
     pressure: string
   } | null>(null);
-  const [measurementTimerRef, setMeasurementTimerRef] = useState<number | null>(null);
+  const measurementTimerRef = useRef<number | null>(null);
+  
+  // Nuevos arrays para almacenar todos los valores durante la medición
+  const allHeartRateValuesRef = useRef<number[]>([]);
+  const allSpo2ValuesRef = useRef<number[]>([]);
+  const allSystolicValuesRef = useRef<number[]>([]);
+  const allDiastolicValuesRef = useRef<number[]>([]);
+  
+  // Flag para trackear si ya tenemos valores válidos que queremos preservar
+  const hasValidValuesRef = useRef(false);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
-  const { processSignal: processHeartBeat } = useHeartBeatProcessor();
+  const { processSignal: processHeartBeat, reset: resetHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
-  const enterFullScreen = async () => {
-    const elem = document.documentElement;
+  const calculateFinalValues = () => {
     try {
-      if (elem.requestFullscreen) {
-        await elem.requestFullscreen();
-      } else if (elem.webkitRequestFullscreen) {
-        await elem.webkitRequestFullscreen();
-      } else if (elem.mozRequestFullScreen) {
-        await elem.mozRequestFullScreen();
-      } else if (elem.msRequestFullscreen) {
-        await elem.msRequestFullscreen();
+      console.log("Calculando PROMEDIOS REALES con todos los valores capturados...");
+      
+      const validHeartRates = allHeartRateValuesRef.current.filter(v => v > 0);
+      const validSpo2Values = allSpo2ValuesRef.current.filter(v => v > 0);
+      const validSystolicValues = allSystolicValuesRef.current.filter(v => v > 0);
+      const validDiastolicValues = allDiastolicValuesRef.current.filter(v => v > 0);
+      
+      console.log("Valores acumulados para promedios:", {
+        heartRateValues: validHeartRates.length,
+        spo2Values: validSpo2Values.length,
+        systolicValues: validSystolicValues.length,
+        diastolicValues: validDiastolicValues.length
+      });
+      
+      let avgHeartRate = 0;
+      let avgSpo2 = 0;
+      let avgSystolic = 0;
+      let avgDiastolic = 0;
+      
+      if (validHeartRates.length > 0) {
+        avgHeartRate = Math.round(validHeartRates.reduce((a, b) => a + b, 0) / validHeartRates.length);
+      } else {
+        avgHeartRate = heartRate;
       }
-    } catch (err) {
-      console.log('Error al entrar en pantalla completa:', err);
+      
+      if (validSpo2Values.length > 0) {
+        avgSpo2 = Math.round(validSpo2Values.reduce((a, b) => a + b, 0) / validSpo2Values.length);
+      } else {
+        avgSpo2 = vitalSigns.spo2;
+      }
+      
+      let finalBPString = vitalSigns.pressure;
+      if (validSystolicValues.length > 0 && validDiastolicValues.length > 0) {
+        avgSystolic = Math.round(validSystolicValues.reduce((a, b) => a + b, 0) / validSystolicValues.length);
+        avgDiastolic = Math.round(validDiastolicValues.reduce((a, b) => a + b, 0) / validDiastolicValues.length);
+        finalBPString = `${avgSystolic}/${avgDiastolic}`;
+      }
+      
+      console.log("PROMEDIOS REALES calculados:", {
+        heartRate: avgHeartRate,
+        spo2: avgSpo2,
+        pressure: finalBPString
+      });
+      
+      setFinalValues({
+        heartRate: avgHeartRate > 0 ? avgHeartRate : heartRate,
+        spo2: avgSpo2 > 0 ? avgSpo2 : vitalSigns.spo2,
+        pressure: finalBPString
+      });
+        
+      hasValidValuesRef.current = true;
+      
+      allHeartRateValuesRef.current = [];
+      allSpo2ValuesRef.current = [];
+      allSystolicValuesRef.current = [];
+      allDiastolicValuesRef.current = [];
+    } catch (error) {
+      console.error("Error en calculateFinalValues:", error);
+      setFinalValues({
+        heartRate: heartRate,
+        spo2: vitalSigns.spo2,
+        pressure: vitalSigns.pressure
+      });
+      hasValidValuesRef.current = true;
     }
   };
-
-  useEffect(() => {
-    const preventScroll = (e) => e.preventDefault();
-    
-    const lockOrientation = async () => {
-      try {
-        if (screen.orientation?.lock) {
-          await screen.orientation.lock('portrait');
-        }
-      } catch (error) {
-        console.log('No se pudo bloquear la orientación:', error);
-      }
-    };
-    
-    lockOrientation();
-    
-    document.body.addEventListener('touchmove', preventScroll, { passive: false });
-    document.body.addEventListener('scroll', preventScroll, { passive: false });
-
-    return () => {
-      document.body.removeEventListener('touchmove', preventScroll);
-      document.body.removeEventListener('scroll', preventScroll);
-    };
-  }, []);
 
   const startMonitoring = () => {
-    enterFullScreen();
-    setIsMonitoring(true);
-    setIsCameraOn(true);
-    startProcessing();
-    setElapsedTime(0);
-    setMeasurementComplete(false);
-    setFinalValues(null);
-    
-    if (measurementTimerRef) {
-      clearInterval(measurementTimerRef);
+    if (isMonitoring) {
+      stopMonitoringOnly();
+    } else {
+      prepareProcessorsOnly();
+      
+      setIsMonitoring(true);
+      setIsCameraOn(true);
+      startProcessing();
+      setElapsedTime(0);
+      setMeasurementComplete(false);
+      
+      allHeartRateValuesRef.current = [];
+      allSpo2ValuesRef.current = [];
+      allSystolicValuesRef.current = [];
+      allDiastolicValuesRef.current = [];
+      
+      if (measurementTimerRef.current) {
+        clearInterval(measurementTimerRef.current);
+        measurementTimerRef.current = null;
+      }
+      
+      measurementTimerRef.current = window.setInterval(() => {
+        setElapsedTime(prev => {
+          if (prev >= 40) {
+            stopMonitoringOnly();
+            return 40;
+          }
+          return prev + 1;
+        });
+      }, 1000);
     }
-    
-    const timerId = window.setInterval(() => {
-      setElapsedTime(prev => {
-        if (prev >= 30) {
-          completeMeasurement();
-          return 30;
-        }
-        return prev + 1;
-      });
-    }, 1000);
-    setMeasurementTimerRef(timerId);
   };
 
-  const stopMonitoring = () => {
+  const prepareProcessorsOnly = () => {
+    console.log("Preparando SOLO procesadores (displays intactos)");
+    
+    setElapsedTime(0);
+    
+    resetHeartBeat();
+    resetVitalSigns();
+    VitalSignsRisk.resetHistory();
+  };
+
+  const stopMonitoringOnly = () => {
+    try {
+      console.log("Deteniendo SOLO monitorización (displays intactos)");
+      
+      setIsMonitoring(false);
+      setIsCameraOn(false);
+      stopProcessing();
+      setMeasurementComplete(true);
+      
+      try {
+        if (heartRate > 0) {
+          VitalSignsRisk.getBPMRisk(heartRate, true);
+        }
+      } catch (err) {
+        console.error("Error al evaluar riesgo BPM:", err);
+      }
+      
+      try {
+        if (vitalSigns.pressure !== "--/--" && vitalSigns.pressure !== "0/0") {
+          VitalSignsRisk.getBPRisk(vitalSigns.pressure, true);
+        }
+      } catch (err) {
+        console.error("Error al evaluar riesgo BP:", err);
+      }
+      
+      try {
+        if (vitalSigns.spo2 > 0) {
+          VitalSignsRisk.getSPO2Risk(vitalSigns.spo2, true);
+        }
+      } catch (err) {
+        console.error("Error al evaluar riesgo SPO2:", err);
+      }
+      
+      calculateFinalValues();
+      
+      if (measurementTimerRef.current) {
+        clearInterval(measurementTimerRef.current);
+        measurementTimerRef.current = null;
+      }
+    } catch (error) {
+      console.error("Error en stopMonitoringOnly:", error);
+      if (measurementTimerRef.current) {
+        clearInterval(measurementTimerRef.current);
+        measurementTimerRef.current = null;
+      }
+      setIsMonitoring(false);
+      setIsCameraOn(false);
+    }
+  };
+
+  const handleReset = () => {
+    console.log("RESET COMPLETO solicitado");
+    
     setIsMonitoring(false);
     setIsCameraOn(false);
     stopProcessing();
-    resetVitalSigns();
-    setElapsedTime(0);
+    
+    if (measurementTimerRef.current) {
+      clearInterval(measurementTimerRef.current);
+      measurementTimerRef.current = null;
+    }
+    
     setHeartRate(0);
     setVitalSigns({ 
       spo2: 0, 
@@ -120,36 +233,24 @@ const Index = () => {
       arrhythmiaStatus: "--" 
     });
     setArrhythmiaCount("--");
-    setSignalQuality(0);
+    setLastArrhythmiaData(null);
+    setElapsedTime(0);
     setMeasurementComplete(false);
     setFinalValues(null);
     
-    if (measurementTimerRef) {
-      clearInterval(measurementTimerRef);
-      setMeasurementTimerRef(null);
-    }
-  };
-
-  const handleReset = () => {
-    stopMonitoring();
-  };
-
-  const completeMeasurement = () => {
-    if (measurementTimerRef) {
-      clearInterval(measurementTimerRef);
-      setMeasurementTimerRef(null);
-    }
+    resetHeartBeat();
+    resetVitalSigns();
+    VitalSignsRisk.resetHistory();
     
-    setMeasurementComplete(true);
-    setFinalValues({
-      heartRate: heartRate,
-      spo2: vitalSigns.spo2,
-      pressure: vitalSigns.pressure
-    });
-    stopMonitoring();
+    hasValidValuesRef.current = false;
+    
+    allHeartRateValuesRef.current = [];
+    allSpo2ValuesRef.current = [];
+    allSystolicValuesRef.current = [];
+    allDiastolicValuesRef.current = [];
   };
 
-  const handleStreamReady = (stream) => {
+  const handleStreamReady = (stream: MediaStream) => {
     if (!isMonitoring) return;
     
     const videoTrack = stream.getVideoTracks()[0];
@@ -194,26 +295,140 @@ const Index = () => {
   };
 
   useEffect(() => {
-    if (lastSignal && lastSignal.fingerDetected && isMonitoring) {
-      const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
-      setHeartRate(heartBeatResult.bpm);
-      
-      const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
-      if (vitals) {
-        setVitalSigns(vitals);
-        setArrhythmiaCount(vitals.arrhythmiaStatus.split('|')[1] || "--");
-        if (vitals.arrhythmiaStatus.includes("ARRITMIA")) {
-          setLastArrhythmiaData({
-            timestamp: Date.now(),
-            rmssd: heartBeatResult.rrData.rmssd,
-            rrVariation: heartBeatResult.rrData.rrVariation
-          });
+    const enterImmersiveMode = async () => {
+      try {
+        const viewport = document.querySelector('meta[name=viewport]');
+        if (viewport) {
+          viewport.setAttribute('content', 
+            'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover'
+          );
         }
+
+        if (screen.orientation?.lock) {
+          try {
+            await screen.orientation.lock('portrait');
+          } catch (e) {
+            console.warn('Orientation lock failed:', e);
+          }
+        }
+
+        const elem = document.documentElement;
+        const methods = [
+          elem.requestFullscreen?.bind(elem),
+          elem.webkitRequestFullscreen?.bind(elem),
+          elem.mozRequestFullScreen?.bind(elem),
+          elem.msRequestFullscreen?.bind(elem)
+        ];
+
+        for (const method of methods) {
+          if (method) {
+            try {
+              await method();
+              break;
+            } catch (e) {
+              console.warn('Fullscreen attempt failed:', e);
+              continue;
+            }
+          }
+        }
+
+        if (navigator.userAgent.includes("Android")) {
+          if ((window as any).AndroidFullScreen?.immersiveMode) {
+            try {
+              await (window as any).AndroidFullScreen.immersiveMode();
+            } catch (e) {
+              console.warn('Android immersive mode failed:', e);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Immersive mode error:', error);
       }
-      
-      setSignalQuality(lastSignal.quality);
+    };
+
+    enterImmersiveMode();
+    
+    setTimeout(enterImmersiveMode, 500);
+    setTimeout(enterImmersiveMode, 1500);
+
+    const handleInteraction = () => {
+      enterImmersiveMode();
+    };
+
+    document.addEventListener('touchstart', handleInteraction);
+    document.addEventListener('click', handleInteraction);
+    document.addEventListener('touchend', handleInteraction);
+
+    return () => {
+      document.removeEventListener('touchstart', handleInteraction);
+      document.removeEventListener('click', handleInteraction);
+      document.removeEventListener('touchend', handleInteraction);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (lastSignal && lastSignal.fingerDetected && isMonitoring) {
+      try {
+        const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
+        
+        if (!measurementComplete) {
+          if (heartBeatResult.bpm > 0) {
+            setHeartRate(heartBeatResult.bpm);
+            allHeartRateValuesRef.current.push(heartBeatResult.bpm);
+          }
+          
+          const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
+          if (vitals) {
+            if (vitals.spo2 > 0) {
+              setVitalSigns(current => ({
+                ...current,
+                spo2: vitals.spo2
+              }));
+              allSpo2ValuesRef.current.push(vitals.spo2);
+            }
+            
+            if (vitals.pressure !== "--/--" && vitals.pressure !== "0/0") {
+              setVitalSigns(current => ({
+                ...current,
+                pressure: vitals.pressure
+              }));
+              
+              const [systolic, diastolic] = vitals.pressure.split('/').map(Number);
+              if (systolic > 0 && diastolic > 0) {
+                allSystolicValuesRef.current.push(systolic);
+                allDiastolicValuesRef.current.push(diastolic);
+              }
+            }
+            
+            setVitalSigns(current => ({
+              ...current,
+              arrhythmiaStatus: vitals.arrhythmiaStatus
+            }));
+            
+            if (vitals.lastArrhythmiaData) {
+              setLastArrhythmiaData(vitals.lastArrhythmiaData);
+              
+              const [status, count] = vitals.arrhythmiaStatus.split('|');
+              setArrhythmiaCount(count || "0");
+            }
+          }
+        }
+        
+        setSignalQuality(lastSignal.quality);
+      } catch (error) {
+        console.error("Error procesando señal:", error);
+      }
     }
-  }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
+  }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns, measurementComplete]);
+
+  useEffect(() => {
+    return () => {
+      if (measurementTimerRef.current) {
+        clearInterval(measurementTimerRef.current);
+        measurementTimerRef.current = null;
+      }
+    };
+  }, []);
 
   return (
     <div 
@@ -248,9 +463,9 @@ const Index = () => {
         />
       </div>
 
-      <div className="fixed bottom-[65px] left-0 right-0 px-5 z-20">
-        <div className="p-3 bg-black/60 rounded-xl" style={{ maxWidth: "98%", margin: "0 auto" }}>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="fixed bottom-[110px] left-0 right-0 px-4 z-20">
+        <div className="p-4 bg-black/60 rounded-xl">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <VitalSign 
               label="FRECUENCIA CARDÍACA"
               value={finalValues ? finalValues.heartRate : heartRate || "--"}
@@ -277,6 +492,12 @@ const Index = () => {
           </div>
         </div>
       </div>
+
+      {isMonitoring && (
+        <div className="fixed bottom-[120px] left-0 right-0 text-center z-20">
+          <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 40s</span>
+        </div>
+      )}
 
       <div className="fixed bottom-0 left-0 right-0 w-full h-[60px] grid grid-cols-2 gap-px z-50">
         <button 
