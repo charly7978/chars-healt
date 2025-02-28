@@ -72,6 +72,8 @@ export class VitalSignsRisk {
   }
 
   static updateBPMHistory(value: number) {
+    if (value <= 0) return; // No registrar valores inválidos
+    
     // Añadir al buffer de EWMA
     this.recentBpmValues.push(value);
     if (this.recentBpmValues.length > this.EWMA_WINDOW_SIZE) {
@@ -88,11 +90,24 @@ export class VitalSignsRisk {
     const now = Date.now();
     this.bpmHistory = this.bpmHistory.filter(check => now - check.timestamp < this.MEASUREMENT_WINDOW);
     this.bpmHistory.push({ value: smoothedValue, timestamp: now });
+    
+    // Log para depuración
+    console.log("VitalSignsRisk - Actualizado BPM History:", {
+      rawValue: value,
+      smoothedValue,
+      historyLength: this.bpmHistory.length,
+      timestamp: new Date().toISOString()
+    });
   }
 
   static updateSPO2History(value: number) {
+    if (value <= 0) return; // No registrar valores inválidos
+    
+    // Limitar SPO2 a máximo 100%
+    const cappedValue = Math.min(100, value);
+    
     // Añadir al buffer de EWMA
-    this.recentSpo2Values.push(value);
+    this.recentSpo2Values.push(cappedValue);
     if (this.recentSpo2Values.length > this.EWMA_WINDOW_SIZE) {
       this.recentSpo2Values.shift();
     }
@@ -106,9 +121,20 @@ export class VitalSignsRisk {
     const now = Date.now();
     this.spo2History = this.spo2History.filter(check => now - check.timestamp < this.MEASUREMENT_WINDOW);
     this.spo2History.push({ value: smoothedValue, timestamp: now });
+    
+    // Log para depuración
+    console.log("VitalSignsRisk - Actualizado SPO2 History:", {
+      rawValue: value,
+      cappedValue,
+      smoothedValue,
+      historyLength: this.spo2History.length,
+      timestamp: new Date().toISOString()
+    });
   }
 
   static updateBPHistory(systolic: number, diastolic: number) {
+    if (systolic <= 0 || diastolic <= 0) return; // No registrar valores inválidos
+    
     // Añadir al buffer de EWMA
     this.recentSystolicValues.push(systolic);
     this.recentDiastolicValues.push(diastolic);
@@ -136,6 +162,16 @@ export class VitalSignsRisk {
       diastolic: smoothedDiastolic, 
       timestamp: now, 
       value: smoothedSystolic 
+    });
+    
+    // Log para depuración
+    console.log("VitalSignsRisk - Actualizado BP History:", {
+      rawSystolic: systolic,
+      rawDiastolic: diastolic,
+      smoothedSystolic,
+      smoothedDiastolic,
+      historyLength: this.bpHistory.length,
+      timestamp: new Date().toISOString()
     });
   }
 
@@ -191,54 +227,71 @@ export class VitalSignsRisk {
   static getAverageBPM(): number {
     if (this.bpmHistory.length === 0) return 0;
     
-    // Usar solo los últimos 20 segundos de datos para el promedio
-    const now = Date.now();
-    const recentHistory = this.bpmHistory.filter(check => now - check.timestamp < 20000);
+    // Usar todo el historial de datos para el promedio final
+    const validReadings = this.bpmHistory.filter(check => check.value > 0);
     
-    if (recentHistory.length === 0) return 0;
+    if (validReadings.length === 0) return 0;
     
-    const sum = recentHistory.reduce((total, check) => total + check.value, 0);
-    return Math.round(sum / recentHistory.length);
+    const sum = validReadings.reduce((total, check) => total + check.value, 0);
+    const avg = Math.round(sum / validReadings.length);
+    
+    // Log para depuración
+    console.log("VitalSignsRisk - Calculado promedio BPM:", {
+      average: avg,
+      totalSamples: validReadings.length,
+      timestamp: new Date().toISOString()
+    });
+    
+    return avg;
   }
 
   // Función para calcular el promedio del historial de SpO2
   static getAverageSPO2(): number {
     if (this.spo2History.length === 0) return 0;
     
-    // Usar solo los últimos 20 segundos de datos para el promedio
-    const now = Date.now();
-    const recentHistory = this.spo2History.filter(check => now - check.timestamp < 20000);
+    // Usar todo el historial de datos para el promedio final
+    const validReadings = this.spo2History.filter(check => check.value > 0);
     
-    if (recentHistory.length === 0) return 0;
-    
-    // Calcular promedio real sin forzar valores máximos
-    const validReadings = recentHistory.filter(check => check.value > 0);
     if (validReadings.length === 0) return 0;
     
-    const sum = validReadings.reduce((total, check) => total + check.value, 0);
-    const avg = sum / validReadings.length;
+    const sum = validReadings.reduce((total, check) => total + check.value, on);
+    const avg = Math.min(100, Math.round(sum / validReadings.length)); // Asegurar máximo 100%
     
-    // Retornamos directamente el valor calculado sin forzar un máximo de 98
-    return Math.round(avg);
+    // Log para depuración
+    console.log("VitalSignsRisk - Calculado promedio SPO2:", {
+      average: avg,
+      totalSamples: validReadings.length,
+      timestamp: new Date().toISOString()
+    });
+    
+    return avg;
   }
 
   // Función para calcular el promedio del historial de presión arterial
   static getAverageBP(): { systolic: number, diastolic: number } {
     if (this.bpHistory.length === 0) return { systolic: 0, diastolic: 0 };
     
-    // Usar solo los últimos 20 segundos de datos para el promedio
-    const now = Date.now();
-    const recentHistory = this.bpHistory.filter(check => now - check.timestamp < 20000);
+    // Usar todo el historial de datos para el promedio final
+    const validReadings = this.bpHistory.filter(check => check.systolic > 0 && check.diastolic > 0);
     
-    if (recentHistory.length === 0) return { systolic: 0, diastolic: 0 };
+    if (validReadings.length === 0) return { systolic: 0, diastolic: 0 };
     
-    const systolicSum = recentHistory.reduce((total, check) => total + check.systolic, 0);
-    const diastolicSum = recentHistory.reduce((total, check) => total + check.diastolic, 0);
+    const systolicSum = validReadings.reduce((total, check) => total + check.systolic, 0);
+    const diastolicSum = validReadings.reduce((total, check) => total + check.diastolic, 0);
     
-    return {
-      systolic: Math.round(systolicSum / recentHistory.length),
-      diastolic: Math.round(diastolicSum / recentHistory.length)
+    const avgResult = {
+      systolic: Math.round(systolicSum / validReadings.length),
+      diastolic: Math.round(diastolicSum / validReadings.length)
     };
+    
+    // Log para depuración
+    console.log("VitalSignsRisk - Calculado promedio BP:", {
+      average: `${avgResult.systolic}/${avgResult.diastolic}`,
+      totalSamples: validReadings.length,
+      timestamp: new Date().toISOString()
+    });
+    
+    return avgResult;
   }
 
   static getBPMRisk(bpm: number, isFinalReading: boolean = false): RiskSegment {
@@ -401,6 +454,7 @@ export class VitalSignsRisk {
   }
 
   static resetHistory() {
+    console.log("VitalSignsRisk - Reseteando todo el historial");
     this.bpmHistory = [];
     this.spo2History = [];
     this.bpHistory = [];
