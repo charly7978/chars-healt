@@ -275,10 +275,8 @@ const PPGSignalMeter = ({
 
   return (
     <>
-      <div className="absolute top-0 left-0 right-0 p-2 flex justify-between items-center bg-gradient-to-r from-blue-400 to-blue-600 border-b border-blue-700/30 shadow-sm" style={{ 
-        maxWidth: "90%", 
-        margin: "0 auto",
-        borderRadius: "0 0 12px 12px",
+      <div className="absolute top-0 left-0 right-0 p-2 flex justify-between items-center" style={{ 
+        width: "100%", 
         background: "linear-gradient(135deg, #33C3F0, #2563eb, #0EA5E9)",
         boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)"
       }}>

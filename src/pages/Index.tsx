@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -463,7 +464,7 @@ const Index = () => {
         />
       </div>
 
-      <div className="fixed bottom-[130px] left-0 right-0 px-4 z-20">
+      <div className="fixed bottom-[65px] left-0 right-0 px-4 z-20">
         <div className="p-4 bg-black/60 rounded-xl">
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <VitalSign 
