@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 
 interface CameraViewProps {
@@ -18,13 +17,29 @@ const CameraView = ({
   const streamRef = useRef<MediaStream | null>(null);
   const mountedRef = useRef(true);
   const initializingRef = useRef(false);
+  const torchEnabledRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [isAndroid, setIsAndroid] = useState(false);
+  const [isHighEndDevice, setIsHighEndDevice] = useState(false);
+  const retryCountRef = useRef(0);
+  const maxRetries = 3;
 
-  // Detectar si estamos en Android
+  // Detectar si estamos en Android y evaluar capacidades del dispositivo
   useEffect(() => {
     const userAgent = navigator.userAgent.toLowerCase();
-    setIsAndroid(/android/i.test(userAgent));
+    const isAndroidDevice = /android/i.test(userAgent);
+    setIsAndroid(isAndroidDevice);
+    
+    // Detectar si es un dispositivo de alta gama basado en núcleos lógicos
+    const highEndCores = navigator.hardwareConcurrency || 0;
+    const isHighEnd = highEndCores >= 6;
+    setIsHighEndDevice(isHighEnd);
+    
+    console.log("CameraView: Detección de dispositivo", {
+      isAndroid: isAndroidDevice,
+      cores: highEndCores,
+      isHighEnd
+    });
   }, []);
 
   // Función para detener la cámara y liberar recursos
@@ -35,12 +50,13 @@ const CameraView = ({
       const tracks = streamRef.current.getTracks();
       tracks.forEach(track => {
         // Primero desactivar la linterna si está disponible
-        if (track.getCapabilities()?.torch) {
+        if (track.getCapabilities()?.torch && torchEnabledRef.current) {
           try {
             console.log("CameraView: Desactivando linterna");
             track.applyConstraints({
               advanced: [{ torch: false }]
             }).catch(err => console.error("Error desactivando linterna:", err));
+            torchEnabledRef.current = false;
           } catch (err) {
             console.error("Error desactivando linterna:", err);
           }
@@ -56,7 +72,7 @@ const CameraView = ({
           } catch (err) {
             console.error("Error deteniendo track:", err);
           }
-        }, 50);
+        }, isAndroid ? 100 : 50);
       });
 
       streamRef.current = null;
@@ -71,9 +87,50 @@ const CameraView = ({
         console.error("Error limpiando video element:", err);
       }
     }
+    
+    // Resetear contador de reintentos
+    retryCountRef.current = 0;
+  }, [isAndroid]);
+
+  // Función para activar la linterna con reintentos
+  const enableTorch = useCallback(async (videoTrack: MediaStreamTrack) => {
+    if (!videoTrack || !videoTrack.getCapabilities()?.torch) {
+      console.log("CameraView: Linterna no disponible en este dispositivo");
+      return false;
+    }
+    
+    try {
+      console.log("CameraView: Intentando activar linterna");
+      await videoTrack.applyConstraints({
+        advanced: [{ torch: true }]
+      });
+      console.log("CameraView: Linterna activada exitosamente");
+      torchEnabledRef.current = true;
+      return true;
+    } catch (e) {
+      console.error("Error activando linterna:", e);
+      
+      // Reintentar con un breve retraso
+      return new Promise<boolean>(resolve => {
+        setTimeout(async () => {
+          try {
+            await videoTrack.applyConstraints({
+              advanced: [{ torch: true }]
+            });
+            console.log("CameraView: Linterna activada en segundo intento");
+            torchEnabledRef.current = true;
+            resolve(true);
+          } catch (e2) {
+            console.error("Error en segundo intento de activación de linterna:", e2);
+            torchEnabledRef.current = false;
+            resolve(false);
+          }
+        }, 300);
+      });
+    }
   }, []);
 
-  // Función para iniciar la cámara
+  // Función optimizada para iniciar la cámara
   const startCamera = useCallback(async () => {
     if (!mountedRef.current || initializingRef.current) return;
     if (!isMonitoring) {
@@ -82,7 +139,7 @@ const CameraView = ({
     }
     
     initializingRef.current = true;
-    console.log("CameraView: Iniciando cámara");
+    console.log("CameraView: Iniciando cámara (intento #" + (retryCountRef.current + 1) + ")");
     setError(null);
     
     try {
@@ -96,13 +153,20 @@ const CameraView = ({
         throw new Error('La API getUserMedia no está disponible');
       }
 
-      // Configuración de la cámara optimizada para cada plataforma
+      // Configuración de la cámara optimizada para cada plataforma y tipo de dispositivo
       const constraints: MediaStreamConstraints = {
         video: {
           facingMode: 'environment',
-          width: isAndroid ? { ideal: 1280 } : { ideal: 640 },
-          height: isAndroid ? { ideal: 720 } : { ideal: 480 },
-          frameRate: { ideal: isAndroid ? 24 : 30 }
+          width: isHighEndDevice 
+            ? { ideal: isAndroid ? 1280 : 1024 } 
+            : { ideal: isAndroid ? 960 : 640 },
+          height: isHighEndDevice 
+            ? { ideal: isAndroid ? 720 : 768 } 
+            : { ideal: isAndroid ? 540 : 480 },
+          frameRate: { 
+            ideal: isHighEndDevice ? 30 : (isAndroid ? 24 : 30),
+            min: 20 // Asegurar mínimo 20fps para detección de pulso
+          }
         },
         audio: false
       };
@@ -121,48 +185,71 @@ const CameraView = ({
 
       streamRef.current = mediaStream;
 
-      // Configurar optimizaciones específicas para Android
-      if (isAndroid) {
-        console.log("CameraView: Aplicando optimizaciones para Android");
-        const videoTrack = mediaStream.getVideoTracks()[0];
-        if (videoTrack) {
-          try {
-            // Optimizaciones para Android
-            const capabilities = videoTrack.getCapabilities();
-            const settings: MediaTrackConstraints = {};
-            
-            if (capabilities.exposureMode && capabilities.exposureMode.includes('continuous')) {
+      // Configurar optimizaciones específicas para la plataforma
+      const videoTrack = mediaStream.getVideoTracks()[0];
+      if (videoTrack) {
+        try {
+          // Obtener capacidades del track para optimizaciones
+          const capabilities = videoTrack.getCapabilities();
+          console.log("CameraView: Capacidades de la cámara:", capabilities);
+          
+          // Configuraciones optimizadas para fotopletismografía
+          const settings: MediaTrackConstraints = {};
+          
+          // Optimizaciones para exposición y enfoque
+          if (capabilities.exposureMode) {
+            if (capabilities.exposureMode.includes('manual')) {
+              settings.exposureMode = 'manual';
+              // Nota: exposureTime no está disponible en todos los dispositivos
+              // y no es parte del tipo estándar MediaTrackCapabilities
+            } else if (capabilities.exposureMode.includes('continuous')) {
               settings.exposureMode = 'continuous';
             }
-            
-            if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+          }
+          
+          // Enfoque fijo para evitar cambios durante la medición
+          if (capabilities.focusMode) {
+            if (capabilities.focusMode.includes('fixed')) {
+              settings.focusMode = 'fixed';
+            } else if (capabilities.focusMode.includes('manual')) {
+              settings.focusMode = 'manual';
+            } else if (capabilities.focusMode.includes('continuous')) {
               settings.focusMode = 'continuous';
             }
-            
-            if (capabilities.whiteBalanceMode && capabilities.whiteBalanceMode.includes('continuous')) {
+          }
+          
+          // Balance de blancos fijo para mejor detección de rojo
+          if (capabilities.whiteBalanceMode) {
+            if (capabilities.whiteBalanceMode.includes('manual')) {
+              settings.whiteBalanceMode = 'manual';
+              // Nota: colorTemperature no está disponible en todos los dispositivos
+              // y no es parte del tipo estándar MediaTrackCapabilities
+            } else if (capabilities.whiteBalanceMode.includes('continuous')) {
               settings.whiteBalanceMode = 'continuous';
             }
-            
-            if (Object.keys(settings).length > 0) {
-              await videoTrack.applyConstraints(settings);
-              console.log("CameraView: Optimizaciones para Android aplicadas", settings);
-            }
-          } catch (err) {
-            console.error("Error aplicando optimizaciones para Android:", err);
           }
+          
+          // Aplicar configuraciones si hay alguna disponible
+          if (Object.keys(settings).length > 0) {
+            await videoTrack.applyConstraints(settings);
+            console.log("CameraView: Configuraciones avanzadas aplicadas:", settings);
+          }
+        } catch (err) {
+          console.error("Error aplicando configuraciones avanzadas:", err);
         }
       }
 
-      // Configurar el elemento de video
+      // Configurar el elemento de video con optimizaciones
       if (videoRef.current) {
         console.log("CameraView: Asignando stream al elemento video");
         
-        // Optimizaciones específicas para el elemento video en Android
-        if (isAndroid) {
-          videoRef.current.style.willChange = 'transform';
-          videoRef.current.style.transform = 'translateZ(0)';
-          videoRef.current.style.backfaceVisibility = 'hidden';
-        }
+        // Optimizaciones específicas para el elemento video
+        videoRef.current.style.willChange = 'transform';
+        videoRef.current.style.transform = 'translateZ(0)';
+        videoRef.current.style.backfaceVisibility = 'hidden';
+        
+        // Priorizar calidad sobre velocidad para mejor análisis de color
+        videoRef.current.style.imageRendering = isHighEndDevice ? 'auto' : 'pixelated';
         
         videoRef.current.srcObject = mediaStream;
         
@@ -178,38 +265,51 @@ const CameraView = ({
         console.error("CameraView: El elemento video no está disponible");
       }
 
-      // Esperar un momento antes de activar la linterna en Android
-      await new Promise(resolve => setTimeout(resolve, isAndroid ? 200 : 0));
+      // Esperar un momento antes de activar la linterna
+      await new Promise(resolve => setTimeout(resolve, isAndroid ? 300 : 150));
 
       // Intentar activar la linterna si estamos monitorizando
-      const videoTrack = mediaStream.getVideoTracks()[0];
-      if (videoTrack && videoTrack.getCapabilities()?.torch) {
-        try {
-          console.log("CameraView: Intentando activar linterna");
-          await videoTrack.applyConstraints({
-            advanced: [{ torch: true }]
-          });
-          console.log("CameraView: Linterna activada");
-        } catch (e) {
-          console.error("Error configurando linterna:", e);
+      if (videoTrack) {
+        const torchEnabled = await enableTorch(videoTrack);
+        if (!torchEnabled && isAndroid) {
+          // En Android, a veces necesitamos un segundo intento después de un retraso
+          setTimeout(async () => {
+            if (mountedRef.current && isMonitoring && videoTrack.readyState === 'live') {
+              await enableTorch(videoTrack);
+            }
+          }, 500);
         }
-      } else {
-        console.log("CameraView: Linterna no disponible");
       }
 
       // Notificar que el stream está listo
-      if (onStreamReady && isMonitoring) {
+      if (onStreamReady && isMonitoring && mountedRef.current) {
         console.log("CameraView: Notificando stream listo");
         onStreamReady(mediaStream);
       }
+      
+      // Resetear contador de reintentos en caso de éxito
+      retryCountRef.current = 0;
     } catch (error) {
       console.error('Error iniciando la cámara:', error);
       setError(`Error iniciando la cámara: ${error instanceof Error ? error.message : String(error)}`);
-      stopCamera();
+      
+      // Reintentar automáticamente si no hemos excedido el máximo de intentos
+      if (retryCountRef.current < maxRetries && mountedRef.current && isMonitoring) {
+        retryCountRef.current++;
+        console.log(`CameraView: Reintentando iniciar cámara (${retryCountRef.current}/${maxRetries})...`);
+        
+        setTimeout(() => {
+          if (mountedRef.current && isMonitoring) {
+            startCamera();
+          }
+        }, 1000);
+      } else {
+        stopCamera();
+      }
     } finally {
       initializingRef.current = false;
     }
-  }, [isMonitoring, onStreamReady, stopCamera, isAndroid]);
+  }, [isMonitoring, onStreamReady, stopCamera, isAndroid, isHighEndDevice, enableTorch]);
 
   // Efecto para iniciar/detener la cámara cuando cambia isMonitoring
   useEffect(() => {
@@ -250,6 +350,25 @@ const CameraView = ({
     };
   }, [stopCamera]);
 
+  // Efecto para monitorear y recuperar la linterna si se apaga
+  useEffect(() => {
+    if (!isMonitoring || !streamRef.current) return;
+    
+    // Verificar periódicamente el estado de la linterna en Android
+    // (algunos dispositivos la apagan automáticamente después de un tiempo)
+    const torchCheckInterval = setInterval(() => {
+      if (isMonitoring && streamRef.current && isAndroid) {
+        const videoTrack = streamRef.current.getVideoTracks()[0];
+        if (videoTrack && videoTrack.getCapabilities()?.torch && !torchEnabledRef.current) {
+          console.log("CameraView: Reactivando linterna que se apagó");
+          enableTorch(videoTrack);
+        }
+      }
+    }, 5000);
+    
+    return () => clearInterval(torchCheckInterval);
+  }, [isMonitoring, isAndroid, enableTorch]);
+
   return (
     <>
       <video
@@ -263,6 +382,8 @@ const CameraView = ({
           WebkitBackfaceVisibility: 'hidden',
           backfaceVisibility: 'hidden',
           willChange: isAndroid ? 'transform' : 'auto',
+          objectFit: 'cover',
+          filter: isFingerDetected ? 'brightness(1.1) contrast(1.1)' : 'none' // Mejorar visibilidad cuando hay dedo
         }}
       />
       {error && (

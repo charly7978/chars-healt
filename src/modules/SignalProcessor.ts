@@ -1,22 +1,17 @@
-
 import { ProcessedSignal, ProcessingError, SignalProcessor } from '../types/signal';
 
-// Class for Kalman filter - improves signal noise reduction
 class KalmanFilter {
-  private R: number = 0.01;  // Measurement noise
-  private Q: number = 0.1;   // Process noise
-  private P: number = 1;     // Error covariance
-  private X: number = 0;     // State estimate
-  private K: number = 0;     // Kalman gain
+  private R: number = 0.01;  // Ruido de medición (ajustado para mejor rendimiento)
+  private Q: number = 0.08;  // Ruido del proceso (reducido para mayor estabilidad)
+  private P: number = 1;     // Estimación inicial de error
+  private X: number = 0;     // Estado inicial
+  private K: number = 0;     // Ganancia de Kalman
 
-  /**
-   * Apply Kalman filter to a measurement
-   */
   filter(measurement: number): number {
-    // Prediction update
+    // Predicción
     this.P = this.P + this.Q;
     
-    // Measurement update
+    // Actualización
     this.K = this.P / (this.P + this.R);
     this.X = this.X + this.K * (measurement - this.X);
     this.P = (1 - this.K) * this.P;
@@ -24,33 +19,28 @@ class KalmanFilter {
     return this.X;
   }
 
-  /**
-   * Reset filter state
-   */
   reset() {
     this.X = 0;
     this.P = 1;
   }
 }
 
-/**
- * PPG Signal Processor implementation
- * Processes camera frames to extract and analyze PPG signals
- */
 export class PPGSignalProcessor implements SignalProcessor {
   private isProcessing: boolean = false;
   private kalmanFilter: KalmanFilter;
   private lastValues: number[] = [];
-  
-  // Configuration settings
   private readonly DEFAULT_CONFIG = {
-    BUFFER_SIZE: 15,           // Buffer for signal analysis
-    MIN_RED_THRESHOLD: 40,     // Minimum threshold for red channel
-    MAX_RED_THRESHOLD: 250,    // Maximum threshold for red channel
-    STABILITY_WINDOW: 6,       // Window for stability analysis
-    MIN_STABILITY_COUNT: 4,    // Minimum stable samples
-    HYSTERESIS: 5,             // Hysteresis to avoid fluctuations
-    MIN_CONSECUTIVE_DETECTIONS: 3  // Minimum consecutive detections needed
+    BUFFER_SIZE: 18,           // Aumentado para mejor análisis de señal
+    MIN_RED_THRESHOLD: 35,     // Reducido para mayor sensibilidad
+    MAX_RED_THRESHOLD: 255,    // Aumentado para captar señal más intensa
+    STABILITY_WINDOW: 8,       // Aumentado para análisis de estabilidad más robusto
+    MIN_STABILITY_COUNT: 4,    // Mínimo de muestras estables
+    HYSTERESIS: 8,             // Aumentado para evitar fluctuaciones en detección
+    MIN_CONSECUTIVE_DETECTIONS: 3,  // Mínimo de detecciones consecutivas necesarias
+    RED_DOMINANCE_FACTOR: 1.15,    // Reducido para mayor sensibilidad
+    STABILITY_THRESHOLD: 0.65,     // Umbral para considerar señal estable
+    INTENSITY_WEIGHT: 0.45,        // Peso de intensidad en cálculo de calidad
+    STABILITY_WEIGHT: 0.55         // Peso de estabilidad en cálculo de calidad
   };
 
   private currentConfig: typeof this.DEFAULT_CONFIG;
@@ -59,23 +49,24 @@ export class PPGSignalProcessor implements SignalProcessor {
   private consecutiveDetections: number = 0;
   private isCurrentlyDetected: boolean = false;
   private lastDetectionTime: number = 0;
-  private readonly DETECTION_TIMEOUT = 500; // 500ms timeout
+  private readonly DETECTION_TIMEOUT = 600; // Aumentado para mayor estabilidad
+  private signalQualityHistory: number[] = []; // Historial de calidad de señal
+  private redValueHistory: number[] = []; // Historial de valores rojos
+  private adaptiveMinThreshold: number; // Umbral mínimo adaptativo
+  private adaptiveMaxThreshold: number; // Umbral máximo adaptativo
+  private readonly ADAPTIVE_THRESHOLD_ALPHA = 0.15; // Factor de adaptación de umbrales
 
-  /**
-   * Constructor
-   */
   constructor(
     public onSignalReady?: (signal: ProcessedSignal) => void,
     public onError?: (error: ProcessingError) => void
   ) {
     this.kalmanFilter = new KalmanFilter();
     this.currentConfig = { ...this.DEFAULT_CONFIG };
-    console.log("PPGSignalProcessor: Instance created");
+    this.adaptiveMinThreshold = this.currentConfig.MIN_RED_THRESHOLD;
+    this.adaptiveMaxThreshold = this.currentConfig.MAX_RED_THRESHOLD;
+    console.log("PPGSignalProcessor: Instancia creada con configuración optimizada");
   }
 
-  /**
-   * Initialize processor
-   */
   async initialize(): Promise<void> {
     try {
       this.lastValues = [];
@@ -84,27 +75,25 @@ export class PPGSignalProcessor implements SignalProcessor {
       this.consecutiveDetections = 0;
       this.isCurrentlyDetected = false;
       this.lastDetectionTime = 0;
+      this.signalQualityHistory = [];
+      this.redValueHistory = [];
+      this.adaptiveMinThreshold = this.currentConfig.MIN_RED_THRESHOLD;
+      this.adaptiveMaxThreshold = this.currentConfig.MAX_RED_THRESHOLD;
       this.kalmanFilter.reset();
-      console.log("PPGSignalProcessor: Initialized");
+      console.log("PPGSignalProcessor: Inicializado con parámetros optimizados");
     } catch (error) {
-      console.error("PPGSignalProcessor: Initialization error", error);
-      this.handleError("INIT_ERROR", "Error initializing processor");
+      console.error("PPGSignalProcessor: Error de inicialización", error);
+      this.handleError("INIT_ERROR", "Error al inicializar el procesador");
     }
   }
 
-  /**
-   * Start processing
-   */
   start(): void {
     if (this.isProcessing) return;
     this.isProcessing = true;
     this.initialize();
-    console.log("PPGSignalProcessor: Started");
+    console.log("PPGSignalProcessor: Iniciado");
   }
 
-  /**
-   * Stop processing
-   */
   stop(): void {
     this.isProcessing = false;
     this.lastValues = [];
@@ -112,60 +101,89 @@ export class PPGSignalProcessor implements SignalProcessor {
     this.lastStableValue = 0;
     this.consecutiveDetections = 0;
     this.isCurrentlyDetected = false;
+    this.signalQualityHistory = [];
+    this.redValueHistory = [];
     this.kalmanFilter.reset();
-    console.log("PPGSignalProcessor: Stopped");
+    console.log("PPGSignalProcessor: Detenido");
   }
 
-  /**
-   * Calibrate processor
-   */
   async calibrate(): Promise<boolean> {
     try {
-      console.log("PPGSignalProcessor: Starting calibration");
+      console.log("PPGSignalProcessor: Iniciando calibración");
       await this.initialize();
-      console.log("PPGSignalProcessor: Calibration completed");
+      
+      // Reiniciar umbrales adaptativos a valores por defecto
+      this.adaptiveMinThreshold = this.currentConfig.MIN_RED_THRESHOLD;
+      this.adaptiveMaxThreshold = this.currentConfig.MAX_RED_THRESHOLD;
+      
+      console.log("PPGSignalProcessor: Calibración completada");
       return true;
     } catch (error) {
-      console.error("PPGSignalProcessor: Calibration error", error);
-      this.handleError("CALIBRATION_ERROR", "Error during calibration");
+      console.error("PPGSignalProcessor: Error de calibración", error);
+      this.handleError("CALIBRATION_ERROR", "Error durante la calibración");
       return false;
     }
   }
 
-  /**
-   * Process a camera frame
-   */
   processFrame(imageData: ImageData): void {
     if (!this.isProcessing) {
-      console.log("PPGSignalProcessor: Not processing");
+      console.log("PPGSignalProcessor: No está procesando");
       return;
     }
 
     try {
-      // Extract PPG signal based on scientific evidence
-      const redValue = this.extractRedChannel(imageData);
-      const filtered = this.kalmanFilter.filter(redValue);
-      this.lastValues.push(filtered);
+      // Extracción optimizada de la señal PPG
+      const { redValue, redDominance } = this.extractRedChannel(imageData);
       
+      // Aplicar filtro de Kalman para suavizar la señal
+      const filtered = this.kalmanFilter.filter(redValue);
+      
+      // Almacenar valor filtrado para análisis
+      this.lastValues.push(filtered);
       if (this.lastValues.length > this.currentConfig.BUFFER_SIZE) {
         this.lastValues.shift();
       }
+      
+      // Almacenar valor rojo para análisis de umbrales adaptativos
+      this.redValueHistory.push(redValue);
+      if (this.redValueHistory.length > 30) { // Mantener historial de 30 frames
+        this.redValueHistory.shift();
+      }
 
-      const { isFingerDetected, quality } = this.analyzeSignal(filtered, redValue);
+      // Actualizar umbrales adaptativos si tenemos suficientes datos
+      if (this.redValueHistory.length >= 15) {
+        this.updateAdaptiveThresholds();
+      }
 
-      console.log("PPGSignalProcessor: Analysis", {
+      // Analizar señal con umbrales adaptativos
+      const { isFingerDetected, quality } = this.analyzeSignal(filtered, redValue, redDominance);
+      
+      // Almacenar calidad para análisis de tendencia
+      if (isFingerDetected) {
+        this.signalQualityHistory.push(quality);
+        if (this.signalQualityHistory.length > 10) {
+          this.signalQualityHistory.shift();
+        }
+      }
+
+      // Calcular calidad de tendencia (más estable)
+      const trendQuality = this.calculateTrendQuality(quality);
+
+      console.log("PPGSignalProcessor: Análisis", {
         redValue,
         filtered,
         isFingerDetected,
-        quality,
-        stableFrames: this.stableFrameCount
+        quality: trendQuality,
+        stableFrames: this.stableFrameCount,
+        adaptiveMin: Math.round(this.adaptiveMinThreshold),
+        adaptiveMax: Math.round(this.adaptiveMaxThreshold)
       });
 
       const processedSignal: ProcessedSignal = {
         timestamp: Date.now(),
         rawValue: redValue,
         filteredValue: filtered,
-        quality: quality,
+        quality: trendQuality,
         fingerDetected: isFingerDetected,
         roi: this.detectROI(redValue)
       };
@@ -173,62 +191,78 @@ export class PPGSignalProcessor implements SignalProcessor {
       this.onSignalReady?.(processedSignal);
 
     } catch (error) {
-      console.error("PPGSignalProcessor: Error processing frame", error);
-      this.handleError("PROCESSING_ERROR", "Error processing frame");
+      console.error("PPGSignalProcessor: Error procesando frame", error);
+      this.handleError("PROCESSING_ERROR", "Error al procesar frame");
     }
   }
 
-  /**
-   * Extract red channel from image data
-   */
-  private extractRedChannel(imageData: ImageData): number {
+  private extractRedChannel(imageData: ImageData): { redValue: number, redDominance: boolean } {
     const data = imageData.data;
     let redSum = 0;
     let greenSum = 0;
     let blueSum = 0;
     let count = 0;
     
-    // Use central region for better signal (central 25%)
-    const startX = Math.floor(imageData.width * 0.375);
-    const endX = Math.floor(imageData.width * 0.625);
-    const startY = Math.floor(imageData.height * 0.375);
-    const endY = Math.floor(imageData.height * 0.625);
+    // Usar región central para mejor señal (30% del centro)
+    const startX = Math.floor(imageData.width * 0.35);
+    const endX = Math.floor(imageData.width * 0.65);
+    const startY = Math.floor(imageData.height * 0.35);
+    const endY = Math.floor(imageData.height * 0.65);
     
-    for (let y = startY; y < endY; y++) {
-      for (let x = startX; x < endX; x++) {
+    // Muestreo optimizado para rendimiento (no procesar todos los píxeles)
+    const sampleStep = Math.max(1, Math.floor((endX - startX) * (endY - startY) / 10000));
+    
+    for (let y = startY; y < endY; y += sampleStep) {
+      for (let x = startX; x < endX; x += sampleStep) {
         const i = (y * imageData.width + x) * 4;
-        redSum += data[i];     // Red channel
-        greenSum += data[i+1]; // Green channel
-        blueSum += data[i+2];  // Blue channel
+        redSum += data[i];     // Canal rojo
+        greenSum += data[i+1]; // Canal verde
+        blueSum += data[i+2];  // Canal azul
         count++;
       }
     }
+    
+    if (count === 0) return { redValue: 0, redDominance: false };
     
     const avgRed = redSum / count;
     const avgGreen = greenSum / count;
     const avgBlue = blueSum / count;
 
-    // Check red channel dominance (characteristic of blood-containing tissue)
-    const isRedDominant = avgRed > (avgGreen * 1.2) && avgRed > (avgBlue * 1.2);
+    // Verificar dominancia del canal rojo (característico de la presencia de tejido con sangre)
+    const redDominanceFactor = this.currentConfig.RED_DOMINANCE_FACTOR;
+    const isRedDominant = avgRed > (avgGreen * redDominanceFactor) && 
+                          avgRed > (avgBlue * redDominanceFactor);
     
-    return isRedDominant ? avgRed : 0;
+    return { 
+      redValue: isRedDominant ? avgRed : 0,
+      redDominance: isRedDominant
+    };
   }
 
-  /**
-   * Analyze signal for finger detection and quality assessment
-   */
-  private analyzeSignal(filtered: number, rawValue: number): { isFingerDetected: boolean, quality: number } {
+  private updateAdaptiveThresholds(): void {
+    if (this.redValueHistory.length < 15) return;
+    
+    // Ordenar valores para análisis estadístico
+    const sortedValues = [...this.redValueHistory].sort((a, b) => a - b);
+    
+    // Usar percentiles para determinar umbrales adaptativos
+    const p10 = sortedValues[Math.floor(sortedValues.length * 0.1)];
+    const p90 = sortedValues[Math.floor(sortedValues.length * 0.9)];
+    
+    // Actualizar umbrales con suavizado exponencial
+    this.adaptiveMinThreshold = this.adaptiveMinThreshold * (1 - this.ADAPTIVE_THRESHOLD_ALPHA) + 
+                               Math.max(this.currentConfig.MIN_RED_THRESHOLD * 0.8, p10) * this.ADAPTIVE_THRESHOLD_ALPHA;
+    
+    this.adaptiveMaxThreshold = this.adaptiveMaxThreshold * (1 - this.ADAPTIVE_THRESHOLD_ALPHA) + 
+                               Math.min(this.currentConfig.MAX_RED_THRESHOLD, p90 * 1.1) * this.ADAPTIVE_THRESHOLD_ALPHA;
+  }
+
+  private analyzeSignal(filtered: number, rawValue: number, redDominance: boolean): { isFingerDetected: boolean, quality: number } {
     const currentTime = Date.now();
     const timeSinceLastDetection = currentTime - this.lastDetectionTime;
     
-    // Check if value is within valid range with hysteresis
-    const inRange = this.isCurrentlyDetected
-      ? rawValue >= (this.currentConfig.MIN_RED_THRESHOLD - this.currentConfig.HYSTERESIS) &&
-        rawValue <= (this.currentConfig.MAX_RED_THRESHOLD + this.currentConfig.HYSTERESIS)
-      : rawValue >= this.currentConfig.MIN_RED_THRESHOLD &&
-        rawValue <= this.currentConfig.MAX_RED_THRESHOLD;
-
-    if (!inRange) {
+    // Si no hay dominancia de rojo, no hay dedo
+    if (!redDominance) {
       this.consecutiveDetections = 0;
       this.stableFrameCount = Math.max(0, this.stableFrameCount - 1);
       
@@ -238,10 +272,28 @@ export class PPGSignalProcessor implements SignalProcessor {
       
       return { isFingerDetected: this.isCurrentlyDetected, quality: 0 };
     }
+    
+    // Verificar si el valor está dentro del rango válido con histéresis
+    const inRange = this.isCurrentlyDetected
+      ? rawValue >= (this.adaptiveMinThreshold - this.currentConfig.HYSTERESIS) &&
+        rawValue <= (this.adaptiveMaxThreshold + this.currentConfig.HYSTERESIS)
+      : rawValue >= this.adaptiveMinThreshold &&
+        rawValue <= this.adaptiveMaxThreshold;
 
-    // Analyze signal stability - scientifically validated measure
+    if (!inRange) {
+      this.consecutiveDetections = Math.max(0, this.consecutiveDetections - 1);
+      this.stableFrameCount = Math.max(0, this.stableFrameCount - 1);
+      
+      if (timeSinceLastDetection > this.DETECTION_TIMEOUT) {
+        this.isCurrentlyDetected = false;
+      }
+      
+      return { isFingerDetected: this.isCurrentlyDetected, quality: 0 };
+    }
+
+    // Analizar estabilidad de la señal con método mejorado
     const stability = this.calculateStability();
-    if (stability > 0.7) {
+    if (stability > this.currentConfig.STABILITY_THRESHOLD) {
       this.stableFrameCount = Math.min(
         this.stableFrameCount + 1,
         this.currentConfig.MIN_STABILITY_COUNT * 2
@@ -250,7 +302,8 @@ export class PPGSignalProcessor implements SignalProcessor {
       this.stableFrameCount = Math.max(0, this.stableFrameCount - 0.5);
     }
 
-    // Update detection state
+    // Actualizar estado de detección con criterios más robustos
+    const wasDetected = this.isCurrentlyDetected;
     const isStableNow = this.stableFrameCount >= this.currentConfig.MIN_STABILITY_COUNT;
 
     if (isStableNow) {
@@ -261,14 +314,29 @@ export class PPGSignalProcessor implements SignalProcessor {
       }
     } else {
       this.consecutiveDetections = Math.max(0, this.consecutiveDetections - 1);
+      if (this.consecutiveDetections === 0 && timeSinceLastDetection > this.DETECTION_TIMEOUT) {
+        this.isCurrentlyDetected = false;
+      }
     }
 
-    // Calculate signal quality based on photoplethysmography principles
-    const stabilityScore = this.stableFrameCount / (this.currentConfig.MIN_STABILITY_COUNT * 2);
-    const intensityScore = Math.min((rawValue - this.currentConfig.MIN_RED_THRESHOLD) / 
-                                (this.currentConfig.MAX_RED_THRESHOLD - this.currentConfig.MIN_RED_THRESHOLD), 1);
+    // Calcular calidad de la señal con método mejorado
+    const stabilityScore = Math.min(1, this.stableFrameCount / (this.currentConfig.MIN_STABILITY_COUNT * 2));
     
-    const quality = Math.round((stabilityScore * 0.6 + intensityScore * 0.4) * 100);
+    // Calcular score de intensidad normalizado al rango adaptativo
+    const intensityScore = Math.min(
+      Math.max(
+        (rawValue - this.adaptiveMinThreshold) / 
+        (this.adaptiveMaxThreshold - this.adaptiveMinThreshold), 
+        0
+      ), 
+      1
+    );
+    
+    // Calcular calidad ponderada
+    const quality = Math.round(
+      (stabilityScore * this.currentConfig.STABILITY_WEIGHT + 
+       intensityScore * this.currentConfig.INTENSITY_WEIGHT) * 100
+    );
 
     return {
       isFingerDetected: this.isCurrentlyDetected,
@@ -276,37 +344,51 @@ export class PPGSignalProcessor implements SignalProcessor {
     };
   }
 
-  /**
-   * Calculate signal stability
-   */
   private calculateStability(): number {
-    if (this.lastValues.length < 2) return 0;
+    if (this.lastValues.length < 3) return 0;
     
-    // Stability calculation based on research
+    // Cálculo de estabilidad mejorado basado en variaciones relativas
     const variations = this.lastValues.slice(1).map((val, i) => 
-      Math.abs(val - this.lastValues[i])
+      Math.abs(val - this.lastValues[i]) / Math.max(1, this.lastValues[i])
     );
     
     const avgVariation = variations.reduce((sum, val) => sum + val, 0) / variations.length;
-    return Math.max(0, Math.min(1, 1 - (avgVariation / 50)));
+    
+    // Convertir a score de estabilidad (menor variación = mayor estabilidad)
+    return Math.max(0, Math.min(1, 1 - (avgVariation * 20)));
   }
 
-  /**
-   * Detect region of interest
-   */
+  private calculateTrendQuality(currentQuality: number): number {
+    // Si no hay historial, usar calidad actual
+    if (this.signalQualityHistory.length === 0) {
+      return currentQuality;
+    }
+    
+    // Calcular calidad promedio con mayor peso a valores recientes
+    let weightedSum = currentQuality * 2; // Doble peso al valor actual
+    let weightSum = 2;
+    
+    for (let i = this.signalQualityHistory.length - 1; i >= 0; i--) {
+      const weight = 1 + (i / this.signalQualityHistory.length); // Peso decreciente con antigüedad
+      weightedSum += this.signalQualityHistory[i] * weight;
+      weightSum += weight;
+    }
+    
+    return Math.round(weightedSum / weightSum);
+  }
+
   private detectROI(redValue: number): ProcessedSignal['roi'] {
-    // Constant ROI for simplification
+    // Región de interés adaptativa basada en la intensidad de la señal
+    const size = Math.max(50, Math.min(100, redValue / 2));
+    
     return {
       x: 0,
       y: 0,
-      width: 100,
-      height: 100
+      width: size,
+      height: size
     };
   }
 
-  /**
-   * Handle processor errors
-   */
   private handleError(code: string, message: string): void {
     console.error("PPGSignalProcessor: Error", code, message);
     const error: ProcessingError = {
