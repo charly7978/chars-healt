@@ -36,7 +36,7 @@ const Index = () => {
     spo2: number,
     pressure: string
   } | null>(null);
-  const [measurementTimerRef, setMeasurementTimerRef] = useState<number | null>(null);
+  const measurementTimerRef = useRef<number | null>(null);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
@@ -60,7 +60,7 @@ const Index = () => {
   };
 
   useEffect(() => {
-    const preventScroll = (e) => e.preventDefault();
+    const preventScroll = (e: Event) => e.preventDefault();
     
     const lockOrientation = async () => {
       try {
@@ -92,8 +92,8 @@ const Index = () => {
     setMeasurementComplete(false);
     setFinalValues(null);
     
-    if (measurementTimerRef) {
-      clearInterval(measurementTimerRef);
+    if (measurementTimerRef.current) {
+      clearInterval(measurementTimerRef.current);
     }
     
     const timerId = window.setInterval(() => {
@@ -105,7 +105,7 @@ const Index = () => {
         return prev + 1;
       });
     }, 1000);
-    setMeasurementTimerRef(timerId);
+    measurementTimerRef.current = timerId;
   };
 
   const stopMonitoring = () => {
@@ -125,9 +125,9 @@ const Index = () => {
     setMeasurementComplete(false);
     setFinalValues(null);
     
-    if (measurementTimerRef) {
-      clearInterval(measurementTimerRef);
-      setMeasurementTimerRef(null);
+    if (measurementTimerRef.current) {
+      clearInterval(measurementTimerRef.current);
+      measurementTimerRef.current = null;
     }
   };
 
@@ -136,9 +136,9 @@ const Index = () => {
   };
 
   const completeMeasurement = () => {
-    if (measurementTimerRef) {
-      clearInterval(measurementTimerRef);
-      setMeasurementTimerRef(null);
+    if (measurementTimerRef.current) {
+      clearInterval(measurementTimerRef.current);
+      measurementTimerRef.current = null;
     }
     
     setMeasurementComplete(true);
@@ -150,7 +150,7 @@ const Index = () => {
     stopMonitoring();
   };
 
-  const handleStreamReady = (stream) => {
+  const handleStreamReady = (stream: MediaStream) => {
     if (!isMonitoring) return;
     
     const videoTrack = stream.getVideoTracks()[0];
