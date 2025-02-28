@@ -1,91 +1,60 @@
-import { useState, useEffect } from 'react';
 
-interface VitalMeasurements {
-  heartRate: number;
-  spo2: number;
-  pressure: string;
-  arrhythmiaCount: string | number;
-}
+// Importar el método cleanMemory de cada uno de los hooks correspondientes
+import { useEffect, useCallback } from 'react';
+import { useSignalProcessor } from './useSignalProcessor';
+import { useHeartBeatProcessor } from './useHeartBeatProcessor';
+import { useVitalSignsProcessor } from './useVitalSignsProcessor';
 
-export const useVitalMeasurement = (isMeasuring: boolean) => {
-  const [measurements, setMeasurements] = useState<VitalMeasurements>({
-    heartRate: 0,
-    spo2: 0,
-    pressure: "--/--",
-    arrhythmiaCount: 0
-  });
-  const [elapsedTime, setElapsedTime] = useState(0);
+export const useVitalMeasurement = () => {
+  const signalProcessor = useSignalProcessor();
+  const heartBeatProcessor = useHeartBeatProcessor();
+  const vitalSignsProcessor = useVitalSignsProcessor();
 
-  useEffect(() => {
-    console.log('useVitalMeasurement - Estado:', {
-      isMeasuring,
-      currentMeasurements: measurements,
-      elapsedTime,
-      timestamp: new Date().toISOString()
-    });
-
-    if (!isMeasuring) {
-      setMeasurements(prev => ({
-        ...prev,
-        heartRate: 0,
-        spo2: 0,
-        pressure: "--/--",
-        arrhythmiaCount: "--"
-      }));
-      setElapsedTime(0);
-      return;
-    }
-
-    const startTime = Date.now();
-    const MEASUREMENT_DURATION = 30000;
-
-    const updateMeasurements = () => {
-      const processor = (window as any).heartBeatProcessor;
-      if (!processor) {
-        console.warn('VitalMeasurement: No se encontró el procesador');
-        return;
-      }
-
-      const bpm = processor.getFinalBPM() || 0;
-      console.log('useVitalMeasurement - Actualización:', {
-        processor: !!processor,
-        bpm,
-        timestamp: new Date().toISOString()
-      });
-
-      setMeasurements(prev => {
-        if (prev.heartRate === bpm) {
-          return prev;
+  // Función para limpiar memoria de forma agresiva
+  const performMemoryCleanup = useCallback(() => {
+    console.log("useVitalMeasurement: Iniciando limpieza agresiva de memoria");
+    
+    // Llamar a la limpieza específica de cada procesador
+    signalProcessor.cleanMemory();
+    heartBeatProcessor.cleanMemory();
+    vitalSignsProcessor.cleanMemory();
+    
+    // Liberar memoria adicional
+    if (window.gc) {
+      setTimeout(() => {
+        try {
+          window.gc();
+          console.log("Garbage collection global ejecutada");
+        } catch (e) {
+          console.log("Garbage collection no disponible");
         }
-        return {
-          ...prev,
-          heartRate: bpm
-        };
-      });
-    };
-
-    updateMeasurements();
-
-    const interval = setInterval(() => {
-      const currentTime = Date.now();
-      const elapsed = currentTime - startTime;
-      setElapsedTime(elapsed / 1000);
-
-      updateMeasurements();
-
-      if (elapsed >= MEASUREMENT_DURATION) {
-        clearInterval(interval);
-        const event = new CustomEvent('measurementComplete');
-        window.dispatchEvent(event);
+      }, 100);
+    }
+    
+    // Programar una segunda limpieza después de un breve retraso
+    setTimeout(() => {
+      console.log("useVitalMeasurement: Segunda fase de limpieza de memoria");
+      if (window.gc) {
+        try {
+          window.gc();
+        } catch (e) {
+          console.log("Segunda GC fallida");
+        }
       }
-    }, 200);
+    }, 2000);
+  }, [signalProcessor, heartBeatProcessor, vitalSignsProcessor]);
 
-    return () => clearInterval(interval);
-  }, [isMeasuring]);
+  // Ejecutar limpieza de memoria cuando el componente se desmonte
+  useEffect(() => {
+    return () => {
+      performMemoryCleanup();
+    };
+  }, [performMemoryCleanup]);
 
   return {
-    ...measurements,
-    elapsedTime: Math.min(elapsedTime, 30),
-    isComplete: elapsedTime >= 30
+    ...signalProcessor,
+    ...heartBeatProcessor,
+    ...vitalSignsProcessor,
+    performMemoryCleanup
   };
 };

@@ -18,6 +18,7 @@ export const useHeartBeatProcessor = () => {
   const processorRef = useRef<HeartBeatProcessor | null>(null);
   const [currentBPM, setCurrentBPM] = useState<number>(0);
   const [confidence, setConfidence] = useState<number>(0);
+  const signalBufferRef = useRef<number[]>([]);
 
   useEffect(() => {
     console.log('useHeartBeatProcessor: Creando nueva instancia de HeartBeatProcessor');
@@ -35,6 +36,8 @@ export const useHeartBeatProcessor = () => {
       if (typeof window !== 'undefined') {
         (window as any).heartBeatProcessor = undefined;
       }
+      // Limpiar buffer
+      signalBufferRef.current = [];
     };
   }, []);
 
@@ -58,6 +61,13 @@ export const useHeartBeatProcessor = () => {
       currentProcessor: !!processorRef.current,
       timestamp: new Date().toISOString()
     });
+
+    // Almacenar señal en buffer para análisis
+    signalBufferRef.current.push(value);
+    // Limitar tamaño del buffer para controlar memoria
+    if (signalBufferRef.current.length > 300) {
+      signalBufferRef.current = signalBufferRef.current.slice(-300);
+    }
 
     const result = processorRef.current.processSignal(value);
     const rrData = processorRef.current.getRRIntervals();
@@ -89,12 +99,56 @@ export const useHeartBeatProcessor = () => {
     }
     setCurrentBPM(0);
     setConfidence(0);
+    
+    // Limpiar buffer de señales para liberar memoria
+    signalBufferRef.current = [];
+    
+    // Forzar garbage collection si está disponible
+    if (window.gc) {
+      try {
+        window.gc();
+      } catch (e) {
+        console.log("GC no disponible en este entorno");
+      }
+    }
+  }, []);
+
+  // Función para limpieza agresiva de memoria
+  const cleanMemory = useCallback(() => {
+    console.log('useHeartBeatProcessor: Limpieza agresiva de memoria');
+    if (processorRef.current) {
+      processorRef.current.reset();
+    }
+    
+    // Limpiar estados
+    setCurrentBPM(0);
+    setConfidence(0);
+    
+    // Limpiar buffer de señales
+    signalBufferRef.current = [];
+    
+    // Recrear el procesador para asegurar limpieza completa
+    processorRef.current = new HeartBeatProcessor();
+    
+    if (typeof window !== 'undefined') {
+      (window as any).heartBeatProcessor = processorRef.current;
+    }
+    
+    // Forzar garbage collection si está disponible
+    if (window.gc) {
+      try {
+        window.gc();
+      } catch (e) {
+        console.log("GC no disponible en este entorno");
+      }
+    }
   }, []);
 
   return {
     currentBPM,
     confidence,
     processSignal,
-    reset
+    reset,
+    cleanMemory
   };
 };

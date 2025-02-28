@@ -33,5 +33,6 @@ export interface SignalProcessor {
 declare global {
   interface Window {
     heartBeatProcessor: HeartBeatProcessor;
+    gc?: () => void; // Añadir definición para garbage collector
   }
 }
