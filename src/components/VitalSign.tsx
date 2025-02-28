@@ -71,14 +71,8 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
       };
     }
     
-    if (status === "CALIBRANDO...") {
-      return {
-        text: status,
-        color: "#F97316",
-        label: "CALIBRACIÓN"
-      };
-    }
-    
+    // MODIFICADO: Ya no se maneja estado de calibración
+    // Aún si el estado original es "CALIBRANDO...", mostraremos "SIN ARRITMIA DETECTADA"
     return {
       text: "SIN ARRITMIA DETECTADA",
       color: "#0EA5E9",

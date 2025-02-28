@@ -1,4 +1,3 @@
-
 export class VitalSignsProcessor {
   private readonly WINDOW_SIZE = 300;
   private readonly SPO2_CALIBRATION_FACTOR = 1.02;
@@ -59,14 +58,13 @@ export class VitalSignsProcessor {
       this.isLearningPhase = false;
     }
 
-    // Determinar estado de arritmia
+    // Determinar estado de arritmia - MODIFICADO para mostrar SIN ARRITMIAS desde el inicio
     let arrhythmiaStatus;
-    if (this.isLearningPhase) {
-      arrhythmiaStatus = "CALIBRANDO...";
-    } else if (this.hasDetectedFirstArrhythmia) {
+    if (this.hasDetectedFirstArrhythmia) {
       // Una vez detectada la primera arritmia, siempre mostramos este estado
       arrhythmiaStatus = `ARRITMIA DETECTADA|${this.arrhythmiaCount}`;
     } else {
+      // Incluso en fase de calibración, mostramos "SIN ARRITMIAS"
       arrhythmiaStatus = `SIN ARRITMIAS|${this.arrhythmiaCount}`;
     }
 
