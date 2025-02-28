@@ -41,9 +41,9 @@ const PPGSignalMeter = ({
   const GRID_SIZE_X = 30;
   const GRID_SIZE_Y = 15;
   const verticalScale = 30.0;
-  const SMOOTHING_FACTOR = 0.65; // Aumentado para una transición más suave
-  const TARGET_FPS = 120; // Aumentado para mayor fluidez
-  const FRAME_TIME = 1000 / TARGET_FPS; // Ajustado para respetar el FPS objetivo
+  const SMOOTHING_FACTOR = 0.55;
+  const TARGET_FPS = 90;
+  const FRAME_TIME = 2000 / TARGET_FPS;
   const BUFFER_SIZE = 600;
 
   useEffect(() => {
@@ -85,7 +85,7 @@ const PPGSignalMeter = ({
       ctx.moveTo(x, 0);
       ctx.lineTo(x, CANVAS_HEIGHT);
       if (x % (GRID_SIZE_X * 4) === 0) {
-        ctx.fillStyle = '#FFFFFF';
+        ctx.fillStyle = '#FFFFFF';  // Cambiado a blanco (antes amarillo)
         ctx.font = '10px Inter';
         ctx.textAlign = 'center';
         ctx.fillText(`${x / 10}ms`, x, CANVAS_HEIGHT - 5);
@@ -97,7 +97,7 @@ const PPGSignalMeter = ({
       ctx.lineTo(CANVAS_WIDTH, y);
       if (y % (GRID_SIZE_Y * 4) === 0) {
         const amplitude = ((CANVAS_HEIGHT / 2) - y) / verticalScale;
-        ctx.fillStyle = '#FFFFFF';
+        ctx.fillStyle = '#FFFFFF';  // Cambiado a blanco (antes amarillo)
         ctx.font = '10px Inter';
         ctx.textAlign = 'right';
         ctx.fillText(amplitude.toFixed(1), 25, y + 4);
@@ -151,10 +151,6 @@ const PPGSignalMeter = ({
       return;
     }
 
-    // Activar la optimización para gráficos suaves
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-
     const now = Date.now();
     
     if (baselineRef.current === null) {
@@ -188,85 +184,26 @@ const PPGSignalMeter = ({
     drawGrid(ctx);
 
     const points = dataBufferRef.current.getPoints();
-    
-    // Identificar los picos y latidos completos
-    let beatSegments: {start: number, end: number, isArrhythmia: boolean}[] = [];
-    let currentBeatStart = 0;
-    let inBeat = false;
-    let beatIsArrhythmia = false;
-    
-    // Identificar latidos completos basados en cruces por cero y picos
-    for (let i = 1; i < points.length; i++) {
-      const prev = points[i-1];
-      const current = points[i];
-      
-      // Detección de inicio de latido (cruce por cero ascendente)
-      if (prev.value <= 0 && current.value > 0 && !inBeat) {
-        currentBeatStart = i - 1;
-        inBeat = true;
-        beatIsArrhythmia = false;
-      }
-      
-      // Si este punto es una arritmia, marcar todo el latido actual
-      if (current.isArrhythmia && inBeat) {
-        beatIsArrhythmia = true;
-      }
-      
-      // Detección de fin de latido (cruce por cero descendente después de un pico)
-      if (prev.value > 0 && current.value <= 0 && inBeat) {
-        beatSegments.push({
-          start: currentBeatStart,
-          end: i,
-          isArrhythmia: beatIsArrhythmia
-        });
-        inBeat = false;
-      }
-    }
-
-    // Si hay un latido en progreso al final, cerrarlo
-    if (inBeat) {
-      beatSegments.push({
-        start: currentBeatStart,
-        end: points.length - 1,
-        isArrhythmia: beatIsArrhythmia
-      });
-    }
-    
-    // Dibujar cada segmento de latido con su color correspondiente
     if (points.length > 1) {
-      for (const segment of beatSegments) {
+      for (let i = 1; i < points.length; i++) {
+        const prevPoint = points[i - 1];
+        const point = points[i];
+        
+        const x1 = canvas.width - ((now - prevPoint.time) * canvas.width / WINDOW_WIDTH_MS);
+        const y1 = canvas.height / 2 - prevPoint.value;
+        const x2 = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
+        const y2 = canvas.height / 2 - point.value;
+
         ctx.beginPath();
+        ctx.strokeStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
         ctx.lineWidth = 2;
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
-        ctx.strokeStyle = segment.isArrhythmia ? '#DC2626' : '#0EA5E9';
-        
-        // Dibujar este segmento de latido
-        for (let i = segment.start; i <= segment.end; i++) {
-          const point = points[i];
-          const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-          const y = canvas.height / 2 - point.value;
-          
-          if (i === segment.start) {
-            ctx.moveTo(x, y);
-          } else {
-            // Usar curvas de Bezier para suavizar la línea
-            const prevPoint = points[i-1];
-            const x1 = canvas.width - ((now - prevPoint.time) * canvas.width / WINDOW_WIDTH_MS);
-            const y1 = canvas.height / 2 - prevPoint.value;
-            const xc = (x1 + x) / 2;
-            const yc = (y1 + y) / 2;
-            ctx.quadraticCurveTo(x1, y1, xc, yc);
-            
-            if (i === segment.end) {
-              ctx.lineTo(x, y);
-            }
-          }
-        }
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
         ctx.stroke();
       }
 
-      // Dibujar puntos de pico y etiquetas
       points.forEach((point, index) => {
         if (index > 0 && index < points.length - 1) {
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
@@ -283,22 +220,22 @@ const PPGSignalMeter = ({
 
             // Dibujar valor del pico
             ctx.font = 'bold 12px Inter';
-            ctx.fillStyle = '#C0C0C0';
+            ctx.fillStyle = '#C0C0C0'; // Gris claro para los números de picos
             ctx.textAlign = 'center';
             ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 20);
             
-            // Agregar círculo y etiqueta "ARR" solo para arritmias
+            // Agregar círculo y etiqueta "ARR" para arritmias (nuevo)
             if (point.isArrhythmia) {
               // Círculo adicional para arritmias
               ctx.beginPath();
               ctx.arc(x, y, 8, 0, Math.PI * 2);
-              ctx.strokeStyle = '#FFFF00';
+              ctx.strokeStyle = '#FFFF00'; // Círculo amarillo
               ctx.lineWidth = 1.5;
               ctx.stroke();
               
               // Etiqueta "ARR"
               ctx.font = 'bold 10px Inter';
-              ctx.fillStyle = '#FF6B6B';
+              ctx.fillStyle = '#FF6B6B'; // Color rojo claro para ARR
               ctx.fillText("ARR", x, y - 35);
             }
           }
@@ -321,22 +258,18 @@ const PPGSignalMeter = ({
 
   return (
     <>
-      <div className="absolute top-0 left-0 right-0 p-2 flex justify-between items-center" style={{ 
-        width: "100%", 
-        background: "linear-gradient(135deg, #33C3F0, #2563eb, #0EA5E9)",
-        boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)"
-      }}>
+      <div className="absolute top-0 left-0 right-0 p-2 flex justify-between items-center bg-white border-b border-slate-100 shadow-sm">
         <div className="flex items-center gap-3">
-          <span className="text-xl font-bold text-white">PPG</span>
-          <div className="w-[150px]">
+          <span className="text-xl font-bold text-slate-700">PPG</span>
+          <div className="w-[200px]">
             <div className={`h-1.5 w-full rounded-full bg-gradient-to-r ${getQualityColor(quality)} transition-all duration-1000 ease-in-out`}>
               <div
                 className="h-full rounded-full bg-white/20 animate-pulse transition-all duration-1000"
                 style={{ width: `${isFingerDetected ? quality : 0}%` }}
               />
             </div>
-            <span className="text-[9px] text-center mt-0.5 font-medium transition-colors duration-700 block text-white" 
-                  style={{ textShadow: "0px 1px 2px rgba(0, 0, 0, 0.2)" }}>
+            <span className="text-[9px] text-center mt-0.5 font-medium transition-colors duration-700 block" 
+                  style={{ color: quality > 60 ? '#0EA5E9' : '#F59E0B' }}>
               {getQualityText(quality)}
             </span>
           </div>
@@ -344,12 +277,15 @@ const PPGSignalMeter = ({
 
         <div className="flex flex-col items-center">
           <Fingerprint
-            className={`h-14 w-14 transition-colors duration-300 ${
-              !isFingerDetected ? 'text-gray-200' : 'text-green-500'
+            className={`h-16 w-16 transition-colors duration-300 ${
+              !isFingerDetected ? 'text-gray-400' :
+              quality > 75 ? 'text-green-500' :
+              quality > 50 ? 'text-yellow-500' :
+              'text-red-500'
             }`}
             strokeWidth={1.5}
           />
-          <span className="text-[10px] text-center mt-0.5 font-medium text-white">
+          <span className="text-[10px] text-center mt-0.5 font-medium text-slate-600">
             {isFingerDetected ? "Dedo detectado" : "Ubique su dedo"}
           </span>
         </div>
