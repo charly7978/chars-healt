@@ -176,6 +176,15 @@ const PPGSignalMeter = ({
       lastArrhythmiaTime.current = now;
     }
 
+    // Si la arritmia está en el estado pero no en el último dato crudo
+    // aún queremos considerarla para puntos recientes
+    if (!isArrhythmia && arrhythmiaStatus?.includes("ARRITMIA")) {
+      // Si hubo una arritmia reciente (últimos 3 segundos)
+      if (now - lastArrhythmiaTime.current < 3000) {
+        isArrhythmia = true;
+      }
+    }
+
     const dataPoint: PPGDataPoint = {
       time: now,
       value: scaledValue,

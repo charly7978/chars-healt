@@ -183,7 +183,7 @@ const Index = () => {
       if (vitals) {
         setVitalSigns(vitals);
         setArrhythmiaCount(vitals.arrhythmiaStatus.split('|')[1] || "--");
-        setLastArrhythmiaData(vitals.arrhythmiaStatus);
+        setLastArrhythmiaData(vitals.lastArrhythmiaData);
       }
       
       setSignalQuality(lastSignal.quality);
@@ -262,10 +262,10 @@ const Index = () => {
         </div>
       )}
 
-      <div className="fixed bottom-0 left-0 right-0 w-full h-[80px] grid grid-cols-2 gap-px z-50">
+      <div className="fixed bottom-0 left-0 right-0 w-full h-[70px] grid grid-cols-2 gap-px z-50">
         <button 
           onClick={isMonitoring ? stopMonitoring : startMonitoring}
-          className="w-full h-full text-2xl font-bold text-white transition-colors duration-200"
+          className="w-full h-full text-xl font-bold text-white transition-colors duration-200"
           style={{ 
             backgroundImage: isMonitoring 
               ? 'linear-gradient(135deg, #f87171, #dc2626, #b91c1c)' 
@@ -277,7 +277,7 @@ const Index = () => {
         </button>
         <button 
           onClick={handleReset}
-          className="w-full h-full text-2xl font-bold text-white transition-colors duration-200"
+          className="w-full h-full text-xl font-bold text-white transition-colors duration-200"
           style={{ 
             backgroundImage: 'linear-gradient(135deg, #64748b, #475569, #334155)',
             textShadow: '0px 1px 3px rgba(0, 0, 0, 0.3)'
