@@ -236,17 +236,11 @@ const Index = () => {
     }
   };
 
-  // SOLO el botón de RESET puede borrar los displays
+  // MODIFICADO: Eliminado el popup de confirmación en handleReset
   const handleReset = () => {
     console.log("RESET COMPLETO solicitado");
     
-    // Confirmar antes de resetear si ya tenemos valores válidos
-    if (hasValidValuesRef.current) {
-      if (!window.confirm("¿Seguro quieres borrar TODOS los valores en pantalla?")) {
-        console.log("Reset cancelado por usuario");
-        return;
-      }
-    }
+    // ELIMINADO: Ya no se pide confirmación al resetear
     
     // Detener monitorización
     setIsMonitoring(false);
@@ -258,7 +252,7 @@ const Index = () => {
       measurementTimerRef.current = null;
     }
     
-    // Resetear SOLO en caso de RESET explícito
+    // Resetear todos los valores y procesadores
     setHeartRate(0);
     setVitalSigns({ 
       spo2: 0, 
@@ -322,6 +316,7 @@ const Index = () => {
       } catch (error) {
         console.error("Error capturando frame:", error);
         if (isMonitoring) {
+          // Seguir intentando incluso si hay error
           requestAnimationFrame(processImage);
         }
       }
