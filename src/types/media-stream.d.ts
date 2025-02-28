@@ -1,10 +1,15 @@
 
 interface MediaTrackCapabilities {
   torch?: boolean;
-  exposureMode?: string;
-  focusMode?: string;
-  whiteBalanceMode?: string;
+  exposureMode?: string[];
+  focusMode?: string[];
+  whiteBalanceMode?: string[];
   exposureCompensation?: {
+    max: number;
+    min: number;
+    step: number;
+  };
+  zoom?: {
     max: number;
     min: number;
     step: number;
@@ -13,10 +18,11 @@ interface MediaTrackCapabilities {
 
 interface MediaTrackConstraintSet {
   torch?: boolean;
-  exposureMode?: ConstrainDOMString;
-  focusMode?: ConstrainDOMString;
-  whiteBalanceMode?: ConstrainDOMString;
+  exposureMode?: string;
+  focusMode?: string;
+  whiteBalanceMode?: string;
   exposureCompensation?: number;
+  zoom?: number;
 }
 
 declare class ImageCapture {

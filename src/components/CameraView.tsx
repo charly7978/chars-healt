@@ -24,6 +24,7 @@ const CameraView = ({
   const [isIOS, setIsIOS] = useState(false);
   const retryCountRef = useRef(0);
   const maxRetries = 3;
+  const androidStreamTimeoutRef = useRef<number | null>(null);
 
   // Detectar plataforma
   useEffect(() => {
@@ -35,6 +36,12 @@ const CameraView = ({
   // Función optimizada para detener la cámara y liberar recursos
   const stopCamera = useCallback(() => {
     console.log("CameraView: Deteniendo cámara");
+    
+    // Limpiar cualquier timeout pendiente
+    if (androidStreamTimeoutRef.current) {
+      clearTimeout(androidStreamTimeoutRef.current);
+      androidStreamTimeoutRef.current = null;
+    }
     
     if (streamRef.current) {
       const tracks = streamRef.current.getTracks();
@@ -62,7 +69,7 @@ const CameraView = ({
           } catch (err) {
             console.error("Error deteniendo track:", err);
           }
-        }, isAndroid ? 100 : 50);
+        }, isAndroid ? 200 : 50);
       });
 
       streamRef.current = null;
@@ -119,7 +126,7 @@ const CameraView = ({
       stopCamera();
       
       // Esperar un momento para que los recursos se liberen (especialmente en Android)
-      await new Promise(resolve => setTimeout(resolve, isAndroid ? 300 : isIOS ? 200 : 50));
+      await new Promise(resolve => setTimeout(resolve, isAndroid ? 500 : isIOS ? 200 : 50));
 
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error('La API getUserMedia no está disponible');
@@ -135,14 +142,7 @@ const CameraView = ({
             facingMode: 'environment',
             width: { ideal: 1280 },
             height: { ideal: 720 },
-            frameRate: { ideal: 30, min: 20 },
-            // Configuraciones avanzadas para Android
-            advanced: [
-              { zoom: 1 }, // Sin zoom para mejor calidad
-              { focusMode: 'continuous' },
-              { whiteBalanceMode: 'continuous' },
-              { exposureMode: 'continuous' }
-            ] as any
+            frameRate: { ideal: 30, min: 20 }
           },
           audio: false
         };
@@ -195,7 +195,7 @@ const CameraView = ({
           // Aplicar configuraciones óptimas según la plataforma
           if (isAndroid) {
             // Configuraciones específicas para Android
-            const settings: MediaTrackConstraints = {};
+            const settings: any = {};
             
             if (capabilities.exposureMode && capabilities.exposureMode.includes('continuous')) {
               settings.exposureMode = 'continuous';
@@ -209,22 +209,13 @@ const CameraView = ({
               settings.whiteBalanceMode = 'continuous';
             }
             
-            // Configurar exposición manual si está disponible
-            if (capabilities.exposureCompensation) {
-              const min = capabilities.exposureCompensation.min || -2;
-              const max = capabilities.exposureCompensation.max || 2;
-              // Usar un valor ligeramente más alto para mejor detección de rojo
-              settings.exposureCompensation = min + (max - min) * 0.6;
-            }
-            
             if (Object.keys(settings).length > 0) {
-              await videoTrack.applyConstraints(settings);
+              await videoTrack.applyConstraints({ advanced: [settings] });
               console.log("CameraView: Optimizaciones para Android aplicadas", settings);
             }
           } else if (isIOS) {
-            // Configuraciones específicas para iOS
-            // iOS tiene menos opciones configurables, pero podemos intentar algunas
-            const settings: MediaTrackConstraints = {};
+            // Algunas configuraciones específicas para iOS
+            const settings: any = {};
             
             if (capabilities.exposureMode) {
               settings.exposureMode = 'continuous';
@@ -235,7 +226,7 @@ const CameraView = ({
             }
             
             if (Object.keys(settings).length > 0) {
-              await videoTrack.applyConstraints(settings);
+              await videoTrack.applyConstraints({ advanced: [settings] });
               console.log("CameraView: Optimizaciones para iOS aplicadas", settings);
             }
           }
@@ -275,18 +266,23 @@ const CameraView = ({
         console.error("CameraView: El elemento video no está disponible");
       }
 
-      // Esperar un momento antes de activar la linterna
-      await new Promise(resolve => setTimeout(resolve, isAndroid ? 300 : isIOS ? 200 : 100));
+      // Android puede necesitar más tiempo para estabilizar la cámara antes de activar la linterna
+      if (isAndroid) {
+        androidStreamTimeoutRef.current = window.setTimeout(async () => {
+          if (videoTrack && isMonitoring && mountedRef.current && !torchEnabledRef.current) {
+            console.log("CameraView: Retrasando activación de linterna para Android");
+            await enableTorch(videoTrack);
+          }
+          androidStreamTimeoutRef.current = null;
+        }, 300);
+      } else {
+        // Para iOS y otros, intentar activar la linterna inmediatamente
+        await new Promise(resolve => setTimeout(resolve, isIOS ? 200 : 100));
+      }
 
       // Intentar activar la linterna si estamos monitorizando
       if (videoTrack && isMonitoring) {
-        const torchEnabled = await enableTorch(videoTrack);
-        if (!torchEnabled && isAndroid) {
-          // En Android, a veces necesitamos un segundo intento
-          setTimeout(async () => {
-            await enableTorch(videoTrack);
-          }, 500);
-        }
+        await enableTorch(videoTrack);
       }
 
       // Notificar que el stream está listo
@@ -310,7 +306,7 @@ const CameraView = ({
             initializingRef.current = false;
             startCamera();
           }
-        }, 1000);
+        }, 1500); // Aumentar el tiempo de espera entre intentos para Android
       } else {
         stopCamera();
       }
@@ -327,7 +323,7 @@ const CameraView = ({
       // Usar un timeout más largo para Android
       const timeoutId = setTimeout(() => {
         startCamera();
-      }, isAndroid ? 500 : isIOS ? 300 : 100);
+      }, isAndroid ? 800 : isIOS ? 400 : 100);
       return () => clearTimeout(timeoutId);
     } else {
       stopCamera();
@@ -338,22 +334,16 @@ const CameraView = ({
   useEffect(() => {
     mountedRef.current = true;
     console.log("CameraView: Componente montado");
-
-    // Asegurarse de que los permisos de la cámara estén disponibles
-    navigator.mediaDevices?.getUserMedia({ video: true, audio: false })
-      .then(stream => {
-        // Solo comprobamos los permisos, detenemos el stream inmediatamente
-        stream.getTracks().forEach(track => track.stop());
-        console.log("CameraView: Permisos de cámara verificados");
-      })
-      .catch(err => {
-        console.error("CameraView: Error verificando permisos de cámara:", err);
-        setError(`Error de permisos: ${err instanceof Error ? err.message : String(err)}`);
-      });
-
+    
     return () => {
       console.log("CameraView: Componente desmontando");
       mountedRef.current = false;
+      
+      if (androidStreamTimeoutRef.current) {
+        clearTimeout(androidStreamTimeoutRef.current);
+        androidStreamTimeoutRef.current = null;
+      }
+      
       stopCamera();
     };
   }, [stopCamera]);
