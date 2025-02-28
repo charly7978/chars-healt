@@ -1,3 +1,4 @@
+
 export class HeartBeatProcessor {
   // ────────── CONFIGURACIONES PRINCIPALES ──────────
   private readonly SAMPLE_RATE = 30;
@@ -48,6 +49,15 @@ export class HeartBeatProcessor {
   private readonly BPM_ALPHA = 0.2;
   private peakCandidateIndex: number | null = null;
   private peakCandidateValue: number = 0;
+  
+  // Nuevas variables para el filtrado avanzado de falsos positivos
+  private readonly SIMILARITY_THRESHOLD = 0.70; // Umbral de similitud para validación de formas de onda
+  private readonly TEMPLATE_SIZE = 12; // Tamaño de la plantilla de forma de onda
+  private readonly MIN_PEAKS_FOR_TEMPLATE = 3; // Mínimo de picos para formar un template válido
+  private readonly MAX_JITTER_MS = 80; // Máxima variación permitida entre picos (en ms)
+  private waveformTemplates: number[][] = []; // Plantillas de formas de onda de latidos válidos
+  private lastValidPeakTimes: number[] = []; // Tiempos de los últimos picos válidos
+  private readonly ADAPTIVE_REJECTION_FACTOR = 0.5; // Factor para rechazo adaptativo
 
   constructor() {
     this.initAudio();
@@ -157,6 +167,130 @@ export class HeartBeatProcessor {
     return this.smoothedValue;
   }
 
+  // Nueva función para calcular la similitud entre formas de onda (correlación)
+  private calculateWaveformSimilarity(waveform1: number[], waveform2: number[]): number {
+    if (waveform1.length !== waveform2.length || waveform1.length === 0) {
+      return 0;
+    }
+    
+    // Normalizar las ondas
+    const normalize = (wave: number[]): number[] => {
+      const min = Math.min(...wave);
+      const max = Math.max(...wave);
+      const range = max - min;
+      if (range === 0) return wave.map(() => 0);
+      return wave.map(v => (v - min) / range);
+    };
+    
+    const norm1 = normalize(waveform1);
+    const norm2 = normalize(waveform2);
+    
+    // Calcular la correlación
+    let sum = 0;
+    let sum1 = 0;
+    let sum2 = 0;
+    
+    for (let i = 0; i < norm1.length; i++) {
+      sum += norm1[i] * norm2[i];
+      sum1 += norm1[i] * norm1[i];
+      sum2 += norm2[i] * norm2[i];
+    }
+    
+    if (sum1 === 0 || sum2 === 0) return 0;
+    return sum / Math.sqrt(sum1 * sum2);
+  }
+  
+  // Nueva función para extraer una forma de onda alrededor de un pico
+  private extractWaveform(centerIndex: number): number[] {
+    const halfSize = Math.floor(this.TEMPLATE_SIZE / 2);
+    const start = Math.max(0, centerIndex - halfSize);
+    const end = Math.min(this.signalBuffer.length - 1, centerIndex + halfSize);
+    
+    if (end - start + 1 < this.TEMPLATE_SIZE) {
+      return [];
+    }
+    
+    return this.signalBuffer.slice(start, end + 1);
+  }
+  
+  // Nueva función para verificar si un pico candidato es similar a plantillas existentes
+  private isPeakSimilarToTemplates(peakIndex: number): boolean {
+    if (this.waveformTemplates.length < this.MIN_PEAKS_FOR_TEMPLATE) {
+      // Si no tenemos suficientes plantillas, aceptamos el pico y lo agregamos como plantilla
+      const waveform = this.extractWaveform(peakIndex);
+      if (waveform.length === this.TEMPLATE_SIZE) {
+        this.waveformTemplates.push(waveform);
+      }
+      return true;
+    }
+    
+    const candidateWaveform = this.extractWaveform(peakIndex);
+    if (candidateWaveform.length !== this.TEMPLATE_SIZE) return false;
+    
+    // Verificar similitud con al menos una plantilla
+    for (const template of this.waveformTemplates) {
+      const similarity = this.calculateWaveformSimilarity(candidateWaveform, template);
+      if (similarity >= this.SIMILARITY_THRESHOLD) {
+        // Actualizar la plantilla con esta nueva forma de onda (aprendizaje continuo)
+        const updatedTemplate = template.map((val, idx) => 
+          (val * 0.8) + (candidateWaveform[idx] * 0.2)
+        );
+        this.waveformTemplates[this.waveformTemplates.indexOf(template)] = updatedTemplate;
+        return true;
+      }
+    }
+    
+    // Verificar si el intervalo temporal es plausible
+    const now = Date.now();
+    if (this.lastValidPeakTimes.length >= 2) {
+      const lastIntervals = [];
+      for (let i = 1; i < this.lastValidPeakTimes.length; i++) {
+        lastIntervals.push(this.lastValidPeakTimes[i] - this.lastValidPeakTimes[i-1]);
+      }
+      
+      const avgInterval = lastIntervals.reduce((a, b) => a + b, 0) / lastIntervals.length;
+      const expectedNextPeakTime = this.lastValidPeakTimes[this.lastValidPeakTimes.length - 1] + avgInterval;
+      
+      // Si el tiempo es cercano al esperado, aceptamos el pico aunque sea diferente
+      if (Math.abs(now - expectedNextPeakTime) < this.MAX_JITTER_MS) {
+        // Añadir esta forma de onda como una nueva plantilla para adaptarse a cambios
+        this.waveformTemplates.push(candidateWaveform);
+        if (this.waveformTemplates.length > 5) {
+          this.waveformTemplates.shift(); // Mantener solo 5 plantillas máximo
+        }
+        return true;
+      }
+    }
+    
+    return false;
+  }
+  
+  // Nueva función para verificar si el tiempo del pico es plausible según el ritmo cardíaco actual
+  private isTimingPlausible(now: number): boolean {
+    if (this.lastValidPeakTimes.length < 2) return true;
+    
+    // Calculamos intervalo promedio reciente (estimación del período cardíaco)
+    const recentIntervals = [];
+    for (let i = 1; i < this.lastValidPeakTimes.length; i++) {
+      recentIntervals.push(this.lastValidPeakTimes[i] - this.lastValidPeakTimes[i-1]);
+    }
+    
+    const avgInterval = recentIntervals.reduce((a, b) => a + b, 0) / recentIntervals.length;
+    const lastPeakTime = this.lastValidPeakTimes[this.lastValidPeakTimes.length - 1];
+    const timeSinceLastPeak = now - lastPeakTime;
+    
+    // Definir una ventana adaptativa basada en la variabilidad anterior
+    const stdDev = Math.sqrt(
+      recentIntervals.reduce((sum, interval) => 
+        sum + Math.pow(interval - avgInterval, 2), 0) / recentIntervals.length
+    );
+    
+    const minAcceptableInterval = Math.max(avgInterval - stdDev - 50, this.MIN_PEAK_TIME_MS);
+    const maxAcceptableInterval = avgInterval + stdDev + 100;
+    
+    return timeSinceLastPeak >= minAcceptableInterval && timeSinceLastPeak <= maxAcceptableInterval;
+  }
+
   public processSignal(value: number): {
     bpm: number;
     confidence: number;
@@ -202,7 +336,40 @@ export class HeartBeatProcessor {
     this.lastValue = smoothed;
 
     const { isPeak, confidence } = this.detectPeak(normalizedValue, smoothDerivative);
-    const isConfirmedPeak = this.confirmPeak(isPeak, normalizedValue, confidence);
+    
+    // Versión mejorada de confirmación de pico con filtrado de falsos positivos
+    let isConfirmedPeak = false;
+    
+    if (isPeak && !this.lastConfirmedPeak && confidence >= this.MIN_CONFIDENCE) {
+      if (this.peakConfirmationBuffer.length >= 3) {
+        const len = this.peakConfirmationBuffer.length;
+        const goingDown1 = this.peakConfirmationBuffer[len - 1] < this.peakConfirmationBuffer[len - 2];
+        const goingDown2 = this.peakConfirmationBuffer[len - 2] < this.peakConfirmationBuffer[len - 3];
+
+        if (goingDown1 && goingDown2) {
+          const now = Date.now();
+          const currentPeakIndex = this.signalBuffer.length - 1;
+          
+          // Validar por patrón de forma de onda y temporización
+          const isWaveformValid = this.isPeakSimilarToTemplates(currentPeakIndex);
+          const isTimingValid = this.isTimingPlausible(now);
+          
+          // Solo confirmamos picos que pasan todas las validaciones
+          if (isWaveformValid && isTimingValid) {
+            this.lastConfirmedPeak = true;
+            isConfirmedPeak = true;
+            
+            // Registrar este pico válido
+            this.lastValidPeakTimes.push(now);
+            if (this.lastValidPeakTimes.length > 8) {
+              this.lastValidPeakTimes.shift();
+            }
+          }
+        }
+      }
+    } else if (!isPeak) {
+      this.lastConfirmedPeak = false;
+    }
 
     if (isConfirmedPeak && !this.isInWarmup()) {
       const now = Date.now();
@@ -379,6 +546,10 @@ export class HeartBeatProcessor {
     this.peakCandidateIndex = null;
     this.peakCandidateValue = 0;
     this.lowSignalCount = 0;
+    
+    // Reiniciar variables del nuevo algoritmo
+    this.waveformTemplates = [];
+    this.lastValidPeakTimes = [];
   }
 
   public getRRIntervals(): { intervals: number[]; lastPeakTime: number | null } {
