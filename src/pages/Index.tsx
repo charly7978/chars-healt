@@ -302,15 +302,18 @@ const Index = () => {
     }
     
     try {
+      // Create a new ImageCapture instance for this stream
       const imageCapture = new ImageCapture(videoTrack);
       imageCaptureRef.current = imageCapture;
       
+      // Activate torch if available
       if (isMonitoring && videoTrack.getCapabilities()?.torch) {
         videoTrack.applyConstraints({
           advanced: [{ torch: true }]
         }).catch(err => console.error("Error activating flashlight:", err));
       }
       
+      // Prepare canvas for frame processing
       const tempCanvas = document.createElement('canvas');
       const tempCtx = tempCanvas.getContext('2d');
       if (!tempCtx) {
@@ -321,15 +324,39 @@ const Index = () => {
       isProcessingFramesRef.current = true;
       
       const processImage = async () => {
-        if (!isMonitoring || !isProcessingFramesRef.current || !imageCaptureRef.current) {
+        // Early exit if we're no longer monitoring or the component is unmounted
+        if (!isMonitoring || !isProcessingFramesRef.current) {
           return;
         }
         
         try {
+          // Check if imageCapture is still valid
+          if (!imageCaptureRef.current) {
+            console.error("ImageCapture instance no longer available");
+            return;
+          }
+          
+          // Verify track is still in valid state before grabbing a frame
+          const track = imageCaptureRef.current.track;
+          if (!track || track.readyState !== 'live') {
+            console.error("Track is not in live state, skipping frame capture");
+            
+            // If we're still monitoring, retry after a delay
+            if (isMonitoring && isProcessingFramesRef.current) {
+              setTimeout(() => {
+                if (isMonitoring && isProcessingFramesRef.current) {
+                  animationFrameRef.current = requestAnimationFrame(processImage);
+                }
+              }, 500);
+            }
+            return;
+          }
+          
           const frame = await imageCaptureRef.current.grabFrame();
           
+          // Double-check we're still monitoring
           if (!isMonitoring || !isProcessingFramesRef.current) {
-            return; // Double-check we're still monitoring
+            return;
           }
           
           tempCanvas.width = frame.width;
@@ -338,14 +365,22 @@ const Index = () => {
           
           const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
           
+          // Process the image for ambient light detection and signal processing
+          if (deviceContextService.processAmbientLight) {
+            deviceContextService.processAmbientLight(imageData);
+          }
+          
+          // Process the frame for vital sign detection
           processFrame(imageData);
           
+          // Continue processing frames if we're still monitoring
           if (isMonitoring && isProcessingFramesRef.current) {
             animationFrameRef.current = requestAnimationFrame(processImage);
           }
         } catch (error) {
           console.error("Error capturing frame:", error);
           
+          // Retry with delay if we're still monitoring
           if (isMonitoring && isProcessingFramesRef.current) {
             setTimeout(() => {
               if (isMonitoring && isProcessingFramesRef.current) {
@@ -356,6 +391,7 @@ const Index = () => {
         }
       };
 
+      // Start processing frames
       animationFrameRef.current = requestAnimationFrame(processImage);
     } catch (error) {
       console.error("Error creating ImageCapture:", error);
