@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { VitalSignsRisk } from '../utils/vitalSignsRisk';
 
@@ -51,13 +50,11 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     
     // For SpO2, ensure we don't show 0 values
     if (isSpO2 && (value === 0 || value === "0")) {
-      console.log("SpO2 display: Zero value converted to placeholder");
       return "--";
     }
     
     // For heart rate, ensure we don't show 0 values
     if (isHeartRate && (value === 0 || value === "0")) {
-      console.log("Heart rate display: Zero value converted to placeholder");
       return "--";
     }
     
@@ -142,16 +139,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     getArrhythmiaDisplay() : 
     { text: displayValue, ...getRiskInfo() };
 
-  // Debug visualization of values
-  React.useEffect(() => {
-    if (isBloodPressure) {
-      console.log(`VitalSign BP: Valor recibido: "${value}", mostrado: "${displayValue}"`);
-    } else if (isSpO2) {
-      console.log(`VitalSign SPO2: Valor recibido: ${value}, mostrado: ${displayValue}`);
-    } else if (isHeartRate) {
-      console.log(`VitalSign HR: Valor recibido: ${value}, mostrado: ${displayValue}`);
-    }
-  }, [value, displayValue, isBloodPressure, isSpO2, isHeartRate, label]);
+  console.log(`[DISPLAY DEBUG] ${label}: Recibido=${value}, Mostrado=${displayValue}, Tipo=${typeof value}`);
 
   return (
     <div className="relative overflow-hidden rounded-xl backdrop-blur-md bg-black/60 border border-white/20 shadow-lg">
