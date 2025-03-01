@@ -164,7 +164,7 @@ export class BloodPressureCalculator {
 
     const { peakIndices, valleyIndices, signalQuality } = enhancedPeakDetection(values);
 
-    if (peakIndices.length < 3 || valleyIndices.length < 3) {
+    if (signalQuality < this.BP_QUALITY_THRESHOLD || peakIndices.length < 3 || valleyIndices.length < 3) {
       return { systolic: this.lastValidSystolic, diastolic: this.lastValidDiastolic };
     }
 
