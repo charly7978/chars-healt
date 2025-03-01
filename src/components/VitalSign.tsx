@@ -1,3 +1,4 @@
+
 import React, { memo, useMemo } from 'react';
 import { VitalSignsRisk } from '../utils/vitalSignsRisk';
 
@@ -11,6 +12,9 @@ interface VitalSignProps {
 const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReading = false }) => {
   const isArrhythmiaDisplay = label === "ARRITMIAS";
   const isBloodPressure = label === "PRESIÓN ARTERIAL";
+  
+  // We need to create a cache for display values
+  const displayValueCache = new Map();
 
   // Helper function to check if blood pressure value is unrealistic
   const isBloodPressureUnrealistic = (bpString: string): boolean => {
@@ -31,7 +35,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
   };
 
   // Process blood pressure display for stable, realistic readings
-  const displayValue = useMemo(() => {
+  const processedDisplayValue = useMemo(() => {
     const cacheKey = `${label}-${value}`;
     if (displayValueCache.has(cacheKey)) {
       return displayValueCache.get(cacheKey);
@@ -120,14 +124,11 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
       label: "NORMAL"
     };
   };
-
-  // Get the medically valid display value
-  const displayValue = getDisplayValue();
   
   // Get the risk info based on the medically valid display value 
   const { text, color, label: riskLabel } = isArrhythmiaDisplay ? 
     getArrhythmiaDisplay() : 
-    { text: displayValue, ...getRiskInfo() };
+    { text: processedDisplayValue, ...getRiskInfo() };
 
   // Simplificar el renderizado para mejorar rendimiento
   return (

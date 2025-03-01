@@ -1,3 +1,4 @@
+
 /**
  * Platform detection utility functions
  * Helps identify the current platform, browser, and available capabilities
@@ -50,7 +51,7 @@ export const hasModernBrowser = (): boolean => {
     navigator.mediaDevices &&
     navigator.mediaDevices.getUserMedia &&
     window.MediaStreamTrack &&
-    typeof ImageCapture !== 'undefined'
+    typeof (window as any).ImageCapture !== 'undefined'
   );
 };
 
@@ -99,7 +100,7 @@ export const hasTorchCapability = async (stream?: MediaStream): Promise<boolean>
  * Check if the browser supports screen orientation locking
  */
 export const supportsOrientationLock = (): boolean => {
-  return !!screen.orientation?.lock;
+  return !!(screen.orientation?.lock);
 };
 
 /**
@@ -109,9 +110,9 @@ export const supportsFullscreen = (): boolean => {
   const elem = document.documentElement;
   return !!(
     elem.requestFullscreen ||
-    elem.webkitRequestFullscreen ||
-    elem.mozRequestFullScreen ||
-    elem.msRequestFullscreen
+    (elem as any).webkitRequestFullscreen ||
+    (elem as any).mozRequestFullScreen ||
+    (elem as any).msRequestFullscreen
   );
 };
 
