@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -502,10 +503,12 @@ const Index = () => {
           signalQuality={isMonitoring ? signalQuality : 0}
         />
         <div 
-          className="absolute inset-0" 
+          className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2" 
           style={{ 
             backgroundColor: 'rgba(0, 0, 0, 0.8)', 
-            backdropFilter: 'blur(2px)' 
+            backdropFilter: 'blur(2px)',
+            width: '80%',
+            height: '80%'
           }} 
         />
       </div>
@@ -523,7 +526,7 @@ const Index = () => {
       </div>
 
       <div className="absolute z-20" style={{ bottom: '65px', left: 0, right: 0, padding: '0 12px' }}>
-        <div className="p-2 rounded-lg">
+        <div className="p-2 rounded-lg bg-black/70">
           <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
             <VitalSign 
               label="FRECUENCIA CARDÍACA"
