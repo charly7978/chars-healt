@@ -159,9 +159,8 @@ const PPGSignalMeter = ({
     const smoothedValue = smoothValue(value, lastValueRef.current);
     lastValueRef.current = smoothedValue;
 
-    // INVERTIR POLARIDAD: Multiplica por -1 el valor normalizado para invertir la señal
-    const normalizedValue = (smoothedValue - (baselineRef.current || 0)) * -1; // Polaridad invertida
-    const scaledValue = normalizedValue * verticalScale; // Eliminamos el segundo -1 para evitar doble inversión
+    const normalizedValue = (smoothedValue - (baselineRef.current || 0));
+    const scaledValue = normalizedValue * verticalScale;
     
     let isArrhythmia = false;
     if (rawArrhythmiaData && 
@@ -241,7 +240,6 @@ const PPGSignalMeter = ({
         const point = visiblePoints[i];
         const nextPoint = visiblePoints[i + 1];
         
-        // INVERTIR LÓGICA PARA DETECTAR PICOS: Ahora buscamos picos negativos (valles)
         if (point.value > prevPoint.value && point.value > nextPoint.value) {
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
           const y = canvas.height * 0.4 + point.value;
@@ -257,25 +255,35 @@ const PPGSignalMeter = ({
           ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 20);
           
           if (point.isArrhythmia) {
+            // Primer círculo - fondo amarillo brillante
             ctx.beginPath();
-            ctx.arc(x, y, 9, 0, Math.PI * 2);
+            ctx.arc(x, y, 12, 0, Math.PI * 2); // Aumentado de 9 a 12
+            ctx.fillStyle = 'rgba(255, 255, 0, 0.4)'; // Fondo amarillo semitransparente
+            ctx.fill();
             ctx.strokeStyle = '#FFFF00';
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 3; // Aumentado de 2 a 3
             ctx.stroke();
             
+            // Segundo círculo - borde rojo pulsante
             ctx.beginPath();
-            ctx.arc(x, y, 14, 0, Math.PI * 2);
-            ctx.strokeStyle = '#FF6B6B';
-            ctx.lineWidth = 1;
-            ctx.setLineDash([2, 2]);
+            ctx.arc(x, y, 18, 0, Math.PI * 2); // Aumentado de 14 a 18
+            ctx.strokeStyle = '#FF3030';
+            ctx.lineWidth = 2; // Aumentado de 1 a 2
+            ctx.setLineDash([3, 3]); // Línea punteada más visible
             ctx.stroke();
             ctx.setLineDash([]);
             
-            ctx.font = 'bold 11px Inter';
+            // Destacar el latido prematuro con un texto más prominente y sombra
+            ctx.font = 'bold 14px Inter'; // Aumentado de 11 a 14
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+            ctx.shadowBlur = 4;
             ctx.fillStyle = '#FF0000';
-            ctx.fillText("LATIDO PREMATURO", x, y - 35);
+            ctx.fillText("LATIDO PREMATURO", x, y - 38); // Ajustado para evitar solapamiento
+            ctx.font = 'bold 12px Inter';
             ctx.fillStyle = '#FFFF00';
             ctx.fillText("DETECTADO", x, y - 22);
+            ctx.shadowColor = 'transparent';
+            ctx.shadowBlur = 0;
             
             if (i < visiblePoints.length - 2) {
               const nextPoint = visiblePoints[i + 1];
@@ -341,6 +349,24 @@ const PPGSignalMeter = ({
       }
     };
   }, [renderSignal]);
+
+  useEffect(() => {
+    if (!dataBufferRef.current) return;
+    
+    if (rawArrhythmiaData && arrhythmiaStatus?.includes("ARRITMIA DETECTADA") && 
+        Date.now() - (rawArrhythmiaData.timestamp || 0) < 1000) {
+      
+      dataBufferRef.current.markLastAsArrhythmia(true);
+      
+      console.log("🩺 PPGSignalMeter: ARRITMIA DETECTADA en visualización", {
+        timestamp: new Date().toISOString(),
+        arrhythmiaStatus,
+        dataDetails: rawArrhythmiaData,
+        markedPoint: "Último punto en buffer marcado como arritmia",
+        bufferSize: dataBufferRef.current.getPoints().length
+      });
+    }
+  }, [rawArrhythmiaData, arrhythmiaStatus]);
 
   return (
     <>
