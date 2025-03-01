@@ -63,7 +63,13 @@ export class VitalSignsProcessor {
     const arrhythmiaResult = this.arrhythmiaDetector.detect();
 
     // Calculate vital signs with minimal window
-    const bp = this.bpCalculator.calculate(this.ppgValues.slice(-30));
+    let bp;
+    if (this.ppgValues.length >= 30) {
+      bp = this.bpCalculator.calculate(this.ppgValues.slice(-30));
+    } else {
+      bp = { systolic: 0, diastolic: 0 };
+    }
+
     const pressure = bp.systolic > 0 && bp.diastolic > 0 ? `${bp.systolic}/${bp.diastolic}` : this.bpCalculator.getLastValidPressure();
     const spo2 = this.spO2Calculator.calculate(this.ppgValues.slice(-30));
 
