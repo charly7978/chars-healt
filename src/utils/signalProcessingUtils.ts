@@ -81,28 +81,29 @@ export const enhancedPeakDetection = (values: number[]): {
   const valleyIndices: number[] = [];
   const signalStrengths: number[] = [];
   
-  // 1. Normalize signal for analysis
+  // 1. Normalizar señal para análisis - asegurando que los picos sean siempre positivos
   const min = Math.min(...values);
   const max = Math.max(...values);
   const range = max - min;
   
-  // Calculate normalized values
+  // Calcular valores normalizados y asegurar que sean positivos para detección correcta
   const normalizedValues = range > 0 ? 
-                        values.map(v => (v - min) / range) : 
+                        values.map(v => Math.abs((v - min) / range)) : 
                         values.map(() => 0.5);
   
-  // 2. Calculate first derivative (slope change)
+  // 2. Calcular primera derivada (cambio de pendiente)
   const derivatives: number[] = [];
   for (let i = 1; i < normalizedValues.length; i++) {
     derivatives.push(normalizedValues[i] - normalizedValues[i-1]);
   }
-  derivatives.push(0); // Add 0 at the end to maintain same length
+  derivatives.push(0); // Añadir 0 al final para mantener la misma longitud
   
-  // 3. Detect peaks with advanced criteria
+  // 3. Detectar picos con criterios avanzados - corrigiendo la orientación de picos
   for (let i = 2; i < normalizedValues.length - 2; i++) {
     const v = normalizedValues[i];
     
-    // Peak criteria: higher than adjacent points and slope changes from positive to negative
+    // Criterio de pico mejorado: más alto que puntos adyacentes y pendiente cambia de positiva a negativa
+    // Los picos en PPG son HACIA ARRIBA (valores mayores = más sangre = pico)
     if (v > normalizedValues[i - 1] && 
         v > normalizedValues[i - 2] && 
         v > normalizedValues[i + 1] && 
@@ -111,12 +112,12 @@ export const enhancedPeakDetection = (values: number[]): {
       
       peakIndices.push(i);
       
-      // Calculate peak "strength" for quality evaluation
+      // Calcular "fuerza" del pico para evaluación de calidad
       const peakStrength = (v - normalizedValues[i-2]) + (v - normalizedValues[i+2]);
       signalStrengths.push(peakStrength);
     }
     
-    // Valley criteria: lower than adjacent points and slope changes from negative to positive
+    // Criterio de valle: más bajo que puntos adyacentes y pendiente cambia de negativa a positiva
     if (v < normalizedValues[i - 1] && 
         v < normalizedValues[i - 2] && 
         v < normalizedValues[i + 1] && 
@@ -127,11 +128,11 @@ export const enhancedPeakDetection = (values: number[]): {
     }
   }
   
-  // 4. Signal quality analysis
+  // 4. Análisis de calidad de señal
   let signalQuality = 0;
   
   if (peakIndices.length >= 3) {
-    // Calculate regularity of intervals between peaks
+    // Calcular regularidad de intervalos entre picos
     const peakIntervals: number[] = [];
     for (let i = 1; i < peakIndices.length; i++) {
       peakIntervals.push(peakIndices[i] - peakIndices[i-1]);
@@ -144,7 +145,7 @@ export const enhancedPeakDetection = (values: number[]): {
     const meanIntervalVariation = intervalVariation.reduce((sum, val) => sum + val, 0) / 
                                intervalVariation.length;
     
-    // Calculate consistency of peak amplitudes
+    // Calcular consistencia de amplitudes de picos
     const peakValues = peakIndices.map(idx => normalizedValues[idx]);
     const peakValueMean = peakValues.reduce((sum, val) => sum + val, 0) / peakValues.length;
     const peakValueVariation = peakValues.map(val => 
@@ -153,11 +154,11 @@ export const enhancedPeakDetection = (values: number[]): {
     const meanPeakVariation = peakValueVariation.reduce((sum, val) => sum + val, 0) / 
                            peakValueVariation.length;
     
-    // Combine factors for final quality score
-    // 1.0 = perfect, 0.0 = unusable
+    // Combinar factores para puntuación final de calidad
+    // 1.0 = perfecta, 0.0 = inutilizable
     const intervalConsistency = 1 - Math.min(1, meanIntervalVariation * 2);
     const amplitudeConsistency = 1 - Math.min(1, meanPeakVariation * 2);
-    const peakCount = Math.min(1, peakIndices.length / 8); // 8+ peaks = maximum score
+    const peakCount = Math.min(1, peakIndices.length / 8); // 8+ picos = puntuación máxima
     
     signalQuality = intervalConsistency * 0.5 + amplitudeConsistency * 0.3 + peakCount * 0.2;
   }
@@ -178,7 +179,8 @@ export const calculateAmplitude = (
   const amps: number[] = [];
   const len = Math.min(peaks.length, valleys.length);
   for (let i = 0; i < len; i++) {
-    const amp = values[peaks[i]] - values[valleys[i]];
+    // Asegurar que calculamos amplitudes positivas (pico - valle)
+    const amp = Math.abs(values[peaks[i]] - values[valleys[i]]);
     if (amp > 0) {
       amps.push(amp);
     }
