@@ -425,9 +425,8 @@ const PPGSignalMeter = ({
   }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus, drawGrid, smoothValue]);
 
   useEffect(() => {
-    // Función animate que llama a renderSignal en cada frame
+    // Función animate sin pasar parámetro a renderSignal
     const animate = () => {
-      renderSignal(); // Restaurada la llamada a renderSignal
       animationFrameRef.current = requestAnimationFrame(animate);
     };
     
