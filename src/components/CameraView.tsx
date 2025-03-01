@@ -8,6 +8,25 @@ interface CameraViewProps {
   signalQuality?: number;
 }
 
+// Define custom interface extending the standard definitions
+interface ExtendedMediaTrackCapabilities extends MediaTrackCapabilities {
+  exposureTime?: {
+    min: number;
+    max: number;
+    step: number;
+  };
+  zoom?: {
+    min: number;
+    max: number;
+    step: number;
+  };
+}
+
+interface ExtendedMediaTrackConstraints extends MediaTrackConstraints {
+  exposureTime?: number;
+  zoom?: number;
+}
+
 const CameraView = ({
   onStreamReady,
   isMonitoring,
@@ -138,14 +157,16 @@ const CameraView = ({
         if (videoTrack) {
           try {
             // Android optimizations
-            const capabilities = videoTrack.getCapabilities();
-            const settings: MediaTrackConstraints = {};
+            const capabilities = videoTrack.getCapabilities() as ExtendedMediaTrackCapabilities;
+            const settings: ExtendedMediaTrackConstraints = {};
             
             // Only apply constraints that are actually available and beneficial
             if (capabilities.exposureMode && capabilities.exposureMode.includes('continuous')) {
               settings.exposureMode = 'continuous';
             }
             
+            // Skip exposureTime setting as it's not standard
+            /* 
             if (capabilities.exposureTime) {
               // Set a moderate exposure time for better performance
               const min = capabilities.exposureTime.min || 0;
@@ -154,6 +175,7 @@ const CameraView = ({
                 settings.exposureTime = Math.min(Math.max(min + (max - min) * 0.3, min), max);
               }
             }
+            */
             
             if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
               settings.focusMode = 'continuous';
@@ -163,6 +185,8 @@ const CameraView = ({
               settings.whiteBalanceMode = 'continuous';
             }
             
+            // Skip zoom setting as it's not standard
+            /*
             if (capabilities.zoom) {
               // Apply a slight zoom to focus on the center
               const min = capabilities.zoom.min || 1;
@@ -171,6 +195,7 @@ const CameraView = ({
                 settings.zoom = Math.min(min + (max - min) * 0.1, max);
               }
             }
+            */
             
             if (Object.keys(settings).length > 0) {
               await videoTrack.applyConstraints(settings);
