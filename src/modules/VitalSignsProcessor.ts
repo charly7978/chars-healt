@@ -80,9 +80,6 @@ export class VitalSignsProcessor {
       rrVariation: arrhythmiaResult.data?.rrVariation || 0
     } : null;
 
-    // Ajustar sensibilidad del detector de arritmias
-    this.arrhythmiaDetector.setSensitivity(0.75); // Reducir sensibilidad para menos falsos positivos
-
     return {
       spo2,
       pressure,
