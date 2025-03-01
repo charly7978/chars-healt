@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -397,53 +398,18 @@ const Index = () => {
         const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
         
         if (!measurementComplete) {
-          if (heartBeatResult.bpm > 0 && heartBeatResult.confidence > 0.6) {
-            console.log("Index - BPM actualizado:", {
-              bpm: heartBeatResult.bpm,
-              confidence: heartBeatResult.confidence,
-              isPeak: heartBeatResult.isPeak
-            });
+          if (heartBeatResult.bpm > 0) {
             setHeartRate(heartBeatResult.bpm);
             allHeartRateValuesRef.current.push(heartBeatResult.bpm);
           }
           
           const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
           if (vitals) {
-            console.log("Index - Procesando vitales:", {
-              spo2: vitals.spo2,
-              pressure: vitals.pressure,
-              fingerDetected: lastSignal.fingerDetected,
-              signalQuality: lastSignal.quality
-            });
-            
             if (vitals.spo2 > 0) {
-              console.log("Index - Actualizando SpO2:", vitals.spo2);
-              // Actualización directa sin efectos visuales ni forzar cambios
-              setVitalSigns(current => {
-                // Solo actualizar si el valor ha cambiado realmente
-                if (current.spo2 !== vitals.spo2) {
-                  console.log("Index - SpO2 cambiado de", current.spo2, "a", vitals.spo2);
-                  
-                  // Actualizar el DOM directamente sin animaciones
-                  setTimeout(() => {
-                    const element = document.getElementById('spo2-value');
-                    if (element) {
-                      element.textContent = vitals.spo2.toString();
-                      console.log("Index - SpO2 actualizado en DOM:", vitals.spo2);
-                    } else {
-                      console.warn("Index - No se encontró el elemento spo2-value en el DOM");
-                    }
-                  }, 0);
-                  
-                  return {
-                    ...current,
-                    spo2: vitals.spo2
-                  };
-                }
-                return current; // No actualizar si el valor no ha cambiado
-              });
-              
-              // Guardar valor para promedios finales solo si es un valor real
+              setVitalSigns(current => ({
+                ...current,
+                spo2: vitals.spo2
+              }));
               allSpo2ValuesRef.current.push(vitals.spo2);
             }
             
@@ -472,20 +438,12 @@ const Index = () => {
               setArrhythmiaCount(count || "0");
             }
           }
-          
-          setSignalQuality(lastSignal.quality);
         }
+        
+        setSignalQuality(lastSignal.quality);
       } catch (error) {
         console.error("Error procesando señal:", error);
       }
-    } else if (!lastSignal?.fingerDetected && isMonitoring) {
-      setHeartRate(0);
-      setVitalSigns(prev => ({
-        ...prev,
-        spo2: 0,
-        pressure: "--/--"
-      }));
-      setSignalQuality(0);
     }
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns, measurementComplete]);
 

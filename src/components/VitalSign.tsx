@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { VitalSignsRisk } from '../utils/vitalSignsRisk';
 
@@ -54,7 +55,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
       return getArrhythmiaDisplay();
     }
 
-    // Para frecuencia cardíaca, mostrar valor real sin comprobar riesgo si no hay medición
+    // For heart rate, show real value without checking risk if no measurement
     if (label === "FRECUENCIA CARDÍACA") {
       if (value === "--" || value === 0) {
         return { color: '#FFFFFF', label: '' };
@@ -64,7 +65,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
       }
     }
 
-    // Para SPO2, mostrar valor real sin comprobar riesgo si no hay medición
+    // For SPO2, show real value without checking risk if no measurement
     if (label === "SPO2") {
       if (value === "--" || value === 0) {
         return { color: '#FFFFFF', label: '' };
@@ -74,13 +75,13 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
       }
     }
 
-    // Para presión arterial, mostrar valor real sin comprobar riesgo si no hay medición
+    // For blood pressure, show real value without checking risk if no measurement
     if (label === "PRESIÓN ARTERIAL") {
       if (value === "--/--" || value === "0/0") {
         return { color: '#FFFFFF', label: '' };
       }
       
-      // No intentar evaluar el riesgo si la medición es inestable/irreal
+      // Don't try to evaluate risk if measurement is unstable/unrealistic
       if (typeof value === 'string' && !isBloodPressureUnrealistic(value)) {
         return VitalSignsRisk.getBPRisk(value, isFinalReading);
       }
@@ -140,7 +141,6 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
             <span 
               className={`${isArrhythmiaDisplay ? 'text-base' : 'text-xl'} font-bold transition-colors duration-300 text-white`}
               style={{ color: color || '#FFFFFF' }}
-              id={label === "SPO2" ? "spo2-value" : undefined}
             >
               {isArrhythmiaDisplay ? text : displayValue}
             </span>
