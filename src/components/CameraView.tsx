@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 
 interface CameraViewProps {
@@ -18,6 +17,8 @@ const CameraView = ({
   const streamRef = useRef<MediaStream | null>(null);
   const mountedRef = useRef(true);
   const initializingRef = useRef(false);
+  const retryCountRef = useRef(0);
+  const maxRetries = 3;
   const [error, setError] = useState<string | null>(null);
   const [isAndroid, setIsAndroid] = useState(false);
 
@@ -46,17 +47,15 @@ const CameraView = ({
           }
         }
         
-        // Esperar un momento antes de detener la pista (ayuda con Android)
-        setTimeout(() => {
-          try {
-            if (track.readyState === 'live') {
-              console.log("CameraView: Deteniendo track de video");
-              track.stop();
-            }
-          } catch (err) {
-            console.error("Error deteniendo track:", err);
+        // Detener la pista inmediatamente
+        try {
+          if (track.readyState === 'live') {
+            console.log("CameraView: Deteniendo track de video");
+            track.stop();
           }
-        }, 50);
+        } catch (err) {
+          console.error("Error deteniendo track:", err);
+        }
       });
 
       streamRef.current = null;
@@ -71,6 +70,9 @@ const CameraView = ({
         console.error("Error limpiando video element:", err);
       }
     }
+    
+    // Resetear el contador de reintentos
+    retryCountRef.current = 0;
   }, []);
 
   // Función para iniciar la cámara
@@ -90,24 +92,24 @@ const CameraView = ({
       stopCamera();
       
       // Esperar un momento para que los recursos se liberen (especialmente en Android)
-      await new Promise(resolve => setTimeout(resolve, isAndroid ? 300 : 50));
+      await new Promise(resolve => setTimeout(resolve, 300));
 
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error('La API getUserMedia no está disponible');
       }
 
-      // Configuración de la cámara optimizada para cada plataforma
+      // Usar configuraciones más simples para mejor compatibilidad
       const constraints: MediaStreamConstraints = {
         video: {
           facingMode: 'environment',
-          width: isAndroid ? { ideal: 1280 } : { ideal: 640 },
-          height: isAndroid ? { ideal: 720 } : { ideal: 480 },
-          frameRate: { ideal: isAndroid ? 24 : 30 }
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          frameRate: { ideal: 15 } // Reducir para mejor estabilidad
         },
         audio: false
       };
 
-      // Intentar obtener acceso a la cámara
+      // En Android, primero intentar con configuraciones más simples
       console.log("CameraView: Solicitando acceso a la cámara con constraints:", constraints);
       const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
       console.log("CameraView: Acceso a la cámara concedido, tracks:", mediaStream.getTracks().length);
@@ -121,91 +123,87 @@ const CameraView = ({
 
       streamRef.current = mediaStream;
 
-      // Configurar optimizaciones específicas para Android
-      if (isAndroid) {
-        console.log("CameraView: Aplicando optimizaciones para Android");
-        const videoTrack = mediaStream.getVideoTracks()[0];
-        if (videoTrack) {
-          try {
-            // Optimizaciones para Android
-            const capabilities = videoTrack.getCapabilities();
-            const settings: MediaTrackConstraints = {};
-            
-            if (capabilities.exposureMode && capabilities.exposureMode.includes('continuous')) {
-              settings.exposureMode = 'continuous';
-            }
-            
-            if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
-              settings.focusMode = 'continuous';
-            }
-            
-            if (capabilities.whiteBalanceMode && capabilities.whiteBalanceMode.includes('continuous')) {
-              settings.whiteBalanceMode = 'continuous';
-            }
-            
-            if (Object.keys(settings).length > 0) {
-              await videoTrack.applyConstraints(settings);
-              console.log("CameraView: Optimizaciones para Android aplicadas", settings);
-            }
-          } catch (err) {
-            console.error("Error aplicando optimizaciones para Android:", err);
-          }
-        }
-      }
-
-      // Configurar el elemento de video
+      // Configurar el elemento de video con prioridad
       if (videoRef.current) {
         console.log("CameraView: Asignando stream al elemento video");
-        
-        // Optimizaciones específicas para el elemento video en Android
-        if (isAndroid) {
-          videoRef.current.style.willChange = 'transform';
-          videoRef.current.style.transform = 'translateZ(0)';
-          videoRef.current.style.backfaceVisibility = 'hidden';
-        }
-        
         videoRef.current.srcObject = mediaStream;
         
-        // En Android, esperar a que las optimizaciones se apliquen antes de reproducir
-        await new Promise(resolve => setTimeout(resolve, isAndroid ? 100 : 0));
-        
-        await videoRef.current.play().catch(e => {
+        try {
+          // Reproducir sin esperar
+          videoRef.current.play();
+          console.log("CameraView: Video reproduciendo correctamente");
+          
+          // Esperar a que la reproducción comience realmente
+          await new Promise<void>((resolve, reject) => {
+            if (videoRef.current) {
+              const onPlaying = () => {
+                videoRef.current?.removeEventListener('playing', onPlaying);
+                resolve();
+              };
+              
+              const onError = (e: any) => {
+                videoRef.current?.removeEventListener('error', onError);
+                reject(e);
+              };
+              
+              videoRef.current.addEventListener('playing', onPlaying);
+              videoRef.current.addEventListener('error', onError);
+              
+              // Timeout por si acaso
+              setTimeout(() => resolve(), 2000);
+            } else {
+              resolve();
+            }
+          });
+          
+        } catch (e) {
           console.error("Error reproduciendo video:", e);
-          throw e;
-        });
-        console.log("CameraView: Video reproduciendo correctamente");
+        }
       } else {
         console.error("CameraView: El elemento video no está disponible");
       }
 
-      // Esperar un momento antes de activar la linterna en Android
-      await new Promise(resolve => setTimeout(resolve, isAndroid ? 200 : 0));
+      // Esperar antes de activar la linterna
+      await new Promise(resolve => setTimeout(resolve, 500));
 
-      // Intentar activar la linterna si estamos monitorizando
-      const videoTrack = mediaStream.getVideoTracks()[0];
-      if (videoTrack && videoTrack.getCapabilities()?.torch) {
-        try {
-          console.log("CameraView: Intentando activar linterna");
-          await videoTrack.applyConstraints({
-            advanced: [{ torch: true }]
-          });
-          console.log("CameraView: Linterna activada");
-        } catch (e) {
-          console.error("Error configurando linterna:", e);
+      // Solo activar la linterna si todo lo demás ha funcionado correctamente
+      if (isMonitoring && streamRef.current) {
+        const videoTrack = streamRef.current.getVideoTracks()[0];
+        if (videoTrack && videoTrack.getCapabilities()?.torch) {
+          try {
+            console.log("CameraView: Intentando activar linterna");
+            await videoTrack.applyConstraints({
+              advanced: [{ torch: true }]
+            });
+            console.log("CameraView: Linterna activada");
+          } catch (e) {
+            console.error("Error configurando linterna:", e);
+          }
+        } else {
+          console.log("CameraView: Linterna no disponible");
         }
-      } else {
-        console.log("CameraView: Linterna no disponible");
       }
 
       // Notificar que el stream está listo
-      if (onStreamReady && isMonitoring) {
+      if (onStreamReady && isMonitoring && streamRef.current) {
         console.log("CameraView: Notificando stream listo");
-        onStreamReady(mediaStream);
+        onStreamReady(streamRef.current);
       }
     } catch (error) {
       console.error('Error iniciando la cámara:', error);
       setError(`Error iniciando la cámara: ${error instanceof Error ? error.message : String(error)}`);
-      stopCamera();
+      
+      // Intentar de nuevo con configuraciones aún más simples si estamos en Android
+      if (retryCountRef.current < maxRetries) {
+        retryCountRef.current++;
+        console.log(`CameraView: Reintentando (${retryCountRef.current}/${maxRetries})...`);
+        setTimeout(() => {
+          initializingRef.current = false;
+          startCamera();
+        }, 1000);
+      } else {
+        stopCamera();
+      }
     } finally {
       initializingRef.current = false;
     }
@@ -216,10 +214,10 @@ const CameraView = ({
     console.log("CameraView: isMonitoring cambió a:", isMonitoring);
     
     if (isMonitoring) {
-      // Usar un timeout más largo para Android
+      // Esperar un poco antes de iniciar la cámara
       const timeoutId = setTimeout(() => {
         startCamera();
-      }, isAndroid ? 500 : 100);
+      }, 1000);
       return () => clearTimeout(timeoutId);
     } else {
       stopCamera();
@@ -251,26 +249,27 @@ const CameraView = ({
   }, [stopCamera]);
 
   return (
-    <>
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        muted
-        className={`absolute top-0 left-0 min-w-full min-h-full w-auto h-auto z-0 object-cover ${!isMonitoring ? 'hidden' : ''}`}
-        style={{
-          transform: 'translateZ(0)', // Hardware acceleration
-          WebkitBackfaceVisibility: 'hidden',
-          backfaceVisibility: 'hidden',
-          willChange: isAndroid ? 'transform' : 'auto',
-        }}
-      />
+    <div className="relative w-full h-full">
       {error && (
-        <div className="absolute top-0 left-0 z-50 bg-red-500/80 text-white p-2 text-sm font-medium rounded m-2">
-          {error}
+        <div className="absolute inset-0 bg-red-500/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white p-4 rounded-lg shadow-lg">
+            <p className="text-red-600 font-bold">Error de cámara</p>
+            <p className="text-sm">{error}</p>
+          </div>
         </div>
       )}
-    </>
+      
+      <video
+        ref={videoRef}
+        className={`absolute inset-0 w-full h-full object-cover ${isFingerDetected ? 'opacity-100' : 'opacity-80'}`}
+        playsInline
+        muted
+        style={{
+          display: isMonitoring ? 'block' : 'none',
+          zIndex: 10
+        }}
+      />
+    </div>
   );
 };
 

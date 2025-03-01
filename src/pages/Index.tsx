@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -252,53 +251,107 @@ const Index = () => {
   const handleStreamReady = (stream: MediaStream) => {
     if (!isMonitoring) return;
     
-    const videoTrack = stream.getVideoTracks()[0];
-    const imageCapture = new ImageCapture(videoTrack);
+    console.log("Index: Stream de cámara recibido y listo para procesar");
     
-    if (isMonitoring && videoTrack.getCapabilities()?.torch) {
-      videoTrack.applyConstraints({
-        advanced: [{ torch: true }]
-      }).catch(err => console.error("Error activando linterna:", err));
-    }
-    
-    const tempCanvas = document.createElement('canvas');
-    const tempCtx = tempCanvas.getContext('2d');
-    if (!tempCtx) {
-      console.error("No se pudo obtener el contexto 2D");
-      return;
-    }
-    
-    const processImage = async () => {
-      if (!isMonitoring) return;
+    try {
+      const videoTrack = stream.getVideoTracks()[0];
       
-      try {
-        const frame = await imageCapture.grabFrame();
-        tempCanvas.width = frame.width;
-        tempCanvas.height = frame.height;
-        tempCtx.drawImage(frame, 0, 0);
-        const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
-        processFrame(imageData);
-        
-        if (isMonitoring) {
-          requestAnimationFrame(processImage);
-        }
-      } catch (error) {
-        console.error("Error capturando frame:", error);
-        if (isMonitoring) {
-          requestAnimationFrame(processImage);
-        }
+      // Verificar que el track esté activo
+      if (!videoTrack || videoTrack.readyState !== 'live') {
+        console.error("Index: El track de video no está activo");
+        return;
       }
-    };
-
-    processImage();
-    
-    return () => {
-      if (videoTrack.getCapabilities()?.torch) {
+      
+      const imageCapture = new ImageCapture(videoTrack);
+      
+      // Verificar la linterna sin forzar - solo si está disponible
+      if (isMonitoring && videoTrack.getCapabilities()?.torch) {
         videoTrack.applyConstraints({
-          advanced: [{ torch: false }]
-        }).catch(err => console.error("Error desactivando linterna:", err));
+          advanced: [{ torch: true }]
+        }).catch(err => console.warn("Aviso - No se pudo activar la linterna:", err));
       }
-    };
+      
+      // Crear un canvas temporal para el procesamiento
+      const tempCanvas = document.createElement('canvas');
+      const tempCtx = tempCanvas.getContext('2d', { 
+        alpha: false,       // Mejor rendimiento
+        desynchronized: true // Procesamiento más rápido
+      });
+      
+      if (!tempCtx) {
+        console.error("No se pudo obtener el contexto 2D");
+        return;
+      }
+      
+      // Configurar el canvas con dimensiones básicas
+      tempCanvas.width = 320;  // Reducir tamaño para mejor rendimiento
+      tempCanvas.height = 240;
+      
+      // Usar una variable para controlar el procesamiento
+      let isProcessingFrame = false;
+      let lastProcessTime = 0;
+      const THROTTLE_MS = 66; // ~15 FPS
+      
+      const processImage = async () => {
+        if (!isMonitoring) return;
+        
+        const now = performance.now();
+        const timeSinceLastProcess = now - lastProcessTime;
+        
+        // Limitar la frecuencia de procesamiento de frames para evitar sobrecarga
+        if (timeSinceLastProcess < THROTTLE_MS || isProcessingFrame) {
+          requestAnimationFrame(processImage);
+          return;
+        }
+        
+        isProcessingFrame = true;
+        lastProcessTime = now;
+        
+        try {
+          // Capturar frame
+          const frame = await imageCapture.grabFrame().catch(err => {
+            console.warn("Aviso - Error capturando frame:", err);
+            return null;
+          });
+          
+          if (!frame) {
+            isProcessingFrame = false;
+            if (isMonitoring) requestAnimationFrame(processImage);
+            return;
+          }
+          
+          // Actualizar tamaño de canvas si es necesario
+          if (tempCanvas.width !== frame.width || tempCanvas.height !== frame.height) {
+            tempCanvas.width = frame.width;
+            tempCanvas.height = frame.height;
+          }
+          
+          // Dibujar y procesar el frame
+          tempCtx.drawImage(frame, 0, 0);
+          const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
+          
+          // Procesar el frame solo si estamos monitorizando
+          if (isMonitoring) {
+            processFrame(imageData);
+          }
+        } catch (error) {
+          console.error("Error procesando frame:", error);
+        } finally {
+          isProcessingFrame = false;
+          
+          // Continuar procesando solo si estamos monitorizando
+          if (isMonitoring) {
+            requestAnimationFrame(processImage);
+          }
+        }
+      };
+      
+      // Iniciar el procesamiento
+      processImage();
+      
+    } catch (error) {
+      console.error("Error configurando procesamiento de cámara:", error);
+    }
   };
 
   useEffect(() => {

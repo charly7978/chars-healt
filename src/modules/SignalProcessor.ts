@@ -1,4 +1,3 @@
-
 import { ProcessedSignal, ProcessingError, SignalProcessor } from '../types/signal';
 
 // Class for Kalman filter - improves signal noise reduction
@@ -186,32 +185,62 @@ export class PPGSignalProcessor implements SignalProcessor {
     let redSum = 0;
     let greenSum = 0;
     let blueSum = 0;
-    let count = 0;
+    let pixelCount = 0;
     
-    // Use central region for better signal (central 25%)
-    const startX = Math.floor(imageData.width * 0.375);
-    const endX = Math.floor(imageData.width * 0.625);
-    const startY = Math.floor(imageData.height * 0.375);
-    const endY = Math.floor(imageData.height * 0.625);
+    // Usar una muestra reducida para mejorar rendimiento
+    // Procesar solo 1 de cada N píxeles
+    const sampleRate = 4;
+    const width = imageData.width;
+    const height = imageData.height;
     
-    for (let y = startY; y < endY; y++) {
-      for (let x = startX; x < endX; x++) {
-        const i = (y * imageData.width + x) * 4;
-        redSum += data[i];     // Red channel
-        greenSum += data[i+1]; // Green channel
-        blueSum += data[i+2];  // Blue channel
-        count++;
+    // Usar región central para mejor señal (25-30% central)
+    const startX = Math.floor(width * 0.35);
+    const endX = Math.floor(width * 0.65);
+    const startY = Math.floor(height * 0.35);
+    const endY = Math.floor(height * 0.65);
+    
+    // Procesar píxeles con muestreo para optimizar
+    for (let y = startY; y < endY; y += sampleRate) {
+      for (let x = startX; x < endX; x += sampleRate) {
+        const i = (y * width + x) * 4;
+        
+        // Verificar que el índice esté dentro de los límites
+        if (i >= 0 && i < data.length - 3) {
+          redSum += data[i];     // Canal rojo
+          greenSum += data[i+1]; // Canal verde
+          blueSum += data[i+2];  // Canal azul
+          pixelCount++;
+        }
       }
     }
     
-    const avgRed = redSum / count;
-    const avgGreen = greenSum / count;
-    const avgBlue = blueSum / count;
-
-    // Check red channel dominance (characteristic of blood-containing tissue)
-    const isRedDominant = avgRed > (avgGreen * 1.2) && avgRed > (avgBlue * 1.2);
+    // Proteger contra división por cero
+    if (pixelCount === 0) return 0;
     
-    return isRedDominant ? avgRed : 0;
+    const avgRed = redSum / pixelCount;
+    const avgGreen = greenSum / pixelCount;
+    const avgBlue = blueSum / pixelCount;
+    
+    // Diferentes estrategias de detección:
+    
+    // 1. Comprobación de dominancia del rojo (indica presencia de sangre)
+    const redDominance = (avgRed > (avgGreen * 1.05) && avgRed > (avgBlue * 1.05));
+    
+    // 2. Brillo adecuado (ni muy oscuro ni saturado)
+    const goodBrightness = avgRed > 20 && avgRed < 240;
+    
+    // 3. Buena saturación de color
+    const colorSaturation = Math.max(avgRed, avgGreen, avgBlue) - Math.min(avgRed, avgGreen, avgBlue);
+    const goodSaturation = colorSaturation > 10;
+    
+    // Calcular un valor de confianza (0-1)
+    let confidence = 0;
+    if (redDominance) confidence += 0.5;
+    if (goodBrightness) confidence += 0.3;
+    if (goodSaturation) confidence += 0.2;
+    
+    // Retornar el valor del canal rojo o 0 si la confianza es baja
+    return confidence > 0.6 ? avgRed : 0;
   }
 
   /**
