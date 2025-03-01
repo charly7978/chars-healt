@@ -280,7 +280,7 @@ const PPGSignalMeter = ({
             // Línea que conecta con el latido anterior (si existe)
             if (i > 0) {
               const prevX = canvas.width - ((now - visiblePoints[i-1].time) * canvas.width / WINDOW_WIDTH_MS);
-              const prevY = canvas.height * 0.4 + visiblePoints[i-1].value;
+              const prevY = canvas.height * 0.6 - visiblePoints[i-1].value;
               
               ctx.moveTo(prevX, prevY - 15);
               ctx.lineTo(x, y - 15);
@@ -290,7 +290,7 @@ const PPGSignalMeter = ({
             // Línea que conecta con el latido siguiente (si existe)
             if (i < visiblePoints.length - 1) {
               const nextX = canvas.width - ((now - visiblePoints[i+1].time) * canvas.width / WINDOW_WIDTH_MS);
-              const nextY = canvas.height * 0.4 + visiblePoints[i+1].value;
+              const nextY = canvas.height * 0.6 - visiblePoints[i+1].value;
               
               ctx.moveTo(x, y - 15);
               ctx.lineTo(nextX, nextY - 15);

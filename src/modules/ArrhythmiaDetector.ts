@@ -5,8 +5,12 @@ export class ArrhythmiaDetector {
   
   // MÁS ESTRICTO: Ajustes extremos para solo detectar latidos prematuros entre normales
   private readonly PREMATURE_BEAT_THRESHOLD = 0.65; // Más estricto para evitar falsos positivos
-  private readonly AMPLITUDE_RATIO_THRESHOLD = 0.55; // Umbral MUCHO más bajo - solo picos muy pequeños
+  private readonly AMPLITUDE_RATIO_THRESHOLD = 0.53; // Umbral MUCHO más bajo - solo picos muy pequeños
   private readonly NORMAL_PEAK_MIN_THRESHOLD = 0.85; // Umbral para considerar un pico como normal
+  
+  // NUEVA PROTECCIÓN: Prevenir detecciones múltiples consecutivas
+  private readonly COOLDOWN_AFTER_DETECTION_MS = 1500; // Período de enfriamiento post-arritmia
+  private readonly MIN_NORMAL_BEATS_BETWEEN_PREMATURE = 2; // Mínimo de latidos normales entre prematuros
   
   // State variables
   private rrIntervals: number[] = [];
@@ -24,11 +28,17 @@ export class ArrhythmiaDetector {
   private avgNormalAmplitude: number = 0;
   private baseRRInterval: number = 0; // Average normal RR interval
   
+  // NUEVO: Variables para evitar falsas detecciones continuas
+  private normalBeatsAfterPremature: number = 0;
+  private lastPrematureIndex: number = -1;
+  private inPostArrhythmiaCooldown: boolean = false;
+  
   // NUEVO: Almacenamiento de secuencia de picos para análisis preciso
   private peakSequence: Array<{
     amplitude: number;
     time: number;
     type: 'normal' | 'premature' | 'unknown';
+    index: number; // Añadido para rastrear picos secuencialmente
   }> = [];
   
   // DEBUG flag to track detection issues
@@ -53,6 +63,11 @@ export class ArrhythmiaDetector {
     this.avgNormalAmplitude = 0;
     this.baseRRInterval = 0;
     this.peakSequence = [];
+    
+    // Reinicio de variables de protección
+    this.normalBeatsAfterPremature = 0;
+    this.lastPrematureIndex = -1;
+    this.inPostArrhythmiaCooldown = false;
     
     console.log("ArrhythmiaDetector: Reset completo");
   }
@@ -127,6 +142,12 @@ export class ArrhythmiaDetector {
     this.rrIntervals = intervals;
     this.lastPeakTime = lastPeakTime;
     
+    // NUEVO: Verificar si debemos salir del período de enfriamiento
+    if (this.inPostArrhythmiaCooldown && currentTime - this.lastArrhythmiaTime > this.COOLDOWN_AFTER_DETECTION_MS) {
+      this.inPostArrhythmiaCooldown = false;
+      console.log('ArrhythmiaDetector - Finalizado período de enfriamiento post-arritmia');
+    }
+    
     // NUEVO: Registrar el tiempo del pico actual
     if (lastPeakTime) {
       this.peakTimes.push(lastPeakTime);
@@ -149,25 +170,60 @@ export class ArrhythmiaDetector {
         if (this.avgNormalAmplitude > 0 && !this.isLearningPhase) {
           const ratio = Math.abs(peakAmplitude) / this.avgNormalAmplitude;
           
-          // Clasificar como normal si está cerca o por encima del promedio normal
+          // MEJORADO: Clasificación más robusta de tipos de latidos
           if (ratio >= this.NORMAL_PEAK_MIN_THRESHOLD) {
             peakType = 'normal';
+            
+            // NUEVO: Contador de latidos normales después de uno prematuro
+            if (this.lastPrematureIndex >= 0) {
+              this.normalBeatsAfterPremature++;
+            }
           } 
-          // Clasificar como prematuro si es significativamente más pequeño
-          else if (ratio <= this.AMPLITUDE_RATIO_THRESHOLD) {
+          // Clasificar como prematuro solo si no estamos en período de enfriamiento
+          else if (ratio <= this.AMPLITUDE_RATIO_THRESHOLD && !this.inPostArrhythmiaCooldown) {
             peakType = 'premature';
+            
+            // Verificar si tenemos suficientes latidos normales desde el último prematuro
+            if (this.normalBeatsAfterPremature < this.MIN_NORMAL_BEATS_BETWEEN_PREMATURE && 
+                this.lastPrematureIndex >= 0) {
+              
+              // Si no hay suficientes latidos normales, lo clasificamos como "desconocido"
+              // para evitar falsas detecciones consecutivas
+              console.log('ArrhythmiaDetector - Reclasificando latido: de prematuro a desconocido (no hay suficientes latidos normales previos)');
+              peakType = 'unknown';
+            } else {
+              // Actualizar índice del último latido prematuro
+              this.lastPrematureIndex = this.peakSequence.length;
+              this.normalBeatsAfterPremature = 0;
+            }
           }
         }
         
-        this.peakSequence.push({
+        // Crear nuevo objeto de pico con índice secuencial
+        const newPeak = {
           amplitude: Math.abs(peakAmplitude),
           time: currentTime,
-          type: peakType
-        });
+          type: peakType,
+          index: this.peakSequence.length
+        };
+        
+        this.peakSequence.push(newPeak);
         
         // Mantener solo los últimos 10 picos
         if (this.peakSequence.length > 10) {
           this.peakSequence.shift();
+          
+          // Ajustar índices después de eliminar el primer elemento
+          this.peakSequence.forEach((peak, i) => {
+            peak.index = i;
+          });
+          
+          // Ajustar lastPrematureIndex si es necesario
+          if (this.lastPrematureIndex > 0) {
+            this.lastPrematureIndex--;
+          } else if (this.lastPrematureIndex === 0) {
+            this.lastPrematureIndex = -1; // Ya no tenemos el latido prematuro en el buffer
+          }
         }
       }
       
@@ -182,6 +238,7 @@ export class ArrhythmiaDetector {
 
   /**
    * ALGORITMO MEJORADO: Detecta SOLO latidos prematuros PEQUEÑOS entre dos latidos NORMALES
+   * Con protección adicional contra falsas detecciones consecutivas
    */
   detect(): {
     detected: boolean;
@@ -218,53 +275,71 @@ export class ArrhythmiaDetector {
     
     let prematureBeatDetected = false;
     
+    // NUEVO: Si estamos en período de enfriamiento, no detectamos nuevas arritmias
+    if (this.inPostArrhythmiaCooldown) {
+      // Calcular variación RR para información adicional pero no detectamos nada
+      const rrVariation = (this.rrIntervals.length > 1) ? 
+        Math.abs(this.rrIntervals[this.rrIntervals.length - 1] - this.baseRRInterval) / this.baseRRInterval : 
+        0;
+      this.lastRRVariation = rrVariation;
+      
+      return {
+        detected: false,
+        count: this.arrhythmiaCount,
+        status: this.hasDetectedFirstArrhythmia ? 
+          `ARRITMIA DETECTADA|${this.arrhythmiaCount}` : 
+          `SIN ARRITMIAS|${this.arrhythmiaCount}`,
+        data: { rmssd, rrVariation, prematureBeat: false }
+      };
+    }
+    
     // ALGORITMO ESTRICTO: Buscar el patrón específico de latido prematuro entre normales
     if (this.peakSequence.length >= 3 && this.avgNormalAmplitude > 0) {
       // Verificamos los 3 últimos picos 
       const lastThreePeaks = this.peakSequence.slice(-3);
       
-      // Clasificar los picos explícitamente
-      for (let i = 0; i < lastThreePeaks.length; i++) {
-        const peak = lastThreePeaks[i];
-        const ratio = peak.amplitude / this.avgNormalAmplitude;
-        
-        // Clasificar el pico basado en su amplitud
-        if (ratio >= this.NORMAL_PEAK_MIN_THRESHOLD) {
-          lastThreePeaks[i].type = 'normal';
-        } else if (ratio <= this.AMPLITUDE_RATIO_THRESHOLD) {
-          lastThreePeaks[i].type = 'premature';
-        } else {
-          lastThreePeaks[i].type = 'unknown';
-        }
-      }
+      // NUEVO: Verificar secuencia más estrictamente - Queremos que el último pico sea el normal
+      // para asegurar el patrón completo NORMAL-PREMATURO-NORMAL
+      const pattern = {
+        firstNormal: lastThreePeaks[0].type === 'normal',
+        middlePremature: lastThreePeaks[1].type === 'premature',
+        lastNormal: lastThreePeaks[2].type === 'normal'
+      };
       
-      // PATRÓN ESTRICTO: Un pico pequeño (prematuro) entre dos picos normales
-      if (
-        lastThreePeaks[0].type === 'normal' && 
-        lastThreePeaks[1].type === 'premature' && 
-        lastThreePeaks[2].type === 'normal'
-      ) {
-        prematureBeatDetected = true;
-        
-        // Para más seguridad, verificar que las amplitudes relativas cumplan lo esperado
-        const firstPeakRatio = lastThreePeaks[0].amplitude / this.avgNormalAmplitude;
-        const secondPeakRatio = lastThreePeaks[1].amplitude / this.avgNormalAmplitude;
-        const thirdPeakRatio = lastThreePeaks[2].amplitude / this.avgNormalAmplitude;
-        
-        if (secondPeakRatio <= this.AMPLITUDE_RATIO_THRESHOLD && 
-            firstPeakRatio >= this.NORMAL_PEAK_MIN_THRESHOLD && 
-            thirdPeakRatio >= this.NORMAL_PEAK_MIN_THRESHOLD) {
+      // Solo procesamos si el último pico es normal (completando el patrón)
+      if (pattern.lastNormal) {
+        // Verificar el patrón completo
+        if (pattern.firstNormal && pattern.middlePremature) {
+          // Para más seguridad, verificar que las amplitudes relativas cumplan lo esperado
+          const firstPeakRatio = lastThreePeaks[0].amplitude / this.avgNormalAmplitude;
+          const secondPeakRatio = lastThreePeaks[1].amplitude / this.avgNormalAmplitude;
+          const thirdPeakRatio = lastThreePeaks[2].amplitude / this.avgNormalAmplitude;
           
-          console.log('ArrhythmiaDetector - ¡LATIDO PREMATURO DETECTADO! Patrón normal-pequeño-normal:', {
-            prematuroRatio: secondPeakRatio,
-            normal1Ratio: firstPeakRatio,
-            normal2Ratio: thirdPeakRatio,
-            umbralPequeno: this.AMPLITUDE_RATIO_THRESHOLD,
-            umbralNormal: this.NORMAL_PEAK_MIN_THRESHOLD
-          });
-        } else {
-          // Si no cumple las condiciones estrictas de amplitud, no es un latido prematuro
-          prematureBeatDetected = false;
+          if (secondPeakRatio <= this.AMPLITUDE_RATIO_THRESHOLD && 
+              firstPeakRatio >= this.NORMAL_PEAK_MIN_THRESHOLD && 
+              thirdPeakRatio >= this.NORMAL_PEAK_MIN_THRESHOLD) {
+            
+            // NUEVO: Verificación temporal - asegurar que los tres picos estén dentro de un rango de tiempo razonable
+            const timeSpan = lastThreePeaks[2].time - lastThreePeaks[0].time;
+            
+            // El tiempo total debe ser menor a 2 segundos para un patrón válido
+            if (timeSpan < 2000) {
+              prematureBeatDetected = true;
+              
+              console.log('ArrhythmiaDetector - ¡LATIDO PREMATURO DETECTADO! Patrón normal-pequeño-normal:', {
+                prematuroRatio: secondPeakRatio,
+                normal1Ratio: firstPeakRatio,
+                normal2Ratio: thirdPeakRatio,
+                timeSpan: timeSpan,
+                umbralPequeno: this.AMPLITUDE_RATIO_THRESHOLD,
+                umbralNormal: this.NORMAL_PEAK_MIN_THRESHOLD
+              });
+            } else {
+              console.log('ArrhythmiaDetector - Patrón rechazado por tiempo excesivo entre picos:', {
+                timeSpan: timeSpan
+              });
+            }
+          }
         }
       }
     }
@@ -281,14 +356,19 @@ export class ArrhythmiaDetector {
       this.lastArrhythmiaTime = currentTime;
       this.hasDetectedFirstArrhythmia = true;
       
+      // NUEVO: Activar período de enfriamiento después de una detección
+      this.inPostArrhythmiaCooldown = true;
+      
       if (this.DEBUG_MODE) {
         console.log('ArrhythmiaDetector - NUEVA ARRITMIA CONTABILIZADA:', {
           count: this.arrhythmiaCount,
           timestamp: currentTime,
+          cooldownActivado: this.inPostArrhythmiaCooldown,
           amplitudes: this.amplitudes.slice(-5),
           peakSequence: this.peakSequence.slice(-5).map(p => ({
             type: p.type,
-            ratio: p.amplitude / this.avgNormalAmplitude
+            ratio: p.amplitude / this.avgNormalAmplitude,
+            index: p.index
           }))
         });
       }
