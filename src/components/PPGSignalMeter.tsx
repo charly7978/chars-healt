@@ -272,6 +272,31 @@ const PPGSignalMeter = ({
             ctx.font = 'bold 10px Inter';
             ctx.fillStyle = '#FF6B6B';
             ctx.fillText("LATIDO PREMATURO", x, y - 35);
+            
+            ctx.beginPath();
+            ctx.setLineDash([2, 2]);
+            ctx.strokeStyle = 'rgba(255, 107, 107, 0.6)';
+            ctx.lineWidth = 1;
+            
+            if (i > 0) {
+              const prevX = canvas.width - ((now - visiblePoints[i-1].time) * canvas.width / WINDOW_WIDTH_MS);
+              const prevY = canvas.height * 0.4 + visiblePoints[i-1].value;
+              
+              ctx.moveTo(prevX, prevY - 15);
+              ctx.lineTo(x, y - 15);
+              ctx.stroke();
+            }
+            
+            if (i < visiblePoints.length - 1) {
+              const nextX = canvas.width - ((now - visiblePoints[i+1].time) * canvas.width / WINDOW_WIDTH_MS);
+              const nextY = canvas.height * 0.4 + visiblePoints[i+1].value;
+              
+              ctx.moveTo(x, y - 15);
+              ctx.lineTo(nextX, nextY - 15);
+              ctx.stroke();
+            }
+            
+            ctx.setLineDash([]);
           }
         }
       }
