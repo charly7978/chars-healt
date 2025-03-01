@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -74,8 +73,7 @@ const PPGSignalMeter = ({
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     
-    // Cambiado: Usar fondo blanco en lugar de negro semi-transparente
-    ctx.fillStyle = '#f3f3f3';  // Fondo gris muy claro para mejor contraste y rendimiento
+    ctx.fillStyle = '#f3f3f3';
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
     ctx.beginPath();
@@ -280,7 +278,7 @@ const PPGSignalMeter = ({
 
   return (
     <>
-      <div className="absolute top-0 right-1 z-30 flex items-center gap-2 bg-black/40 rounded-lg p-2"
+      <div className="absolute top-0 right-1 z-30 flex items-center gap-2 rounded-lg p-2"
            style={{ top: '5px', right: '5px' }}>
         <div className="w-[190px]">
           <div className={`h-1.5 w-full rounded-full bg-gradient-to-r ${getQualityColor(quality)} transition-all duration-1000 ease-in-out`}>
