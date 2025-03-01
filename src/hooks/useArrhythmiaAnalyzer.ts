@@ -48,11 +48,14 @@ export const useArrhythmiaAnalyzer = () => {
       };
     }
     
-    // Log para depuración
+    // Log más detallado para depuración
     if (rrData.amplitudes && rrData.amplitudes.length > 0) {
       console.log("ArrhythmiaAnalyzer - Procesando datos con amplitudes:", {
         intervals: rrData.intervals.length,
-        lastAmplitude: rrData.amplitudes[rrData.amplitudes.length - 1]
+        firstInterval: rrData.intervals[0],
+        lastInterval: rrData.intervals[rrData.intervals.length - 1],
+        lastAmplitude: rrData.amplitudes[rrData.amplitudes.length - 1],
+        amplitudesCount: rrData.amplitudes.length
       });
     }
     
@@ -69,7 +72,9 @@ export const useArrhythmiaAnalyzer = () => {
     
     // Si se detectó una nueva arritmia, actualizar el contador
     if (result.detected && arrhythmiaCounter < maxArrhythmias) {
-      setArrhythmiaCounter(result.count);
+      const newCount = result.count;
+      console.log(`ArrhythmiaAnalyzer - Arritmia detectada! Contador: ${newCount}`);
+      setArrhythmiaCounter(newCount);
       
       return {
         detected: true,

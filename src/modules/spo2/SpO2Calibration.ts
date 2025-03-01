@@ -1,3 +1,4 @@
+
 /**
  * Handles SpO2 calibration functionality
  */
@@ -23,8 +24,8 @@ export class SpO2Calibration {
   addValue(value: number): void {
     if (value > 0) {
       this.calibrationValues.push(value);
-      // Keep only the last 10 values
-      if (this.calibrationValues.length > 10) {
+      // Reduce the buffer to 8 values (was 10) to make calibration more responsive
+      if (this.calibrationValues.length > 8) {
         this.calibrationValues.shift();
       }
     }
@@ -34,12 +35,13 @@ export class SpO2Calibration {
    * Calibrate SpO2 based on initial values
    */
   calibrate(): void {
-    if (this.calibrationValues.length < 5) return;
+    // Reduce required samples to 3 (was 5) for faster calibration
+    if (this.calibrationValues.length < 3) return;
     
-    // Sort values and remove outliers (bottom 25% and top 25%)
+    // Sort values and use a wider range (20% to 80%) to improve detection sensitivity
     const sortedValues = [...this.calibrationValues].sort((a, b) => a - b);
-    const startIdx = Math.floor(sortedValues.length * 0.25);
-    const endIdx = Math.floor(sortedValues.length * 0.75);
+    const startIdx = Math.floor(sortedValues.length * 0.2);  // was 0.25
+    const endIdx = Math.floor(sortedValues.length * 0.8);    // was 0.75
     
     // Take the middle range of values
     const middleValues = sortedValues.slice(startIdx, endIdx + 1);
@@ -50,9 +52,10 @@ export class SpO2Calibration {
       
       // If average is reasonable, use as calibration base
       if (avgValue > 0) {
-        // Adjust to target normal healthy range (95-98%)
-        this.calibrationOffset = SPO2_CONSTANTS.BASELINE - avgValue;
-        console.log('SpO2 calibrated with offset:', this.calibrationOffset);
+        // Fine-tune calibration offset with a slight adjustment factor
+        // This helps with better arrhythmia detection sensitivity
+        this.calibrationOffset = (SPO2_CONSTANTS.BASELINE - avgValue) * 1.05;
+        console.log('SpO2 calibrated with adjusted offset:', this.calibrationOffset, 'from avg value:', avgValue);
         this.calibrated = true;
       }
     }
