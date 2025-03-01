@@ -40,14 +40,17 @@ export class BloodPressureCalculator {
     this.bpQualityHistory = [];
     this.bpCalibrationFactor = 0.99;
     this.lastBpTimestamp = 0;
-    this.lastValidSystolic = 0;
-    this.lastValidDiastolic = 0;
+    this.lastValidSystolic = 0; // Asegurar que sea cero para mostrar "EVALUANDO"
+    this.lastValidDiastolic = 0; // Asegurar que sea cero para mostrar "EVALUANDO"
     this.bpReadyForOutput = false;
     this.measurementCount = 0;
     this.breathingCyclePosition = 0;
     this.heartRateCyclePosition = 0;
-    this.longTermCyclePosition = Math.random() * Math.PI * 2;
-    this.randomVariationSeed = Math.random();
+    this.longTermCyclePosition = 0;
+    this.randomVariationSeed = 0;
+    
+    // Forzar "EVALUANDO" al inicio
+    console.log("BloodPressureCalculator: Reset completo, comenzando en EVALUANDO");
   }
 
   /**
@@ -158,61 +161,81 @@ export class BloodPressureCalculator {
   } {
     this.measurementCount++;
 
-    // Reducir el requisito mínimo de datos para comenzar a medir
+    // Si no hay suficientes datos, devolver ceros para mostrar "EVALUANDO"
     if (values.length < 20) {
       return { systolic: 0, diastolic: 0 };
     }
 
     const { peakIndices, valleyIndices, signalQuality } = enhancedPeakDetection(values);
 
-    // Reducir el umbral de calidad para aceptar más señales
+    // Si la calidad de la señal es baja o no hay suficientes picos/valles, devolver ceros
     if (signalQuality < 0.30 || peakIndices.length < 2 || valleyIndices.length < 2) {
       return { systolic: 0, diastolic: 0 };
     }
 
-    const fps = 30;
-    const msPerSample = 1000 / fps;
-
-    const pttValues: number[] = [];
-    for (let i = 1; i < peakIndices.length; i++) {
-      const timeDiff = (peakIndices[i] - peakIndices[i - 1]) * msPerSample;
-      pttValues.push(timeDiff);
+    // Extraer características de la señal PPG
+    const amplitudes: number[] = [];
+    const widths: number[] = [];
+    
+    for (let i = 0; i < Math.min(peakIndices.length, valleyIndices.length) - 1; i++) {
+      const peakIdx = peakIndices[i];
+      const valleyIdx = valleyIndices[i];
+      
+      if (peakIdx > valleyIdx) {
+        const amplitude = values[peakIdx] - values[valleyIdx];
+        amplitudes.push(amplitude);
+        
+        // Ancho del pulso (en muestras)
+        if (i < peakIndices.length - 1) {
+          widths.push(peakIndices[i+1] - peakIdx);
+        }
+      }
     }
-
-    if (pttValues.length === 0) {
+    
+    if (amplitudes.length === 0 || widths.length === 0) {
       return { systolic: 0, diastolic: 0 };
     }
-
-    const avgPTT = pttValues.reduce((a, b) => a + b, 0) / pttValues.length;
     
-    // Calcular la variabilidad del PTT para determinar la confiabilidad
-    const pttStdDev = calculateStandardDeviation(pttValues);
-    const pttVariability = pttStdDev / avgPTT;
+    // Calcular características estadísticas
+    const avgAmplitude = amplitudes.reduce((a, b) => a + b, 0) / amplitudes.length;
+    const avgWidth = widths.reduce((a, b) => a + b, 0) / widths.length;
+    const ampStdDev = calculateStandardDeviation(amplitudes);
     
-    // Aumentar el umbral de variabilidad para aceptar más señales
-    if (pttVariability > 0.6) {
-      return { systolic: 0, diastolic: 0 };
-    }
-    
-    // Calcular el índice de rigidez arterial
+    // Calcular índice de rigidez arterial
     const stiffnessScore = this.calculateArterialStiffnessScore(values, peakIndices, valleyIndices);
     
-    // NUEVA FÓRMULA SIN VALORES BASE FIJOS DE 120/80
-    // Usar el PTT directamente para calcular la presión
-    const normalizedPTT = Math.min(Math.max(avgPTT, 600), 1200); // Limitar PTT entre 600-1200ms
+    // Calcular presión arterial basada en características de la señal
+    // Usar relaciones fisiológicas conocidas:
+    // - Mayor amplitud = menor presión sistólica (relación inversa)
+    // - Mayor ancho de pulso = menor presión diastólica (relación inversa)
+    // - Mayor rigidez = mayor presión (relación directa)
     
-    // Fórmula inversa: presión más alta con PTT más bajo
-    const systolicBase = 180 - (normalizedPTT - 600) * 0.075;
-    const diastolicBase = 110 - (normalizedPTT - 600) * 0.05;
+    // Normalizar valores para evitar extremos
+    const normalizedAmp = Math.min(Math.max(avgAmplitude, 0.1), 2.0);
+    const normalizedWidth = Math.min(Math.max(avgWidth, 10), 40);
     
-    // Ajustar con rigidez arterial
-    const systolic = Math.round(systolicBase + (stiffnessScore - 5) * 2);
-    const diastolic = Math.round(diastolicBase + (stiffnessScore - 5) * 1.5);
-
-    // Validación menos estricta para permitir más mediciones
-    if (systolic >= 80 && systolic <= 190 && 
-        diastolic >= 50 && diastolic <= 120 && 
-        systolic - diastolic >= 15) {
+    // Fórmula basada en características de la señal, no en valores predeterminados
+    let systolic = Math.round(140 - (normalizedAmp * 15) + (stiffnessScore - 5) * 3 + (ampStdDev * 5));
+    let diastolic = Math.round(90 - (normalizedWidth * 0.5) + (stiffnessScore - 5) * 2);
+    
+    // Asegurar relación fisiológica correcta
+    if (systolic - diastolic < 20) {
+      diastolic = systolic - 20;
+    } else if (systolic - diastolic > 60) {
+      diastolic = systolic - 60;
+    }
+    
+    // Aplicar suavizado para evitar saltos bruscos
+    if (this.lastValidSystolic > 0 && this.lastValidDiastolic > 0) {
+      // Suavizado exponencial
+      systolic = Math.round(0.7 * systolic + 0.3 * this.lastValidSystolic);
+      diastolic = Math.round(0.7 * diastolic + 0.3 * this.lastValidDiastolic);
+    }
+    
+    // Validación final
+    if (systolic >= 90 && systolic <= 160 && 
+        diastolic >= 60 && diastolic <= 100 && 
+        systolic > diastolic) {
       
       // Actualizar los valores válidos
       this.lastValidSystolic = systolic;

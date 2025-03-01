@@ -64,18 +64,21 @@ export class VitalSignsProcessor {
 
     // Calculate vital signs with minimal window
     let bp;
-    let pressure: string;
+    let pressure: string = "EVALUANDO"; // Iniciar siempre en "EVALUANDO"
 
-    if (this.ppgValues.length >= 50) { // Reducido de 150 a 50 para comenzar a medir antes
-      bp = this.bpCalculator.calculate(this.ppgValues.slice(-50));
-      if (bp.systolic <= 0 || bp.diastolic <= 0) {
-        // Si no hay valores válidos en esta medición, mostrar EVALUANDO
-        pressure = "EVALUANDO";
-      } else {
+    // Asegurar suficientes datos para una medición válida
+    if (this.ppgValues.length >= 30) { // Mínimo 30 muestras para medición confiable
+      bp = this.bpCalculator.calculate(this.ppgValues.slice(-30));
+      
+      // Solo mostrar valores si son válidos
+      if (bp.systolic > 0 && bp.diastolic > 0) {
         pressure = `${bp.systolic}/${bp.diastolic}`;
+        console.log(`VitalSignsProcessor: Presión arterial medida: ${pressure}`);
+      } else {
+        console.log("VitalSignsProcessor: Valores de presión no válidos, mostrando EVALUANDO");
       }
     } else {
-      pressure = "EVALUANDO";
+      console.log(`VitalSignsProcessor: Insuficientes datos (${this.ppgValues.length}/30), mostrando EVALUANDO`);
     }
 
     const spo2 = this.spO2Calculator.calculate(this.ppgValues.slice(-30));
