@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -208,6 +209,9 @@ const Index = () => {
           />
         </div>
 
+        {/* Semi-transparent overlay covering the entire bottom portion */}
+        <div className="absolute bottom-0 left-0 right-0 h-[350px] bg-black/60 z-10"></div>
+
         <div className="relative z-10 h-full flex flex-col">
           <div className="flex-1">
             <PPGSignalMeter 
@@ -220,9 +224,7 @@ const Index = () => {
             />
           </div>
 
-          <div className="absolute bottom-0 left-0 right-0 h-[300px] bg-black/70 z-0"></div>
-
-          <div className="absolute bottom-[200px] left-0 right-0 px-4 z-10">
+          <div className="absolute bottom-[200px] left-0 right-0 px-4 z-20">
             <div className="absolute inset-0 bg-black/70 rounded-xl -m-2"></div>
             
             <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4 relative">
@@ -251,12 +253,12 @@ const Index = () => {
           </div>
 
           {isMonitoring && (
-            <div className="absolute bottom-40 left-0 right-0 text-center z-10">
+            <div className="absolute bottom-40 left-0 right-0 text-center z-20">
               <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 30s</span>
             </div>
           )}
 
-          <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 mt-auto relative z-10">
+          <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 mt-auto relative z-20">
             <button 
               onClick={startMonitoring}
               className={`w-full h-full text-2xl font-bold text-white active:bg-gray-800 ${!permissionsGranted ? 'bg-gray-600' : 'bg-black/80'}`}
@@ -273,7 +275,7 @@ const Index = () => {
           </div>
           
           {!permissionsGranted && (
-            <div className="absolute bottom-20 left-0 right-0 text-center px-4 z-10">
+            <div className="absolute bottom-20 left-0 right-0 text-center px-4 z-20">
               <span className="text-lg font-medium text-red-400">
                 La aplicación necesita permisos de cámara para funcionar correctamente
               </span>
