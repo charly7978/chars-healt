@@ -1,6 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
 import { VitalSignsProcessor } from '../modules/VitalSignsProcessor';
-import { useArrhythmiaAnalyzer } from './useArrhythmiaAnalyzer';
 import { createBloodPressureStabilizer } from '../utils/bloodPressureStabilizer';
 import { createVitalSignsDataCollector } from '../utils/vitalSignsDataCollector';
 import { useSignalHistory } from './useSignalHistory';
@@ -11,7 +10,6 @@ export const useVitalSignsProcessor = () => {
   const processorRef = useRef<VitalSignsProcessor | null>(null);
   
   // Specialized modules
-  const arrhythmiaAnalyzer = useArrhythmiaAnalyzer();
   const bloodPressureStabilizer = useRef(createBloodPressureStabilizer());
   const dataCollector = useRef(createVitalSignsDataCollector());
   const signalHistory = useSignalHistory();
@@ -83,32 +81,9 @@ export const useVitalSignsProcessor = () => {
       dataCollector.current.addBloodPressure(stabilizedBP);
     }
     
-    // ESQUEMA COORDINADO DE DETECCIÓN DE ARRITMIAS:
-    // 1. Primero revisamos el resultado del detector interno del VitalSignsProcessor
-    // 2. Si no detectó arritmias, permitimos que el arrhythmiaAnalyzer independiente lo intente
-    // 3. Combinamos los resultados de manera coherente
-    
-    // Actualizar la detección del procesador interno
+    // Usar SOLO el detector de arritmias original del VitalSignsProcessor
     let finalArrhythmiaStatus = result.arrhythmiaStatus || "SIN ARRITMIAS|0";
     let finalArrhythmiaData = result.lastArrhythmiaData || null;
-    let arrhythmiaDetected = result.arrhythmiaStatus?.includes("ARRITMIA DETECTADA");
-    
-    // Si el detector principal no detectó arritmias, permitimos que el analizador independiente lo intente
-    if (!arrhythmiaDetected && rrData?.intervals && rrData.intervals.length >= 4) {
-      const arrhythmiaResult = arrhythmiaAnalyzer.processArrhythmia(rrData, MAX_ARRHYTHMIAS_PER_SESSION);
-      
-      // Si el analizador independiente detectó una arritmia, usamos su resultado
-      if (arrhythmiaResult.detected) {
-        finalArrhythmiaStatus = arrhythmiaResult.arrhythmiaStatus;
-        finalArrhythmiaData = arrhythmiaResult.lastArrhythmiaData;
-        arrhythmiaDetected = true;
-        
-        console.log("useVitalSignsProcessor: Arritmia detectada por analizador independiente", {
-          status: finalArrhythmiaStatus,
-          time: new Date().toISOString()
-        });
-      }
-    }
     
     // Actualizar referencias de estado
     lastArrhythmiaStatusRef.current = finalArrhythmiaStatus;
@@ -116,14 +91,14 @@ export const useVitalSignsProcessor = () => {
       lastArrhythmiaDataRef.current = finalArrhythmiaData;
     }
     
-    // Devolver los resultados combinados
+    // Devolver los resultados
     return {
       spo2: result.spo2,
       pressure: stabilizedBP,
       arrhythmiaStatus: finalArrhythmiaStatus,
       lastArrhythmiaData: finalArrhythmiaData
     };
-  }, [getProcessor, signalHistory, arrhythmiaAnalyzer]);
+  }, [getProcessor, signalHistory]);
 
   /**
    * Reset all processors and data
@@ -144,7 +119,6 @@ export const useVitalSignsProcessor = () => {
     }
     
     // Reset all specialized modules
-    arrhythmiaAnalyzer.reset(); // Resetear también el analizador independiente
     bloodPressureStabilizer.current.reset();
     dataCollector.current.reset();
     signalHistory.reset();
@@ -155,7 +129,7 @@ export const useVitalSignsProcessor = () => {
     lastArrhythmiaDataRef.current = null;
     
     console.log("useVitalSignsProcessor: Reset completo");
-  }, [signalHistory, arrhythmiaAnalyzer]);
+  }, [signalHistory]);
   
   /**
    * Aggressive memory cleanup
@@ -187,9 +161,9 @@ export const useVitalSignsProcessor = () => {
     console.log("useVitalSignsProcessor: Limpieza de memoria completada");
   }, [reset]);
 
-  // Obtener el contador combinado de arritmias
+  // Obtener el contador de arritmias directamente del estado actual
   const getArrhythmiaCounter = useCallback(() => {
-    // Intentar extraer el conteo del estado actual
+    // Extraer el conteo del estado actual
     const status = lastArrhythmiaStatusRef.current;
     const parts = status.split('|');
     
@@ -201,12 +175,8 @@ export const useVitalSignsProcessor = () => {
       }
     }
     
-    // Combinar con el contador del analizador independiente
-    const analyzerCount = arrhythmiaAnalyzer.arrhythmiaCounter || 0;
-    
-    // Usar el contador mayor de los dos
-    return Math.max(count, analyzerCount);
-  }, [arrhythmiaAnalyzer]);
+    return count;
+  }, []);
 
   return {
     processSignal,
