@@ -395,24 +395,32 @@ const Index = () => {
   useEffect(() => {
     if (lastSignal && lastSignal.fingerDetected && isMonitoring) {
       try {
+        console.log("Index: Procesando nueva señal, fingerDetected=true");
+        
         const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
         
         if (!measurementComplete) {
           if (heartBeatResult.bpm > 0) {
+            console.log("Index: Nuevo valor BPM:", heartBeatResult.bpm);
             setHeartRate(heartBeatResult.bpm);
             allHeartRateValuesRef.current.push(heartBeatResult.bpm);
           }
           
           const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
           if (vitals) {
+            console.log("Index: Nuevos valores vitales:", vitals);
+            
+            // Actualizar SpO2
             if (vitals.spo2 > 0) {
               setVitalSigns(current => ({
                 ...current,
                 spo2: vitals.spo2
               }));
               allSpo2ValuesRef.current.push(vitals.spo2);
+              console.log("Index: SpO2 actualizado:", vitals.spo2);
             }
             
+            // Actualizar presión arterial
             if (vitals.pressure !== "--/--" && vitals.pressure !== "0/0") {
               setVitalSigns(current => ({
                 ...current,
@@ -423,9 +431,11 @@ const Index = () => {
               if (systolic > 0 && diastolic > 0) {
                 allSystolicValuesRef.current.push(systolic);
                 allDiastolicValuesRef.current.push(diastolic);
+                console.log("Index: Presión arterial actualizada:", vitals.pressure);
               }
             }
             
+            // Actualizar estado de arritmias
             setVitalSigns(current => ({
               ...current,
               arrhythmiaStatus: vitals.arrhythmiaStatus
@@ -436,7 +446,10 @@ const Index = () => {
               
               const [status, count] = vitals.arrhythmiaStatus.split('|');
               setArrhythmiaCount(count || "0");
+              console.log("Index: Estado de arritmia actualizado:", vitals.arrhythmiaStatus);
             }
+          } else {
+            console.log("Index: processVitalSigns no retornó valores");
           }
         }
         
@@ -444,6 +457,8 @@ const Index = () => {
       } catch (error) {
         console.error("Error procesando señal:", error);
       }
+    } else if (lastSignal) {
+      console.log("Index: Señal ignorada, fingerDetected=", lastSignal.fingerDetected, "isMonitoring=", isMonitoring);
     }
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns, measurementComplete]);
 
@@ -495,8 +510,6 @@ const Index = () => {
           rawArrhythmiaData={lastArrhythmiaData}
         />
       </div>
-
-      {/* Eliminando el título "Chars Healt" que estaba aquí */}
 
       {/* Panel de signos vitales con posición fija abajo */}
       <div className="absolute z-20" style={{ bottom: '65px', left: 0, right: 0, padding: '0 12px' }}>

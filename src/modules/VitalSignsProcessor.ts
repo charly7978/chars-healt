@@ -32,6 +32,7 @@ export class VitalSignsProcessor {
     rrData?: { intervals: number[]; lastPeakTime: number | null }
   ) {
     const currentTime = Date.now();
+    console.log("VitalSignsProcessor: Procesando valor PPG:", ppgValue);
 
     // Actualizar intervalos RR si están disponibles
     if (rrData?.intervals && rrData.intervals.length > 0) {
