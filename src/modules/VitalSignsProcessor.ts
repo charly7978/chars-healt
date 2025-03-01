@@ -5,13 +5,13 @@ import { BloodPressureCalculator } from './BloodPressureCalculator';
 import { ArrhythmiaDetector } from './ArrhythmiaDetector';
 
 export class VitalSignsProcessor {
-  private readonly WINDOW_SIZE = 50; // Reduced for faster response
+  private readonly WINDOW_SIZE = 30; // Reducido para respuesta más rápida
   private ppgValues: number[] = [];
-  private readonly SMA_WINDOW = 1; // Minimum to show nearly raw signal
-  private readonly BPM_SMOOTHING_ALPHA = 0.01; // Very low smoothing to show natural variations
+  private readonly SMA_WINDOW = 1; // Mínimo para mostrar señal casi cruda
+  private readonly BPM_SMOOTHING_ALPHA = 0.01; // Suavizado muy bajo para mostrar variaciones naturales
   private lastBPM: number = 0;
   
-  // Specialized modules for each vital sign
+  // Módulos especializados para cada signo vital
   private spO2Calculator: SpO2Calculator;
   private bpCalculator: BloodPressureCalculator;
   private arrhythmiaDetector: ArrhythmiaDetector;
@@ -20,12 +20,12 @@ export class VitalSignsProcessor {
     this.spO2Calculator = new SpO2Calculator();
     this.bpCalculator = new BloodPressureCalculator();
     this.arrhythmiaDetector = new ArrhythmiaDetector();
-    console.log("VitalSignsProcessor: Created new instance with minimal filtering");
+    console.log("VitalSignsProcessor: Instancia creada con filtrado mínimo");
   }
 
   /**
    * Process incoming PPG signal and calculate vital signs
-   * Pass through real measurements with minimal filtering
+   * Pasar mediciones reales con filtrado mínimo
    */
   public processSignal(
     ppgValue: number,
@@ -33,61 +33,65 @@ export class VitalSignsProcessor {
   ) {
     const currentTime = Date.now();
 
-    // Update RR intervals if available
+    // Actualizar intervalos RR si están disponibles
     if (rrData?.intervals && rrData.intervals.length > 0) {
-      // Process all intervals without filtering
+      // Procesar todos los intervalos sin filtrar
       this.arrhythmiaDetector.updateIntervals(rrData.intervals, rrData.lastPeakTime);
     }
 
-    // Process PPG signal with minimal filtering
+    // Procesar señal PPG con filtrado mínimo
     const filtered = this.applySMAFilter(ppgValue);
     this.ppgValues.push(filtered);
     if (this.ppgValues.length > this.WINDOW_SIZE) {
       this.ppgValues.shift();
     }
 
-    // Check learning phase
+    // Comprobar fase de aprendizaje
     const isLearning = this.arrhythmiaDetector.isInLearningPhase();
     
-    // During learning phase, collect values for SpO2 calibration
+    // Durante la fase de aprendizaje, recopilar valores para calibración de SpO2
     if (isLearning) {
-      if (this.ppgValues.length >= 10) { // Further reduced window for faster calibration
+      if (this.ppgValues.length >= 10) { // Ventana reducida para calibración más rápida
         const tempSpO2 = this.spO2Calculator.calculateRaw(this.ppgValues.slice(-10));
         if (tempSpO2 > 0) {
           this.spO2Calculator.addCalibrationValue(tempSpO2);
+          console.log("Valor de calibración SpO2 añadido:", tempSpO2);
         }
       }
     } else {
-      // Auto-calibrate SpO2
+      // Auto-calibrar SpO2
       this.spO2Calculator.calibrate();
     }
 
-    // Process arrhythmia detection
+    // Procesar detección de arritmias
     const arrhythmiaResult = this.arrhythmiaDetector.detect();
 
-    // Calculate vital signs with minimal window
+    // Calcular signos vitales con ventana mínima
     let bp;
-    let pressure = "EVALUANDO"; // Start with "EVALUATING"
+    let pressure = "EVALUANDO"; // Comenzar con "EVALUANDO"
 
-    // Calculate pressure with smaller window for faster response
-    if (this.ppgValues.length >= 15) { // Reduced from 30 to 15 minimum samples
-      console.log("VitalSignsProcessor: Calculating BP with real measurements");
-      bp = this.bpCalculator.calculate(this.ppgValues.slice(-30)); // Reduced from 60 to 30 samples
+    // Calcular presión con ventana más pequeña para respuesta más rápida
+    if (this.ppgValues.length >= 15) { // Reducido de 30 a 15 muestras mínimas
+      console.log("VitalSignsProcessor: Calculando BP con mediciones reales");
+      bp = this.bpCalculator.calculate(this.ppgValues.slice(-15)); // Reducido para respuesta más rápida
       
       if (bp.systolic > 0 && bp.diastolic > 0) {
         pressure = `${bp.systolic}/${bp.diastolic}`;
-        console.log(`VitalSignsProcessor: Real BP measurement: ${pressure}`);
+        console.log(`VitalSignsProcessor: Medición BP real: ${pressure}`);
       } else {
-        console.log("VitalSignsProcessor: Invalid BP values, showing EVALUANDO");
+        console.log("VitalSignsProcessor: Valores BP inválidos, mostrando EVALUANDO");
       }
     } else {
-      console.log(`VitalSignsProcessor: Insufficient data (${this.ppgValues.length}/15), showing EVALUANDO`);
+      console.log(`VitalSignsProcessor: Datos insuficientes (${this.ppgValues.length}/15), mostrando EVALUANDO`);
     }
 
-    // Calculate SpO2 with smaller window
-    const spo2 = this.spO2Calculator.calculate(this.ppgValues.slice(-10)); // Reduced from 20 to 10
+    // Calcular SpO2 con ventana más pequeña
+    console.log("VitalSignsProcessor: Calculando SpO2 con datos reales");
+    const spo2Values = this.ppgValues.slice(-10); // Usar solo las últimas 10 muestras
+    const spo2 = this.spO2Calculator.calculate(spo2Values);
+    console.log(`VitalSignsProcessor: SpO2 calculado: ${spo2}, con ${spo2Values.length} muestras`);
 
-    // Prepare arrhythmia data if detected
+    // Preparar datos de arritmia si se detecta
     const lastArrhythmiaData = arrhythmiaResult.detected ? {
       timestamp: currentTime,
       rmssd: arrhythmiaResult.data?.rmssd || 0,
@@ -113,7 +117,7 @@ export class VitalSignsProcessor {
       return rawBPM;
     }
     
-    // Minimal smoothing to show natural variations
+    // Suavizado mínimo para mostrar variaciones naturales
     const smoothed = Math.round(
       this.BPM_SMOOTHING_ALPHA * rawBPM + 
       (1 - this.BPM_SMOOTHING_ALPHA) * this.lastBPM
@@ -132,7 +136,7 @@ export class VitalSignsProcessor {
     this.spO2Calculator.reset();
     this.bpCalculator.reset();
     this.arrhythmiaDetector.reset();
-    console.log("VitalSignsProcessor: Reset all processors");
+    console.log("VitalSignsProcessor: Reset de todos los procesadores");
   }
 
   /**
