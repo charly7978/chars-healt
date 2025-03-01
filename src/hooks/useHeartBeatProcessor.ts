@@ -1,4 +1,3 @@
-
 import { useState, useRef, useCallback } from 'react';
 import { HeartBeatProcessor } from '../modules/HeartBeatProcessor';
 
@@ -62,12 +61,33 @@ export const useHeartBeatProcessor = () => {
     return processorRef.current.getFinalBPM();
   }, []);
   
+  const cleanMemory = useCallback(() => {
+    console.log("useHeartBeatProcessor: Limpieza agresiva de memoria");
+    if (processorRef.current) {
+      processorRef.current.reset();
+      processorRef.current = null;
+    }
+    setBpm(0);
+    setConfidence(0);
+    setIsPeak(false);
+    
+    // Force garbage collection if available
+    if (window.gc) {
+      try {
+        window.gc();
+      } catch (e) {
+        console.log("GC no disponible en este entorno");
+      }
+    }
+  }, []);
+  
   return {
     bpm,
     confidence,
     isPeak,
     processSignal,
     reset,
-    getFinalBPM
+    getFinalBPM,
+    cleanMemory
   };
 };
