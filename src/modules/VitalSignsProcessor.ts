@@ -64,8 +64,8 @@ export class VitalSignsProcessor {
 
     // Calculate vital signs with minimal window
     let bp;
-    if (this.ppgValues.length >= 50) {
-      bp = this.bpCalculator.calculate(this.ppgValues.slice(-50));
+    if (this.ppgValues.length >= 100) {
+      bp = this.bpCalculator.calculate(this.ppgValues.slice(-100));
       if (bp.systolic <= 0 || bp.diastolic <= 0) {
         bp = null;
       }
