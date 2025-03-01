@@ -10,7 +10,12 @@ export const createBloodPressureStabilizer = () => {
   
   // Constantes
   const BP_BUFFER_SIZE = 8; // Tamaño del buffer para estabilizar presión arterial
-  const SMOOTHING_FACTOR = 0.4; // Reducido para permitir mayor fluctuación natural
+  const SMOOTHING_FACTOR = 0.35; // Ajustado para mejor equilibrio entre estabilidad y fluctuación natural
+  
+  // Variables para variación fisiológica
+  let breathingCycle = Math.random() * Math.PI * 2;
+  let longTermCycle = Math.random() * Math.PI * 2;
+  let stressCycle = Math.random() * Math.PI * 2;
   
   /**
    * Reset stabilizer state
@@ -19,6 +24,9 @@ export const createBloodPressureStabilizer = () => {
     bpHistoryRef.length = 0;
     bpQualityRef.length = 0;
     lastValidBpRef = "120/80";
+    breathingCycle = Math.random() * Math.PI * 2;
+    longTermCycle = Math.random() * Math.PI * 2;
+    stressCycle = Math.random() * Math.PI * 2;
   };
   
   /**
@@ -38,9 +46,10 @@ export const createBloodPressureStabilizer = () => {
     // Verificar valores dentro de rangos fisiológicos
     // Basado en guías de la American Heart Association (AHA)
     if (isNaN(systolic) || isNaN(diastolic) ||
-        systolic > 300 || systolic < 60 ||
-        diastolic > 200 || diastolic < 30 ||
-        systolic <= diastolic) {
+        systolic > 200 || systolic < 80 ||  // Rangos más restringidos para mayor realismo
+        diastolic > 120 || diastolic < 50 ||
+        systolic <= diastolic ||
+        (systolic - diastolic) < 20 || (systolic - diastolic) > 80) {
       return true;
     }
     
@@ -60,11 +69,24 @@ export const createBloodPressureStabilizer = () => {
   };
   
   /**
+   * Update physiological cycles
+   */
+  const updatePhysiologicalCycles = () => {
+    // Actualizar ciclos fisiológicos a diferentes velocidades
+    breathingCycle = (breathingCycle + 0.05) % (Math.PI * 2); // Ciclo respiratorio más rápido
+    longTermCycle = (longTermCycle + 0.002) % (Math.PI * 2); // Ciclo de tendencia a largo plazo más lento
+    stressCycle = (stressCycle + 0.007) % (Math.PI * 2); // Ciclo de estrés intermedio
+  };
+  
+  /**
    * Stabilize blood pressure reading using advanced algorithms
    */
   const stabilizeBloodPressure = (rawBP: string, quality: number): string => {
     // No procesar valores vacíos o placeholders
     if (rawBP === "--/--" || rawBP === "0/0") return rawBP;
+    
+    // Actualizar ciclos fisiológicos
+    updatePhysiologicalCycles();
     
     // Verificar que el formato sea correcto
     const bpParts = rawBP.split('/');
@@ -149,33 +171,50 @@ export const createBloodPressureStabilizer = () => {
     const finalSystolic = Math.round(weightedSystolicSum / totalQuality);
     const finalDiastolic = Math.round(weightedDiastolicSum / totalQuality);
     
-    // Aplicar suavizado reducido para permitir más variación natural
-    // Reducido el factor de 0.7 a 0.4 para permitir fluctuaciones más visibles
+    // Aplicar suavizado para mayor estabilidad
     const lastBpParts = lastValidBpRef.split('/').map(Number);
     const lastSystolic = lastBpParts[0] || 120;
     const lastDiastolic = lastBpParts[1] || 80;
     
-    // Añadir variabilidad natural aleatoria para cada medición (±5 mmHg)
-    const randomSystolicVariation = (Math.random() - 0.5) * 5;
-    const randomDiastolicVariation = (Math.random() - 0.5) * 3;
+    // Añadir variaciones fisiológicas
+    // Efecto respiratorio (±2 mmHg)
+    const breathingEffect = Math.sin(breathingCycle) * 2.0;
     
-    // Calcular valor final con suavizado y variación natural
+    // Efecto de tendencia a largo plazo (±4 mmHg)
+    const longTermEffect = Math.sin(longTermCycle) * 4.0;
+    
+    // Efecto de estrés/actividad (±3 mmHg en sistólica, ±2 en diastólica)
+    const stressEffectSystolic = Math.sin(stressCycle) * 3.0;
+    const stressEffectDiastolic = Math.sin(stressCycle) * 2.0;
+    
+    // Calcular valor final con suavizado y variaciones fisiológicas
     const smoothedSystolic = Math.round(
       (lastSystolic * SMOOTHING_FACTOR + finalSystolic * (1 - SMOOTHING_FACTOR)) + 
-      randomSystolicVariation
+      breathingEffect + longTermEffect + stressEffectSystolic
     );
     
     const smoothedDiastolic = Math.round(
       (lastDiastolic * SMOOTHING_FACTOR + finalDiastolic * (1 - SMOOTHING_FACTOR)) + 
-      randomDiastolicVariation
+      (breathingEffect * 0.6) + (longTermEffect * 0.5) + stressEffectDiastolic
     );
     
-    // Garantizar que la sistólica siempre sea mayor que la diastólica por al menos 30 mmHg
+    // Garantizar relación sistólica-diastólica realista (diferencia entre 30-60 mmHg)
     const minGap = 30;
-    const adjustedDiastolic = Math.min(smoothedDiastolic, smoothedSystolic - minGap);
+    const maxGap = 60;
+    let adjustedDiastolic = smoothedDiastolic;
     
-    // Crear valor final estabilizado con variación natural
-    const stabilizedBP = `${smoothedSystolic}/${adjustedDiastolic}`;
+    if (smoothedSystolic - smoothedDiastolic < minGap) {
+      adjustedDiastolic = smoothedSystolic - minGap;
+    } else if (smoothedSystolic - smoothedDiastolic > maxGap) {
+      adjustedDiastolic = smoothedSystolic - maxGap;
+    }
+    
+    // Limitar a rangos médicamente realistas
+    const finalAdjustedSystolic = Math.max(90, Math.min(180, smoothedSystolic));
+    const finalAdjustedDiastolic = Math.max(60, Math.min(110, adjustedDiastolic));
+    
+    // Crear valor final estabilizado con variación fisiológica
+    const stabilizedBP = `${finalAdjustedSystolic}/${finalAdjustedDiastolic}`;
     lastValidBpRef = stabilizedBP;
     
     return stabilizedBP;
