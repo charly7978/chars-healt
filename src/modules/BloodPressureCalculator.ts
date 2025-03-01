@@ -184,23 +184,49 @@ export class BloodPressureCalculator {
     }
 
     const avgPTT = pttValues.reduce((a, b) => a + b, 0) / pttValues.length;
+    
+    // Calcular la variabilidad del PTT para determinar la confiabilidad
+    const pttStdDev = calculateStandardDeviation(pttValues);
+    const pttVariability = pttStdDev / avgPTT;
+    
+    // Si la variabilidad es muy alta, la señal no es confiable
+    if (pttVariability > 0.4) {
+      return { systolic: 0, diastolic: 0 };
+    }
+    
+    // Calcular el índice de rigidez arterial
+    const stiffnessScore = this.calculateArterialStiffnessScore(values, peakIndices, valleyIndices);
+    
+    // Calcular presión arterial basada en PTT y rigidez arterial
+    const systolic = Math.round(this.BP_BASELINE_SYSTOLIC - 
+                               (avgPTT * this.BP_PTT_COEFFICIENT) + 
+                               (stiffnessScore * this.BP_STIFFNESS_FACTOR));
+                               
+    const diastolic = Math.round(this.BP_BASELINE_DIASTOLIC - 
+                                (avgPTT * this.BP_PTT_COEFFICIENT * 0.6) + 
+                                (stiffnessScore * this.BP_STIFFNESS_FACTOR * 0.5));
 
-    // Calcular valores reales basados en PTT, no valores predeterminados
-    const systolic = Math.round(this.BP_BASELINE_SYSTOLIC - avgPTT * this.BP_PTT_COEFFICIENT);
-    const diastolic = Math.round(this.BP_BASELINE_DIASTOLIC - avgPTT * this.BP_PTT_COEFFICIENT * 0.6);
-
-    // Solo actualizar valores válidos si son razonables
-    if (systolic >= 90 && systolic <= 180 && diastolic >= 60 && diastolic <= 110) {
+    // Validación estricta de los valores calculados
+    if (systolic >= 90 && systolic <= 180 && 
+        diastolic >= 60 && diastolic <= 110 && 
+        systolic - diastolic >= 20 && 
+        systolic - diastolic <= 60) {
+      
+      // Actualizar los valores válidos
       this.lastValidSystolic = systolic;
       this.lastValidDiastolic = diastolic;
       return { systolic, diastolic };
     } else {
-      // Si los valores calculados no son razonables, devolver ceros
+      // Si los valores calculados no son fisiológicamente razonables, devolver ceros
       return { systolic: 0, diastolic: 0 };
     }
   }
 
   public getLastValidPressure(): string {
+    // Si no hay valores válidos, devolver "0/0" para que se muestre "EVALUANDO"
+    if (this.lastValidSystolic <= 0 || this.lastValidDiastolic <= 0) {
+      return "0/0";
+    }
     return `${this.lastValidSystolic}/${this.lastValidDiastolic}`;
   }
 }
