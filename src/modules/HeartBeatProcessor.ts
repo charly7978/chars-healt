@@ -4,24 +4,24 @@ export class HeartBeatProcessor {
   private readonly WINDOW_SIZE = 60;
   private readonly MIN_BPM = 40;
   private readonly MAX_BPM = 200; // Se mantiene amplio para no perder picos fuera de rango
-  private readonly SIGNAL_THRESHOLD = 0.35; // Reducido ligeramente para mejor detección
-  private readonly MIN_CONFIDENCE = 0.65;
-  private readonly DERIVATIVE_THRESHOLD = 0.04; // INVERTIDO - Ahora positivo para detectar subidas
-  private readonly MIN_PEAK_TIME_MS = 400; 
-  private readonly WARMUP_TIME_MS = 3000; 
+  private readonly SIGNAL_THRESHOLD = 0.25; // Reducido para mejorar sensibilidad
+  private readonly MIN_CONFIDENCE = 0.55; // Reducido para detectar más picos
+  private readonly DERIVATIVE_THRESHOLD = 0.035; // Ajustado para mejor detección de subidas
+  private readonly MIN_PEAK_TIME_MS = 300; // Reducido para detectar frecuencias más altas
+  private readonly WARMUP_TIME_MS = 2000; // Reducido tiempo de calentamiento
 
   // Parámetros de filtrado
   private readonly MEDIAN_FILTER_WINDOW = 3; 
-  private readonly MOVING_AVERAGE_WINDOW = 3; 
-  private readonly EMA_ALPHA = 0.4; 
-  private readonly BASELINE_FACTOR = 1.0; 
+  private readonly MOVING_AVERAGE_WINDOW = 5; // Aumentado para suavizar más la señal
+  private readonly EMA_ALPHA = 0.3; // Ajustado para suavizado óptimo
+  private readonly BASELINE_FACTOR = 0.98; // Ajustado para adaptación más rápida
 
   // Parámetros de beep
   private readonly BEEP_PRIMARY_FREQUENCY = 880; 
   private readonly BEEP_SECONDARY_FREQUENCY = 440; 
-  private readonly BEEP_DURATION = 80; 
-  private readonly BEEP_VOLUME = 0.9; 
-  private readonly MIN_BEEP_INTERVAL_MS = 300;
+  private readonly BEEP_DURATION = 60; // Reducido para un beep más corto y rápido
+  private readonly BEEP_VOLUME = 0.8; 
+  private readonly MIN_BEEP_INTERVAL_MS = 250; // Reducido para permitir beeps más frecuentes
 
   // ────────── AUTO-RESET SI LA SEÑAL ES MUY BAJA ──────────
   private readonly LOW_SIGNAL_THRESHOLD = 0.03;
@@ -186,7 +186,7 @@ export class HeartBeatProcessor {
       this.signalBuffer.shift();
     }
 
-    if (this.signalBuffer.length < 30) {
+    if (this.signalBuffer.length < 15) { // Reducido para comenzar antes
       return {
         bpm: 0,
         confidence: 0,
@@ -196,46 +196,56 @@ export class HeartBeatProcessor {
       };
     }
 
+    // Actualizar línea base con adaptación más rápida
     this.baseline =
       this.baseline * this.BASELINE_FACTOR + smoothed * (1 - this.BASELINE_FACTOR);
 
+    // Normalizar valor respecto a la línea base
     const normalizedValue = smoothed - this.baseline;
     this.autoResetIfSignalIsLow(Math.abs(normalizedValue));
 
+    // Mantener un buffer corto para cálculo de derivada
     this.values.push(smoothed);
     if (this.values.length > 3) {
       this.values.shift();
     }
 
-    // INVERTIR: Ahora buscamos derivada positiva (señal subiendo)
+    // Calcular la derivada (tasa de cambio de la señal)
     let smoothDerivative = smoothed - this.lastValue;
     if (this.values.length === 3) {
+      // Usar derivada centrada para más precisión
       smoothDerivative = (this.values[2] - this.values[0]) / 2;
     }
     this.lastValue = smoothed;
 
-    // NUEVO: Utilizamos valores positivos para detectar cuando la señal SUBE
+    // Detectar pico basado en derivada y umbral
     const { isPeak, confidence } = this.detectPeak(normalizedValue, smoothDerivative);
+    
+    // Confirmar pico para evitar falsos positivos
     const isConfirmedPeak = this.confirmPeak(isPeak, normalizedValue, confidence);
 
+    // Si se confirmó un pico y no estamos en periodo de calentamiento
     if (isConfirmedPeak && !this.isInWarmup()) {
       const now = Date.now();
       const timeSinceLastPeak = this.lastPeakTime
         ? now - this.lastPeakTime
         : Number.MAX_VALUE;
 
+      // Verificar que haya pasado suficiente tiempo desde el último pico
       if (timeSinceLastPeak >= this.MIN_PEAK_TIME_MS) {
         this.previousPeakTime = this.lastPeakTime;
         this.lastPeakTime = now;
         
-        // REPRODUCIR BEEP EN LA DETECCIÓN DE PICO POSITIVO (SUBIDA DE SEÑAL)
-        this.playBeep(0.12);
+        // Reproducir beep para indicar latido
+        this.playBeep(Math.min(0.2 + confidence * 0.6, 0.8)); // Volumen proporcional a confianza
         
+        // Guardar amplitud para análisis posterior
         this.peakAmplitudes.push(Math.abs(normalizedValue));
         if (this.peakAmplitudes.length > 20) {
           this.peakAmplitudes.shift();
         }
         
+        // Actualizar cálculo de BPM
         this.updateBPM();
       }
     }
@@ -281,28 +291,33 @@ export class HeartBeatProcessor {
       ? now - this.lastPeakTime
       : Number.MAX_VALUE;
 
+    // No detectar picos demasiado cercanos en el tiempo
     if (timeSinceLastPeak < this.MIN_PEAK_TIME_MS) {
       return { isPeak: false, confidence: 0 };
     }
 
-    // INVERTIDO: Ahora buscamos cuando la derivada es POSITIVA (señal subiendo)
-    // y el valor normalizado está por encima del umbral
+    // Sistema de detección combinado:
+    // 1. Detectar cuando la derivada es positiva (la señal está subiendo)
+    // 2. El valor normalizado debe estar por encima del umbral
+    // 3. Verificación adicional de que estamos por encima de la línea base
     const isOverThreshold =
       derivative > this.DERIVATIVE_THRESHOLD &&
-      normalizedValue > this.SIGNAL_THRESHOLD &&
-      this.lastValue > this.baseline * 0.98;
+      normalizedValue > this.SIGNAL_THRESHOLD;
 
+    // Calcular confianza basada en amplitud
     const amplitudeConfidence = Math.min(
-      Math.max(Math.abs(normalizedValue) / (this.SIGNAL_THRESHOLD * 1.8), 0),
+      Math.max(Math.abs(normalizedValue) / (this.SIGNAL_THRESHOLD * 1.5), 0),
       1
     );
+    
+    // Calcular confianza basada en derivada
     const derivativeConfidence = Math.min(
-      Math.max(derivative / this.DERIVATIVE_THRESHOLD, 0),
+      Math.max(derivative / (this.DERIVATIVE_THRESHOLD * 1.2), 0),
       1
     );
 
-    // Aproximación a la confianza final
-    const confidence = (amplitudeConfidence + derivativeConfidence) / 2;
+    // Confianza combinada (promedio ponderado)
+    const confidence = (amplitudeConfidence * 0.6 + derivativeConfidence * 0.4);
 
     return { isPeak: isOverThreshold, confidence };
   }
@@ -312,28 +327,32 @@ export class HeartBeatProcessor {
     normalizedValue: number,
     confidence: number
   ): boolean {
+    // Añadir valor actual al buffer de confirmación
     this.peakConfirmationBuffer.push(normalizedValue);
     if (this.peakConfirmationBuffer.length > 5) {
       this.peakConfirmationBuffer.shift();
     }
 
+    // Solo intentar confirmar si es un posible pico con confianza suficiente
     if (isPeak && !this.lastConfirmedPeak && confidence >= this.MIN_CONFIDENCE) {
+      // Necesitamos al menos 3 muestras para confirmar un pico
       if (this.peakConfirmationBuffer.length >= 3) {
         const len = this.peakConfirmationBuffer.length;
         
-        // INVERTIDO: Ahora verificamos que la señal estaba subiendo y ahora empieza a bajar,
-        // indicando que hemos llegado a un pico real
-        const goingUp1 =
-          this.peakConfirmationBuffer[len - 2] > this.peakConfirmationBuffer[len - 3];
-        const goingUp2 =
-          this.peakConfirmationBuffer[len - 1] > this.peakConfirmationBuffer[len - 2];
+        // Verificar patrón de subida seguido de bajada (punto de inflexión)
+        const goingUp = 
+          this.peakConfirmationBuffer[len - 3] < this.peakConfirmationBuffer[len - 2];
+        const goingDown = 
+          this.peakConfirmationBuffer[len - 2] > this.peakConfirmationBuffer[len - 1];
 
-        if (goingUp1 && !goingUp2) {
+        // Patrón típico de un pico real: subida seguida de bajada
+        if (goingUp && goingDown) {
           this.lastConfirmedPeak = true;
           return true;
         }
       }
     } else if (!isPeak) {
+      // Resetear estado cuando ya no es un pico
       this.lastConfirmedPeak = false;
     }
 
@@ -342,12 +361,19 @@ export class HeartBeatProcessor {
 
   private updateBPM() {
     if (!this.lastPeakTime || !this.previousPeakTime) return;
+    
+    // Calcular intervalo entre picos en milisegundos
     const interval = this.lastPeakTime - this.previousPeakTime;
     if (interval <= 0) return;
 
+    // Convertir intervalo a BPM
     const instantBPM = 60000 / interval;
+    
+    // Filtrar valores fisiológicamente imposibles
     if (instantBPM >= this.MIN_BPM && instantBPM <= this.MAX_BPM) {
       this.bpmHistory.push(instantBPM);
+      
+      // Mantener historial limitado para promediar
       if (this.bpmHistory.length > 12) {
         this.bpmHistory.shift();
       }
@@ -356,10 +382,14 @@ export class HeartBeatProcessor {
 
   private getSmoothBPM(): number {
     const rawBPM = this.calculateCurrentBPM();
+    
+    // Si no tenemos BPM previo, usar el actual
     if (this.smoothBPM === 0) {
       this.smoothBPM = rawBPM;
       return rawBPM;
     }
+    
+    // Suavizar el BPM para evitar fluctuaciones bruscas
     this.smoothBPM =
       this.BPM_ALPHA * rawBPM + (1 - this.BPM_ALPHA) * this.smoothBPM;
     return this.smoothBPM;
@@ -369,9 +399,15 @@ export class HeartBeatProcessor {
     if (this.bpmHistory.length < 2) {
       return 0;
     }
+    
+    // Ordenar valores para eliminar outliers
     const sorted = [...this.bpmHistory].sort((a, b) => a - b);
+    
+    // Usar valores centrales (eliminar extremos)
     const trimmed = sorted.slice(1, -1);
     if (!trimmed.length) return 0;
+    
+    // Calcular promedio de valores filtrados
     const avg = trimmed.reduce((a, b) => a + b, 0) / trimmed.length;
     return avg;
   }
@@ -380,10 +416,17 @@ export class HeartBeatProcessor {
     if (this.bpmHistory.length < 5) {
       return 0;
     }
+    
+    // Ordenar para eliminar outliers
     const sorted = [...this.bpmHistory].sort((a, b) => a - b);
+    
+    // Recortar el 10% más alto y más bajo
     const cut = Math.round(sorted.length * 0.1);
     const finalSet = sorted.slice(cut, sorted.length - cut);
+    
     if (!finalSet.length) return 0;
+    
+    // Calcular promedio final
     const sum = finalSet.reduce((acc, val) => acc + val, 0);
     return Math.round(sum / finalSet.length);
   }
