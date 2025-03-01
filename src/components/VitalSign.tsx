@@ -30,8 +30,11 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     return false;
   };
 
+  // Cache para optimizar procesamiento de valores repetidos
+  const displayValueCache = new Map<string, string | number>();
+  
   // Process blood pressure display for stable, realistic readings
-  const displayValue = useMemo(() => {
+  const processedDisplayValue = useMemo(() => {
     const cacheKey = `${label}-${value}`;
     if (displayValueCache.has(cacheKey)) {
       return displayValueCache.get(cacheKey);
@@ -107,27 +110,25 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     const [status, count] = String(value).split('|');
     
     if (status === "ARRITMIA DETECTADA") {
+      // Mejora en la visualización del texto para hacerlo más específico
       return {
-        text: count ? `ARRITMIA DETECTADA (${count})` : "ARRITMIA DETECTADA",
+        text: count ? `LATIDOS PREMATUROS (${count})` : "LATIDOS PREMATUROS",
         color: "#DC2626",
         label: "ARRITMIA"
       };
     }
     
     return {
-      text: "SIN ARRITMIA DETECTADA",
+      text: "RITMO NORMAL",
       color: "#0EA5E9",
       label: "NORMAL"
     };
   };
 
-  // Get the medically valid display value
-  const displayValue = getDisplayValue();
-  
   // Get the risk info based on the medically valid display value 
   const { text, color, label: riskLabel } = isArrhythmiaDisplay ? 
     getArrhythmiaDisplay() : 
-    { text: displayValue, ...getRiskInfo() };
+    { text: processedDisplayValue, ...getRiskInfo() };
 
   // Simplificar el renderizado para mejorar rendimiento
   return (

@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { 
+import React, { useEffect, useState } from 'react';
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -8,204 +8,123 @@ import {
   DialogFooter
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-
-// Define types for dynamically imported Capacitor plugins
-interface CameraPermissionState {
-  camera: 'granted' | 'denied' | 'prompt' | 'prompt-with-rationale';
-}
-
-interface CameraPlugin {
-  checkPermissions(): Promise<CameraPermissionState>;
-  requestPermissions(options: { permissions: string[] }): Promise<CameraPermissionState>;
-}
-
-interface AppPlugin {
-  exitApp(): Promise<void>;
-  openUrl(options: { url: string }): Promise<{ completed: boolean }>;
-}
+import { Camera } from 'lucide-react';
 
 interface PermissionsHandlerProps {
   onPermissionsGranted: () => void;
   onPermissionsDenied: () => void;
 }
 
-// Helper functions to check if we're in a Capacitor environment
-const isCapacitorAvailable = (): boolean => {
-  return typeof (window as any).Capacitor !== 'undefined';
-};
-
-const isNativePlatform = (): boolean => {
-  return isCapacitorAvailable() && (window as any).Capacitor.isNativePlatform();
-};
-
-const PermissionsHandler: React.FC<PermissionsHandlerProps> = ({ 
-  onPermissionsGranted, 
-  onPermissionsDenied 
+const PermissionsHandler: React.FC<PermissionsHandlerProps> = ({
+  onPermissionsGranted,
+  onPermissionsDenied
 }) => {
   const [permissionsChecked, setPermissionsChecked] = useState(false);
   const [showPermissionDialog, setShowPermissionDialog] = useState(false);
-  const [isAndroid, setIsAndroid] = useState(false);
+  const [permissionState, setPermissionState] = useState<'checking' | 'granted' | 'denied' | 'prompt'>('checking');
 
-  // Detect platform
-  useEffect(() => {
-    const userAgent = navigator.userAgent.toLowerCase();
-    setIsAndroid(/android/i.test(userAgent));
-  }, []);
-
-  // Handle web browser camera permissions
-  const checkWebPermissions = useCallback(async () => {
+  const checkCameraPermission = async () => {
     try {
-      console.log('Checking web camera permissions');
-      // Request camera permission using standard web API
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      
-      // Stop the stream right away, we just needed to check permissions
-      stream.getTracks().forEach(track => track.stop());
-      
-      console.log('Web camera permission granted');
-      onPermissionsGranted();
-    } catch (error) {
-      console.error('Web camera permission denied:', error);
-      setShowPermissionDialog(true);
-      onPermissionsDenied();
-    }
-  }, [onPermissionsGranted, onPermissionsDenied]);
-
-  // Handle Capacitor native permissions
-  const checkCapacitorPermissions = useCallback(async () => {
-    try {
-      console.log('Checking Capacitor camera permissions');
-      
-      // Dynamically import Capacitor plugins to avoid issues in web environment
-      // Using type assertion to handle the dynamic import
-      const cameraModule = await import('@capacitor/camera').catch(() => null);
-      
-      if (!cameraModule) {
-        console.error('Failed to import @capacitor/camera, falling back to web permissions');
-        return checkWebPermissions();
-      }
-      
-      const Camera = cameraModule.Camera as CameraPlugin;
-      
-      // Check current permission status
-      const cameraPermission = await Camera.checkPermissions();
-      
-      if (cameraPermission.camera === 'granted') {
-        console.log('Capacitor camera permission already granted');
-        onPermissionsGranted();
-      } else {
-        console.log('Requesting Capacitor camera permission...');
-        const requestResult = await Camera.requestPermissions({
-          permissions: ['camera']
-        });
+      // Verificar si la API de navigator.permissions está disponible
+      if (navigator.permissions && navigator.permissions.query) {
+        // Consultar el estado actual del permiso de cámara
+        const permissionStatus = await navigator.permissions.query({ name: 'camera' as PermissionName });
         
-        if (requestResult.camera === 'granted') {
-          console.log('Capacitor camera permission granted');
+        console.log('Estado de permiso de cámara:', permissionStatus.state);
+        setPermissionState(permissionStatus.state as 'granted' | 'denied' | 'prompt');
+        
+        if (permissionStatus.state === 'granted') {
           onPermissionsGranted();
-        } else {
-          console.log('Capacitor camera permission denied');
-          setShowPermissionDialog(true);
+        } else if (permissionStatus.state === 'denied') {
           onPermissionsDenied();
+          setShowPermissionDialog(true);
+        } else {
+          // Si el estado es 'prompt', intentamos solicitar acceso a la cámara
+          requestCameraAccess();
         }
-      }
-    } catch (error) {
-      console.error('Error checking Capacitor permissions:', error);
-      
-      // Fallback to web permissions if Capacitor permissions fail
-      try {
-        await checkWebPermissions();
-      } catch (fallbackError) {
-        console.error('Both Capacitor and web permissions failed:', fallbackError);
-        setShowPermissionDialog(true);
-        onPermissionsDenied();
-      }
-    }
-  }, [checkWebPermissions, onPermissionsGranted, onPermissionsDenied]);
-
-  // Main permissions check function
-  const checkAndRequestPermissions = useCallback(async () => {
-    try {
-      if (isNativePlatform()) {
-        await checkCapacitorPermissions();
+        
+        // Configurar el listener para cambios en el estado de los permisos
+        permissionStatus.addEventListener('change', (e) => {
+          const target = e.target as PermissionStatus;
+          console.log('Cambio en estado de permiso de cámara:', target.state);
+          setPermissionState(target.state as 'granted' | 'denied' | 'prompt');
+          
+          if (target.state === 'granted') {
+            onPermissionsGranted();
+            setShowPermissionDialog(false);
+          } else if (target.state === 'denied') {
+            onPermissionsDenied();
+            setShowPermissionDialog(true);
+          }
+        });
       } else {
-        await checkWebPermissions();
+        // Si la API de permisos no está disponible, intentamos solicitar directamente
+        console.log('API de permisos no disponible, solicitando acceso directamente');
+        requestCameraAccess();
       }
     } catch (error) {
-      console.error('Error checking permissions:', error);
-      setShowPermissionDialog(true);
-      onPermissionsDenied();
+      console.error('Error al verificar permisos de cámara:', error);
+      // Si hay un error, intentamos solicitar directamente
+      requestCameraAccess();
     } finally {
       setPermissionsChecked(true);
     }
-  }, [checkCapacitorPermissions, checkWebPermissions, onPermissionsDenied]);
+  };
 
-  // Function to open app settings
-  const openAppSettings = async () => {
+  const requestCameraAccess = async () => {
     try {
-      if (isNativePlatform()) {
-        const appModule = await import('@capacitor/app').catch(() => null);
-        
-        if (!appModule) {
-          console.error('Failed to import @capacitor/app');
-          alert('Please manually open your device settings and allow camera access for this app');
-          return;
-        }
-        
-        const App = appModule.App as AppPlugin;
-        
-        if (isAndroid) {
-          // On Android, we can try to launch settings
-          try {
-            // Try to open app settings
-            await App.openUrl({ url: 'package:' + (window as any).Capacitor.getPlatform() });
-          } catch (e) {
-            // Fallback to just exiting the app so user can manually change settings
-            console.log('Could not open settings directly, exiting app instead');
-            await App.exitApp();
-          }
-        } else {
-          // On iOS, we don't have a direct way, so just inform user
-          alert('Please open Settings app and allow camera access for this app');
-        }
-      } else {
-        // In web, we can just ask the user to check browser settings
-        alert('Please allow camera access in your browser settings');
-      }
+      console.log('Solicitando acceso a la cámara...');
+      // Intentar obtener acceso a la cámara
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      
+      // Si llegamos aquí, el permiso fue concedido
+      console.log('Permiso de cámara concedido');
+      setPermissionState('granted');
+      onPermissionsGranted();
+      
+      // Detener inmediatamente todos los tracks para liberar la cámara
+      stream.getTracks().forEach(track => track.stop());
     } catch (error) {
-      console.error('Error opening settings:', error);
-      alert('Please manually open your device settings and allow camera access for this app');
+      console.error('Error al solicitar acceso a la cámara:', error);
+      setPermissionState('denied');
+      onPermissionsDenied();
+      setShowPermissionDialog(true);
     }
   };
 
-  // Run permission check on component mount
+  const handleRetryPermission = () => {
+    requestCameraAccess();
+  };
+
   useEffect(() => {
-    checkAndRequestPermissions();
-  }, [checkAndRequestPermissions]);
+    // Verificar permisos cuando el componente se monta
+    checkCameraPermission();
+  }, []);
 
   return (
     <Dialog open={showPermissionDialog} onOpenChange={setShowPermissionDialog}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Camera Permission Required</DialogTitle>
-          <DialogDescription>
-            This app needs access to your camera to measure vital signs. Please grant camera permission to continue.
+          <div className="flex items-center justify-center mb-4">
+            <Camera className="w-12 h-12 text-red-500" />
+          </div>
+          <DialogTitle className="text-center">Permiso de cámara necesario</DialogTitle>
+          <DialogDescription className="text-center">
+            Esta aplicación necesita acceso a la cámara para medir tus signos vitales. 
+            Sin este permiso, la aplicación no podrá funcionar correctamente.
           </DialogDescription>
         </DialogHeader>
         <div className="mt-4 flex flex-col space-y-3">
-          <p className="text-sm text-gray-500">
-            Without camera permission, the app cannot function properly. Your privacy is important - camera data is only processed on your device and is not stored or transmitted.
+          <p className="text-sm text-center text-gray-500">
+            Por favor, concede acceso a la cámara cuando tu navegador lo solicite.
           </p>
         </div>
         <DialogFooter className="flex flex-col sm:flex-row gap-2 mt-4">
-          <Button onClick={openAppSettings}>
-            Open Settings
+          <Button onClick={handleRetryPermission} className="w-full">
+            Reintentar
           </Button>
-          <Button variant="outline" onClick={() => {
-            setShowPermissionDialog(false);
-            // Try checking permissions again
-            checkAndRequestPermissions();
-          }}>
-            Try Again
+          <Button variant="outline" onClick={() => window.location.reload()} className="w-full">
+            Recargar página
           </Button>
         </DialogFooter>
       </DialogContent>
