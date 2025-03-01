@@ -1,3 +1,4 @@
+
 import React, { memo, useMemo } from 'react';
 import { VitalSignsRisk } from '../utils/vitalSignsRisk';
 
@@ -62,7 +63,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     // For heart rate, show real value without checking risk if no measurement
     if (label === "FRECUENCIA CARDÍACA") {
       if (value === "--" || value === 0) {
-        return { color: '#FFFFFF', label: '' };
+        return { color: '#000000', label: '' };
       }
       if (typeof value === 'number') {
         return VitalSignsRisk.getBPMRisk(value, isFinalReading);
@@ -72,7 +73,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     // For SPO2, show real value without checking risk if no measurement
     if (label === "SPO2") {
       if (value === "--" || value === 0) {
-        return { color: '#FFFFFF', label: '' };
+        return { color: '#000000', label: '' };
       }
       if (typeof value === 'number') {
         return VitalSignsRisk.getSPO2Risk(value, isFinalReading);
@@ -82,7 +83,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     // For blood pressure, show real value without checking risk if no measurement
     if (label === "PRESIÓN ARTERIAL") {
       if (value === "--/--" || value === "0/0") {
-        return { color: '#FFFFFF', label: '' };
+        return { color: '#000000', label: '' };
       }
       
       // Don't try to evaluate risk if measurement is unstable/unrealistic
@@ -90,10 +91,10 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
         return VitalSignsRisk.getBPRisk(value, isFinalReading);
       }
       
-      return { color: '#FFFFFF', label: '' };
+      return { color: '#000000', label: '' };
     }
 
-    return { color: '#FFFFFF', label: '' };
+    return { color: '#000000', label: '' };
   };
   
   const getArrhythmiaDisplay = () => {
@@ -102,7 +103,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     if (value === "--") {
       return { 
         text: "--", 
-        color: "#D3E4FD",
+        color: "#000000",
         label: ""
       };
     }
@@ -142,7 +143,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
           <div className="flex items-baseline gap-1 justify-center">
             <span 
               className={`${isArrhythmiaDisplay ? 'text-base' : 'text-xl'} font-bold transition-colors duration-300 text-white`}
-              style={{ color: color || '#FFFFFF' }}
+              style={{ color: color || '#000000' }}
             >
               {text}
             </span>
@@ -153,7 +154,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
           {riskLabel && (
             <span 
               className="text-[10px] font-semibold tracking-wider mt-1 text-white"
-              style={{ color: color || '#FFFFFF' }}
+              style={{ color: color || '#000000' }}
             >
               {riskLabel}
             </span>
