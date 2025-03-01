@@ -1,175 +1,212 @@
-// Service to detect device context (ambient light, device state, etc.)
 
-// Interface for device context
-export interface DeviceContext {
-  ambientLight: 'low' | 'medium' | 'high' | 'unknown';
-  batteryLevel: number;
-  batterySaving: boolean;
-  deviceIdle: boolean;
-  lastActivity: number; // timestamp
-  isBackgrounded: boolean;
-}
-
+/**
+ * Service to manage device context information like battery level, ambient light, etc.
+ */
 class DeviceContextService {
-  private context: DeviceContext = {
-    ambientLight: 'unknown',
-    batteryLevel: 100,
-    batterySaving: false,
-    deviceIdle: false,
-    lastActivity: Date.now(),
-    isBackgrounded: false
-  };
-  
-  private ambientLightReadings: number[] = [];
-  private batteryAPI: any = null;
-  private visibilityChangeHandler: () => void;
-  private idleTimeout: number | null = null;
-  private readonly IDLE_THRESHOLD_MS = 30000; // 30 seconds
-  
+  private _batteryLevel: number = 100;
+  private _isBatterySavingMode: boolean = false;
+  private _isDeviceIdle: boolean = false;
+  private _isBackgrounded: boolean = false;
+  private _ambientLight: 'low' | 'medium' | 'high' = 'medium';
+  private _lastAmbientLightUpdate: number = 0;
+  private _sampleCount: number = 0;
+  private _brightnessValues: number[] = [];
+  private _maxSamples: number = 10;
+  private _sampleRate: number = 2000; // milliseconds
+
   constructor() {
-    // Initialize visibility change detection
-    this.visibilityChangeHandler = this.handleVisibilityChange.bind(this);
-    document.addEventListener('visibilitychange', this.visibilityChangeHandler);
+    this.initBatteryMonitoring();
+    this.initVisibilityMonitoring();
     
-    // Initialize user activity detection
-    document.addEventListener('touchstart', this.resetIdleTimer.bind(this), { passive: true });
-    document.addEventListener('click', this.resetIdleTimer.bind(this), { passive: true });
-    
-    // Try to initialize battery detection
-    this.initBatteryAPI();
-    
-    // Start idle detection
-    this.resetIdleTimer();
-    
-    console.log("DeviceContextService: Service initialized");
+    // Initialize with default values
+    this._ambientLight = 'medium';
+    this._brightnessValues = [];
+    this._sampleCount = 0;
   }
-  
-  private async initBatteryAPI() {
+
+  /**
+   * Initialize battery monitoring if browser supports it
+   */
+  private initBatteryMonitoring() {
+    if ('getBattery' in navigator) {
+      // Get initial battery status
+      navigator.getBattery().then(battery => {
+        this.updateBatteryInfo(battery);
+
+        // Set up event listeners for battery changes
+        battery.addEventListener('levelchange', () => this.updateBatteryInfo(battery));
+        battery.addEventListener('chargingchange', () => this.updateBatteryInfo(battery));
+      }).catch(error => {
+        console.error('Error accessing battery info:', error);
+      });
+    } else {
+      console.log('Battery API not supported on this device');
+    }
+  }
+
+  /**
+   * Update battery information
+   */
+  private updateBatteryInfo(battery: any) {
     try {
-      if ('getBattery' in navigator) {
-        this.batteryAPI = await (navigator as any).getBattery();
+      this._batteryLevel = battery.level * 100;
+      
+      // Consider low battery if level is below 20% and not charging
+      this._isBatterySavingMode = battery.level < 0.2 && !battery.charging;
+      
+      console.log(`DeviceContextService: Battery level: ${this._batteryLevel}%, Saving mode: ${this._isBatterySavingMode}`);
+    } catch (error) {
+      console.error('Error updating battery info:', error);
+    }
+  }
+
+  /**
+   * Initialize visibility monitoring
+   */
+  private initVisibilityMonitoring() {
+    // Listen for visibility changes
+    document.addEventListener('visibilitychange', () => {
+      this._isBackgrounded = document.hidden;
+      console.log(`DeviceContextService: App ${this._isBackgrounded ? 'backgrounded' : 'foregrounded'}`);
+    });
+
+    // Listen for user idle state (no interaction for 60 seconds)
+    let idleTimer: number | null = null;
+    const resetIdleTimer = () => {
+      if (idleTimer) {
+        clearTimeout(idleTimer);
+      }
+      this._isDeviceIdle = false;
+      idleTimer = window.setTimeout(() => {
+        this._isDeviceIdle = true;
+        console.log('DeviceContextService: Device idle detected');
+      }, 60000); // 60 seconds
+    };
+
+    // Reset idle timer on user interaction
+    ['mousedown', 'mousemove', 'keypress', 'touchstart', 'scroll'].forEach(event => {
+      document.addEventListener(event, resetIdleTimer, { passive: true });
+    });
+
+    // Initial call
+    resetIdleTimer();
+  }
+
+  /**
+   * Process image data to estimate ambient light levels
+   */
+  public processAmbientLight(imageData: ImageData) {
+    // Limit how often we process ambient light
+    const now = Date.now();
+    if (now - this._lastAmbientLightUpdate < this._sampleRate) {
+      return;
+    }
+    this._lastAmbientLightUpdate = now;
+
+    try {
+      // Calculate average brightness of the image
+      let totalBrightness = 0;
+      const data = imageData.data;
+      
+      // Sample at most 10000 pixels for performance
+      const totalPixels = data.length / 4;
+      const sampleRate = Math.max(1, Math.floor(totalPixels / 10000));
+      
+      let sampledPixels = 0;
+      
+      for (let i = 0; i < data.length; i += 4 * sampleRate) {
+        // Calculate brightness from RGB
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
         
-        if (this.batteryAPI) {
-          // Update initial values
-          this.context.batteryLevel = this.batteryAPI.level * 100;
-          this.context.batterySaving = this.batteryAPI.charging ? false : (this.batteryLevel < 20);
-          
-          // Set up event listeners
-          this.batteryAPI.addEventListener('levelchange', () => {
-            this.context.batteryLevel = this.batteryAPI.level * 100;
-            this.context.batterySaving = this.batteryAPI.charging ? false : (this.batteryLevel < 20);
-            console.log(`DeviceContextService: Battery level changed to ${this.context.batteryLevel}%`);
-          });
-        }
+        // Weighted brightness calculation (human eyes are more sensitive to green)
+        const brightness = (r * 0.299 + g * 0.587 + b * 0.114) / 255;
+        totalBrightness += brightness;
+        sampledPixels++;
+      }
+      
+      // Calculate average brightness (0-1)
+      const avgBrightness = totalBrightness / sampledPixels;
+      
+      // Add to running average
+      this._brightnessValues.push(avgBrightness);
+      if (this._brightnessValues.length > this._maxSamples) {
+        this._brightnessValues.shift();
+      }
+      
+      // Only update after collecting enough samples
+      this._sampleCount++;
+      if (this._sampleCount >= 5) {
+        this.updateAmbientLight();
       }
     } catch (error) {
-      console.error("DeviceContextService: Error initializing Battery API", error);
+      console.error('Error processing ambient light:', error);
     }
   }
-  
-  public get batteryLevel(): number {
-    return this.context.batteryLevel;
-  }
-  
-  public get isBatterySavingMode(): boolean {
-    return this.context.batterySaving;
-  }
-  
-  public get isDeviceIdle(): boolean {
-    return this.context.deviceIdle;
-  }
-  
-  public get isBackgrounded(): boolean {
-    return this.context.isBackgrounded;
-  }
-  
-  public get ambientLight(): string {
-    return this.context.ambientLight;
-  }
-  
-  // Process ambient light data from camera frames
-  public processAmbientLight(imageData: ImageData): void {
-    // Simple algorithm to estimate ambient light from image data
-    const data = imageData.data;
-    const pixelCount = data.length / 4;
-    let totalBrightness = 0;
-    
-    // Sample every 20th pixel for performance
-    for (let i = 0; i < data.length; i += 80) {
-      const r = data[i];
-      const g = data[i + 1];
-      const b = data[i + 2];
+
+  /**
+   * Update ambient light classification based on collected samples
+   */
+  private updateAmbientLight() {
+    try {
+      // Calculate average from collected samples
+      const sum = this._brightnessValues.reduce((acc, val) => acc + val, 0);
+      const avg = sum / this._brightnessValues.length;
       
-      // Calculate perceived brightness using relative luminance formula
-      const brightness = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-      totalBrightness += brightness;
-    }
-    
-    const averageBrightness = totalBrightness / (pixelCount / 20);
-    
-    // Add to readings array and keep only last 5 readings
-    this.ambientLightReadings.push(averageBrightness);
-    if (this.ambientLightReadings.length > 5) {
-      this.ambientLightReadings.shift();
-    }
-    
-    // Calculate average from recent readings
-    const avgRecentBrightness = this.ambientLightReadings.reduce((a, b) => a + b, 0) / 
-                              this.ambientLightReadings.length;
-    
-    // Classify ambient light
-    if (avgRecentBrightness < 40) {
-      this.context.ambientLight = 'low';
-    } else if (avgRecentBrightness < 120) {
-      this.context.ambientLight = 'medium';
-    } else {
-      this.context.ambientLight = 'high';
+      // Classify light level
+      let newAmbientLight: 'low' | 'medium' | 'high';
+      
+      if (avg < 0.25) {
+        newAmbientLight = 'low';
+      } else if (avg < 0.6) {
+        newAmbientLight = 'medium';
+      } else {
+        newAmbientLight = 'high';
+      }
+      
+      // Only log if changed
+      if (this._ambientLight !== newAmbientLight) {
+        console.log(`DeviceContextService: Ambient light changed from ${this._ambientLight} to ${newAmbientLight} (brightness: ${avg.toFixed(2)})`);
+        this._ambientLight = newAmbientLight;
+      }
+    } catch (error) {
+      console.error('Error updating ambient light:', error);
     }
   }
-  
-  private handleVisibilityChange(): void {
-    if (document.hidden) {
-      this.context.isBackgrounded = true;
-      console.log("DeviceContextService: App moved to background");
-    } else {
-      this.context.isBackgrounded = false;
-      console.log("DeviceContextService: App moved to foreground");
-      this.resetIdleTimer();
-    }
+
+  /**
+   * Reset ambient light detection
+   */
+  public resetAmbientLight() {
+    this._ambientLight = 'medium';
+    this._brightnessValues = [];
+    this._sampleCount = 0;
+    this._lastAmbientLightUpdate = 0;
   }
-  
-  private resetIdleTimer(): void {
-    this.context.deviceIdle = false;
-    this.context.lastActivity = Date.now();
-    
-    if (this.idleTimeout !== null) {
-      window.clearTimeout(this.idleTimeout);
-    }
-    
-    this.idleTimeout = window.setTimeout(() => {
-      this.context.deviceIdle = true;
-      console.log("DeviceContextService: Device is now idle");
-    }, this.IDLE_THRESHOLD_MS);
+
+  // Getters for device context information
+  get batteryLevel(): number {
+    return this._batteryLevel;
   }
-  
-  public cleanUp(): void {
-    document.removeEventListener('visibilitychange', this.visibilityChangeHandler);
-    document.removeEventListener('touchstart', this.resetIdleTimer);
-    document.removeEventListener('click', this.resetIdleTimer);
-    
-    if (this.idleTimeout !== null) {
-      window.clearTimeout(this.idleTimeout);
-      this.idleTimeout = null;
-    }
-    
-    // Clear any held references
-    this.ambientLightReadings = [];
-    this.batteryAPI = null;
-    
-    console.log("DeviceContextService: Service cleaned up");
+
+  get isBatterySavingMode(): boolean {
+    return this._isBatterySavingMode;
+  }
+
+  get isDeviceIdle(): boolean {
+    return this._isDeviceIdle;
+  }
+
+  get isBackgrounded(): boolean {
+    return this._isBackgrounded;
+  }
+
+  get ambientLight(): 'low' | 'medium' | 'high' {
+    return this._ambientLight;
   }
 }
 
-// Create a singleton instance
+// Singleton instance
 const deviceContextService = new DeviceContextService();
 export default deviceContextService;

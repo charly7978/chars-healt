@@ -9,24 +9,12 @@ interface CameraViewProps {
   signalQuality?: number;
 }
 
-// Define custom interface extending the standard definitions
 interface ExtendedMediaTrackCapabilities extends MediaTrackCapabilities {
-  // Note: These are commented out as they aren't standard and cause TypeScript errors
-  // exposureTime?: {
-  //   min: number;
-  //   max: number;
-  //   step: number;
-  // };
-  // zoom?: {
-  //   min: number;
-  //   max: number;
-  //   step: number;
-  // };
+  // Extended capabilities are commented out as they cause TypeScript errors
 }
 
 interface ExtendedMediaTrackConstraints extends MediaTrackConstraints {
-  // exposureTime?: number;
-  // zoom?: number;
+  // Extended constraints are commented out as they cause TypeScript errors
 }
 
 const CameraView = ({
@@ -44,6 +32,7 @@ const CameraView = ({
   const flashIntensityRef = useRef<number>(0);
   const lastFlashAdjustTimeRef = useRef<number>(0);
   const trackRef = useRef<MediaStreamTrack | null>(null);
+  const processingFramesRef = useRef(false);
 
   // Detect if we're on Android - only compute this once
   useEffect(() => {
@@ -67,7 +56,7 @@ const CameraView = ({
     const ambientLight = deviceContextService.ambientLight;
     let newIntensity = 0;
     
-    if (isMonitoring && trackRef.current.getCapabilities()?.torch) {
+    if (isMonitoring && trackRef.current.getCapabilities()?.torch && trackRef.current.readyState === 'live') {
       try {
         // Set torch based on ambient light
         if (ambientLight === 'low') {
@@ -85,11 +74,12 @@ const CameraView = ({
           console.log(`CameraView: Adjusting flash intensity to ${newIntensity} based on ambient light: ${ambientLight}`);
           flashIntensityRef.current = newIntensity;
           
-          // Unfortunately, standard torch intensity control isn't widely supported
-          // For now, we just turn it on/off as a fallback
-          await trackRef.current.applyConstraints({
-            advanced: [{ torch: true }]
-          });
+          // Check if track is still live before applying constraints
+          if (trackRef.current.readyState === 'live') {
+            await trackRef.current.applyConstraints({
+              advanced: [{ torch: true }]
+            });
+          }
         }
       } catch (e) {
         console.error("Error adjusting flash intensity:", e);
@@ -97,43 +87,14 @@ const CameraView = ({
     }
   }, [isMonitoring]);
 
-  // Function to stop the camera and release resources
+  // Function to safely stop the camera and release resources
   const stopCamera = useCallback(() => {
     console.log("CameraView: Deteniendo cámara");
     
-    if (streamRef.current) {
-      const tracks = streamRef.current.getTracks();
-      tracks.forEach(track => {
-        // First disable torch if available
-        if (track.getCapabilities()?.torch) {
-          try {
-            console.log("CameraView: Desactivando linterna");
-            track.applyConstraints({
-              advanced: [{ torch: false }]
-            }).catch(err => console.error("Error desactivando linterna:", err));
-          } catch (err) {
-            console.error("Error desactivando linterna:", err);
-          }
-        }
-        
-        // Wait a moment before stopping the track (helps with Android)
-        setTimeout(() => {
-          try {
-            if (track.readyState === 'live') {
-              console.log("CameraView: Deteniendo track de video");
-              track.stop();
-            }
-          } catch (err) {
-            console.error("Error deteniendo track:", err);
-          }
-        }, 50);
-      });
-
-      streamRef.current = null;
-      trackRef.current = null;
-    }
-
-    // Clear the video element
+    // First, mark that we're no longer processing frames
+    processingFramesRef.current = false;
+    
+    // Clear the video element first
     if (videoRef.current) {
       try {
         videoRef.current.pause();
@@ -141,6 +102,46 @@ const CameraView = ({
       } catch (err) {
         console.error("Error limpiando video element:", err);
       }
+    }
+    
+    // Then handle the stream
+    if (streamRef.current) {
+      const tracks = streamRef.current.getTracks();
+      
+      // Process each track
+      tracks.forEach(track => {
+        try {
+          // First disable torch if available and track is live
+          if (track.readyState === 'live' && track.getCapabilities()?.torch) {
+            try {
+              console.log("CameraView: Desactivando linterna");
+              track.applyConstraints({
+                advanced: [{ torch: false }]
+              }).catch(err => console.error("Error desactivando linterna:", err));
+            } catch (err) {
+              console.error("Error desactivando linterna:", err);
+            }
+          }
+          
+          // Wait a moment before stopping the track (helps with Android)
+          setTimeout(() => {
+            try {
+              if (track.readyState === 'live') {
+                console.log("CameraView: Deteniendo track de video");
+                track.stop();
+              }
+            } catch (err) {
+              console.error("Error deteniendo track:", err);
+            }
+          }, 100);
+        } catch (error) {
+          console.error("Error general al detener track:", error);
+        }
+      });
+
+      // Clear references
+      streamRef.current = null;
+      trackRef.current = null;
     }
     
     // Reset flash state
@@ -160,11 +161,11 @@ const CameraView = ({
     setError(null);
     
     try {
-      // Make sure any previous stream is stopped
+      // Make sure any previous stream is stopped properly
       stopCamera();
       
       // Wait for resources to be released (especially on Android)
-      await new Promise(resolve => setTimeout(resolve, isAndroid ? 300 : 50));
+      await new Promise(resolve => setTimeout(resolve, isAndroid ? 500 : 200));
 
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error('La API getUserMedia no está disponible');
@@ -200,6 +201,7 @@ const CameraView = ({
       const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
       console.log("CameraView: Acceso a la cámara concedido, tracks:", mediaStream.getTracks().length);
       
+      // Check if component is still mounted and monitoring
       if (!mountedRef.current || !isMonitoring) {
         console.log("CameraView: Componente desmontado o no monitorizando, liberando stream");
         mediaStream.getTracks().forEach(track => track.stop());
@@ -207,43 +209,38 @@ const CameraView = ({
         return;
       }
 
+      // Store references
       streamRef.current = mediaStream;
       const videoTrack = mediaStream.getVideoTracks()[0];
       trackRef.current = videoTrack;
 
       // Apply specific optimizations for Android
-      if (isAndroid) {
+      if (isAndroid && videoTrack && videoTrack.readyState === 'live') {
         console.log("CameraView: Aplicando optimizaciones para Android");
-        if (videoTrack) {
-          try {
-            // Android optimizations
-            const capabilities = videoTrack.getCapabilities() as ExtendedMediaTrackCapabilities;
-            const settings: ExtendedMediaTrackConstraints = {};
-            
-            // Only apply constraints that are actually available and beneficial
-            if (capabilities.exposureMode && capabilities.exposureMode.includes('continuous')) {
-              settings.exposureMode = 'continuous';
-            }
-            
-            // Removed non-standard exposureTime setting
-            
-            if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
-              settings.focusMode = 'continuous';
-            }
-            
-            if (capabilities.whiteBalanceMode && capabilities.whiteBalanceMode.includes('continuous')) {
-              settings.whiteBalanceMode = 'continuous';
-            }
-            
-            // Removed non-standard zoom setting
-            
-            if (Object.keys(settings).length > 0) {
-              await videoTrack.applyConstraints(settings);
-              console.log("CameraView: Optimizaciones para Android aplicadas", settings);
-            }
-          } catch (err) {
-            console.error("Error aplicando optimizaciones para Android:", err);
+        try {
+          // Android optimizations
+          const capabilities = videoTrack.getCapabilities() as ExtendedMediaTrackCapabilities;
+          const settings: ExtendedMediaTrackConstraints = {};
+          
+          // Only apply constraints that are actually available and beneficial
+          if (capabilities.exposureMode && capabilities.exposureMode.includes('continuous')) {
+            settings.exposureMode = 'continuous';
           }
+          
+          if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+            settings.focusMode = 'continuous';
+          }
+          
+          if (capabilities.whiteBalanceMode && capabilities.whiteBalanceMode.includes('continuous')) {
+            settings.whiteBalanceMode = 'continuous';
+          }
+          
+          if (Object.keys(settings).length > 0 && videoTrack.readyState === 'live') {
+            await videoTrack.applyConstraints(settings);
+            console.log("CameraView: Optimizaciones para Android aplicadas", settings);
+          }
+        } catch (err) {
+          console.error("Error aplicando optimizaciones para Android:", err);
         }
       }
 
@@ -265,34 +262,41 @@ const CameraView = ({
         videoRef.current.srcObject = mediaStream;
         
         // On Android, wait for optimizations to apply before playing
-        await new Promise(resolve => setTimeout(resolve, isAndroid ? 100 : 0));
+        await new Promise(resolve => setTimeout(resolve, isAndroid ? 200 : 50));
         
-        await videoRef.current.play().catch(e => {
+        try {
+          await videoRef.current.play();
+          console.log("CameraView: Video reproduciendo correctamente");
+        } catch (e) {
           console.error("Error reproduciendo video:", e);
           throw e;
-        });
-        console.log("CameraView: Video reproduciendo correctamente");
+        }
       } else {
         console.error("CameraView: El elemento video no está disponible");
       }
 
       // Wait a moment before activating the flashlight on Android
-      await new Promise(resolve => setTimeout(resolve, isAndroid ? 200 : 0));
+      await new Promise(resolve => setTimeout(resolve, isAndroid ? 300 : 100));
+
+      // Mark that we're ready to process frames
+      processingFramesRef.current = true;
 
       // Initial flash adjustment based on ambient conditions
-      await adjustFlashIntensity();
+      if (videoTrack.readyState === 'live') {
+        await adjustFlashIntensity();
       
-      // Set up periodic flash intensity adjustment
-      const flashAdjustInterval = setInterval(() => {
-        if (isMonitoring && videoTrack) {
-          adjustFlashIntensity();
-        } else {
-          clearInterval(flashAdjustInterval);
-        }
-      }, 2000);
+        // Set up periodic flash intensity adjustment
+        const flashAdjustInterval = setInterval(() => {
+          if (isMonitoring && videoTrack && videoTrack.readyState === 'live') {
+            adjustFlashIntensity();
+          } else {
+            clearInterval(flashAdjustInterval);
+          }
+        }, 2000);
+      }
 
       // Notify that the stream is ready
-      if (onStreamReady && isMonitoring) {
+      if (onStreamReady && isMonitoring && mountedRef.current) {
         console.log("CameraView: Notificando stream listo");
         onStreamReady(mediaStream);
       }
@@ -313,7 +317,7 @@ const CameraView = ({
       // Use a longer timeout for Android
       const timeoutId = setTimeout(() => {
         startCamera();
-      }, isAndroid ? 300 : 100);
+      }, isAndroid ? 500 : 200);
       return () => clearTimeout(timeoutId);
     } else {
       stopCamera();
@@ -340,6 +344,7 @@ const CameraView = ({
     return () => {
       console.log("CameraView: Componente desmontando");
       mountedRef.current = false;
+      processingFramesRef.current = false;
       stopCamera();
     };
   }, [stopCamera]);
