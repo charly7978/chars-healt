@@ -303,8 +303,10 @@ const PPGSignalMeter = ({
             }`}
             strokeWidth={1.5}
           />
-          <span className="text-[9px] text-center mt-0.5 font-medium text-white">
-            {isFingerDetected ? "Dedo detectado" : "Ubique su dedo"}
+          <span className={`text-[9px] text-center mt-0.5 font-medium ${
+            !isFingerDetected ? 'text-gray-400' : 'text-green-500'
+          }`}>
+            {isFingerDetected ? "Dedo detectado" : "Ubique su dedo en la Lente"}
           </span>
         </div>
       </div>
