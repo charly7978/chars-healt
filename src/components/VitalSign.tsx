@@ -65,14 +65,14 @@ const VitalSign: React.FC<VitalSignProps> = memo(({ label, value, unit, isFinalR
     
     if (status === "ARRITMIA DETECTADA") {
       return {
-        text: count ? `ARRITMIA DETECTADA (${count})` : "ARRITMIA DETECTADA",
+        text: count ? `LATIDOS PREMATUROS (${count})` : "LATIDOS PREMATUROS",
         color: "#DC2626",
-        label: "ARRITMIA"
+        label: "PREMATUROS"
       };
     }
     
     return {
-      text: "SIN ARRITMIA DETECTADA",
+      text: "RITMO NORMAL",
       color: "#0EA5E9",
       label: "NORMAL"
     };

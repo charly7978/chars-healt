@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -253,14 +252,52 @@ const PPGSignalMeter = ({
           
           if (point.isArrhythmia) {
             ctx.beginPath();
-            ctx.arc(x, y, 8, 0, Math.PI * 2);
+            ctx.arc(x, y, 9, 0, Math.PI * 2);
             ctx.strokeStyle = '#FFFF00';
-            ctx.lineWidth = 1.5;
+            ctx.lineWidth = 2;
             ctx.stroke();
             
+            // Segundo círculo de alerta 
+            ctx.beginPath();
+            ctx.arc(x, y, 14, 0, Math.PI * 2);
+            ctx.strokeStyle = '#FF6B6B';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([2, 2]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            // Etiqueta más específica y descriptiva
             ctx.font = 'bold 10px Inter';
             ctx.fillStyle = '#FF6B6B';
-            ctx.fillText("ARR", x, y - 35);
+            ctx.fillText("LATIDO PREMATURO", x, y - 35);
+            
+            // Indicador visual para mostrar la posición entre dos latidos normales
+            ctx.beginPath();
+            ctx.setLineDash([2, 2]);
+            ctx.strokeStyle = 'rgba(255, 107, 107, 0.6)';
+            ctx.lineWidth = 1;
+            
+            // Línea que conecta con el latido anterior (si existe)
+            if (i > 0) {
+              const prevX = canvas.width - ((now - visiblePoints[i-1].time) * canvas.width / WINDOW_WIDTH_MS);
+              const prevY = canvas.height * 0.4 + visiblePoints[i-1].value;
+              
+              ctx.moveTo(prevX, prevY - 15);
+              ctx.lineTo(x, y - 15);
+              ctx.stroke();
+            }
+            
+            // Línea que conecta con el latido siguiente (si existe)
+            if (i < visiblePoints.length - 1) {
+              const nextX = canvas.width - ((now - visiblePoints[i+1].time) * canvas.width / WINDOW_WIDTH_MS);
+              const nextY = canvas.height * 0.4 + visiblePoints[i+1].value;
+              
+              ctx.moveTo(x, y - 15);
+              ctx.lineTo(nextX, nextY - 15);
+              ctx.stroke();
+            }
+            
+            ctx.setLineDash([]);
           }
         }
       }
