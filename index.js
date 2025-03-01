@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -7,7 +6,6 @@ import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import PermissionsHandler from "@/components/PermissionsHandler";
-import deviceContextService from "@/services/DeviceContextService";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -23,11 +21,6 @@ const Index = () => {
   const [elapsedTime, setElapsedTime] = useState(0);
   const [permissionsGranted, setPermissionsGranted] = useState(false);
   const measurementTimerRef = useRef(null);
-  const videoTrackRef = useRef(null);
-  const imageCaptureRef = useRef(null);
-  const processingImageRef = useRef(false);
-  const animationFrameRef = useRef(null);
-  const frameProcessingEnabled = useRef(false);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
@@ -90,55 +83,28 @@ const Index = () => {
       return;
     }
     
-    // Reset any previous state to ensure clean start
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
-    processingImageRef.current = false;
-    frameProcessingEnabled.current = false;
-    
-    // Clear previous video track
-    videoTrackRef.current = null;
-    imageCaptureRef.current = null;
-    
-    // First set the camera on, then after a small delay start the monitoring
+    enterFullScreen();
+    setIsMonitoring(true);
     setIsCameraOn(true);
+    startProcessing();
+    setElapsedTime(0);
     
-    // Delay the monitoring start to allow camera to initialize
-    setTimeout(() => {
-      enterFullScreen();
-      setIsMonitoring(true);
-      startProcessing();
-      setElapsedTime(0);
-      frameProcessingEnabled.current = true;
-      
-      if (measurementTimerRef.current) {
-        clearInterval(measurementTimerRef.current);
-      }
-      
-      measurementTimerRef.current = window.setInterval(() => {
-        setElapsedTime(prev => {
-          if (prev >= 30) {
-            stopMonitoring();
-            return 30;
-          }
-          return prev + 1;
-        });
-      }, 1000);
-    }, 300);
+    if (measurementTimerRef.current) {
+      clearInterval(measurementTimerRef.current);
+    }
+    
+    measurementTimerRef.current = window.setInterval(() => {
+      setElapsedTime(prev => {
+        if (prev >= 30) {
+          stopMonitoring();
+          return 30;
+        }
+        return prev + 1;
+      });
+    }, 1000);
   };
 
   const stopMonitoring = () => {
-    frameProcessingEnabled.current = false;
-    
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
-    
-    processingImageRef.current = false;
-    
     setIsMonitoring(false);
     setIsCameraOn(false);
     stopProcessing();
@@ -157,155 +123,50 @@ const Index = () => {
       clearInterval(measurementTimerRef.current);
       measurementTimerRef.current = null;
     }
-    
-    // Limpieza adicional
-    videoTrackRef.current = null;
-    imageCaptureRef.current = null;
   };
 
   const handleStreamReady = (stream) => {
-    console.log("Stream ready received, isMonitoring:", isMonitoring);
+    if (!isMonitoring) return;
     
-    if (!isMonitoring) {
-      console.log("Not monitoring, ignoring stream");
+    const videoTrack = stream.getVideoTracks()[0];
+    const imageCapture = new ImageCapture(videoTrack);
+    
+    if (videoTrack.getCapabilities()?.torch) {
+      videoTrack.applyConstraints({
+        advanced: [{ torch: true }]
+      }).catch(err => console.error("Error activando linterna:", err));
+    }
+    
+    const tempCanvas = document.createElement('canvas');
+    const tempCtx = tempCanvas.getContext('2d');
+    if (!tempCtx) {
+      console.error("No se pudo obtener el contexto 2D");
       return;
     }
     
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
-    
-    processingImageRef.current = false;
-    
-    try {
-      const tracks = stream.getVideoTracks();
-      if (!tracks || tracks.length === 0) {
-        console.error("No video tracks found in stream");
-        return;
-      }
+    const processImage = async () => {
+      if (!isMonitoring) return;
       
-      const videoTrack = tracks[0];
-      videoTrackRef.current = videoTrack;
-      
-      if (!videoTrack || videoTrack.readyState !== 'live') {
-        console.error("Video track not available or not live, state:", videoTrack?.readyState);
-        return;
-      }
-      
-      console.log("Video track is live, setting up processing");
-      
-      // Activar linterna si está disponible
-      if (videoTrack.getCapabilities()?.torch) {
-        videoTrack.applyConstraints({
-          advanced: [{ torch: true }]
-        }).catch(err => console.error("Error activando linterna:", err));
-      }
-      
-      // Crear nuevo ImageCapture para este stream
       try {
-        const imageCapture = new ImageCapture(videoTrack);
-        imageCaptureRef.current = imageCapture;
-        console.log("ImageCapture creado correctamente");
-      } catch (error) {
-        console.error("Error creando ImageCapture:", error);
-        return;
-      }
-      
-      const tempCanvas = document.createElement('canvas');
-      const tempCtx = tempCanvas.getContext('2d');
-      
-      if (!tempCtx) {
-        console.error("No se pudo obtener el contexto 2D");
-        return;
-      }
-      
-      processingImageRef.current = true;
-      
-      const processImage = async () => {
-        if (!isMonitoring || !processingImageRef.current || !frameProcessingEnabled.current) {
-          console.log("Skipping frame processing, conditions not met:", {
-            isMonitoring,
-            processingImage: processingImageRef.current,
-            frameProcessingEnabled: frameProcessingEnabled.current
-          });
-          return;
-        }
+        const frame = await imageCapture.grabFrame();
+        tempCanvas.width = frame.width;
+        tempCanvas.height = frame.height;
+        tempCtx.drawImage(frame, 0, 0);
+        const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
+        processFrame(imageData);
         
-        try {
-          // Verificar que ImageCapture sigue siendo válido
-          if (!imageCaptureRef.current) {
-            console.error("ImageCapture ya no está disponible");
-            return;
-          }
-          
-          // Get current track reference
-          const currentTrack = videoTrackRef.current;
-          
-          // Verificar que el track sigue activo
-          if (!currentTrack || currentTrack.readyState !== 'live') {
-            console.error("Track is not in live state, skipping frame capture, state:", currentTrack?.readyState);
-            
-            // Si seguimos monitorizando, reintentar después de un retraso
-            if (isMonitoring && processingImageRef.current && frameProcessingEnabled.current) {
-              setTimeout(() => {
-                if (isMonitoring && processingImageRef.current && frameProcessingEnabled.current) {
-                  animationFrameRef.current = requestAnimationFrame(processImage);
-                }
-              }, 500);
-            }
-            return;
-          }
-          
-          const frame = await imageCaptureRef.current.grabFrame();
-          
-          // Verificar que seguimos monitorizando
-          if (!isMonitoring || !processingImageRef.current || !frameProcessingEnabled.current) {
-            return;
-          }
-          
-          tempCanvas.width = frame.width;
-          tempCanvas.height = frame.height;
-          tempCtx.drawImage(frame, 0, 0);
-          
-          const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
-          
-          // Procesar la imagen para detección de luz ambiental
-          if (deviceContextService.processAmbientLight) {
-            deviceContextService.processAmbientLight(imageData);
-          }
-          
-          // Procesar el frame para detección de signos vitales
-          processFrame(imageData);
-          
-          // Continuar procesando frames si seguimos monitorizando
-          if (isMonitoring && processingImageRef.current && frameProcessingEnabled.current) {
-            animationFrameRef.current = requestAnimationFrame(processImage);
-          }
-        } catch (error) {
-          console.error("Error capturando frame:", error);
-          
-          // Reintentar con retraso si seguimos monitorizando
-          if (isMonitoring && processingImageRef.current && frameProcessingEnabled.current) {
-            setTimeout(() => {
-              if (isMonitoring && processingImageRef.current && frameProcessingEnabled.current) {
-                animationFrameRef.current = requestAnimationFrame(processImage);
-              }
-            }, 500);
-          }
+        if (isMonitoring) {
+          requestAnimationFrame(processImage);
         }
-      };
+      } catch (error) {
+        console.error("Error capturando frame:", error);
+        if (isMonitoring) {
+          requestAnimationFrame(processImage);
+        }
+      }
+    };
 
-      // Wait briefly before starting frame processing
-      setTimeout(() => {
-        if (isMonitoring && processingImageRef.current) {
-          console.log("Starting frame processing");
-          animationFrameRef.current = requestAnimationFrame(processImage);
-        }
-      }, 200);
-    } catch (error) {
-      console.error("Error general en handleStreamReady:", error);
-    }
+    processImage();
   };
 
   useEffect(() => {
@@ -322,24 +183,6 @@ const Index = () => {
       setSignalQuality(lastSignal.quality);
     }
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
-
-  useEffect(() => {
-    return () => {
-      frameProcessingEnabled.current = false;
-      
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
-      }
-      
-      processingImageRef.current = false;
-      
-      if (measurementTimerRef.current) {
-        clearInterval(measurementTimerRef.current);
-        measurementTimerRef.current = null;
-      }
-    };
-  }, []);
 
   return (
     <div 

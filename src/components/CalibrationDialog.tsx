@@ -1,3 +1,4 @@
+
 import * as React from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -12,15 +13,7 @@ interface CalibrationDialogProps {
   onCalibrationEnd: () => void;
 }
 
-// Constantes para animación - Reducidas para mejorar rendimiento
-const ANIMATION_CONFIG = {
-  initial: { opacity: 0 },
-  animate: { opacity: 1 },
-  exit: { opacity: 0 },
-  transition: { duration: 0.2, ease: "easeOut" }
-};
-
-const CalibrationDialog: React.FC<CalibrationDialogProps> = React.memo(({ 
+const CalibrationDialog: React.FC<CalibrationDialogProps> = ({ 
   isOpen, 
   onClose,
   onCalibrationStart,
@@ -30,27 +23,18 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = React.memo(({
   const [diastolic, setDiastolic] = React.useState<string>("");
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
-  // Reset form when dialog closes
-  React.useEffect(() => {
-    if (!isOpen) {
-      setSystolic("");
-      setDiastolic("");
-      setIsSubmitting(false);
-    }
-  }, [isOpen]);
-
-  const handleCalibration = React.useCallback(async () => {
+  const handleCalibration = async () => {
     try {
       setIsSubmitting(true);
       onCalibrationStart();
 
       // Simulamos un pequeño delay para la calibración
-      await new Promise(resolve => setTimeout(resolve, 500)); // Reducido de 1000ms a 500ms
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
       onCalibrationEnd();
       setTimeout(() => {
         onClose();
-      }, 300); // Reducido de 500ms a 300ms
+      }, 500);
 
     } catch (error) {
       console.error("Error durante la calibración:", error);
@@ -59,104 +43,78 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = React.memo(({
     } finally {
       setIsSubmitting(false);
     }
-  }, [onCalibrationStart, onCalibrationEnd, onClose]);
-
-  const handleClose = React.useCallback(() => {
-    if (!isSubmitting) {
-      onClose();
-    }
-  }, [isSubmitting, onClose]);
-
-  const isFormValid = React.useMemo(() => 
-    Boolean(systolic && diastolic && !isSubmitting), 
-    [systolic, diastolic, isSubmitting]
-  );
-
-  // Optimizar el manejo de cambios en los inputs
-  const handleSystolicChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    // Solo permitir números y limitar a 3 dígitos
-    if (/^\d{0,3}$/.test(value)) {
-      setSystolic(value);
-    }
-  }, []);
-
-  const handleDiastolicChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    // Solo permitir números y limitar a 3 dígitos
-    if (/^\d{0,3}$/.test(value)) {
-      setDiastolic(value);
-    }
-  }, []);
+  };
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
+    <Dialog open={isOpen} onOpenChange={() => {
+      if (!isSubmitting) {
+        onClose();
+      }
+    }}>
       <DialogContent className="sm:max-w-md perspective-1000">
         <motion.div
-          {...ANIMATION_CONFIG}
-          className="bg-background p-6 rounded-lg shadow-lg hardware-accelerated"
+          initial={{ rotateY: -90 }}
+          animate={{ rotateY: 0 }}
+          exit={{ rotateY: 90 }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+          style={{ transformStyle: "preserve-3d" }}
+          className="bg-background p-6 rounded-lg shadow-lg"
         >
           <div className="flex items-center justify-between mb-4">
             <Button
               variant="ghost"
               size="icon"
-              onClick={handleClose}
-              disabled={isSubmitting}
-              className="hardware-accelerated"
+              onClick={() => {
+                if (!isSubmitting) {
+                  onClose();
+                }
+              }}
             >
               <ArrowLeft className="h-5 w-5" />
             </Button>
-            <h2 className="text-lg font-semibold text-optimized">Calibración</h2>
+            <h2 className="text-lg font-semibold">Calibración Manual</h2>
             <div className="w-9" />
           </div>
 
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <label className="text-sm font-medium text-optimized">Sistólica</label>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Presión Sistólica</label>
               <Input
                 type="number"
-                inputMode="numeric"
-                pattern="[0-9]*"
                 placeholder="120"
                 value={systolic}
-                onChange={handleSystolicChange}
-                className="w-full hardware-accelerated"
-                disabled={isSubmitting}
+                onChange={(e) => setSystolic(e.target.value)}
+                className="w-full"
               />
             </div>
 
-            <div className="space-y-1">
-              <label className="text-sm font-medium text-optimized">Diastólica</label>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Presión Diastólica</label>
               <Input
                 type="number"
-                inputMode="numeric"
-                pattern="[0-9]*"
                 placeholder="80"
                 value={diastolic}
-                onChange={handleDiastolicChange}
-                className="w-full hardware-accelerated"
-                disabled={isSubmitting}
+                onChange={(e) => setDiastolic(e.target.value)}
+                className="w-full"
               />
             </div>
 
             <Button
-              className="w-full hardware-accelerated"
+              className="w-full"
               onClick={handleCalibration}
-              disabled={!isFormValid}
+              disabled={!systolic || !diastolic || isSubmitting}
             >
               {isSubmitting ? "Calibrando..." : "Calibrar"}
             </Button>
 
-            <p className="text-xs text-gray-500 text-center text-optimized">
-              Ingrese los valores de su última medición
+            <p className="text-sm text-gray-500 text-center">
+              Ingrese los valores de su última medición de presión arterial para calibrar el sistema
             </p>
           </div>
         </motion.div>
       </DialogContent>
     </Dialog>
   );
-});
-
-CalibrationDialog.displayName = "CalibrationDialog";
+};
 
 export default CalibrationDialog;
