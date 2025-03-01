@@ -64,13 +64,16 @@ export class VitalSignsProcessor {
 
     // Calculate vital signs with minimal window
     let bp;
-    if (this.ppgValues.length >= 50) { // Incrementado para asegurar datos suficientes
+    if (this.ppgValues.length >= 50) {
       bp = this.bpCalculator.calculate(this.ppgValues.slice(-50));
+      if (bp.systolic <= 0 || bp.diastolic <= 0) {
+        bp = null;
+      }
     } else {
-      bp = { systolic: 0, diastolic: 0 };
+      bp = null;
     }
 
-    const pressure = bp.systolic > 0 && bp.diastolic > 0 ? `${bp.systolic}/${bp.diastolic}` : 'EVALUANDO';
+    const pressure = bp ? `${bp.systolic}/${bp.diastolic}` : 'EVALUANDO';
     const spo2 = this.spO2Calculator.calculate(this.ppgValues.slice(-30));
 
     // Prepare arrhythmia data if detected
