@@ -1,4 +1,3 @@
-
 import React, { memo, useMemo } from 'react';
 import { VitalSignsRisk } from '../utils/vitalSignsRisk';
 
@@ -132,42 +131,14 @@ const VitalSign: React.FC<VitalSignProps> = memo(({ label, value, unit, isFinalR
 
   return (
     <div className="relative overflow-hidden rounded-xl backdrop-blur-md shadow-lg p-2">
-      {/* Fondo expandido considerablemente más allá del componente */}
-      <div className="absolute bg-black/90 pointer-events-none" 
-           style={{ 
-             top: '-25px', 
-             left: '-25px', 
-             right: '-25px', 
-             bottom: '-25px' 
-           }} />
-           
-      <div className="absolute pointer-events-none" 
-           style={{ 
-             top: '-25px', 
-             left: '-25px', 
-             right: '-25px', 
-             bottom: '-25px',
-             background: 'linear-gradient(135deg, rgba(16,42,76,0.4) 0%, rgba(6,22,41,0.9) 100%)' 
-           }} />
-           
-      <div className="absolute pointer-events-none" 
-           style={{
-             top: '-25px', 
-             left: '-25px', 
-             right: '-25px', 
-             bottom: '-25px',
-             backgroundImage: "radial-gradient(circle at top right, rgba(13, 148, 218, 0.25), transparent 70%)"
-           }} />
-           
-      <div className="absolute pointer-events-none" 
-           style={{ 
-             top: '-25px', 
-             left: '-25px', 
-             right: '-25px', 
-             bottom: '-25px',
-             border: '1px solid rgba(211, 228, 253, 0.3)',
-             borderRadius: '0.75rem'
-           }} />
+      {/* Capa transparente al 70% que cubre solo la superficie del display */}
+      <div 
+        className="absolute inset-0 rounded-xl" 
+        style={{ 
+          backgroundColor: 'rgba(0, 0, 0, 0.7)', 
+          backdropFilter: 'blur(2px)' 
+        }} 
+      />
       
       <div className="relative z-10 p-2">
         <h3 className="text-[#D3E4FD] text-[10px] font-medium tracking-wider mb-1">{label}</h3>
