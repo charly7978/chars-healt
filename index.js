@@ -6,6 +6,7 @@ import { useSignalProcessor } from "@/hooks/useSignalProcessor";
 import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
+import PermissionsHandler from "@/components/PermissionsHandler";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -19,11 +20,22 @@ const Index = () => {
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState("--");
   const [elapsedTime, setElapsedTime] = useState(0);
+  const [permissionsGranted, setPermissionsGranted] = useState(false);
   const measurementTimerRef = useRef(null);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
+
+  const handlePermissionsGranted = () => {
+    console.log("Permisos concedidos correctamente");
+    setPermissionsGranted(true);
+  };
+
+  const handlePermissionsDenied = () => {
+    console.log("Permisos denegados - funcionalidad limitada");
+    setPermissionsGranted(false);
+  };
 
   const enterFullScreen = async () => {
     const elem = document.documentElement;
@@ -67,6 +79,11 @@ const Index = () => {
   }, []);
 
   const startMonitoring = () => {
+    if (!permissionsGranted) {
+      console.log("No se puede iniciar sin permisos");
+      return;
+    }
+    
     enterFullScreen();
     setIsMonitoring(true);
     setIsCameraOn(true);
@@ -177,11 +194,16 @@ const Index = () => {
         paddingBottom: 'env(safe-area-inset-bottom)'
       }}
     >
+      <PermissionsHandler 
+        onPermissionsGranted={handlePermissionsGranted}
+        onPermissionsDenied={handlePermissionsDenied}
+      />
+      
       <div className="flex-1 relative">
         <div className="absolute inset-0">
           <CameraView 
             onStreamReady={handleStreamReady}
-            isMonitoring={isCameraOn}
+            isMonitoring={isCameraOn && permissionsGranted}
             isFingerDetected={lastSignal?.fingerDetected}
             signalQuality={signalQuality}
           />
@@ -234,9 +256,10 @@ const Index = () => {
           <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 mt-auto">
             <button 
               onClick={startMonitoring}
-              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
+              className={`w-full h-full text-2xl font-bold text-white active:bg-gray-800 ${!permissionsGranted ? 'bg-gray-600' : 'bg-black/80'}`}
+              disabled={!permissionsGranted}
             >
-              INICIAR
+              {!permissionsGranted ? 'PERMISOS REQUERIDOS' : 'INICIAR'}
             </button>
             <button 
               onClick={stopMonitoring}
@@ -245,6 +268,14 @@ const Index = () => {
               RESET
             </button>
           </div>
+          
+          {!permissionsGranted && (
+            <div className="absolute bottom-20 left-0 right-0 text-center px-4">
+              <span className="text-lg font-medium text-red-400">
+                La aplicación necesita permisos de cámara para funcionar correctamente
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </div>

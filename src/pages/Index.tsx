@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -6,6 +5,7 @@ import { useSignalProcessor } from "@/hooks/useSignalProcessor";
 import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
+import PermissionsHandler from "@/components/PermissionsHandler";
 import { VitalSignsRisk } from '@/utils/vitalSignsRisk';
 
 interface VitalSigns {
@@ -37,6 +37,7 @@ const Index = () => {
     spo2: number,
     pressure: string
   } | null>(null);
+  const [permissionsGranted, setPermissionsGranted] = useState(false);
   const measurementTimerRef = useRef<number | null>(null);
   
   const allHeartRateValuesRef = useRef<number[]>([]);
@@ -49,6 +50,16 @@ const Index = () => {
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat, reset: resetHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
+
+  const handlePermissionsGranted = () => {
+    console.log("Permisos concedidos correctamente");
+    setPermissionsGranted(true);
+  };
+
+  const handlePermissionsDenied = () => {
+    console.log("Permisos denegados - funcionalidad limitada");
+    setPermissionsGranted(false);
+  };
 
   const calculateFinalValues = () => {
     try {
@@ -120,6 +131,11 @@ const Index = () => {
   };
 
   const startMonitoring = () => {
+    if (!permissionsGranted) {
+      console.log("No se puede iniciar sin permisos");
+      return;
+    }
+    
     if (isMonitoring) {
       stopMonitoringOnly();
     } else {
@@ -473,17 +489,20 @@ const Index = () => {
         paddingLeft: 'var(--sal)',
       }}
     >
-      {/* Capa de CameraView con posición absoluta */}
+      <PermissionsHandler 
+        onPermissionsGranted={handlePermissionsGranted}
+        onPermissionsDenied={handlePermissionsDenied}
+      />
+      
       <div className="absolute inset-0 z-0">
         <CameraView 
           onStreamReady={handleStreamReady}
-          isMonitoring={isCameraOn}
+          isMonitoring={isCameraOn && permissionsGranted}
           isFingerDetected={isMonitoring ? lastSignal?.fingerDetected : false}
           signalQuality={isMonitoring ? signalQuality : 0}
         />
       </div>
 
-      {/* PPG Signal Meter con posición absoluta fija */}
       <div className="absolute inset-0 z-10">
         <PPGSignalMeter 
           value={isMonitoring ? lastSignal?.filteredValue || 0 : 0}
@@ -496,9 +515,6 @@ const Index = () => {
         />
       </div>
 
-      {/* Eliminando el título "Chars Healt" que estaba aquí */}
-
-      {/* Panel de signos vitales con posición fija abajo */}
       <div className="absolute z-20" style={{ bottom: '65px', left: 0, right: 0, padding: '0 12px' }}>
         <div className="p-2 bg-black/60 rounded-lg">
           <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
@@ -529,20 +545,23 @@ const Index = () => {
         </div>
       </div>
 
-      {/* Botonera fija en la parte inferior */}
       <div className="absolute z-50" style={{ bottom: 0, left: 0, right: 0, height: '55px' }}>
         <div className="grid grid-cols-2 gap-px w-full h-full">
           <button 
             onClick={startMonitoring}
             className="w-full h-full text-xl font-bold text-white transition-colors duration-200"
+            disabled={!permissionsGranted}
             style={{ 
-              backgroundImage: isMonitoring 
-                ? 'linear-gradient(135deg, #f87171, #dc2626, #b91c1c)' 
-                : 'linear-gradient(135deg, #3b82f6, #2563eb, #1d4ed8)',
-              textShadow: '0px 1px 3px rgba(0, 0, 0, 0.3)'
+              backgroundImage: !permissionsGranted 
+                ? 'linear-gradient(135deg, #64748b, #475569, #334155)'
+                : isMonitoring 
+                  ? 'linear-gradient(135deg, #f87171, #dc2626, #b91c1c)' 
+                  : 'linear-gradient(135deg, #3b82f6, #2563eb, #1d4ed8)',
+              textShadow: '0px 1px 3px rgba(0, 0, 0, 0.3)',
+              opacity: !permissionsGranted ? 0.7 : 1
             }}
           >
-            {isMonitoring ? 'DETENER' : 'INICIAR'}
+            {!permissionsGranted ? 'PERMISOS REQUERIDOS' : (isMonitoring ? 'DETENER' : 'INICIAR')}
           </button>
           <button 
             onClick={handleReset}
@@ -556,6 +575,23 @@ const Index = () => {
           </button>
         </div>
       </div>
+      
+      {!permissionsGranted && (
+        <div className="absolute z-50 top-1/2 left-0 right-0 text-center px-4 transform -translate-y-1/2">
+          <div className="bg-red-900/80 backdrop-blur-sm p-4 rounded-lg mx-auto max-w-md">
+            <h3 className="text-xl font-bold text-white mb-2">Permisos necesarios</h3>
+            <p className="text-white/90 mb-4">
+              Esta aplicación necesita acceso a la cámara para medir tus signos vitales.
+            </p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="bg-white text-red-900 font-bold py-2 px-4 rounded"
+            >
+              Reintentar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
