@@ -1,6 +1,6 @@
 
 import { applySMAFilter } from '../utils/signalProcessingUtils';
-import { SpO2Calculator } from './SpO2Calculator';
+import { SpO2Calculator } from './spo2';
 import { BloodPressureCalculator } from './BloodPressureCalculator';
 import { ArrhythmiaDetector } from './ArrhythmiaDetector';
 
