@@ -158,14 +158,16 @@ export class BloodPressureCalculator {
   } {
     this.measurementCount++;
 
+    // Si no hay suficientes datos, devolver ceros para mostrar "EVALUANDO"
     if (values.length < 30) {
-      return { systolic: this.lastValidSystolic, diastolic: this.lastValidDiastolic };
+      return { systolic: 0, diastolic: 0 };
     }
 
     const { peakIndices, valleyIndices, signalQuality } = enhancedPeakDetection(values);
 
+    // Si la calidad de la señal es baja o no hay suficientes picos/valles, devolver ceros
     if (signalQuality < this.BP_QUALITY_THRESHOLD || peakIndices.length < 3 || valleyIndices.length < 3) {
-      return { systolic: this.lastValidSystolic, diastolic: this.lastValidDiastolic };
+      return { systolic: 0, diastolic: 0 };
     }
 
     const fps = 30;
@@ -178,18 +180,24 @@ export class BloodPressureCalculator {
     }
 
     if (pttValues.length === 0) {
-      return { systolic: this.lastValidSystolic, diastolic: this.lastValidDiastolic };
+      return { systolic: 0, diastolic: 0 };
     }
 
     const avgPTT = pttValues.reduce((a, b) => a + b, 0) / pttValues.length;
 
+    // Calcular valores reales basados en PTT, no valores predeterminados
     const systolic = Math.round(this.BP_BASELINE_SYSTOLIC - avgPTT * this.BP_PTT_COEFFICIENT);
     const diastolic = Math.round(this.BP_BASELINE_DIASTOLIC - avgPTT * this.BP_PTT_COEFFICIENT * 0.6);
 
-    this.lastValidSystolic = systolic;
-    this.lastValidDiastolic = diastolic;
-
-    return { systolic, diastolic };
+    // Solo actualizar valores válidos si son razonables
+    if (systolic >= 90 && systolic <= 180 && diastolic >= 60 && diastolic <= 110) {
+      this.lastValidSystolic = systolic;
+      this.lastValidDiastolic = diastolic;
+      return { systolic, diastolic };
+    } else {
+      // Si los valores calculados no son razonables, devolver ceros
+      return { systolic: 0, diastolic: 0 };
+    }
   }
 
   public getLastValidPressure(): string {
