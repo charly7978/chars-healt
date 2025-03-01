@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { PPGSignalProcessor } from '../modules/SignalProcessor';
 import { ProcessedSignal, ProcessingError } from '../types/signal';
@@ -9,7 +8,6 @@ export const useSignalProcessor = () => {
   const [lastSignal, setLastSignal] = useState<ProcessedSignal | null>(null);
   const [error, setError] = useState<ProcessingError | null>(null);
   
-  // Usar inicialización lazy para el procesador
   useEffect(() => {
     console.log("useSignalProcessor: Creando nueva instancia del procesador");
     processorRef.current = new PPGSignalProcessor();
@@ -38,7 +36,6 @@ export const useSignalProcessor = () => {
       console.log("useSignalProcessor: Limpiando y destruyendo procesador");
       if (processorRef.current) {
         processorRef.current.stop();
-        // Liberar referencias explícitamente
         processorRef.current.onSignalReady = null;
         processorRef.current.onError = null;
         processorRef.current = null;
@@ -60,7 +57,6 @@ export const useSignalProcessor = () => {
       processorRef.current.stop();
     }
     setIsProcessing(false);
-    // Liberar memoria explícitamente
     setLastSignal(null);
     setError(null);
   }, []);
@@ -89,7 +85,6 @@ export const useSignalProcessor = () => {
     }
   }, [isProcessing]);
 
-  // Función para liberar memoria de forma más agresiva
   const cleanMemory = useCallback(() => {
     console.log("useSignalProcessor: Limpieza agresiva de memoria");
     if (processorRef.current) {
@@ -98,7 +93,6 @@ export const useSignalProcessor = () => {
     setLastSignal(null);
     setError(null);
     
-    // Forzar limpieza del garbage collector si está disponible
     if (window.gc) {
       try {
         window.gc();
