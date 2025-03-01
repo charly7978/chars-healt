@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -159,8 +160,10 @@ const PPGSignalMeter = ({
     const smoothedValue = smoothValue(value, lastValueRef.current);
     lastValueRef.current = smoothedValue;
 
-    const normalizedValue = smoothedValue - (baselineRef.current || 0);
-    const scaledValue = normalizedValue * verticalScale * -1;
+    // Invert the polarity of the signal by multiplying by -1
+    // This will make peaks point upward instead of downward
+    const normalizedValue = (smoothedValue - (baselineRef.current || 0));
+    const scaledValue = normalizedValue * verticalScale * -1; // Multiplying by -1 to invert the signal
     
     let isArrhythmia = false;
     if (rawArrhythmiaData && 
@@ -168,8 +171,6 @@ const PPGSignalMeter = ({
         now - rawArrhythmiaData.timestamp < 1000) {
       isArrhythmia = true;
       lastArrhythmiaTime.current = now;
-      
-      arrhythmiaCountRef.current++;
     }
 
     const dataPoint: PPGDataPoint = {
@@ -200,7 +201,7 @@ const PPGSignalMeter = ({
         for (let i = 0; i < visiblePoints.length; i++) {
           const point = visiblePoints[i];
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-          const y = canvas.height * 0.4 + point.value;
+          const y = canvas.height * 0.6 - point.value;
           
           if (firstPoint) {
             ctx.moveTo(x, y);
@@ -213,20 +214,16 @@ const PPGSignalMeter = ({
             ctx.stroke();
             ctx.beginPath();
             ctx.strokeStyle = '#DC2626';
-            ctx.lineWidth = 3;
-            ctx.setLineDash([3, 2]);
             ctx.moveTo(x, y);
             
             const nextPoint = visiblePoints[i + 1];
             const nextX = canvas.width - ((now - nextPoint.time) * canvas.width / WINDOW_WIDTH_MS);
-            const nextY = canvas.height * 0.4 + nextPoint.value;
+            const nextY = canvas.height * 0.6 - nextPoint.value;
             ctx.lineTo(nextX, nextY);
             ctx.stroke();
             
             ctx.beginPath();
             ctx.strokeStyle = '#0EA5E9';
-            ctx.lineWidth = 2;
-            ctx.setLineDash([]);
             ctx.moveTo(nextX, nextY);
             firstPoint = false;
           }
@@ -240,12 +237,12 @@ const PPGSignalMeter = ({
         const point = visiblePoints[i];
         const nextPoint = visiblePoints[i + 1];
         
-        if (point.value < prevPoint.value && point.value < nextPoint.value) {
+        if (point.value > prevPoint.value && point.value > nextPoint.value) {
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-          const y = canvas.height * 0.4 + point.value;
+          const y = canvas.height * 0.6 - point.value;
           
           ctx.beginPath();
-          ctx.arc(x, y, point.isArrhythmia ? 5 : 4, 0, Math.PI * 2);
+          ctx.arc(x, y, 4, 0, Math.PI * 2);
           ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
           ctx.fill();
 
@@ -256,22 +253,14 @@ const PPGSignalMeter = ({
           
           if (point.isArrhythmia) {
             ctx.beginPath();
-            ctx.arc(x, y, 9, 0, Math.PI * 2);
+            ctx.arc(x, y, 8, 0, Math.PI * 2);
             ctx.strokeStyle = '#FFFF00';
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 1.5;
             ctx.stroke();
-            
-            ctx.beginPath();
-            ctx.arc(x, y, 14, 0, Math.PI * 2);
-            ctx.strokeStyle = '#FF6B6B';
-            ctx.lineWidth = 1;
-            ctx.setLineDash([2, 2]);
-            ctx.stroke();
-            ctx.setLineDash([]);
             
             ctx.font = 'bold 10px Inter';
             ctx.fillStyle = '#FF6B6B';
-            ctx.fillText("LATIDO PREMATURO", x, y - 35);
+            ctx.fillText("ARR", x, y - 35);
           }
         }
       }

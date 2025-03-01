@@ -1,3 +1,4 @@
+
 import { applySMAFilter } from '../utils/signalProcessingUtils';
 import { SpO2Calculator } from './spo2';
 import { BloodPressureCalculator } from './BloodPressureCalculator';
@@ -31,11 +32,7 @@ export class VitalSignsProcessor {
    */
   public processSignal(
     ppgValue: number,
-    rrData?: { 
-      intervals: number[]; 
-      lastPeakTime: number | null;
-      amplitude?: number; // Añadir parámetro opcional para amplitud del pico
-    }
+    rrData?: { intervals: number[]; lastPeakTime: number | null }
   ) {
     const currentTime = Date.now();
 
@@ -48,13 +45,7 @@ export class VitalSignsProcessor {
       });
       
       if (validIntervals.length > 0) {
-        // IMPORTANTE: Ahora pasamos también la amplitud del pico al detector
-        this.arrhythmiaDetector.updateIntervals(
-          validIntervals, 
-          rrData.lastPeakTime,
-          // Si tenemos amplitud explícita la usamos, sino el valor PPG
-          rrData.amplitude !== undefined ? rrData.amplitude : ppgValue
-        );
+        this.arrhythmiaDetector.updateIntervals(validIntervals, rrData.lastPeakTime);
       }
     }
 
@@ -199,33 +190,16 @@ export class VitalSignsProcessor {
    * Reset all processors
    */
   public reset() {
-    console.log("VitalSignsProcessor: Reset completo iniciado");
-
-    // Limpieza específica de datos del procesador
     this.ppgValues = [];
     this.lastBPM = 0;
-    
-    // Reinicio CRÍTICO: Hacer reset completo del detector de arritmias
-    // Este es un paso crítico para evitar detecciones inconsistentes
-    try {
-      console.log("VitalSignsProcessor: Reiniciando detector de arritmias");
-      this.arrhythmiaDetector.reset();
-    } catch (err) {
-      console.error("VitalSignsProcessor: Error al reiniciar detector de arritmias", err);
-      // Si falla el reset, recrear el detector completamente
-      this.arrhythmiaDetector = new ArrhythmiaDetector();
-    }
-    
-    // Reinicio de módulos secundarios
     this.spO2Calculator.reset();
     this.bpCalculator.reset();
+    this.arrhythmiaDetector.reset();
     
     // Reiniciar mediciones reales
     this.lastSystolic = 120;
     this.lastDiastolic = 80;
     this.measurementCount = 0;
-    
-    console.log("VitalSignsProcessor: Reset completo finalizado");
   }
 
   /**

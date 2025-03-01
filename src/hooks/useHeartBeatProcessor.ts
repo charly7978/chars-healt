@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { HeartBeatProcessor } from '../modules/HeartBeatProcessor';
 
@@ -10,7 +11,6 @@ interface HeartBeatResult {
   rrData?: {
     intervals: number[];
     lastPeakTime: number | null;
-    amplitude?: number;
   };
 }
 
@@ -112,10 +112,7 @@ export const useHeartBeatProcessor = () => {
 
     return {
       ...validatedResult,
-      rrData: {
-        ...rrData,
-        amplitude: validatedResult.isPeak ? Math.abs(filteredValue) : undefined
-      }
+      rrData
     };
   }, []);
 
