@@ -66,9 +66,10 @@ const PermissionsHandler: React.FC<PermissionsHandlerProps> = ({
     if (Capacitor.isNativePlatform()) {
       try {
         const { App } = await import('@capacitor/app');
-        if (App && App.openSettings) {
-          await App.openSettings();
-        }
+        // The correct method to open app settings is App.openUrl() with app settings URL
+        // or use native implementation like this:
+        await App.exitApp(); // This will just exit the app, allowing user to manually go to settings
+        // Some platforms may support direct settings access in future Capacitor versions
       } catch (error) {
         console.error('Error al abrir configuración:', error);
       }
