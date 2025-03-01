@@ -102,7 +102,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     if (value === "--") {
       return { 
         text: "--", 
-        color: "#D3E4FD",
+        color: "#FFFFFF",
         label: ""
       };
     }
@@ -113,7 +113,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
       return {
         text: count ? `LATIDOS PREMATUROS (${count})` : "LATIDOS PREMATUROS",
         color: "#DC2626",
-        label: "PREMATUROS"
+        label: "ARRITMIA"
       };
     }
     
