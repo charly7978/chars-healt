@@ -7,10 +7,16 @@ class DeviceContextService {
   private _ambientLight: 'low' | 'medium' | 'high' = 'medium';
   private _batteryLevel: number = 100;
   private _isCharging: boolean = false;
+  private _isBackgrounded: boolean = false;
+  private _isDeviceIdle: boolean = false;
+  private _lastUserInteractionTime: number = Date.now();
+  private _idleCheckInterval: number | null = null;
+  private readonly IDLE_TIMEOUT_MS: number = 30000; // 30 seconds of inactivity
 
   constructor() {
     this.initBatteryMonitoring();
     this.initAmbientLightDetection();
+    this.initDeviceStateMonitoring();
   }
 
   private initBatteryMonitoring() {
@@ -85,6 +91,73 @@ class DeviceContextService {
       this._ambientLight = 'medium'; // Default to medium
     }
   }
+
+  private initDeviceStateMonitoring() {
+    // Check visibility change
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        this._isBackgrounded = document.hidden;
+      });
+
+      // Monitor user interaction to detect idle state
+      const resetIdleTimer = () => {
+        this._lastUserInteractionTime = Date.now();
+        this._isDeviceIdle = false;
+      };
+
+      const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+      events.forEach(name => {
+        document.addEventListener(name, resetIdleTimer, { passive: true });
+      });
+
+      // Setup idle check interval
+      this._idleCheckInterval = window.setInterval(() => {
+        const now = Date.now();
+        if (now - this._lastUserInteractionTime > this.IDLE_TIMEOUT_MS) {
+          this._isDeviceIdle = true;
+        }
+      }, 10000); // Check every 10 seconds
+    }
+  }
+
+  /**
+   * Process ambient light from image data
+   * Analyzes image data to estimate ambient light conditions
+   */
+  public processAmbientLight(imageData: ImageData): void {
+    try {
+      const data = imageData.data;
+      let totalLuminance = 0;
+      
+      // Sample pixels to estimate overall brightness
+      const totalPixels = imageData.width * imageData.height;
+      const samplingRate = Math.max(1, Math.floor(totalPixels / 10000)); // Sample at most 10,000 pixels
+      let sampledPixels = 0;
+      
+      for (let i = 0; i < data.length; i += 4 * samplingRate) {
+        // Calculate luminance using standard formula: 0.299R + 0.587G + 0.114B
+        const r = data[i];
+        const g = data[i+1];
+        const b = data[i+2];
+        const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+        totalLuminance += luminance;
+        sampledPixels++;
+      }
+      
+      const avgLuminance = totalLuminance / sampledPixels;
+      
+      // Categorize ambient light based on average luminance
+      if (avgLuminance < 40) {
+        this._ambientLight = 'low';
+      } else if (avgLuminance < 120) {
+        this._ambientLight = 'medium';
+      } else {
+        this._ambientLight = 'high';
+      }
+    } catch (error) {
+      console.warn('Error processing ambient light:', error);
+    }
+  }
   
   // Public getters
   get isBatterySavingMode(): boolean {
@@ -101,6 +174,22 @@ class DeviceContextService {
   
   get isCharging(): boolean {
     return this._isCharging;
+  }
+
+  get isBackgrounded(): boolean {
+    return this._isBackgrounded;
+  }
+
+  get isDeviceIdle(): boolean {
+    return this._isDeviceIdle;
+  }
+
+  // Cleanup method (important for memory management)
+  public dispose(): void {
+    if (this._idleCheckInterval !== null) {
+      clearInterval(this._idleCheckInterval);
+      this._idleCheckInterval = null;
+    }
   }
 }
 
