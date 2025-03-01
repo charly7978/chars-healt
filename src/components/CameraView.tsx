@@ -1,5 +1,6 @@
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
+import deviceContextService from '../services/DeviceContextService';
 
 interface CameraViewProps {
   onStreamReady?: (stream: MediaStream) => void;
@@ -39,12 +40,61 @@ const CameraView = ({
   const initializingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [isAndroid, setIsAndroid] = useState(false);
+  const flashIntensityRef = useRef<number>(0);
+  const lastFlashAdjustTimeRef = useRef<number>(0);
+  const trackRef = useRef<MediaStreamTrack | null>(null);
 
   // Detect if we're on Android - only compute this once
   useEffect(() => {
     const userAgent = navigator.userAgent.toLowerCase();
     setIsAndroid(/android/i.test(userAgent));
   }, []);
+
+  // Function to adjust flash intensity based on ambient light
+  const adjustFlashIntensity = useCallback(async () => {
+    if (!trackRef.current || !trackRef.current.getCapabilities()?.torch) {
+      return;
+    }
+    
+    // Limit how often we adjust flash (max once per second)
+    const now = Date.now();
+    if (now - lastFlashAdjustTimeRef.current < 1000) {
+      return;
+    }
+    lastFlashAdjustTimeRef.current = now;
+    
+    const ambientLight = deviceContextService.ambientLight;
+    let newIntensity = 0;
+    
+    if (isMonitoring && trackRef.current.getCapabilities()?.torch) {
+      try {
+        // Set torch based on ambient light
+        if (ambientLight === 'low') {
+          // Low ambient light - use lower torch power (if device supports it)
+          newIntensity = 0.7;
+        } else if (ambientLight === 'medium') {
+          // Medium ambient light - use medium torch power
+          newIntensity = 0.85;
+        } else {
+          // High ambient light or unknown - use full torch power
+          newIntensity = 1;
+        }
+        
+        if (flashIntensityRef.current !== newIntensity) {
+          console.log(`CameraView: Adjusting flash intensity to ${newIntensity} based on ambient light: ${ambientLight}`);
+          flashIntensityRef.current = newIntensity;
+          
+          // Unfortunately, standard torch intensity control isn't widely supported
+          // For now, we just turn it on/off as a fallback
+          await trackRef.current.applyConstraints({
+            advanced: [{ torch: true }]
+          });
+        }
+      } catch (e) {
+        console.error("Error adjusting flash intensity:", e);
+      }
+    }
+  }, [isMonitoring]);
 
   // Function to stop the camera and release resources
   const stopCamera = useCallback(() => {
@@ -79,6 +129,7 @@ const CameraView = ({
       });
 
       streamRef.current = null;
+      trackRef.current = null;
     }
 
     // Clear the video element
@@ -90,6 +141,9 @@ const CameraView = ({
         console.error("Error limpiando video element:", err);
       }
     }
+    
+    // Reset flash state
+    flashIntensityRef.current = 0;
   }, []);
 
   // Function to start the camera with optimized settings
@@ -115,23 +169,27 @@ const CameraView = ({
         throw new Error('La API getUserMedia no está disponible');
       }
 
+      // Adapt resolution based on device battery state
+      const lowPowerMode = deviceContextService.isBatterySavingMode;
+      console.log(`CameraView: Dispositivo en modo ahorro de energía: ${lowPowerMode}`);
+      
       // Optimized camera configuration for each platform
       const constraints: MediaStreamConstraints = isAndroid 
         ? {
             video: {
               facingMode: 'environment',
-              width: { ideal: 640, max: 1280 },  // Reduced resolution for better performance
-              height: { ideal: 480, max: 720 },
-              frameRate: { ideal: 15, max: 24 }  // Reduced frame rate for better performance
+              width: lowPowerMode ? { ideal: 320, max: 640 } : { ideal: 640, max: 1280 },
+              height: lowPowerMode ? { ideal: 240, max: 480 } : { ideal: 480, max: 720 },
+              frameRate: lowPowerMode ? { ideal: 10, max: 15 } : { ideal: 15, max: 24 }
             },
             audio: false
           }
         : {
             video: {
               facingMode: 'environment',
-              width: { ideal: 640 },
-              height: { ideal: 480 },
-              frameRate: { ideal: 20, max: 30 }
+              width: lowPowerMode ? { ideal: 480, max: 640 } : { ideal: 640 },
+              height: lowPowerMode ? { ideal: 360, max: 480 } : { ideal: 480 },
+              frameRate: lowPowerMode ? { ideal: 15, max: 20 } : { ideal: 20, max: 30 }
             },
             audio: false
           };
@@ -149,11 +207,12 @@ const CameraView = ({
       }
 
       streamRef.current = mediaStream;
+      const videoTrack = mediaStream.getVideoTracks()[0];
+      trackRef.current = videoTrack;
 
       // Apply specific optimizations for Android
       if (isAndroid) {
         console.log("CameraView: Aplicando optimizaciones para Android");
-        const videoTrack = mediaStream.getVideoTracks()[0];
         if (videoTrack) {
           try {
             // Android optimizations
@@ -239,21 +298,17 @@ const CameraView = ({
       // Wait a moment before activating the flashlight on Android
       await new Promise(resolve => setTimeout(resolve, isAndroid ? 200 : 0));
 
-      // Try to activate the flashlight if we're monitoring
-      const videoTrack = mediaStream.getVideoTracks()[0];
-      if (videoTrack && videoTrack.getCapabilities()?.torch) {
-        try {
-          console.log("CameraView: Intentando activar linterna");
-          await videoTrack.applyConstraints({
-            advanced: [{ torch: true }]
-          });
-          console.log("CameraView: Linterna activada");
-        } catch (e) {
-          console.error("Error configurando linterna:", e);
+      // Initial flash adjustment based on ambient conditions
+      await adjustFlashIntensity();
+      
+      // Set up periodic flash intensity adjustment
+      const flashAdjustInterval = setInterval(() => {
+        if (isMonitoring && videoTrack) {
+          adjustFlashIntensity();
+        } else {
+          clearInterval(flashAdjustInterval);
         }
-      } else {
-        console.log("CameraView: Linterna no disponible");
-      }
+      }, 2000);
 
       // Notify that the stream is ready
       if (onStreamReady && isMonitoring) {
@@ -267,7 +322,7 @@ const CameraView = ({
     } finally {
       initializingRef.current = false;
     }
-  }, [isMonitoring, onStreamReady, stopCamera, isAndroid]);
+  }, [isMonitoring, onStreamReady, stopCamera, isAndroid, adjustFlashIntensity]);
 
   // Effect to start/stop the camera when isMonitoring changes
   useEffect(() => {

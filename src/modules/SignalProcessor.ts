@@ -1,5 +1,5 @@
-
 import { ProcessedSignal, ProcessingError, SignalProcessor } from '../types/signal';
+import deviceContextService from '../services/DeviceContextService';
 
 // Class for Kalman filter - improves signal noise reduction
 class KalmanFilter {
@@ -42,7 +42,12 @@ export class PPGSignalProcessor implements SignalProcessor {
   private kalmanFilter: KalmanFilter;
   private lastValues: number[] = [];
   private frameSkipCount: number = 0;  // For frame skipping optimization
-  private readonly FRAME_PROCESS_INTERVAL: number = 2;  // Process every Nth frame
+  private frameSkipFactor: number = 2; // Adjust dynamically based on stability
+  
+  // Frame compression settings
+  private compressionCanvas: HTMLCanvasElement | null = null;
+  private compressionCtx: CanvasRenderingContext2D | null = null;
+  private compressionQuality: number = 1.0; // 1.0 = no compression
   
   // Configuration settings
   private readonly DEFAULT_CONFIG = {
@@ -67,6 +72,14 @@ export class PPGSignalProcessor implements SignalProcessor {
   private lastRedValue: number = 0;
   private lastProcessedTime: number = 0;
   private processingThrottleMs: number = 33; // ~ 30fps max processing rate
+  
+  // Signal stability tracking
+  private lastSignalStability: number = 0;
+  private stabilityHistory: number[] = [];
+  
+  // Pattern recognition
+  private signalPatterns: Array<{pattern: number[], timestamp: number}> = [];
+  private patternMatchThreshold: number = 0.8;
 
   /**
    * Constructor
@@ -77,7 +90,21 @@ export class PPGSignalProcessor implements SignalProcessor {
   ) {
     this.kalmanFilter = new KalmanFilter();
     this.currentConfig = { ...this.DEFAULT_CONFIG };
+    this.initializeCompression();
     console.log("PPGSignalProcessor: Instance created");
+  }
+  
+  /**
+   * Initialize compression canvas
+   */
+  private initializeCompression(): void {
+    try {
+      this.compressionCanvas = document.createElement('canvas');
+      this.compressionCtx = this.compressionCanvas.getContext('2d', { willReadFrequently: true });
+      console.log("PPGSignalProcessor: Compression canvas initialized");
+    } catch (error) {
+      console.error("PPGSignalProcessor: Error initializing compression canvas", error);
+    }
   }
 
   /**
@@ -92,9 +119,12 @@ export class PPGSignalProcessor implements SignalProcessor {
       this.isCurrentlyDetected = false;
       this.lastDetectionTime = 0;
       this.frameSkipCount = 0;
+      this.frameSkipFactor = 2;
       this.kalmanFilter.reset();
       this.lastRedValue = 0;
       this.lastProcessedTime = 0;
+      this.lastSignalStability = 0;
+      this.stabilityHistory = [];
       console.log("PPGSignalProcessor: Initialized");
     } catch (error) {
       console.error("PPGSignalProcessor: Initialization error", error);
@@ -125,6 +155,8 @@ export class PPGSignalProcessor implements SignalProcessor {
     this.kalmanFilter.reset();
     this.lastRedValue = 0;
     this.lastProcessedTime = 0;
+    this.stabilityHistory = [];
+    this.signalPatterns = [];
     console.log("PPGSignalProcessor: Stopped");
   }
 
@@ -151,9 +183,34 @@ export class PPGSignalProcessor implements SignalProcessor {
     if (!this.isProcessing) {
       return;
     }
+    
+    // Don't process if app is backgrounded or in hibernation
+    if (deviceContextService.isBackgrounded) {
+      console.log("PPGSignalProcessor: App in background, skipping processing");
+      return;
+    }
+    
+    // If device is idle for a while, enter hibernation mode for non-critical components
+    if (deviceContextService.isDeviceIdle) {
+      this.frameSkipFactor = 4; // Maximum skip in hibernation mode
+    } else {
+      // Dynamic skip factor based on battery and stability
+      const lowPower = deviceContextService.isBatterySavingMode;
+      
+      if (lowPower) {
+        // More aggressive skipping when battery is low
+        this.frameSkipFactor = Math.min(this.frameSkipFactor + 0.25, 3);
+      } else if (this.lastSignalStability > 0.9) {
+        // Very stable signal - can skip more frames
+        this.frameSkipFactor = Math.min(this.frameSkipFactor + 0.1, 3);
+      } else if (this.lastSignalStability < 0.7) {
+        // Less stable signal - process more frames
+        this.frameSkipFactor = Math.max(this.frameSkipFactor - 0.2, 1);
+      }
+    }
 
     // Frame skipping for performance optimization
-    this.frameSkipCount = (this.frameSkipCount + 1) % this.FRAME_PROCESS_INTERVAL;
+    this.frameSkipCount = (this.frameSkipCount + 1) % Math.floor(this.frameSkipFactor);
     if (this.frameSkipCount !== 0) {
       return;
     }
@@ -166,8 +223,16 @@ export class PPGSignalProcessor implements SignalProcessor {
     this.lastProcessedTime = now;
     
     try {
+      // Compress image before processing if needed
+      let processedImageData = imageData;
+      
+      if (deviceContextService.isBatterySavingMode && this.compressionCanvas && this.compressionCtx) {
+        // Reduced resolution for processing when in battery saving mode
+        processedImageData = this.compressImage(imageData, 0.75);
+      }
+      
       // Extract PPG signal based on scientific evidence
-      const redValue = this.extractRedChannel(imageData);
+      const redValue = this.extractRedChannel(processedImageData);
       
       // Skip processing if the value hasn't changed significantly (optimization)
       if (Math.abs(redValue - this.lastRedValue) < 0.5 && this.lastValues.length > 0) {
@@ -183,6 +248,11 @@ export class PPGSignalProcessor implements SignalProcessor {
       }
 
       const { isFingerDetected, quality } = this.analyzeSignal(filtered, redValue);
+      
+      // Check for pattern recognition if we have enough samples
+      if (isFingerDetected && this.lastValues.length >= 10) {
+        this.learnPattern();
+      }
 
       // Only emit signal if value has changed meaningfully or detection status changed
       const processedSignal: ProcessedSignal = {
@@ -199,6 +269,47 @@ export class PPGSignalProcessor implements SignalProcessor {
     } catch (error) {
       console.error("PPGSignalProcessor: Error processing frame", error);
       this.handleError("PROCESSING_ERROR", "Error processing frame");
+    }
+  }
+  
+  /**
+   * Compress image for more efficient processing
+   */
+  private compressImage(imageData: ImageData, quality: number): ImageData {
+    if (!this.compressionCanvas || !this.compressionCtx) {
+      return imageData;
+    }
+    
+    try {
+      // Set canvas size proportional to original based on quality factor
+      const targetWidth = Math.floor(imageData.width * quality);
+      const targetHeight = Math.floor(imageData.height * quality);
+      
+      this.compressionCanvas.width = targetWidth;
+      this.compressionCanvas.height = targetHeight;
+      
+      // Create a temporary canvas to draw the original image data
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = imageData.width;
+      tempCanvas.height = imageData.height;
+      const tempCtx = tempCanvas.getContext('2d');
+      
+      if (!tempCtx) {
+        return imageData;
+      }
+      
+      // Draw original image data to temp canvas
+      tempCtx.putImageData(imageData, 0, 0);
+      
+      // Draw and resize to compression canvas
+      this.compressionCtx.drawImage(tempCanvas, 0, 0, imageData.width, imageData.height, 
+                                  0, 0, targetWidth, targetHeight);
+      
+      // Get compressed image data
+      return this.compressionCtx.getImageData(0, 0, targetWidth, targetHeight);
+    } catch (err) {
+      console.error("Error compressing image:", err);
+      return imageData;
     }
   }
 
@@ -272,6 +383,14 @@ export class PPGSignalProcessor implements SignalProcessor {
 
     // Analyze signal stability - scientifically validated measure
     const stability = this.calculateStability();
+    this.lastSignalStability = stability;
+    this.stabilityHistory.push(stability);
+    
+    // Keep stability history limited
+    if (this.stabilityHistory.length > 30) {
+      this.stabilityHistory.shift();
+    }
+    
     if (stability > 0.7) {
       this.stableFrameCount = Math.min(
         this.stableFrameCount + 1,
@@ -299,7 +418,10 @@ export class PPGSignalProcessor implements SignalProcessor {
     const intensityScore = Math.min((rawValue - this.currentConfig.MIN_RED_THRESHOLD) / 
                                 (this.currentConfig.MAX_RED_THRESHOLD - this.currentConfig.MIN_RED_THRESHOLD), 1);
     
-    const quality = Math.round((stabilityScore * 0.6 + intensityScore * 0.4) * 100);
+    // If we have matched a pattern, improve quality score
+    const patternBonus = this.hasMatchingPattern() ? 0.1 : 0;
+    
+    const quality = Math.round((stabilityScore * 0.6 + intensityScore * 0.3 + patternBonus) * 100);
 
     return {
       isFingerDetected: this.isCurrentlyDetected,
@@ -320,6 +442,73 @@ export class PPGSignalProcessor implements SignalProcessor {
     
     const avgVariation = variations.reduce((sum, val) => sum + val, 0) / variations.length;
     return Math.max(0, Math.min(1, 1 - (avgVariation / 50)));
+  }
+  
+  /**
+   * Learn signal patterns for optimized processing
+   */
+  private learnPattern(): void {
+    if (this.lastValues.length < 10) return;
+    
+    // Extract the last 10 values as a pattern
+    const pattern = this.lastValues.slice(-10);
+    
+    // Normalize pattern (important for comparison)
+    const min = Math.min(...pattern);
+    const max = Math.max(...pattern);
+    const range = max - min;
+    
+    if (range < 2) return; // Skip patterns with minimal variation
+    
+    const normalizedPattern = pattern.map(val => (val - min) / range);
+    
+    // Store pattern with timestamp
+    this.signalPatterns.push({
+      pattern: normalizedPattern,
+      timestamp: Date.now()
+    });
+    
+    // Keep only last 5 patterns
+    if (this.signalPatterns.length > 5) {
+      this.signalPatterns.shift();
+    }
+  }
+  
+  /**
+   * Check if current signal matches learned patterns
+   */
+  private hasMatchingPattern(): boolean {
+    if (this.signalPatterns.length === 0 || this.lastValues.length < 10) {
+      return false;
+    }
+    
+    // Get current pattern
+    const currentPattern = this.lastValues.slice(-10);
+    
+    // Normalize current pattern
+    const min = Math.min(...currentPattern);
+    const max = Math.max(...currentPattern);
+    const range = max - min;
+    
+    if (range < 2) return false;
+    
+    const normalizedCurrent = currentPattern.map(val => (val - min) / range);
+    
+    // Compare with stored patterns
+    for (const storedPattern of this.signalPatterns) {
+      // Calculate similarity
+      let similarity = 0;
+      for (let i = 0; i < 10; i++) {
+        similarity += 1 - Math.abs(normalizedCurrent[i] - storedPattern.pattern[i]);
+      }
+      similarity /= 10;
+      
+      if (similarity > this.patternMatchThreshold) {
+        return true;
+      }
+    }
+    
+    return false;
   }
 
   /**
