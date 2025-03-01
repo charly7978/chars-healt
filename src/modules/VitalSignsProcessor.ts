@@ -1,4 +1,3 @@
-
 import { applySMAFilter } from '../utils/signalProcessingUtils';
 import { SpO2Calculator } from './SpO2Calculator';
 import { BloodPressureCalculator } from './BloodPressureCalculator';
@@ -64,9 +63,9 @@ export class VitalSignsProcessor {
     const arrhythmiaResult = this.arrhythmiaDetector.detect();
 
     // Calculate vital signs with minimal window
-    const spo2 = this.spO2Calculator.calculate(this.ppgValues.slice(-30));
     const bp = this.bpCalculator.calculate(this.ppgValues.slice(-30));
-    const pressure = `${bp.systolic}/${bp.diastolic}`;
+    const pressure = bp.systolic > 0 && bp.diastolic > 0 ? `${bp.systolic}/${bp.diastolic}` : this.bpCalculator.getLastValidPressure();
+    const spo2 = this.spO2Calculator.calculate(this.ppgValues.slice(-30));
 
     // Prepare arrhythmia data if detected
     const lastArrhythmiaData = arrhythmiaResult.detected ? {

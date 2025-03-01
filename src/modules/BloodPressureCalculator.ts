@@ -20,8 +20,8 @@ export class BloodPressureCalculator {
   private bpQualityHistory: number[] = [];
   private bpCalibrationFactor: number = 0.99;
   private lastBpTimestamp: number = 0;
-  private lastValidSystolic: number = 0;
-  private lastValidDiastolic: number = 0;
+  private lastValidSystolic: number = 120;
+  private lastValidDiastolic: number = 80;
   private bpReadyForOutput: boolean = false;
   private measurementCount: number = 0;
   private breathingCyclePosition: number = 0; // Respiratory cycle
@@ -40,8 +40,8 @@ export class BloodPressureCalculator {
     this.bpQualityHistory = [];
     this.bpCalibrationFactor = 0.99;
     this.lastBpTimestamp = 0;
-    this.lastValidSystolic = 0;
-    this.lastValidDiastolic = 0;
+    this.lastValidSystolic = 120;
+    this.lastValidDiastolic = 80;
     this.bpReadyForOutput = false;
     this.measurementCount = 0;
     this.breathingCyclePosition = 0;
@@ -448,5 +448,9 @@ export class BloodPressureCalculator {
       systolic: this.bpReadyForOutput ? finalSystolic : 0,
       diastolic: this.bpReadyForOutput ? finalDiastolic : 0
     };
+  }
+
+  public getLastValidPressure(): string {
+    return `${this.lastValidSystolic}/${this.lastValidDiastolic}`;
   }
 }
