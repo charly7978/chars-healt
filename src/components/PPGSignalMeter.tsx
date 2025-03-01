@@ -71,15 +71,19 @@ const PPGSignalMeter = ({
   }, []);
 
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
+    // Limpiar el canvas
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     
+    // Fondo del gráfico
     ctx.fillStyle = '#f3f3f3';
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
+    // Dibujar líneas de cuadrícula
     ctx.beginPath();
     ctx.strokeStyle = 'rgba(0, 180, 120, 0.15)';
     ctx.lineWidth = 0.5;
 
+    // Cuadrícula vertical
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X) {
       ctx.moveTo(x, 0);
       ctx.lineTo(x, CANVAS_HEIGHT);
@@ -91,6 +95,7 @@ const PPGSignalMeter = ({
       }
     }
 
+    // Cuadrícula horizontal
     for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y) {
       ctx.moveTo(0, y);
       ctx.lineTo(CANVAS_WIDTH, y);
@@ -104,6 +109,7 @@ const PPGSignalMeter = ({
     }
     ctx.stroke();
 
+    // Líneas principales de la cuadrícula
     ctx.beginPath();
     ctx.strokeStyle = 'rgba(0, 150, 100, 0.25)';
     ctx.lineWidth = 1;
@@ -119,6 +125,7 @@ const PPGSignalMeter = ({
     }
     ctx.stroke();
 
+    // Línea base horizontal
     ctx.beginPath();
     ctx.strokeStyle = 'rgba(0, 150, 100, 0.35)';
     ctx.lineWidth = 1.5;
@@ -150,28 +157,33 @@ const PPGSignalMeter = ({
 
     const now = Date.now();
     
+    // Actualización del valor base para alinear la señal
     if (baselineRef.current === null) {
       baselineRef.current = value;
     } else {
       baselineRef.current = baselineRef.current * 0.95 + value * 0.05;
     }
 
+    // Suavizado de la señal
     const smoothedValue = smoothValue(value, lastValueRef.current);
     lastValueRef.current = smoothedValue;
 
+    // Normalización de valores - asegurando que los picos vayan hacia arriba
     const normalizedValue = (smoothedValue - (baselineRef.current || 0));
     const scaledValue = normalizedValue * verticalScale;
     
-    let isArrhythmia = false;
-    if (rawArrhythmiaData && 
-        arrhythmiaStatus?.includes("ARRITMIA") && 
-        now - rawArrhythmiaData.timestamp < 1000) {
-      isArrhythmia = true;
+    // Verificar si el punto actual corresponde a una arritmia
+    const isArrhythmia = !!(rawArrhythmiaData && 
+      arrhythmiaStatus?.includes("ARRITMIA") && 
+      now - rawArrhythmiaData.timestamp < 1000);
+    
+    // Registrar arritmia si se detecta
+    if (isArrhythmia) {
       lastArrhythmiaTime.current = now;
-      
       arrhythmiaCountRef.current++;
     }
 
+    // Añadir el punto al buffer circular
     const dataPoint: PPGDataPoint = {
       time: now,
       value: scaledValue,
@@ -180,8 +192,10 @@ const PPGSignalMeter = ({
     
     dataBufferRef.current.push(dataPoint);
 
+    // Dibujar cuadrícula de fondo
     drawGrid(ctx);
 
+    // Obtener puntos visibles en la ventana de tiempo actual
     const points = dataBufferRef.current.getPoints();
     if (points.length > 1) {
       const visiblePoints = points.filter(
@@ -189,6 +203,7 @@ const PPGSignalMeter = ({
       );
       
       if (visiblePoints.length > 1) {
+        // Dibujar la línea de la señal
         ctx.beginPath();
         ctx.strokeStyle = '#0EA5E9';
         ctx.lineWidth = 2;
@@ -209,6 +224,7 @@ const PPGSignalMeter = ({
             ctx.lineTo(x, y);
           }
           
+          // Destacar segmentos con arritmias
           if (point.isArrhythmia && i < visiblePoints.length - 1) {
             ctx.stroke();
             ctx.beginPath();
@@ -235,103 +251,65 @@ const PPGSignalMeter = ({
         ctx.stroke();
       }
 
+      // Detectar y marcar los picos
       for (let i = 1; i < visiblePoints.length - 1; i++) {
         const prevPoint = visiblePoints[i - 1];
         const point = visiblePoints[i];
         const nextPoint = visiblePoints[i + 1];
         
+        // Detectar picos (puntos más altos que sus vecinos)
         if (point.value > prevPoint.value && point.value > nextPoint.value) {
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
           const y = canvas.height * 0.4 + point.value;
           
+          // Marcar el pico
           ctx.beginPath();
-          ctx.arc(x, y, point.isArrhythmia ? 5 : 4, 0, Math.PI * 2);
+          ctx.arc(x, y, point.isArrhythmia ? 6 : 4, 0, Math.PI * 2);
           ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
           ctx.fill();
-
+          
+          // Mostrar valor del pico
           ctx.font = 'bold 12px Inter';
           ctx.fillStyle = '#666666';
           ctx.textAlign = 'center';
-          ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 20);
+          ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 15);
           
+          // Destacar arritmias
           if (point.isArrhythmia) {
-            // Primer círculo - fondo amarillo brillante
+            // Círculo destacado para arritmia
             ctx.beginPath();
-            ctx.arc(x, y, 12, 0, Math.PI * 2); // Aumentado de 9 a 12
-            ctx.fillStyle = 'rgba(255, 255, 0, 0.4)'; // Fondo amarillo semitransparente
-            ctx.fill();
-            ctx.strokeStyle = '#FFFF00';
-            ctx.lineWidth = 3; // Aumentado de 2 a 3
-            ctx.stroke();
-            
-            // Segundo círculo - borde rojo pulsante
-            ctx.beginPath();
-            ctx.arc(x, y, 18, 0, Math.PI * 2); // Aumentado de 14 a 18
+            ctx.arc(x, y, 10, 0, Math.PI * 2);
             ctx.strokeStyle = '#FF3030';
-            ctx.lineWidth = 2; // Aumentado de 1 a 2
-            ctx.setLineDash([3, 3]); // Línea punteada más visible
+            ctx.lineWidth = 2;
             ctx.stroke();
-            ctx.setLineDash([]);
             
-            // Destacar el latido prematuro con un texto más prominente y sombra
-            ctx.font = 'bold 14px Inter'; // Aumentado de 11 a 14
-            ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
-            ctx.shadowBlur = 4;
-            ctx.fillStyle = '#FF0000';
-            ctx.fillText("LATIDO PREMATURO", x, y - 38); // Ajustado para evitar solapamiento
-            ctx.font = 'bold 12px Inter';
-            ctx.fillStyle = '#FFFF00';
-            ctx.fillText("DETECTADO", x, y - 22);
-            ctx.shadowColor = 'transparent';
-            ctx.shadowBlur = 0;
+            // Etiqueta de latido prematuro
+            ctx.font = 'bold 10px Inter';
+            ctx.fillStyle = '#DC2626';
+            ctx.fillText("LATIDO PREMATURO", x, y - 28);
             
+            // Mostrar pausa compensatoria si hay suficientes puntos
             if (i < visiblePoints.length - 2) {
               const nextPoint = visiblePoints[i + 1];
               const nextNextPoint = visiblePoints[i + 2];
               
               const nextX = canvas.width - ((now - nextPoint.time) * canvas.width / WINDOW_WIDTH_MS);
               const nextNextX = canvas.width - ((now - nextNextPoint.time) * canvas.width / WINDOW_WIDTH_MS);
-              const timeSpanPixels = Math.abs(nextNextX - x);
               
               ctx.beginPath();
               ctx.setLineDash([2, 2]);
-              ctx.strokeStyle = 'rgba(255, 100, 100, 0.7)';
-              ctx.lineWidth = 1.5;
+              ctx.strokeStyle = 'rgba(220, 38, 38, 0.6)';
+              ctx.lineWidth = 1;
               ctx.moveTo(x, y + 15);
               ctx.lineTo(nextNextX, y + 15);
               ctx.stroke();
               ctx.setLineDash([]);
               
-              const compensatoryY = y + 30;
+              const compensatoryY = y + 25;
               ctx.font = '9px Inter';
-              ctx.fillStyle = '#FF6B6B';
+              ctx.fillStyle = '#DC2626';
               ctx.fillText("PAUSA COMPENSATORIA", (x + nextNextX) / 2, compensatoryY);
             }
-            
-            ctx.beginPath();
-            ctx.setLineDash([2, 2]);
-            ctx.strokeStyle = 'rgba(255, 107, 107, 0.6)';
-            ctx.lineWidth = 1;
-            
-            if (i > 0) {
-              const prevX = canvas.width - ((now - visiblePoints[i-1].time) * canvas.width / WINDOW_WIDTH_MS);
-              const prevY = canvas.height * 0.4 + visiblePoints[i-1].value;
-              
-              ctx.moveTo(prevX, prevY - 15);
-              ctx.lineTo(x, y - 15);
-              ctx.stroke();
-            }
-            
-            if (i < visiblePoints.length - 1) {
-              const nextX = canvas.width - ((now - visiblePoints[i+1].time) * canvas.width / WINDOW_WIDTH_MS);
-              const nextY = canvas.height * 0.4 + visiblePoints[i+1].value;
-              
-              ctx.moveTo(x, y - 15);
-              ctx.lineTo(nextX, nextY - 15);
-              ctx.stroke();
-            }
-            
-            ctx.setLineDash([]);
           }
         }
       }
@@ -341,6 +319,7 @@ const PPGSignalMeter = ({
     animationFrameRef.current = requestAnimationFrame(renderSignal);
   }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus, drawGrid, smoothValue]);
 
+  // Iniciar y detener el renderizado
   useEffect(() => {
     renderSignal();
     return () => {
@@ -350,6 +329,7 @@ const PPGSignalMeter = ({
     };
   }, [renderSignal]);
 
+  // Marcar arritmias en el buffer cuando se detectan
   useEffect(() => {
     if (!dataBufferRef.current) return;
     
@@ -358,12 +338,8 @@ const PPGSignalMeter = ({
       
       dataBufferRef.current.markLastAsArrhythmia(true);
       
-      console.log("🩺 PPGSignalMeter: ARRITMIA DETECTADA en visualización", {
-        timestamp: new Date().toISOString(),
-        arrhythmiaStatus,
-        dataDetails: rawArrhythmiaData,
-        markedPoint: "Último punto en buffer marcado como arritmia",
-        bufferSize: dataBufferRef.current.getPoints().length
+      console.log("PPGSignalMeter: Arritmia detectada en visualización", {
+        timestamp: new Date().toISOString()
       });
     }
   }, [rawArrhythmiaData, arrhythmiaStatus]);
