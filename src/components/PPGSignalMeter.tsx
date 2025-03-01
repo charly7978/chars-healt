@@ -257,16 +257,48 @@ const PPGSignalMeter = ({
         const point = visiblePoints[i];
         const nextPoint = visiblePoints[i + 1];
         
-        // Detectar picos (puntos más altos que sus vecinos)
-        if (point.value > prevPoint.value && point.value > nextPoint.value) {
+        // DETECTOR MEJORADO: Buscar explícitamente picos hacia ARRIBA más pronunciados
+        // Un pico real es un punto que es significativamente mayor que sus vecinos
+        const isPeak = point.value > prevPoint.value && 
+                      point.value > nextPoint.value && 
+                      (point.value - prevPoint.value) > 1.5 && // Asegurar que el ascenso sea significativo
+                      (point.value - nextPoint.value) > 1.5;   // Asegurar que el descenso sea significativo
+        
+        if (isPeak) {
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
           const y = canvas.height * 0.4 + point.value;
+          
+          // DEPURACIÓN: Informar cuando se detecta un pico
+          // Esto ayudará a entender la correspondencia entre picos visuales y detección
+          if (i === 1) { // Solo reportar para el pico más reciente
+            console.log('PPGSignalMeter - Pico detectado:', {
+              amplitud: (point.value / verticalScale).toFixed(2),
+              esArrhythmia: point.isArrhythmia,
+              timestamp: new Date().toISOString()
+            });
+          }
+          
+          // Destacar visualmente el pico detectado con línea vertical
+          ctx.beginPath();
+          ctx.strokeStyle = point.isArrhythmia ? '#FF0000' : '#22D3EE';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([]);
+          ctx.moveTo(x, y);
+          ctx.lineTo(x, y - 40); // Línea vertical hacia arriba
+          ctx.stroke();
           
           // Marcar el pico
           ctx.beginPath();
           ctx.arc(x, y, point.isArrhythmia ? 6 : 4, 0, Math.PI * 2);
           ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
           ctx.fill();
+          
+          // Añadir segundo círculo más grande para mejor visibilidad
+          ctx.beginPath();
+          ctx.arc(x, y, 8, 0, Math.PI * 2);
+          ctx.strokeStyle = point.isArrhythmia ? '#FF0000' : '#0EA5E9';
+          ctx.lineWidth = 1;
+          ctx.stroke();
           
           // Mostrar valor del pico
           ctx.font = 'bold 12px Inter';

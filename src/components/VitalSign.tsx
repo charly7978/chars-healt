@@ -1,4 +1,3 @@
-
 import React, { memo, useMemo } from 'react';
 import { VitalSignsRisk } from '../utils/vitalSignsRisk';
 

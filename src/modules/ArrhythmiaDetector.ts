@@ -9,12 +9,12 @@
 export class ArrhythmiaDetector {
   // Parámetros de configuración optimizados para detección precisa
   private readonly RR_WINDOW_SIZE = 5;
-  private readonly ARRHYTHMIA_LEARNING_PERIOD = 3000; // 3 segundos para calibración
+  private readonly ARRHYTHMIA_LEARNING_PERIOD = 2000; // Reducido a 2 segundos para entrar antes en detección
   
   // Umbrales óptimos basados en literatura médica
   private readonly PREMATURE_BEAT_THRESHOLD = 0.65;
-  private readonly AMPLITUDE_RATIO_THRESHOLD = 0.82; 
-  private readonly NORMAL_PEAK_MIN_THRESHOLD = 0.65;
+  private readonly AMPLITUDE_RATIO_THRESHOLD = 0.85; // Aumentado de 0.82 para capturar más picos pequeños 
+  private readonly NORMAL_PEAK_MIN_THRESHOLD = 0.60; // Reducido de 0.65 para clasificar más picos como normales
   
   // Variables de estado
   private rrIntervals: number[] = [];
@@ -119,6 +119,14 @@ export class ArrhythmiaDetector {
     const currentTime = Date.now();
     this.rrIntervals = intervals;
     this.lastPeakTime = lastPeakTime;
+    
+    // LOG: Depuración para visualizar datos que llegan
+    console.log('ArrhythmiaDetector - Recibiendo datos:', {
+      peakAmplitude: peakAmplitude ? Math.abs(peakAmplitude).toFixed(2) : 'N/A',
+      avgNormalAmplitude: this.avgNormalAmplitude.toFixed(2),
+      isLearning: this.isLearningPhase,
+      timestamp: new Date().toISOString()
+    });
     
     if (lastPeakTime) {
       this.peakTimes.push(lastPeakTime);
@@ -265,8 +273,9 @@ export class ArrhythmiaDetector {
             firstPeakRatio >= this.NORMAL_PEAK_MIN_THRESHOLD * 0.9 && 
             thirdPeakRatio >= this.NORMAL_PEAK_MIN_THRESHOLD * 0.9;
           
-          // Detectar como arritmia si se cumplen criterios de amplitud o intervalos
-          prematureBeatDetected = amplitudePatternValid && intervalPatternValid;
+          // Detectar como arritmia si se cumplen criterios de amplitud O intervalos
+          // Esto permite mayor sensibilidad para detectar arritmias reales
+          prematureBeatDetected = amplitudePatternValid || intervalPatternValid;
         }
       }
     }
