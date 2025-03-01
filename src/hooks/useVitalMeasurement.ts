@@ -1,4 +1,3 @@
-
 // Importar el método cleanMemory de cada uno de los hooks correspondientes
 import { useEffect, useCallback } from 'react';
 import { useSignalProcessor } from './useSignalProcessor';
@@ -10,9 +9,44 @@ export const useVitalMeasurement = () => {
   const heartBeatProcessor = useHeartBeatProcessor();
   const vitalSignsProcessor = useVitalSignsProcessor();
 
+  // Función mejorada para iniciar una medición
+  const startMeasurement = useCallback(() => {
+    console.log("useVitalMeasurement: Iniciando nueva medición");
+    
+    // Realizar un reset completo de los procesadores antes de empezar
+    try {
+      // Primero reiniciar todos los procesadores
+      vitalSignsProcessor.reset();
+      heartBeatProcessor.reset();
+      
+      // Luego iniciar el procesamiento
+      signalProcessor.startProcessing();
+      console.log("useVitalMeasurement: Procesamiento iniciado correctamente");
+    } catch (err) {
+      console.error("useVitalMeasurement: Error al iniciar la medición", err);
+      // En caso de error, intentar limpiar memoria y reiniciar
+      performMemoryCleanup();
+      
+      // Segundo intento de iniciar el procesamiento
+      signalProcessor.startProcessing();
+    }
+  }, [signalProcessor, heartBeatProcessor, vitalSignsProcessor]);
+  
+  // Función mejorada para detener una medición
+  const stopMeasurement = useCallback(() => {
+    console.log("useVitalMeasurement: Deteniendo medición");
+    signalProcessor.stopProcessing();
+    
+    // Registrar último estado antes de limpieza
+    console.log("useVitalMeasurement: Medición finalizada correctamente");
+  }, [signalProcessor]);
+
   // Función para limpiar memoria de forma agresiva
   const performMemoryCleanup = useCallback(() => {
     console.log("useVitalMeasurement: Iniciando limpieza agresiva de memoria");
+    
+    // Detener el procesamiento primero
+    signalProcessor.stopProcessing();
     
     // Llamar a la limpieza específica de cada procesador
     signalProcessor.cleanMemory();
@@ -47,14 +81,18 @@ export const useVitalMeasurement = () => {
   // Ejecutar limpieza de memoria cuando el componente se desmonte
   useEffect(() => {
     return () => {
+      // Importante: Siempre detener el procesamiento antes de desmontar
+      signalProcessor.stopProcessing();
       performMemoryCleanup();
     };
-  }, [performMemoryCleanup]);
+  }, [performMemoryCleanup, signalProcessor]);
 
   return {
     ...signalProcessor,
     ...heartBeatProcessor,
     ...vitalSignsProcessor,
+    startMeasurement,
+    stopMeasurement,
     performMemoryCleanup
   };
 };

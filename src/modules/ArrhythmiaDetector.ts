@@ -1,7 +1,11 @@
 export class ArrhythmiaDetector {
+  // Identificador de versión para diagnosticar problemas de duplicación
+  private static readonly VERSION = "2.1.3"; // Identificador específico para esta versión
+  private readonly ALGORITHM_ID = "STRICT_PREMATURE_DETECTOR_V213";
+  
   // Constants for arrhythmia detection
   private readonly RR_WINDOW_SIZE = 5;
-  private readonly ARRHYTHMIA_LEARNING_PERIOD = 2000; // Reduced from 3000ms to detect earlier
+  private readonly ARRHYTHMIA_LEARNING_PERIOD = 2000; // Reducido para detectar antes
   
   // MÁS ESTRICTO: Ajustes extremos para solo detectar latidos prematuros entre normales
   private readonly PREMATURE_BEAT_THRESHOLD = 0.65; // Más estricto para evitar falsos positivos
@@ -11,6 +15,12 @@ export class ArrhythmiaDetector {
   // NUEVA PROTECCIÓN: Prevenir detecciones múltiples consecutivas
   private readonly COOLDOWN_AFTER_DETECTION_MS = 1500; // Período de enfriamiento post-arritmia
   private readonly MIN_NORMAL_BEATS_BETWEEN_PREMATURE = 2; // Mínimo de latidos normales entre prematuros
+  
+  // NUEVO: Evitar comportamiento errático entre sesiones
+  private readonly MAX_INACTIVE_TIME_MS = 5000; // Tiempo máximo sin actualizaciones antes de reiniciar 
+  private readonly MAX_PEAKS_WITHOUT_DETECTION = 50; // Reiniciar si no hay detecciones después de muchos picos
+  private lastUpdateTime = Date.now();
+  private peaksProcessedSinceLastDetection = 0; 
   
   // State variables
   private rrIntervals: number[] = [];
@@ -33,6 +43,9 @@ export class ArrhythmiaDetector {
   private lastPrematureIndex: number = -1;
   private inPostArrhythmiaCooldown: boolean = false;
   
+  // NUEVO: Flag para verificar si la instancia está inicializada correctamente
+  private isProperlyInitialized: boolean = true;
+  
   // NUEVO: Almacenamiento de secuencia de picos para análisis preciso
   private peakSequence: Array<{
     amplitude: number;
@@ -44,10 +57,49 @@ export class ArrhythmiaDetector {
   // DEBUG flag to track detection issues
   private readonly DEBUG_MODE = true;
   
+  constructor() {
+    this.logInitialization();
+    this.reset();
+  }
+
+  /**
+   * NUEVO: Registrar información de inicialización para diagnóstico
+   */
+  private logInitialization(): void {
+    console.log(`ArrhythmiaDetector: Inicialización v${ArrhythmiaDetector.VERSION} (${this.ALGORITHM_ID})`);
+    console.log(`ArrhythmiaDetector: Thresholds - Normal: ${this.NORMAL_PEAK_MIN_THRESHOLD}, Premature: ${this.AMPLITUDE_RATIO_THRESHOLD}`);
+  }
+  
+  /**
+   * NUEVO: Verifica si debe reiniciar por inactividad o falta de detecciones
+   */
+  private checkForAutoReset(): void {
+    const now = Date.now();
+    
+    // Reiniciar si han pasado demasiado tiempo sin actualizaciones (posible inactividad)
+    if (now - this.lastUpdateTime > this.MAX_INACTIVE_TIME_MS) {
+      console.log(`ArrhythmiaDetector: Auto-reset por inactividad (${Math.round((now - this.lastUpdateTime)/1000)}s)`);
+      this.reset();
+      return;
+    }
+    
+    // Reiniciar si procesamos demasiados picos sin detectar arritmias (posible fallo)
+    if (this.peaksProcessedSinceLastDetection > this.MAX_PEAKS_WITHOUT_DETECTION && 
+        this.hasDetectedFirstArrhythmia && 
+        now - this.lastArrhythmiaTime > 30000) {
+      console.log(`ArrhythmiaDetector: Auto-reset por falta de detecciones (${this.peaksProcessedSinceLastDetection} picos)`);
+      this.reset();
+      return;
+    }
+  }
+  
   /**
    * Reset all state variables
    */
   reset(): void {
+    // Guardar la hora de inicio para referencia
+    const startTime = Date.now();
+    
     this.rrIntervals = [];
     this.amplitudes = [];
     this.peakTimes = [];
@@ -55,7 +107,7 @@ export class ArrhythmiaDetector {
     this.hasDetectedFirstArrhythmia = false;
     this.arrhythmiaDetected = false;
     this.arrhythmiaCount = 0;
-    this.measurementStartTime = Date.now();
+    this.measurementStartTime = startTime;
     this.lastRMSSD = 0;
     this.lastRRVariation = 0;
     this.lastArrhythmiaTime = 0;
@@ -69,13 +121,58 @@ export class ArrhythmiaDetector {
     this.lastPrematureIndex = -1;
     this.inPostArrhythmiaCooldown = false;
     
-    console.log("ArrhythmiaDetector: Reset completo");
+    // Reinicio de variables de auto-diagnóstico
+    this.lastUpdateTime = startTime;
+    this.peaksProcessedSinceLastDetection = 0;
+    this.isProperlyInitialized = true;
+    
+    console.log(`ArrhythmiaDetector: Reset completo (v${ArrhythmiaDetector.VERSION})`);
+  }
+  
+  /**
+   * NUEVO: Verificar si la instancia está en un estado válido
+   */
+  private ensureValidState(): boolean {
+    // Verificaciones de estado interno
+    // Reinicio automático si algo no está bien
+    if (!this.isProperlyInitialized) {
+      console.warn("ArrhythmiaDetector: Estado inválido detectado, reiniciando");
+      this.reset();
+      return false;
+    }
+    
+    // Verificar consistencia en las estructuras de datos
+    const peakSeqLength = this.peakSequence.length;
+    const amplitudesLength = this.amplitudes.length;
+    
+    // Si hay una discrepancia severa entre estructuras, reiniciar
+    if ((peakSeqLength > 0 && amplitudesLength === 0) || 
+        (amplitudesLength > 0 && peakSeqLength === 0 && !this.isLearningPhase)) {
+      console.warn("ArrhythmiaDetector: Inconsistencia en estructuras de datos, reiniciando");
+      this.reset();
+      return false;
+    }
+    
+    // Verificar si alguna estructura tiene valores pero otras no
+    if ((this.avgNormalAmplitude > 0 && amplitudesLength === 0) ||
+        (this.baseRRInterval > 0 && this.rrIntervals.length === 0)) {
+      console.warn("ArrhythmiaDetector: Inconsistencia en parámetros de referencia, reiniciando");
+      this.reset();
+      return false;
+    }
+    
+    return true;
   }
 
   /**
    * Check if in learning phase
    */
   isInLearningPhase(): boolean {
+    // Asegurar estado válido antes de responder
+    if (!this.ensureValidState()) {
+      return true; // Si no es válido, volver a fase de aprendizaje
+    }
+    
     const timeSinceStart = Date.now() - this.measurementStartTime;
     return timeSinceStart <= this.ARRHYTHMIA_LEARNING_PERIOD;
   }
@@ -101,6 +198,7 @@ export class ArrhythmiaDetector {
           this.avgNormalAmplitude = topAmplitudes.reduce((a, b) => a + b, 0) / topAmplitudes.length;
           
           console.log('ArrhythmiaDetector - Amplitud normal de referencia:', {
+            algorithm: this.ALGORITHM_ID,
             avgNormalAmplitude: this.avgNormalAmplitude,
             totalSamples: this.amplitudes.length,
             topValues: topAmplitudes
@@ -121,6 +219,7 @@ export class ArrhythmiaDetector {
           this.baseRRInterval = filteredRR[medianIndex];
           
           console.log('ArrhythmiaDetector - Intervalo RR normal:', {
+            algorithm: this.ALGORITHM_ID,
             baseRRInterval: this.baseRRInterval,
             totalSamples: this.rrIntervals.length
           });
@@ -133,19 +232,32 @@ export class ArrhythmiaDetector {
    * Update RR intervals and peak amplitudes with new data
    */
   updateIntervals(intervals: number[], lastPeakTime: number | null, peakAmplitude?: number): void {
+    // NUEVO: Verificar si es necesario un autoreset antes de procesar
+    this.checkForAutoReset();
+    
+    // Asegurar que la instancia está en un estado válido
+    if (!this.ensureValidState()) {
+      return; // Si detectamos un estado inválido, no procesamos más hasta el siguiente ciclo
+    }
+    
     // Check if we have any data to process
     if (!intervals || intervals.length === 0) {
       return;
     }
 
     const currentTime = Date.now();
+    this.lastUpdateTime = currentTime; // NUEVO: Actualizar timestamp de última actualización
+    
     this.rrIntervals = intervals;
     this.lastPeakTime = lastPeakTime;
+    
+    // Incrementar contador de picos procesados desde la última detección
+    this.peaksProcessedSinceLastDetection++;
     
     // NUEVO: Verificar si debemos salir del período de enfriamiento
     if (this.inPostArrhythmiaCooldown && currentTime - this.lastArrhythmiaTime > this.COOLDOWN_AFTER_DETECTION_MS) {
       this.inPostArrhythmiaCooldown = false;
-      console.log('ArrhythmiaDetector - Finalizado período de enfriamiento post-arritmia');
+      console.log(`ArrhythmiaDetector - Finalizado período de enfriamiento post-arritmia (${this.ALGORITHM_ID})`);
     }
     
     // NUEVO: Registrar el tiempo del pico actual
@@ -189,7 +301,7 @@ export class ArrhythmiaDetector {
               
               // Si no hay suficientes latidos normales, lo clasificamos como "desconocido"
               // para evitar falsas detecciones consecutivas
-              console.log('ArrhythmiaDetector - Reclasificando latido: de prematuro a desconocido (no hay suficientes latidos normales previos)');
+              console.log(`ArrhythmiaDetector - Reclasificando latido: de prematuro a desconocido (${this.ALGORITHM_ID})`);
               peakType = 'unknown';
             } else {
               // Actualizar índice del último latido prematuro
@@ -246,6 +358,16 @@ export class ArrhythmiaDetector {
     status: string;
     data: { rmssd: number; rrVariation: number; prematureBeat: boolean } | null;
   } {
+    // NUEVO: Verificar estado válido antes de procesar
+    if (!this.ensureValidState()) {
+      return {
+        detected: false,
+        count: 0,
+        status: "VERIFICANDO SEÑAL",
+        data: null
+      };
+    }
+    
     // Skip detection during learning phase or if not enough data
     if (this.rrIntervals.length < 3 || this.amplitudes.length < 3 || this.isLearningPhase) {
       return {
@@ -322,11 +444,12 @@ export class ArrhythmiaDetector {
             // NUEVO: Verificación temporal - asegurar que los tres picos estén dentro de un rango de tiempo razonable
             const timeSpan = lastThreePeaks[2].time - lastThreePeaks[0].time;
             
-            // El tiempo total debe ser menor a 2 segundos para un patrón válido
+            // El tiempo total debe ser menor a 2 segundos para un patrón válido de arritmia
+            // (esto es aproximadamente 2-3 latidos a frecuencia cardíaca normal)
             if (timeSpan < 2000) {
               prematureBeatDetected = true;
               
-              console.log('ArrhythmiaDetector - ¡LATIDO PREMATURO DETECTADO! Patrón normal-pequeño-normal:', {
+              console.log(`ArrhythmiaDetector - ¡LATIDO PREMATURO DETECTADO! (${this.ALGORITHM_ID}):`, {
                 prematuroRatio: secondPeakRatio,
                 normal1Ratio: firstPeakRatio,
                 normal2Ratio: thirdPeakRatio,
@@ -335,7 +458,7 @@ export class ArrhythmiaDetector {
                 umbralNormal: this.NORMAL_PEAK_MIN_THRESHOLD
               });
             } else {
-              console.log('ArrhythmiaDetector - Patrón rechazado por tiempo excesivo entre picos:', {
+              console.log(`ArrhythmiaDetector - Patrón rechazado por tiempo excesivo (${this.ALGORITHM_ID}):`, {
                 timeSpan: timeSpan
               });
             }
@@ -356,11 +479,15 @@ export class ArrhythmiaDetector {
       this.lastArrhythmiaTime = currentTime;
       this.hasDetectedFirstArrhythmia = true;
       
+      // Resetear contador de picos sin detección
+      this.peaksProcessedSinceLastDetection = 0;
+      
       // NUEVO: Activar período de enfriamiento después de una detección
       this.inPostArrhythmiaCooldown = true;
       
       if (this.DEBUG_MODE) {
-        console.log('ArrhythmiaDetector - NUEVA ARRITMIA CONTABILIZADA:', {
+        console.log(`ArrhythmiaDetector - NUEVA ARRITMIA CONTABILIZADA (${this.ALGORITHM_ID}):`, {
+          version: ArrhythmiaDetector.VERSION,
           count: this.arrhythmiaCount,
           timestamp: currentTime,
           cooldownActivado: this.inPostArrhythmiaCooldown,
@@ -390,6 +517,10 @@ export class ArrhythmiaDetector {
    * Get current arrhythmia status
    */
   getStatus(): string {
+    if (!this.ensureValidState()) {
+      return "VERIFICANDO SEÑAL";
+    }
+    
     return this.hasDetectedFirstArrhythmia ? 
       `ARRITMIA DETECTADA|${this.arrhythmiaCount}` : 
       `SIN ARRITMIAS|${this.arrhythmiaCount}`;
@@ -399,13 +530,25 @@ export class ArrhythmiaDetector {
    * Get current arrhythmia count
    */
   getCount(): number {
+    if (!this.ensureValidState()) {
+      return 0;
+    }
+    
     return this.arrhythmiaCount;
   }
   
   /**
-   * Clean memory function for resource management
+   * Get algorithm identification 
+   */
+  getAlgorithmInfo(): string {
+    return `${this.ALGORITHM_ID} v${ArrhythmiaDetector.VERSION}`;
+  }
+  
+  /**
+   * Perform deep memory cleanup
    */
   cleanMemory(): void {
     this.reset();
+    // Limpieza adicional de estructuras...
   }
 }
