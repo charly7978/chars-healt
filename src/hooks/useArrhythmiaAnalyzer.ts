@@ -9,6 +9,8 @@ export const useArrhythmiaAnalyzer = () => {
   const ANALYSIS_WINDOW_SIZE = 10; // Análisis sobre 10 latidos consecutivos
   const ARRHYTHMIA_CONFIRMATION_THRESHOLD = 3; // Requiere confirmación en al menos 3 ciclos
   const MIN_TIME_BETWEEN_ARRHYTHMIAS = 1000; // Mínimo 1 segundo entre arritmias
+  const PREMATURE_BEAT_RATIO = 0.75; // Un latido prematuro es típicamente <= 75% del intervalo normal
+  const COMPENSATORY_PAUSE_RATIO = 1.15; // Una pausa compensatoria es >= 115% del intervalo normal
   
   // State and refs
   const [arrhythmiaCounter, setArrhythmiaCounter] = useState(0);
@@ -17,8 +19,11 @@ export const useArrhythmiaAnalyzer = () => {
   
   // Analysis buffers
   const rrIntervalsHistoryRef = useRef<number[][]>([]);
+  const amplitudesHistoryRef = useRef<number[][]>([]);
   const rmssdHistoryRef = useRef<number[]>([]);
   const rrVariationHistoryRef = useRef<number[]>([]);
+  const baselineRRIntervalRef = useRef<number>(0);
+  const baselineAmplitudeRef = useRef<number>(0);
   
   /**
    * Reset all analysis state
@@ -30,23 +35,102 @@ export const useArrhythmiaAnalyzer = () => {
     
     // Clear buffers
     rrIntervalsHistoryRef.current = [];
+    amplitudesHistoryRef.current = [];
     rmssdHistoryRef.current = [];
     rrVariationHistoryRef.current = [];
+    baselineRRIntervalRef.current = 0;
+    baselineAmplitudeRef.current = 0;
     
     console.log("Arrhythmia analyzer reset");
   }, []);
   
   /**
-   * Analyze RR intervals to detect arrhythmias based on medical algorithms
+   * Calculate baseline values from a stable period of measurements
    */
-  const analyzeArrhythmia = useCallback((intervals: number[]) => {
-    if (intervals.length < 4) return { detected: false, confidence: 0, rmssd: 0, rrVariation: 0 };
+  const calculateBaselines = useCallback((intervals: number[], amplitudes: number[] = []) => {
+    if (intervals.length < 5) return;
     
-    // Seleccionar últimos 4 intervalos para análisis (suficientes para detectar la mayoría de arritmias)
-    const recentIntervals = intervals.slice(-4);
+    // Use median to establish baseline RR to avoid outliers
+    const sortedRR = [...intervals].sort((a, b) => a - b);
+    baselineRRIntervalRef.current = sortedRR[Math.floor(sortedRR.length / 2)];
     
-    // 1. Calcular RMSSD (Root Mean Square of Successive Differences)
-    // Un indicador clave de la variabilidad de la frecuencia cardíaca
+    // If amplitudes available, calculate baseline
+    if (amplitudes.length >= 5) {
+      // Normal beats typically have higher amplitude than premature beats
+      // Sort amplitudes in descending order and take top 70% as normal
+      const sortedAmplitudes = [...amplitudes].sort((a, b) => b - a);
+      const normalBeatsCount = Math.ceil(sortedAmplitudes.length * 0.7);
+      const normalAmplitudes = sortedAmplitudes.slice(0, normalBeatsCount);
+      baselineAmplitudeRef.current = normalAmplitudes.reduce((a, b) => a + b, 0) / normalAmplitudes.length;
+    }
+  }, []);
+  
+  /**
+   * Analyze RR intervals to detect premature beats (arrhythmias)
+   */
+  const analyzeArrhythmia = useCallback((intervals: number[], amplitudes: number[] = []) => {
+    if (intervals.length < 3) {
+      return { detected: false, confidence: 0, prematureBeat: false };
+    }
+    
+    // If we don't have a baseline yet, calculate it
+    if (baselineRRIntervalRef.current === 0 && intervals.length >= 5) {
+      calculateBaselines(intervals, amplitudes);
+    }
+    
+    // 1. Look for premature beat pattern (short RR followed by compensatory pause)
+    let prematureBeatConfidence = 0;
+    let prematureBeatDetected = false;
+    
+    // Get the most recent intervals and amplitudes
+    const recentIntervals = intervals.slice(-3);
+    const recentAmplitudes = amplitudes.slice(-3);
+    
+    if (recentIntervals.length >= 3 && baselineRRIntervalRef.current > 0) {
+      // RR-interval pattern for premature beats:
+      // Normal - Short - Compensatory Pause
+      const normal = recentIntervals[0];
+      const premature = recentIntervals[1];
+      const compensatory = recentIntervals[2];
+      
+      // Check if the pattern matches typical premature beat characteristics
+      const isShortInterval = premature < normal * PREMATURE_BEAT_RATIO;
+      const isCompensatoryPause = compensatory > normal * COMPENSATORY_PAUSE_RATIO;
+      
+      // Additional confidence if we have amplitude data (premature beats often have lower amplitude)
+      let amplitudeEvidence = 0;
+      if (recentAmplitudes.length >= 3 && baselineAmplitudeRef.current > 0) {
+        const normalAmp = recentAmplitudes[0];
+        const prematureAmp = recentAmplitudes[1];
+        
+        // Premature beats typically have lower amplitude than normal beats
+        if (prematureAmp < normalAmp * 0.7) {
+          amplitudeEvidence = 0.3;  // Add 30% confidence if amplitude is significantly lower
+        }
+      }
+      
+      // Calculate confidence based on timing pattern
+      if (isShortInterval && isCompensatoryPause) {
+        prematureBeatConfidence = 0.7 + amplitudeEvidence;
+        
+        // Strong evidence of a premature beat
+        if (prematureBeatConfidence >= 0.75) {
+          prematureBeatDetected = true;
+          
+          console.log('Premature beat detected:', {
+            normal,
+            premature,
+            compensatory,
+            normalToPrematuredRatio: premature / normal,
+            normalToCompensatoryRatio: compensatory / normal,
+            amplitudeEvidence,
+            confidence: prematureBeatConfidence
+          });
+        }
+      }
+    }
+    
+    // 2. Calculate RMSSD (traditional variability metric) as a backup
     let sumSquaredDiff = 0;
     for (let i = 1; i < recentIntervals.length; i++) {
       const diff = recentIntervals[i] - recentIntervals[i-1];
@@ -54,97 +138,41 @@ export const useArrhythmiaAnalyzer = () => {
     }
     const rmssd = Math.sqrt(sumSquaredDiff / (recentIntervals.length - 1));
     
-    // 2. Calcular variación porcentual de intervalos RR
+    // 3. Calculate average RR interval and its coefficient of variation
     const avgRR = recentIntervals.reduce((a, b) => a + b, 0) / recentIntervals.length;
-    // Tomar el último intervalo R-R para compararlo con el promedio
-    const lastRR = recentIntervals[recentIntervals.length - 1];
-    const rrVariation = Math.abs(lastRR - avgRR) / avgRR;
-    
-    // 3. Calcular Índice de Arritmia basado en el coeficiente de variación
     const rrStandardDeviation = Math.sqrt(
       recentIntervals.reduce((sum, rr) => sum + Math.pow(rr - avgRR, 2), 0) / recentIntervals.length
     );
     const coefficientOfVariation = rrStandardDeviation / avgRR;
     
-    // 4. Calcular Poincaré SD1 (variabilidad a corto plazo)
-    let sd1Sum = 0;
-    for (let i = 0; i < recentIntervals.length - 1; i++) {
-      const x1 = recentIntervals[i];
-      const x2 = recentIntervals[i + 1];
-      sd1Sum += Math.pow((x2 - x1) / Math.sqrt(2), 2);
-    }
-    const sd1 = Math.sqrt(sd1Sum / (recentIntervals.length - 1));
-    
-    // 5. Buscar presencia de latidos ectópicos (significativamente diferentes)
-    const ectopicBeatDetected = recentIntervals.some(interval => 
-      Math.abs(interval - avgRR) > (avgRR * 0.40) // 40% de diferencia es indicativo de latido ectópico
-    );
-    
-    // 6. Algoritmo avanzado para detección de arritmias combinando múltiples indicadores
-    // Criterios basados en literatura médica para arritmias cardíacas
-    let arrhythmiaConfidence = 
-      (rmssd > 50 ? 0.35 : 0) +                    // Alta RMSSD
-      (rrVariation > 0.2 ? 0.25 : 0) +             // Alta variación RR
-      (coefficientOfVariation > 0.15 ? 0.20 : 0) + // Alto coeficiente de variación
-      (sd1 > 30 ? 0.10 : 0) +                      // Alta variabilidad a corto plazo
-      (ectopicBeatDetected ? 0.10 : 0);            // Presencia de latidos ectópicos
-    
-    // Guardar datos para análisis de tendencias
-    rrIntervalsHistoryRef.current.push(recentIntervals);
-    if (rrIntervalsHistoryRef.current.length > ANALYSIS_WINDOW_SIZE) {
-      rrIntervalsHistoryRef.current.shift();
-    }
-    
+    // Store data for trend analysis
     rmssdHistoryRef.current.push(rmssd);
     if (rmssdHistoryRef.current.length > ANALYSIS_WINDOW_SIZE) {
       rmssdHistoryRef.current.shift();
     }
     
-    rrVariationHistoryRef.current.push(rrVariation);
+    rrVariationHistoryRef.current.push(coefficientOfVariation);
     if (rrVariationHistoryRef.current.length > ANALYSIS_WINDOW_SIZE) {
       rrVariationHistoryRef.current.shift();
     }
     
-    // Análisis de tendencias para confirmar arritmias y reducir falsos positivos
-    let confirmedArrhythmia = arrhythmiaConfidence >= 0.70; // Alta confianza en detección inmediata
-    
-    // Si no está confirmado por alta confianza, verificar persistencia en ventana de análisis
-    if (!confirmedArrhythmia && rmssdHistoryRef.current.length >= 3) {
-      // Contar cuántos de los últimos análisis mostraron alta RMSSD y variación RR
-      let confirmationCount = 0;
-      for (let i = 1; i <= Math.min(ARRHYTHMIA_CONFIRMATION_THRESHOLD, rmssdHistoryRef.current.length); i++) {
-        const historicIndex = rmssdHistoryRef.current.length - i;
-        if (historicIndex >= 0 && 
-            rmssdHistoryRef.current[historicIndex] > 40 && 
-            rrVariationHistoryRef.current[historicIndex] > 0.18) {
-          confirmationCount++;
-        }
-      }
-      
-      // Confirmar arritmia si hay suficientes ciclos que la respaldan
-      if (confirmationCount >= ARRHYTHMIA_CONFIRMATION_THRESHOLD - 1) {
-        confirmedArrhythmia = true;
-        // Ajustar confianza basada en persistencia
-        arrhythmiaConfidence = Math.max(arrhythmiaConfidence, 0.65);
-      }
-    }
-    
     return {
-      detected: confirmedArrhythmia,
-      confidence: arrhythmiaConfidence,
+      detected: prematureBeatDetected,
+      confidence: prematureBeatConfidence,
+      prematureBeat: prematureBeatDetected,
       rmssd,
-      rrVariation
+      rrVariation: coefficientOfVariation
     };
-  }, []);
+  }, [calculateBaselines]);
   
   /**
    * Process new RR interval data and update arrhythmia state
    */
   const processArrhythmia = useCallback((
-    rrData: { intervals: number[], lastPeakTime: number | null },
+    rrData: { intervals: number[], lastPeakTime: number | null, amplitudes?: number[] },
     maxArrhythmias: number = 15
   ) => {
-    if (!rrData?.intervals || rrData.intervals.length < 4) {
+    if (!rrData?.intervals || rrData.intervals.length < 3) {
       return {
         detected: false,
         arrhythmiaStatus: hasDetectedArrhythmia.current 
@@ -154,11 +182,29 @@ export const useArrhythmiaAnalyzer = () => {
       };
     }
     
-    const currentTime = Date.now();
-    const arrhythmiaAnalysis = analyzeArrhythmia(rrData.intervals);
+    // Store interval history for trend analysis
+    rrIntervalsHistoryRef.current.push([...rrData.intervals]);
+    if (rrIntervalsHistoryRef.current.length > ANALYSIS_WINDOW_SIZE) {
+      rrIntervalsHistoryRef.current.shift();
+    }
     
+    // Store amplitude history if available
+    if (rrData.amplitudes && rrData.amplitudes.length > 0) {
+      amplitudesHistoryRef.current.push([...rrData.amplitudes]);
+      if (amplitudesHistoryRef.current.length > ANALYSIS_WINDOW_SIZE) {
+        amplitudesHistoryRef.current.shift();
+      }
+    }
+    
+    const currentTime = Date.now();
+    const arrhythmiaAnalysis = analyzeArrhythmia(
+      rrData.intervals, 
+      rrData.amplitudes || []
+    );
+    
+    // If a premature beat is detected and enough time has passed since the last one
     if (arrhythmiaAnalysis.detected && 
-        arrhythmiaAnalysis.confidence >= 0.65 && 
+        arrhythmiaAnalysis.confidence >= 0.75 && 
         currentTime - lastArrhythmiaTime.current >= MIN_TIME_BETWEEN_ARRHYTHMIAS &&
         arrhythmiaCounter < maxArrhythmias) {
       
@@ -166,11 +212,12 @@ export const useArrhythmiaAnalyzer = () => {
       setArrhythmiaCounter(prev => prev + 1);
       lastArrhythmiaTime.current = currentTime;
       
-      console.log("Arritmia detectada:", {
+      console.log("Arritmia (latido prematuro) detectada:", {
         rmssd: arrhythmiaAnalysis.rmssd,
         rrVariation: arrhythmiaAnalysis.rrVariation,
         confidence: arrhythmiaAnalysis.confidence,
-        intervals: rrData.intervals.slice(-4),
+        intervals: rrData.intervals.slice(-3),
+        amplitudes: rrData.amplitudes?.slice(-3) || [],
         counter: arrhythmiaCounter + 1
       });
 
@@ -180,12 +227,13 @@ export const useArrhythmiaAnalyzer = () => {
         lastArrhythmiaData: {
           timestamp: currentTime,
           rmssd: arrhythmiaAnalysis.rmssd,
-          rrVariation: arrhythmiaAnalysis.rrVariation
+          rrVariation: arrhythmiaAnalysis.rrVariation,
+          isPrematureBeat: true
         }
       };
     }
     
-    // Si ya detectamos una arritmia antes, mantenemos el estado
+    // If we've already detected an arrhythmia, maintain the count in status
     if (hasDetectedArrhythmia.current) {
       return {
         detected: false,
