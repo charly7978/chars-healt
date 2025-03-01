@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -502,7 +501,6 @@ const Index = () => {
           isFingerDetected={isMonitoring ? lastSignal?.fingerDetected : false}
           signalQuality={isMonitoring ? signalQuality : 0}
         />
-        {/* Capa transparente al 80% para la ventana de previsualización */}
         <div 
           className="absolute inset-0" 
           style={{ 
@@ -524,7 +522,6 @@ const Index = () => {
         />
       </div>
 
-      {/* El resto del código permanece igual */}
       <div className="absolute z-20" style={{ bottom: '65px', left: 0, right: 0, padding: '0 12px' }}>
         <div className="p-2 rounded-lg">
           <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
