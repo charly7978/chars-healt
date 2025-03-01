@@ -419,7 +419,11 @@ const Index = () => {
             allHeartRateValuesRef.current.push(heartBeatResult.bpm);
           }
           
-          const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
+          const vitals = processVitalSigns(
+            lastSignal.filteredValue, 
+            heartBeatResult.rrData
+          );
+          
           if (vitals) {
             if (vitals.spo2 > 0) {
               setVitalSigns(current => ({

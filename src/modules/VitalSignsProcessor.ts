@@ -31,7 +31,11 @@ export class VitalSignsProcessor {
    */
   public processSignal(
     ppgValue: number,
-    rrData?: { intervals: number[]; lastPeakTime: number | null }
+    rrData?: { 
+      intervals: number[]; 
+      lastPeakTime: number | null;
+      amplitude?: number; // Añadir parámetro opcional para amplitud del pico
+    }
   ) {
     const currentTime = Date.now();
 
@@ -44,7 +48,13 @@ export class VitalSignsProcessor {
       });
       
       if (validIntervals.length > 0) {
-        this.arrhythmiaDetector.updateIntervals(validIntervals, rrData.lastPeakTime);
+        // IMPORTANTE: Ahora pasamos también la amplitud del pico al detector
+        this.arrhythmiaDetector.updateIntervals(
+          validIntervals, 
+          rrData.lastPeakTime,
+          // Si tenemos amplitud explícita la usamos, sino el valor PPG
+          rrData.amplitude !== undefined ? rrData.amplitude : ppgValue
+        );
       }
     }
 

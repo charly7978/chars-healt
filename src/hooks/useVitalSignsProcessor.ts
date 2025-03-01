@@ -1,6 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
 import { VitalSignsProcessor } from '../modules/VitalSignsProcessor';
-import { useArrhythmiaAnalyzer } from './useArrhythmiaAnalyzer';
 import { createBloodPressureStabilizer } from '../utils/bloodPressureStabilizer';
 import { createVitalSignsDataCollector } from '../utils/vitalSignsDataCollector';
 import { useSignalHistory } from './useSignalHistory';
@@ -11,13 +10,13 @@ export const useVitalSignsProcessor = () => {
   const processorRef = useRef<VitalSignsProcessor | null>(null);
   
   // Specialized modules
-  const arrhythmiaAnalyzer = useArrhythmiaAnalyzer();
   const bloodPressureStabilizer = useRef(createBloodPressureStabilizer());
   const dataCollector = useRef(createVitalSignsDataCollector());
   const signalHistory = useSignalHistory();
   
-  // Constants
-  const MAX_ARRHYTHMIAS_PER_SESSION = 15; // Máximo razonable para 30 segundos
+  // Estado para trackear la última detección de arritmia
+  const lastArrhythmiaStatusRef = useRef<string>("SIN ARRITMIAS|0");
+  const lastArrhythmiaDataRef = useRef<any>(null);
   
   /**
    * Lazy initialization of the VitalSignsProcessor
@@ -33,7 +32,7 @@ export const useVitalSignsProcessor = () => {
   /**
    * Process a new signal value and update all vitals
    */
-  const processSignal = useCallback((value: number, rrData?: { intervals: number[], lastPeakTime: number | null }) => {
+  const processSignal = useCallback((value: number, rrData?: { intervals: number[], lastPeakTime: number | null, amplitude?: number }) => {
     const processor = getProcessor();
     const currentTime = Date.now();
     
@@ -60,8 +59,15 @@ export const useVitalSignsProcessor = () => {
       }
     }
     
-    // Get base results from the core processor
-    const result = processor.processSignal(value, rrData);
+    // Get base results from the core processor - asegurando que pasamos tanto los intervalos como la amplitud
+    const result = processor.processSignal(
+      value, 
+      rrData ? {
+        intervals: rrData.intervals || [],
+        lastPeakTime: rrData.lastPeakTime,
+        amplitude: rrData.amplitude || value // Si no tenemos amplitud específica, usamos el valor actual
+      } : undefined
+    );
     
     // Stabilize blood pressure
     const signalQuality = signalHistory.getSignalQuality();
@@ -76,53 +82,54 @@ export const useVitalSignsProcessor = () => {
       dataCollector.current.addBloodPressure(stabilizedBP);
     }
     
-    // Advanced arrhythmia analysis
-    if (rrData?.intervals && rrData.intervals.length >= 4) {
-      const arrhythmiaResult = arrhythmiaAnalyzer.processArrhythmia(rrData, MAX_ARRHYTHMIAS_PER_SESSION);
-      
-      if (arrhythmiaResult.detected) {
-        return {
-          spo2: result.spo2,
-          pressure: stabilizedBP,
-          arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus,
-          lastArrhythmiaData: arrhythmiaResult.lastArrhythmiaData
-        };
-      }
-      
-      return {
-        spo2: result.spo2,
-        pressure: stabilizedBP,
-        arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus
-      };
+    // Actualizar referencias de estado de arritmias
+    if (result.arrhythmiaStatus) {
+      lastArrhythmiaStatusRef.current = result.arrhythmiaStatus;
     }
     
-    // If we already analyzed arrhythmias before, use the latest status
-    const arrhythmiaStatus = `SIN ARRITMIAS|${arrhythmiaAnalyzer.arrhythmiaCounter}`;
+    if (result.lastArrhythmiaData) {
+      lastArrhythmiaDataRef.current = result.lastArrhythmiaData;
+    }
     
+    // Devolver los resultados completos, incluyendo datos de arritmia del procesador central
     return {
       spo2: result.spo2,
       pressure: stabilizedBP,
-      arrhythmiaStatus
+      arrhythmiaStatus: result.arrhythmiaStatus || lastArrhythmiaStatusRef.current,
+      lastArrhythmiaData: result.lastArrhythmiaData || lastArrhythmiaDataRef.current
     };
-  }, [getProcessor, arrhythmiaAnalyzer, signalHistory]);
+  }, [getProcessor, signalHistory]);
 
   /**
    * Reset all processors and data
    */
   const reset = useCallback(() => {
+    console.log("useVitalSignsProcessor: Reset iniciado");
+    
+    // Reset main processor
     if (processorRef.current) {
-      processorRef.current.reset();
+      try {
+        processorRef.current.reset();
+      } catch (err) {
+        console.error("useVitalSignsProcessor: Error al resetear procesador, creando nueva instancia", err);
+        processorRef.current = new VitalSignsProcessor();
+      }
+    } else {
+      processorRef.current = new VitalSignsProcessor();
     }
     
     // Reset all specialized modules
-    arrhythmiaAnalyzer.reset();
     bloodPressureStabilizer.current.reset();
     dataCollector.current.reset();
     signalHistory.reset();
     VitalSignsRisk.resetHistory();
     
-    console.log("Reseteo de detección de arritmias y presión arterial");
-  }, [arrhythmiaAnalyzer, signalHistory]);
+    // Reset arrhythmia tracking
+    lastArrhythmiaStatusRef.current = "SIN ARRITMIAS|0";
+    lastArrhythmiaDataRef.current = null;
+    
+    console.log("useVitalSignsProcessor: Reset completo");
+  }, [signalHistory]);
   
   /**
    * Aggressive memory cleanup
@@ -130,18 +137,17 @@ export const useVitalSignsProcessor = () => {
   const cleanMemory = useCallback(() => {
     console.log("useVitalSignsProcessor: Limpieza agresiva de memoria");
     
-    // Destroy current processor and create a new one
-    if (processorRef.current) {
-      processorRef.current.reset();
-      processorRef.current = new VitalSignsProcessor();
-    }
+    // First reset all state
+    reset();
     
-    // Reset all specialized modules
-    arrhythmiaAnalyzer.reset();
-    bloodPressureStabilizer.current.reset();
-    dataCollector.current.reset();
-    signalHistory.reset();
-    VitalSignsRisk.resetHistory();
+    // Then destroy and recreate everything
+    processorRef.current = new VitalSignsProcessor();
+    bloodPressureStabilizer.current = createBloodPressureStabilizer();
+    dataCollector.current = createVitalSignsDataCollector();
+    
+    // Reset arrhythmia tracking
+    lastArrhythmiaStatusRef.current = "SIN ARRITMIAS|0";
+    lastArrhythmiaDataRef.current = null;
     
     // Force garbage collection if available
     if (window.gc) {
@@ -151,13 +157,26 @@ export const useVitalSignsProcessor = () => {
         console.log("GC no disponible en este entorno");
       }
     }
-  }, [arrhythmiaAnalyzer, signalHistory]);
+    
+    console.log("useVitalSignsProcessor: Limpieza de memoria completada");
+  }, [reset]);
+
+  // Extraer contador de arritmias del estado actual
+  const getArrhythmiaCounter = useCallback(() => {
+    const status = lastArrhythmiaStatusRef.current;
+    const parts = status.split('|');
+    if (parts.length > 1) {
+      const count = parseInt(parts[1], 10);
+      return isNaN(count) ? 0 : count;
+    }
+    return 0;
+  }, []);
 
   return {
     processSignal,
     reset,
     cleanMemory,
-    arrhythmiaCounter: arrhythmiaAnalyzer.arrhythmiaCounter,
+    arrhythmiaCounter: getArrhythmiaCounter(),
     dataCollector: dataCollector.current
   };
 };
