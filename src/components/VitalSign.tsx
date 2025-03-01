@@ -1,3 +1,4 @@
+
 import React, { memo, useMemo } from 'react';
 import { VitalSignsRisk } from '../utils/vitalSignsRisk';
 
@@ -131,23 +132,22 @@ const VitalSign: React.FC<VitalSignProps> = memo(({ label, value, unit, isFinalR
 
   return (
     <div className="relative overflow-hidden rounded-xl shadow-lg p-2">
-      {/* Nueva capa de fondo con efecto de cristal que cubre toda la ventana */}
-      <div className="fixed inset-0 -z-10">
+      {/* Capa transparente ajustada al 70% de opacidad y posicionada solo en el componente */}
+      <div className="absolute inset-0 rounded-xl overflow-hidden">
         <div 
-          className="absolute inset-0 bg-gradient-to-br from-black/80 to-[#061629]/95"
-          style={{ backdropFilter: 'blur(15px)' }}
+          className="absolute inset-0 bg-gradient-to-br from-black/60 to-[#061629]/70 backdrop-blur-md"
         />
         <div 
           className="absolute inset-0"
           style={{ 
-            backgroundImage: "radial-gradient(circle at top right, rgba(13, 148, 218, 0.1), transparent 80%)",
-            mixBlendMode: 'overlay' 
+            backgroundImage: "radial-gradient(circle at top right, rgba(13, 148, 218, 0.1), transparent 60%)",
+            mixBlendMode: 'overlay',
+            opacity: 0.7
           }}
         />
       </div>
       
-      {/* Fondo local del componente */}
-      <div className="absolute inset-0 bg-gradient-to-r from-[#0D1C2E]/80 to-[#061629]/80 backdrop-blur-md" />
+      {/* Bordes y efectos sutiles del componente */}
       <div className="absolute inset-0 border border-[#D3E4FD]/20 rounded-xl" />
       <div className="absolute inset-0 bg-gradient-to-br from-transparent to-blue-900/5" />
       
