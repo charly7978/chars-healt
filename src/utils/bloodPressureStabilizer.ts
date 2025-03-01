@@ -1,16 +1,16 @@
 
 /**
- * Utility for minimal blood pressure stabilization
+ * Utility for blood pressure processing without any fixed values
  */
 export const createBloodPressureStabilizer = () => {
   // Buffer para estabilizar la medición de presión arterial
   const bpHistoryRef: string[] = [];
   const bpQualityRef: number[] = [];
-  let lastValidBpRef: string = "120/80";
+  let lastValidBpRef: string = "";
   
-  // Constantes
-  const BP_BUFFER_SIZE = 4; // Reduced buffer size for faster updates
-  const SMOOTHING_FACTOR = 0.15; // Reduced for more direct readings
+  // Constantes - Reducidas para permitir más variación natural
+  const BP_BUFFER_SIZE = 2; // Reducido drásticamente para mostrar cambios en tiempo real
+  const SMOOTHING_FACTOR = 0.05; // Casi sin suavizado para mostrar lecturas directas
   
   /**
    * Reset stabilizer state
@@ -18,11 +18,12 @@ export const createBloodPressureStabilizer = () => {
   const reset = () => {
     bpHistoryRef.length = 0;
     bpQualityRef.length = 0;
-    lastValidBpRef = "120/80";
+    lastValidBpRef = "";
   };
   
   /**
-   * Check if blood pressure is unrealistic
+   * Check if blood pressure is physiologically impossible
+   * Sólo filtra valores médicamente imposibles, muestra todo lo demás
    */
   const isBloodPressureUnrealistic = (rawBP: string): boolean => {
     // No procesar valores vacíos o placeholders
@@ -35,10 +36,11 @@ export const createBloodPressureStabilizer = () => {
     const systolic = parseInt(bpParts[0], 10);
     const diastolic = parseInt(bpParts[1], 10);
     
-    // Only filter extreme physiological limits
+    // Sólo filtrar valores fisiológicamente imposibles
+    // Rangos extremadamente amplios para permitir cualquier lectura real
     if (isNaN(systolic) || isNaN(diastolic) ||
-        systolic > 300 || systolic < 40 ||
-        diastolic > 220 || diastolic < 20 ||
+        systolic > 300 || systolic < 30 ||
+        diastolic > 250 || diastolic < 15 ||
         systolic <= diastolic) {
       return true;
     }
@@ -47,7 +49,7 @@ export const createBloodPressureStabilizer = () => {
   };
   
   /**
-   * Stabilize blood pressure reading with minimal interference
+   * Process blood pressure with minimal interference - muestra directamente los valores
    */
   const stabilizeBloodPressure = (rawBP: string, quality: number): string => {
     // No procesar valores vacíos o placeholders
@@ -55,55 +57,34 @@ export const createBloodPressureStabilizer = () => {
     
     // Verificar que el formato sea correcto
     const bpParts = rawBP.split('/');
-    if (bpParts.length !== 2) return lastValidBpRef || "120/80";
+    if (bpParts.length !== 2) return lastValidBpRef || "--/--";
     
     const systolic = parseInt(bpParts[0], 10);
     const diastolic = parseInt(bpParts[1], 10);
     
-    // Filtrar solo valores médicamente imposibles
+    // Mostrar directamente los valores si son medicamente posibles
     if (isBloodPressureUnrealistic(rawBP)) {
-      return lastValidBpRef || "120/80";
+      return lastValidBpRef || "--/--";
     }
     
-    // Añadir al historial de mediciones
-    bpHistoryRef.push(rawBP);
+    // Mostrar la lectura actual directamente para valores válidos
+    const directBP = `${systolic}/${diastolic}`;
+    
+    // Añadir al historial con mínimo filtrado
+    bpHistoryRef.push(directBP);
     bpQualityRef.push(quality);
     
-    // Mantener buffer de tamaño limitado
+    // Mantener buffer pequeño para respuesta rápida
     if (bpHistoryRef.length > BP_BUFFER_SIZE) {
       bpHistoryRef.shift();
       bpQualityRef.shift();
     }
     
-    // Si no tenemos suficientes mediciones, usar la actual si es válida
-    if (bpHistoryRef.length < 2) {
-      lastValidBpRef = rawBP;
-      return rawBP;
-    }
+    // Actualizar último valor válido
+    lastValidBpRef = directBP;
     
-    // Apply minimal smoothing for stability without distorting measurements
-    const lastBpParts = lastValidBpRef.split('/').map(Number);
-    const lastSystolic = lastBpParts[0] || 120;
-    const lastDiastolic = lastBpParts[1] || 80;
-    
-    // Apply minimal smoothing to allow natural fluctuations
-    const smoothedSystolic = Math.round(
-      lastSystolic * SMOOTHING_FACTOR + systolic * (1 - SMOOTHING_FACTOR)
-    );
-    
-    const smoothedDiastolic = Math.round(
-      lastDiastolic * SMOOTHING_FACTOR + diastolic * (1 - SMOOTHING_FACTOR)
-    );
-    
-    // Ensure systolic > diastolic by at least 20 mmHg
-    const minGap = 20;
-    const adjustedDiastolic = Math.min(smoothedDiastolic, smoothedSystolic - minGap);
-    
-    // Create minimally stabilized BP
-    const stabilizedBP = `${smoothedSystolic}/${adjustedDiastolic}`;
-    lastValidBpRef = stabilizedBP;
-    
-    return stabilizedBP;
+    // Devolver directamente la lectura
+    return directBP;
   };
   
   return {
