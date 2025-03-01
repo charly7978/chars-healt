@@ -1,71 +1,105 @@
+// Web worker for offloading intensive signal processing
 
-// Signal Processing Web Worker
-// Handles intensive calculations outside the main thread
+// Signal processing worker designed to handle calculation-intensive tasks
 
-// Cache for repetitive calculations
-const calculationCache: Record<string, number> = {};
+// Constants for signal processing
+const CACHE_SIZE = 20;
 
-// Function to process signal with caching
-function processSignalWithCache(signal: number, timestamp: number): { 
-  processedValue: number, 
-  peaks: number[], 
-  valleys: number[] 
-} {
-  // Generate cache key based on signal value (rounded to 1 decimal place for better cache hits)
-  const cacheKey = `${Math.round(signal * 10) / 10}`;
-  
-  // Check if we have a cached result
-  if (calculationCache[cacheKey] !== undefined) {
-    return {
-      processedValue: calculationCache[cacheKey],
-      peaks: [],
-      valleys: []
-    };
-  }
-  
-  // Simulate intensive calculation (actual algorithm would go here)
-  const processedValue = Math.sin(signal * 0.1) * 50 + signal;
-  
-  // Store in cache
-  calculationCache[cacheKey] = processedValue;
-  
-  // Limit cache size to prevent memory issues
-  const cacheKeys = Object.keys(calculationCache);
-  if (cacheKeys.length > 1000) {
-    // Remove oldest entries when cache gets too large
-    const oldestKeys = cacheKeys.slice(0, 100);
-    oldestKeys.forEach(key => {
-      delete calculationCache[key];
-    });
-  }
-  
-  return {
-    processedValue,
-    peaks: [],
-    valleys: []
-  };
-}
-
-// Message handler
-self.onmessage = (e: MessageEvent) => {
-  if (e.data.type === 'process') {
-    const result = processSignalWithCache(e.data.signal, e.data.timestamp);
-    self.postMessage({
-      type: 'result',
-      processedValue: result.processedValue,
-      originalSignal: e.data.signal,
-      timestamp: e.data.timestamp,
-      peaks: result.peaks,
-      valleys: result.valleys
-    });
-  } else if (e.data.type === 'clear-cache') {
-    // Clear cache on request
-    Object.keys(calculationCache).forEach(key => {
-      delete calculationCache[key];
-    });
-    self.postMessage({ type: 'cache-cleared' });
-  }
+// Cache structure to avoid recalculating same values
+type CacheItem = {
+  input: any;
+  result: any;
+  timestamp: number;
 };
 
-// Export empty object to satisfy TypeScript module requirements
-export {};
+// Keep a simple LRU cache
+const calculationCache: CacheItem[] = [];
+
+// Process raw signal data
+function processSignalData(data: number[], params: any) {
+  // Example processing function that could be computationally intensive
+  // In a real implementation, this would contain complex algorithms
+  const result = {
+    min: Math.min(...data),
+    max: Math.max(...data),
+    mean: data.reduce((sum, val) => sum + val, 0) / data.length,
+    processed: data.map(val => Math.sqrt(Math.abs(val))),
+    timestamp: Date.now()
+  };
+  
+  return result;
+}
+
+// Find cached result for input if available
+function findCachedResult(input: any): any | null {
+  const stringifiedInput = JSON.stringify(input);
+  
+  for (const item of calculationCache) {
+    if (JSON.stringify(item.input) === stringifiedInput) {
+      return item.result;
+    }
+  }
+  
+  return null;
+}
+
+// Add result to cache
+function cacheResult(input: any, result: any): void {
+  // Remove oldest cache item if cache is full
+  if (calculationCache.length >= CACHE_SIZE) {
+    calculationCache.shift();
+  }
+  
+  calculationCache.push({
+    input,
+    result,
+    timestamp: Date.now()
+  });
+}
+
+// Clear cache
+function clearCache(): void {
+  calculationCache.length = 0;
+}
+
+// Main message handler
+self.onmessage = (event) => {
+  const { type, data, params, timestamp } = event.data;
+  
+  switch (type) {
+    case 'process-signal':
+      // Check if we have a cached result
+      const cachedResult = findCachedResult({ data, params });
+      
+      if (cachedResult) {
+        // Return cached result if available
+        self.postMessage({ 
+          type: 'result', 
+          result: cachedResult,
+          fromCache: true,
+          timestamp 
+        });
+      } else {
+        // Process data and cache result
+        const result = processSignalData(data, params);
+        cacheResult({ data, params }, result);
+        
+        self.postMessage({ 
+          type: 'result', 
+          result,
+          fromCache: false,
+          timestamp 
+        });
+      }
+      break;
+      
+    case 'clear-cache':
+      // Clear the calculation cache
+      clearCache();
+      self.postMessage({ type: 'cache-cleared' });
+      break;
+      
+    default:
+      console.error('Unknown message type:', type);
+  }
+};

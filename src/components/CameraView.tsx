@@ -11,21 +11,22 @@ interface CameraViewProps {
 
 // Define custom interface extending the standard definitions
 interface ExtendedMediaTrackCapabilities extends MediaTrackCapabilities {
-  exposureTime?: {
-    min: number;
-    max: number;
-    step: number;
-  };
-  zoom?: {
-    min: number;
-    max: number;
-    step: number;
-  };
+  // Note: These are commented out as they aren't standard and cause TypeScript errors
+  // exposureTime?: {
+  //   min: number;
+  //   max: number;
+  //   step: number;
+  // };
+  // zoom?: {
+  //   min: number;
+  //   max: number;
+  //   step: number;
+  // };
 }
 
 interface ExtendedMediaTrackConstraints extends MediaTrackConstraints {
-  exposureTime?: number;
-  zoom?: number;
+  // exposureTime?: number;
+  // zoom?: number;
 }
 
 const CameraView = ({
@@ -224,17 +225,7 @@ const CameraView = ({
               settings.exposureMode = 'continuous';
             }
             
-            // Skip exposureTime setting as it's not standard
-            /* 
-            if (capabilities.exposureTime) {
-              // Set a moderate exposure time for better performance
-              const min = capabilities.exposureTime.min || 0;
-              const max = capabilities.exposureTime.max || 10000;
-              if (min < max) {
-                settings.exposureTime = Math.min(Math.max(min + (max - min) * 0.3, min), max);
-              }
-            }
-            */
+            // Removed non-standard exposureTime setting
             
             if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
               settings.focusMode = 'continuous';
@@ -244,17 +235,7 @@ const CameraView = ({
               settings.whiteBalanceMode = 'continuous';
             }
             
-            // Skip zoom setting as it's not standard
-            /*
-            if (capabilities.zoom) {
-              // Apply a slight zoom to focus on the center
-              const min = capabilities.zoom.min || 1;
-              const max = capabilities.zoom.max || 1;
-              if (max > min) {
-                settings.zoom = Math.min(min + (max - min) * 0.1, max);
-              }
-            }
-            */
+            // Removed non-standard zoom setting
             
             if (Object.keys(settings).length > 0) {
               await videoTrack.applyConstraints(settings);
