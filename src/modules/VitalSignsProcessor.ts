@@ -7,7 +7,7 @@ export class VitalSignsProcessor {
   private readonly WINDOW_SIZE = 300;
   private ppgValues: number[] = [];
   private readonly SMA_WINDOW = 2; // Reduced for faster response
-  private readonly BPM_SMOOTHING_ALPHA = 0.08; // Reduced for more direct readings
+  private readonly BPM_SMOOTHING_ALPHA = 0.15; // Incrementado para estabilizar lecturas
   private lastBPM: number = 0;
   
   // Specialized modules for each vital sign
@@ -64,13 +64,13 @@ export class VitalSignsProcessor {
 
     // Calculate vital signs with minimal window
     let bp;
-    if (this.ppgValues.length >= 30) {
-      bp = this.bpCalculator.calculate(this.ppgValues.slice(-30));
+    if (this.ppgValues.length >= 50) { // Incrementado para asegurar datos suficientes
+      bp = this.bpCalculator.calculate(this.ppgValues.slice(-50));
     } else {
       bp = { systolic: 0, diastolic: 0 };
     }
 
-    const pressure = bp.systolic > 0 && bp.diastolic > 0 ? `${bp.systolic}/${bp.diastolic}` : this.bpCalculator.getLastValidPressure();
+    const pressure = bp.systolic > 0 && bp.diastolic > 0 ? `${bp.systolic}/${bp.diastolic}` : 'EVALUANDO';
     const spo2 = this.spO2Calculator.calculate(this.ppgValues.slice(-30));
 
     // Prepare arrhythmia data if detected
@@ -79,6 +79,9 @@ export class VitalSignsProcessor {
       rmssd: arrhythmiaResult.data?.rmssd || 0,
       rrVariation: arrhythmiaResult.data?.rrVariation || 0
     } : null;
+
+    // Ajustar sensibilidad del detector de arritmias
+    this.arrhythmiaDetector.setSensitivity(0.75); // Reducir sensibilidad para menos falsos positivos
 
     return {
       spo2,

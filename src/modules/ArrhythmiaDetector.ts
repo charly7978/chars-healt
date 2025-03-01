@@ -1,8 +1,7 @@
-
 export class ArrhythmiaDetector {
   // Constants for arrhythmia detection
   private readonly RR_WINDOW_SIZE = 5;
-  private readonly RMSSD_THRESHOLD = 25;
+  private readonly RMSSD_THRESHOLD = 30;
   private readonly ARRHYTHMIA_LEARNING_PERIOD = 3000;
 
   // State variables
@@ -101,7 +100,7 @@ export class ArrhythmiaDetector {
     this.lastRRVariation = rrVariation;
     
     // Detect arrhythmia based on thresholds
-    const newArrhythmiaState = rmssd > this.RMSSD_THRESHOLD && rrVariation > 0.20;
+    const newArrhythmiaState = rmssd > this.RMSSD_THRESHOLD && rrVariation > 0.25;
     
     // If it's a new arrhythmia and enough time has passed since the last one
     if (newArrhythmiaState && 
