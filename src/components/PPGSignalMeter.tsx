@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -273,8 +272,31 @@ const PPGSignalMeter = ({
             ctx.setLineDash([]);
             
             ctx.font = 'bold 10px Inter';
-            ctx.fillStyle = '#FF6B6B';
+            ctx.fillStyle = '#FF0000';
             ctx.fillText("LATIDO PREMATURO", x, y - 35);
+            
+            if (i < visiblePoints.length - 2) {
+              const nextPoint = visiblePoints[i + 1];
+              const nextNextPoint = visiblePoints[i + 2];
+              
+              const nextX = canvas.width - ((now - nextPoint.time) * canvas.width / WINDOW_WIDTH_MS);
+              const nextNextX = canvas.width - ((now - nextNextPoint.time) * canvas.width / WINDOW_WIDTH_MS);
+              const timeSpanPixels = Math.abs(nextNextX - x);
+              
+              ctx.beginPath();
+              ctx.setLineDash([2, 2]);
+              ctx.strokeStyle = 'rgba(255, 100, 100, 0.7)';
+              ctx.lineWidth = 1.5;
+              ctx.moveTo(x, y + 15);
+              ctx.lineTo(nextNextX, y + 15);
+              ctx.stroke();
+              ctx.setLineDash([]);
+              
+              const compensatoryY = y + 30;
+              ctx.font = '9px Inter';
+              ctx.fillStyle = '#FF6B6B';
+              ctx.fillText("PAUSA COMPENSATORIA", (x + nextNextX) / 2, compensatoryY);
+            }
             
             ctx.beginPath();
             ctx.setLineDash([2, 2]);
