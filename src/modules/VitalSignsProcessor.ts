@@ -5,7 +5,7 @@ import { BloodPressureCalculator } from './BloodPressureCalculator';
 import { ArrhythmiaDetector } from './ArrhythmiaDetector';
 
 export class VitalSignsProcessor {
-  private readonly WINDOW_SIZE = 15; // Reducido aún más para respuesta inmediata
+  private readonly WINDOW_SIZE = 10; // Reducido al mínimo para respuesta inmediata
   private ppgValues: number[] = [];
   private readonly SMA_WINDOW = 0; // Sin filtrado para mostrar señal completamente cruda
   private readonly BPM_SMOOTHING_ALPHA = 0.005; // Mínimo suavizado para mostrar valores reales
@@ -50,15 +50,15 @@ export class VitalSignsProcessor {
     
     // Durante la fase de aprendizaje, recopilar valores para calibración de SpO2
     if (isLearning) {
-      if (this.ppgValues.length >= 5) { // Ventana mínima para calibración instantánea
-        const tempSpO2 = this.spO2Calculator.calculateRaw(this.ppgValues.slice(-5));
+      if (this.ppgValues.length >= 3) { // Ventana mínima para calibración instantánea
+        const tempSpO2 = this.spO2Calculator.calculateRaw(this.ppgValues.slice(-3));
         if (tempSpO2 > 0) {
           this.spO2Calculator.addCalibrationValue(tempSpO2);
           console.log("Valor de calibración SpO2 añadido:", tempSpO2);
         }
       }
     } else {
-      // Auto-calibrar SpO2
+      // Auto-calibrar SpO2 si es necesario
       this.spO2Calculator.calibrate();
     }
 
@@ -67,27 +67,27 @@ export class VitalSignsProcessor {
 
     // Calcular signos vitales con ventana mínima
     let bp;
-    let pressure = "EVALUANDO"; // Comenzar con "EVALUANDO"
+    let pressure = "--/--"; // Comenzar con marcador estándar
 
-    // Calcular presión arterial con ventana mínima para respuesta inmediata
-    if (this.ppgValues.length >= 10) { // Reducido al mínimo para respuesta inmediata
+    // Calcular presión arterial solo si tenemos suficientes datos
+    if (this.ppgValues.length >= Math.min(5, this.WINDOW_SIZE)) { 
       console.log("VitalSignsProcessor: Calculando BP con datos crudos");
-      bp = this.bpCalculator.calculate(this.ppgValues); // Usar todos los valores disponibles
+      bp = this.bpCalculator.calculate(this.ppgValues); 
       
       if (bp && bp.systolic > 0 && bp.diastolic > 0) {
         pressure = `${bp.systolic}/${bp.diastolic}`;
-        console.log(`VitalSignsProcessor: Medición BP real actualizada: ${pressure}`);
+        console.log(`VitalSignsProcessor: Medición BP real: ${pressure}`);
       } else {
-        console.log("VitalSignsProcessor: Valores BP no válidos, mostrando EVALUANDO");
+        console.log("VitalSignsProcessor: Cálculo BP sin resultado válido");
       }
     } else {
-      console.log(`VitalSignsProcessor: Datos insuficientes (${this.ppgValues.length}/10), mostrando EVALUANDO`);
+      console.log(`VitalSignsProcessor: Datos insuficientes para BP (${this.ppgValues.length}/${Math.min(5, this.WINDOW_SIZE)})`);
     }
 
-    // Calcular SpO2 con ventana mínima
+    // Calcular SpO2 con ventana mínima para respuesta inmediata
     console.log("VitalSignsProcessor: Calculando SpO2 con datos crudos");
-    const spo2Values = this.ppgValues.slice(-5); // Usar solo las últimas 5 muestras para respuesta inmediata
-    const spo2 = this.spO2Calculator.calculate(spo2Values);
+    const spo2Values = this.ppgValues.slice(-3); // Usar solo las últimas muestras para respuesta inmediata
+    const spo2 = spo2Values.length >= 3 ? this.spO2Calculator.calculate(spo2Values) : 0;
     console.log(`VitalSignsProcessor: SpO2 calculado: ${spo2}, con ${spo2Values.length} muestras`);
 
     // Preparar datos de arritmia si se detecta

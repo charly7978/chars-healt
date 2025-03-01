@@ -63,21 +63,23 @@ export const useVitalSignsProcessor = () => {
     
     // Obtener resultados base del procesador principal
     const result = processor.processSignal(value, rrData);
-    console.log("useVitalSignsProcessor: Resultado del procesador:", 
+    console.log("useVitalSignsProcessor: Resultados brutos:", 
                 { spo2: result.spo2, pressure: result.pressure });
     
-    // Estabilizar presión arterial
+    // Estabilizar presión arterial pasándola directamente
     const signalQuality = signalHistory.getSignalQuality();
     const stabilizedBP = bloodPressureStabilizer.current.stabilizeBloodPressure(result.pressure, signalQuality);
+    console.log("useVitalSignsProcessor: BP estabilizada:", stabilizedBP);
     
-    // Recopilar datos para promedios finales
-    if (result.spo2 > 0) {
+    // Recopilar datos para promedios finales solo si son valores válidos
+    if (result.spo2 > 90 && result.spo2 <= 100) {
       dataCollector.current.addSpO2(result.spo2);
       console.log("useVitalSignsProcessor: SpO2 añadido al colector:", result.spo2);
     }
     
-    if (stabilizedBP !== "--/--" && stabilizedBP !== "0/0") {
+    if (stabilizedBP !== "--/--" && stabilizedBP !== "0/0" && stabilizedBP !== "EVALUANDO") {
       dataCollector.current.addBloodPressure(stabilizedBP);
+      console.log("useVitalSignsProcessor: BP añadida al colector:", stabilizedBP);
     }
     
     // Análisis avanzado de arritmias

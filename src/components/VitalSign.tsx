@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { VitalSignsRisk } from '../utils/vitalSignsRisk';
 
@@ -15,7 +14,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
 
   // Helper function to check if blood pressure value is unrealistic
   const isBloodPressureUnrealistic = (bpString: string): boolean => {
-    if (!isBloodPressure || bpString === "--/--" || bpString === "0/0") return false;
+    if (!isBloodPressure || bpString === "--/--" || bpString === "0/0" || bpString === "EVALUANDO") return false;
     
     const [systolic, diastolic] = bpString.split('/').map(Number);
     
@@ -24,8 +23,8 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     
     // Ranges based on published medical guidelines
     // American Heart Association and European Society of Hypertension
-    if (systolic > 300 || systolic < 60) return true;
-    if (diastolic > 200 || diastolic < 30) return true;
+    if (systolic > 300 || systolic < 30) return true;
+    if (diastolic > 200 || diastolic < 15) return true;
     if (systolic <= diastolic) return true;
     
     return false;
@@ -35,7 +34,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
   const getDisplayValue = (): string | number => {
     if (isBloodPressure && typeof value === 'string') {
       // Always show placeholder values unchanged
-      if (value === "--/--" || value === "0/0") return value;
+      if (value === "--/--" || value === "0/0" || value === "EVALUANDO") return value;
       
       // Filter out clearly unrealistic readings
       if (isBloodPressureUnrealistic(value)) {
@@ -77,7 +76,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
 
     // For blood pressure, show real value without checking risk if no measurement
     if (label === "PRESIÓN ARTERIAL") {
-      if (value === "--/--" || value === "0/0") {
+      if (value === "--/--" || value === "0/0" || value === "EVALUANDO") {
         return { color: '#FFFFFF', label: '' };
       }
       
@@ -127,6 +126,15 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
   const { text, color, label: riskLabel } = isArrhythmiaDisplay ? 
     getArrhythmiaDisplay() : 
     { text: displayValue, ...getRiskInfo() };
+
+  // Debug visualization of values
+  React.useEffect(() => {
+    if (isBloodPressure) {
+      console.log(`VitalSign BP: Valor recibido: "${value}", mostrado: "${displayValue}"`);
+    } else if (label === "SPO2") {
+      console.log(`VitalSign SPO2: Valor recibido: ${value}, mostrado: ${displayValue}`);
+    }
+  }, [value, displayValue, isBloodPressure, label]);
 
   return (
     <div className="relative overflow-hidden rounded-xl backdrop-blur-md bg-black/60 border border-white/20 shadow-lg">
