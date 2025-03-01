@@ -8,7 +8,7 @@ interface VitalSignProps {
   isFinalReading?: boolean;
 }
 
-const VitalSign: React.FC<VitalSignProps> = memo(({ label, value, unit, isFinalReading = false }) => {
+const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReading = false }) => {
   const isArrhythmiaDisplay = label === "ARRITMIAS";
   const isBloodPressure = label === "PRESIÓN ARTERIAL";
 
@@ -30,56 +30,31 @@ const VitalSign: React.FC<VitalSignProps> = memo(({ label, value, unit, isFinalR
     return false;
   };
 
+  // Cache para optimizar procesamiento de valores repetidos
+  const displayValueCache = new Map<string, string | number>();
+  
   // Process blood pressure display for stable, realistic readings
-  const getDisplayValue = (): string | number => {
+  const processedDisplayValue = useMemo(() => {
+    const cacheKey = `${label}-${value}`;
+    if (displayValueCache.has(cacheKey)) {
+      return displayValueCache.get(cacheKey);
+    }
+    
+    let result = value;
     if (isBloodPressure && typeof value === 'string') {
       // Always show placeholder values unchanged
-      if (value === "--/--" || value === "0/0") return value;
-      
-      // Filter out clearly unrealistic readings
-      if (isBloodPressureUnrealistic(value)) {
-        console.log("Medically unrealistic BP filtered:", value);
-        return "--/--";
+      if (value === "--/--" || value === "0/0") {
+        result = value;
+      } else if (isBloodPressureUnrealistic(value)) {
+        result = "--/--";
       }
-      
-      // This is a valid reading within medical ranges
-      return value;
     }
     
-    return value;
-  };
+    displayValueCache.set(cacheKey, result);
+    return result;
+  }, [value, isBloodPressure, label]);
 
-  // Function to handle arrhythmia display - defined before it's used in riskInfo
-  const getArrhythmiaDisplay = () => {
-    if (!isArrhythmiaDisplay) return { text: value, color: "", label: "" };
-    
-    if (value === "--") {
-      return { 
-        text: "--", 
-        color: "#D3E4FD",
-        label: ""
-      };
-    }
-    
-    const [status, count] = String(value).split('|');
-    
-    if (status === "ARRITMIA DETECTADA") {
-      return {
-        text: count ? `ARRITMIA DETECTADA (${count})` : "ARRITMIA DETECTADA",
-        color: "#DC2626",
-        label: "ARRITMIA"
-      };
-    }
-    
-    return {
-      text: "SIN ARRITMIA DETECTADA",
-      color: "#0EA5E9",
-      label: "NORMAL"
-    };
-  };
-
-  // Memoized risk information calculation to optimize rendering
-  const riskInfo = useMemo(() => {
+  const getRiskInfo = () => {
     if (isArrhythmiaDisplay) {
       return getArrhythmiaDisplay();
     }
@@ -87,7 +62,7 @@ const VitalSign: React.FC<VitalSignProps> = memo(({ label, value, unit, isFinalR
     // For heart rate, show real value without checking risk if no measurement
     if (label === "FRECUENCIA CARDÍACA") {
       if (value === "--" || value === 0) {
-        return { color: '#D3E4FD', label: '' };
+        return { color: '#FFFFFF', label: '' };
       }
       if (typeof value === 'number') {
         return VitalSignsRisk.getBPMRisk(value, isFinalReading);
@@ -97,7 +72,7 @@ const VitalSign: React.FC<VitalSignProps> = memo(({ label, value, unit, isFinalR
     // For SPO2, show real value without checking risk if no measurement
     if (label === "SPO2") {
       if (value === "--" || value === 0) {
-        return { color: '#D3E4FD', label: '' };
+        return { color: '#FFFFFF', label: '' };
       }
       if (typeof value === 'number') {
         return VitalSignsRisk.getSPO2Risk(value, isFinalReading);
@@ -107,7 +82,7 @@ const VitalSign: React.FC<VitalSignProps> = memo(({ label, value, unit, isFinalR
     // For blood pressure, show real value without checking risk if no measurement
     if (label === "PRESIÓN ARTERIAL") {
       if (value === "--/--" || value === "0/0") {
-        return { color: '#D3E4FD', label: '' };
+        return { color: '#FFFFFF', label: '' };
       }
       
       // Don't try to evaluate risk if measurement is unstable/unrealistic
@@ -115,49 +90,71 @@ const VitalSign: React.FC<VitalSignProps> = memo(({ label, value, unit, isFinalR
         return VitalSignsRisk.getBPRisk(value, isFinalReading);
       }
       
-      return { color: '#D3E4FD', label: '' };
+      return { color: '#FFFFFF', label: '' };
     }
 
-    return { color: '#D3E4FD', label: '' };
-  }, [label, value, isArrhythmiaDisplay, isBloodPressure, isFinalReading]);
+    return { color: '#FFFFFF', label: '' };
+  };
   
-  // Memoized display value calculation to optimize rendering
-  const displayValue = useMemo(() => getDisplayValue(), [value, isBloodPressure]);
-  
+  const getArrhythmiaDisplay = () => {
+    if (!isArrhythmiaDisplay) return { text: value, color: "", label: "" };
+    
+    if (value === "--") {
+      return { 
+        text: "--", 
+        color: "#FFFFFF",
+        label: ""
+      };
+    }
+    
+    const [status, count] = String(value).split('|');
+    
+    if (status === "ARRITMIA DETECTADA") {
+      // Mejora en la visualización del texto para hacerlo más específico
+      return {
+        text: count ? `LATIDOS PREMATUROS (${count})` : "LATIDOS PREMATUROS",
+        color: "#DC2626",
+        label: "ARRITMIA"
+      };
+    }
+    
+    return {
+      text: "RITMO NORMAL",
+      color: "#0EA5E9",
+      label: "NORMAL"
+    };
+  };
+
   // Get the risk info based on the medically valid display value 
   const { text, color, label: riskLabel } = isArrhythmiaDisplay ? 
     getArrhythmiaDisplay() : 
-    { text: displayValue, ...riskInfo };
+    { text: processedDisplayValue, ...getRiskInfo() };
 
+  // Simplificar el renderizado para mejorar rendimiento
   return (
-    <div className="relative overflow-hidden rounded-xl backdrop-blur-md shadow-lg p-2">
-      {/* Capa transparente al 70% que cubre solo la superficie del display */}
-      <div 
-        className="absolute inset-0 rounded-xl" 
-        style={{ 
-          backgroundColor: 'rgba(0, 0, 0, 0.7)', 
-          backdropFilter: 'blur(2px)' 
-        }} 
-      />
-      
-      <div className="relative z-10 p-2">
-        <h3 className="text-[#D3E4FD] text-[10px] font-medium tracking-wider mb-1">{label}</h3>
-        <div className="flex flex-col items-center">
+    <div className="relative overflow-hidden rounded-xl backdrop-blur-md bg-black/60 border border-white/20 shadow-lg">
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-400/10 to-teal-400/10 pointer-events-none" />
+      <div className="absolute inset-0 bg-black/40 pointer-events-none" style={{
+        backgroundImage: "radial-gradient(circle at top right, rgba(0, 0, 0, 0.2), transparent 70%)"
+      }} />
+      <div className="relative z-10 p-4">
+        <h3 className="text-white text-xs font-medium tracking-wider mb-2">{label}</h3>
+        <div className="flex flex-col items-center gap-1">
           <div className="flex items-baseline gap-1 justify-center">
             <span 
-              className={`${isArrhythmiaDisplay ? 'text-sm' : 'text-lg'} font-bold transition-colors duration-300 text-[#D3E4FD]`}
-              style={{ color: color || '#D3E4FD' }}
+              className={`${isArrhythmiaDisplay ? 'text-base' : 'text-xl'} font-bold transition-colors duration-300 text-white`}
+              style={{ color: color || '#FFFFFF' }}
             >
-              {isArrhythmiaDisplay ? text : displayValue}
+              {text}
             </span>
             {!isArrhythmiaDisplay && unit && (
-              <span className="text-[#D3E4FD] text-[9px]">{unit}</span>
+              <span className="text-white text-xs">{unit}</span>
             )}
           </div>
           {riskLabel && (
             <span 
-              className="text-[9px] font-semibold tracking-wider mt-0.5 text-[#D3E4FD]"
-              style={{ color: color || '#D3E4FD' }}
+              className="text-[10px] font-semibold tracking-wider mt-1 text-white"
+              style={{ color: color || '#FFFFFF' }}
             >
               {riskLabel}
             </span>
@@ -166,6 +163,6 @@ const VitalSign: React.FC<VitalSignProps> = memo(({ label, value, unit, isFinalR
       </div>
     </div>
   );
-});
+};
 
 export default VitalSign;
