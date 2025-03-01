@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { VitalSignsRisk } from '../utils/vitalSignsRisk';
 
@@ -11,6 +12,8 @@ interface VitalSignProps {
 const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReading = false }) => {
   const isArrhythmiaDisplay = label === "ARRITMIAS";
   const isBloodPressure = label === "PRESIÓN ARTERIAL";
+  const isSpO2 = label === "SPO2";
+  const isHeartRate = label === "FRECUENCIA CARDÍACA";
 
   // Helper function to check if blood pressure value is unrealistic
   const isBloodPressureUnrealistic = (bpString: string): boolean => {
@@ -46,6 +49,18 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
       return value;
     }
     
+    // For SpO2, ensure we don't show 0 values
+    if (isSpO2 && (value === 0 || value === "0")) {
+      console.log("SpO2 display: Zero value converted to placeholder");
+      return "--";
+    }
+    
+    // For heart rate, ensure we don't show 0 values
+    if (isHeartRate && (value === 0 || value === "0")) {
+      console.log("Heart rate display: Zero value converted to placeholder");
+      return "--";
+    }
+    
     return value;
   };
 
@@ -55,7 +70,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     }
 
     // For heart rate, show real value without checking risk if no measurement
-    if (label === "FRECUENCIA CARDÍACA") {
+    if (isHeartRate) {
       if (value === "--" || value === 0) {
         return { color: '#FFFFFF', label: '' };
       }
@@ -65,7 +80,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     }
 
     // For SPO2, show real value without checking risk if no measurement
-    if (label === "SPO2") {
+    if (isSpO2) {
       if (value === "--" || value === 0) {
         return { color: '#FFFFFF', label: '' };
       }
@@ -75,7 +90,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     }
 
     // For blood pressure, show real value without checking risk if no measurement
-    if (label === "PRESIÓN ARTERIAL") {
+    if (isBloodPressure) {
       if (value === "--/--" || value === "0/0" || value === "EVALUANDO") {
         return { color: '#FFFFFF', label: '' };
       }
@@ -131,10 +146,12 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
   React.useEffect(() => {
     if (isBloodPressure) {
       console.log(`VitalSign BP: Valor recibido: "${value}", mostrado: "${displayValue}"`);
-    } else if (label === "SPO2") {
+    } else if (isSpO2) {
       console.log(`VitalSign SPO2: Valor recibido: ${value}, mostrado: ${displayValue}`);
+    } else if (isHeartRate) {
+      console.log(`VitalSign HR: Valor recibido: ${value}, mostrado: ${displayValue}`);
     }
-  }, [value, displayValue, isBloodPressure, label]);
+  }, [value, displayValue, isBloodPressure, isSpO2, isHeartRate, label]);
 
   return (
     <div className="relative overflow-hidden rounded-xl backdrop-blur-md bg-black/60 border border-white/20 shadow-lg">
