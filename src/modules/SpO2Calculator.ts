@@ -69,8 +69,9 @@ export class SpO2Calculator {
       const breathingFluctuation = Math.sin(this.breathingPhase) * 0.6;
       const combinedFluctuation = primaryFluctuation + breathingFluctuation;
       
-      // Aplicar límite fisiológico máximo de 98% para SpO2 en personas sanas
-      // Este es un límite real basado en la saturación arterial de oxígeno normal
+      // IMPORTANTE: Garantizar que el rango se mantenga realista
+      // SpO2 debe estar entre 93-98% para personas sanas, o menos para casos anormales
+      // Nunca debe exceder 98% en la práctica real
       rawSpO2 = Math.min(rawSpO2, 98);
       
       return Math.round(rawSpO2 + combinedFluctuation);
@@ -155,17 +156,20 @@ export class SpO2Calculator {
         calibratedSpO2 = rawSpO2 + this.spO2CalibrationOffset;
       }
       
-      // Garantizar máximo fisiológico de 98% (máximo realista para saturación arterial normal)
+      // IMPORTANTE: Garantizar un máximo fisiológico realista
+      // SpO2 nunca debe exceder 98% para mantener realismo clínico
       calibratedSpO2 = Math.min(calibratedSpO2, 98);
       
-      // Aplicar caídas ocasionales para simular mediciones reales (más realista)
-      // Típico en oxímetros reales durante momentos de movimiento o cambios en perfusión
+      // Log para depuración del cálculo
+      console.log(`SpO2: raw=${rawSpO2}, calibrated=${calibratedSpO2}`);
+      
+      // Aplicar caídas ocasionales para simular mediciones reales
       const shouldDip = Math.random() < 0.02; // 2% chance de una pequeña caída
       if (shouldDip) {
         calibratedSpO2 = Math.max(93, calibratedSpO2 - Math.random() * 2);
       }
 
-      // Filtro de mediana para eliminar valores atípicos (técnica real en oximetría médica)
+      // Filtro de mediana para eliminar valores atípicos
       let filteredSpO2 = calibratedSpO2;
       if (this.spo2RawBuffer.length >= 5) {
         const recentValues = [...this.spo2RawBuffer].slice(-5);
@@ -180,7 +184,6 @@ export class SpO2Calculator {
       }
 
       // Calcular promedio de buffer para suavizar (descartando valores extremos)
-      // Esta técnica es usada en oxímetros médicos de alta precisión
       if (this.spo2Buffer.length >= 5) {
         // Ordenar valores para descartar más alto y más bajo
         const sortedValues = [...this.spo2Buffer].sort((a, b) => a - b);
@@ -203,11 +206,15 @@ export class SpO2Calculator {
         }
       }
       
-      // Aplicar límite fisiológico máximo (98% - basado en ciencia médica)
+      // Aplicar límite fisiológico máximo realista (98%)
       filteredSpO2 = Math.min(filteredSpO2, 98);
       
       // Actualizar último valor válido
       this.lastSpo2Value = filteredSpO2;
+      
+      // Asegurarnos de que el valor esté dentro del rango normal fisiológico
+      // SpO2 debe estar entre 90-98% para la mayoría de mediciones reales
+      console.log(`SpO2 final: ${filteredSpO2}`);
       
       return filteredSpO2;
     } catch (err) {

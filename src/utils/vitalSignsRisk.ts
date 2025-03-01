@@ -220,7 +220,6 @@ export class VitalSignsRisk {
     return counts.sort((a, b) => b.count - a.count)[0].segment;
   }
 
-  // Función para calcular el promedio del historial de BPM
   static getAverageBPM(): number {
     if (this.bpmHistory.length === 0) return 0;
     
@@ -242,7 +241,6 @@ export class VitalSignsRisk {
     return avg;
   }
 
-  // Función para calcular el promedio del historial de SpO2
   static getAverageSPO2(): number {
     if (this.spo2History.length === 0) return 0;
     
@@ -264,7 +262,6 @@ export class VitalSignsRisk {
     return avg;
   }
 
-  // Función para calcular el promedio del historial de presión arterial
   static getAverageBP(): { systolic: number, diastolic: number } {
     if (this.bpHistory.length === 0) return { systolic: 0, diastolic: 0 };
     
@@ -360,44 +357,57 @@ export class VitalSignsRisk {
       console.log("Cálculo final de SpO2:", { avgSPO2, isFinalReading });
       
       if (avgSPO2 > 0) {
-        // CORREGIDO: Umbrales de SpO2 para determinar correctamente el riesgo
+        // CLASIFICACIÓN PARA VALORES FINALES:
+        // Reglas definidas: 
+        // - Menor a 90%: Insuficiencia respiratoria (rojo)
+        // - 90-92%: Leve insuficiencia respiratoria (naranja)
+        // - 93% o mayor: Normal (azul)
+        
         if (avgSPO2 < 90) {
           return { color: '#ea384c', label: 'INSUFICIENCIA RESPIRATORIA' };
         } else if (avgSPO2 >= 90 && avgSPO2 < 93) {
           return { color: '#F97316', label: 'LEVE INSUFICIENCIA RESPIRATORIA' };
         } else {
-          // Para valores ≥ 93, consideramos NORMAL (rango saludable)
           return { color: '#0EA5E9', label: 'NORMAL' };
         }
       }
       
-      // Si no hay suficientes datos para calcular el promedio, usar el historial de segmentos
+      // Si no hay promedio, usar el historial de segmentos
       if (this.spo2SegmentHistory.length > 0) {
         return this.getMostFrequentSegment(this.spo2SegmentHistory);
       }
     }
     
-    // Comportamiento para tiempo real con rangos corregidos
+    // COMPORTAMIENTO EN TIEMPO REAL
+    // Lógica más simple para evitar conflictos
     let currentSegment: RiskSegment;
     
-    // CORREGIDO: Simplificamos la lógica para evitar conflictos
+    // Aplicamos las mismas reglas de clasificación para tiempo real:
+    // - Menor a 90%: Insuficiencia respiratoria (rojo)
+    // - 90-92%: Leve insuficiencia respiratoria (naranja)
+    // - 93-100%: Normal (azul)
+    
     if (this.isStableValue(this.spo2History, [0, 89])) {
+      // SpO2 < 90% = Insuficiencia respiratoria (rojo)
       currentSegment = { color: '#ea384c', label: 'INSUFICIENCIA RESPIRATORIA' };
     } else if (this.isStableValue(this.spo2History, [90, 92])) {
+      // SpO2 90-92% = Leve insuficiencia respiratoria (naranja)
       currentSegment = { color: '#F97316', label: 'LEVE INSUFICIENCIA RESPIRATORIA' };
     } else if (this.isStableValue(this.spo2History, [93, 100])) {
-      // CORREGIDO: Valores normales (93-100) deben mostrar NORMAL
+      // SpO2 93-100% = Normal (azul)
       currentSegment = { color: '#0EA5E9', label: 'NORMAL' };
     } else {
-      // Si no hay estabilidad o está fuera de rango
+      // Valores inestables o fuera de rango
       currentSegment = { color: '#FFFFFF', label: 'EVALUANDO...' };
     }
     
-    // Guardar el segmento actual para análisis final solo si no es "EVALUANDO..."
+    // Guardar el segmento actual para análisis final
     if (currentSegment.label !== 'EVALUANDO...') {
       this.spo2SegmentHistory.push(currentSegment);
+      console.log(`Añadiendo segmento SpO2: ${currentSegment.label} para valor ${spo2}`);
     }
     
+    console.log(`SPO2Risk resultado: ${currentSegment.label} para valor ${spo2}`);
     return currentSegment;
   }
 
