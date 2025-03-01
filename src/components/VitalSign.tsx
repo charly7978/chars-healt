@@ -129,28 +129,28 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     { text: displayValue, ...getRiskInfo() };
 
   return (
-    <div className="relative overflow-hidden rounded-xl backdrop-blur-md bg-[#0EA5E9]/20 border border-[#D3E4FD]/30 shadow-lg">
+    <div className="relative overflow-hidden rounded-xl backdrop-blur-md bg-[#0EA5E9]/20 border border-[#D3E4FD]/30 shadow-lg p-2">
       <div className="absolute inset-0 bg-gradient-to-br from-[#D3E4FD]/20 to-[#0EA5E9]/10 pointer-events-none" />
       <div className="absolute inset-0 pointer-events-none" style={{
         backgroundImage: "radial-gradient(circle at top right, rgba(211, 228, 253, 0.15), transparent 70%)"
       }} />
-      <div className="relative z-10 p-4">
-        <h3 className="text-[#D3E4FD] text-xs font-medium tracking-wider mb-2">{label}</h3>
-        <div className="flex flex-col items-center gap-1">
+      <div className="relative z-10 p-2">
+        <h3 className="text-[#D3E4FD] text-[10px] font-medium tracking-wider mb-1">{label}</h3>
+        <div className="flex flex-col items-center">
           <div className="flex items-baseline gap-1 justify-center">
             <span 
-              className={`${isArrhythmiaDisplay ? 'text-base' : 'text-xl'} font-bold transition-colors duration-300 text-[#D3E4FD]`}
+              className={`${isArrhythmiaDisplay ? 'text-sm' : 'text-lg'} font-bold transition-colors duration-300 text-[#D3E4FD]`}
               style={{ color: color || '#D3E4FD' }}
             >
               {isArrhythmiaDisplay ? text : displayValue}
             </span>
             {!isArrhythmiaDisplay && unit && (
-              <span className="text-[#D3E4FD] text-xs">{unit}</span>
+              <span className="text-[#D3E4FD] text-[9px]">{unit}</span>
             )}
           </div>
           {riskLabel && (
             <span 
-              className="text-[10px] font-semibold tracking-wider mt-1 text-[#D3E4FD]"
+              className="text-[9px] font-semibold tracking-wider mt-0.5 text-[#D3E4FD]"
               style={{ color: color || '#D3E4FD' }}
             >
               {riskLabel}
