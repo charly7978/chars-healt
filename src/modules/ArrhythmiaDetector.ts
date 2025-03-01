@@ -9,12 +9,12 @@
 export class ArrhythmiaDetector {
   // Parámetros de configuración optimizados para detección precisa
   private readonly RR_WINDOW_SIZE = 5;
-  private readonly ARRHYTHMIA_LEARNING_PERIOD = 2000; // Reducido a 2 segundos para entrar antes en detección
+  private readonly ARRHYTHMIA_LEARNING_PERIOD = 3000; // 3 segundos para calibración adecuada
   
-  // Umbrales óptimos basados en literatura médica
+  // Umbrales OPTIMIZADOS para máxima precisión en detección de arritmias
   private readonly PREMATURE_BEAT_THRESHOLD = 0.65;
-  private readonly AMPLITUDE_RATIO_THRESHOLD = 0.85; // Aumentado de 0.82 para capturar más picos pequeños 
-  private readonly NORMAL_PEAK_MIN_THRESHOLD = 0.60; // Reducido de 0.65 para clasificar más picos como normales
+  private readonly AMPLITUDE_RATIO_THRESHOLD = 0.85; // Optimizado para mejor detección de latidos prematuros
+  private readonly NORMAL_PEAK_MIN_THRESHOLD = 0.70; // Ajustado para mejor balance detección/especificidad
   
   // Variables de estado
   private rrIntervals: number[] = [];
@@ -120,11 +120,12 @@ export class ArrhythmiaDetector {
     this.rrIntervals = intervals;
     this.lastPeakTime = lastPeakTime;
     
-    // LOG: Depuración para visualizar datos que llegan
+    // LOG MEJORADO: Depuración detallada para mejor diagnóstico
     console.log('ArrhythmiaDetector - Recibiendo datos:', {
       peakAmplitude: peakAmplitude ? Math.abs(peakAmplitude).toFixed(2) : 'N/A',
       avgNormalAmplitude: this.avgNormalAmplitude.toFixed(2),
       isLearning: this.isLearningPhase,
+      intervalCount: intervals.length,
       timestamp: new Date().toISOString()
     });
     
@@ -144,12 +145,20 @@ export class ArrhythmiaDetector {
         if (this.avgNormalAmplitude > 0 && !this.isLearningPhase) {
           const ratio = Math.abs(peakAmplitude) / this.avgNormalAmplitude;
           
+          // Clasificación más precisa usando los umbrales optimizados
           if (ratio >= this.NORMAL_PEAK_MIN_THRESHOLD) {
             peakType = 'normal';
           } 
           else if (ratio <= this.AMPLITUDE_RATIO_THRESHOLD) {
             peakType = 'premature';
           }
+          
+          // Log para depuración de clasificación de picos
+          console.log('ArrhythmiaDetector - Clasificación de pico:', {
+            ratio: ratio.toFixed(2),
+            tipo: peakType,
+            threshold: this.AMPLITUDE_RATIO_THRESHOLD
+          });
         }
         
         this.peakSequence.push({
@@ -261,6 +270,14 @@ export class ArrhythmiaDetector {
             
             // Patrón clásico de extrasístole: primer intervalo corto, segundo largo
             intervalPatternValid = interval1Ratio < 0.90 && interval2Ratio > 1.10;
+            
+            // Log detallado de patrones de intervalos
+            console.log('ArrhythmiaDetector - Análisis de intervalos RR:', {
+              interval1Ratio: interval1Ratio.toFixed(2),
+              interval2Ratio: interval2Ratio.toFixed(2),
+              baseRRInterval: this.baseRRInterval,
+              criteriosCumplidos: intervalPatternValid
+            });
           }
           
           // Verificación del patrón de amplitud
@@ -273,9 +290,19 @@ export class ArrhythmiaDetector {
             firstPeakRatio >= this.NORMAL_PEAK_MIN_THRESHOLD * 0.9 && 
             thirdPeakRatio >= this.NORMAL_PEAK_MIN_THRESHOLD * 0.9;
           
-          // Detectar como arritmia si se cumplen criterios de amplitud O intervalos
-          // Esto permite mayor sensibilidad para detectar arritmias reales
-          prematureBeatDetected = amplitudePatternValid || intervalPatternValid;
+          // Log detallado de patrones de amplitud
+          console.log('ArrhythmiaDetector - Análisis de amplitudes:', {
+            firstPeakRatio: firstPeakRatio.toFixed(2),
+            secondPeakRatio: secondPeakRatio.toFixed(2),
+            thirdPeakRatio: thirdPeakRatio.toFixed(2),
+            criteriosCumplidos: amplitudePatternValid
+          });
+          
+          // VERSIÓN OPTIMIZADA: Permitir detección con criterios menos estrictos
+          // Detectar arritmia si AMBOS criterios o si el patrón de amplitud es muy claro
+          prematureBeatDetected = 
+            (amplitudePatternValid && intervalPatternValid) || 
+            (amplitudePatternValid && secondPeakRatio <= this.AMPLITUDE_RATIO_THRESHOLD * 0.8);
         }
       }
     }

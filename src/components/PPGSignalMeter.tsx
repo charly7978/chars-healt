@@ -257,24 +257,27 @@ const PPGSignalMeter = ({
         const point = visiblePoints[i];
         const nextPoint = visiblePoints[i + 1];
         
-        // DETECTOR MEJORADO: Buscar explícitamente picos hacia ARRIBA más pronunciados
-        // Un pico real es un punto que es significativamente mayor que sus vecinos
-        const isPeak = point.value > prevPoint.value && 
-                      point.value > nextPoint.value && 
-                      (point.value - prevPoint.value) > 1.5 && // Asegurar que el ascenso sea significativo
-                      (point.value - nextPoint.value) > 1.5;   // Asegurar que el descenso sea significativo
+        // DETECTOR OPTIMIZADO: Equilibrio entre sensibilidad y especificidad
+        // Más sensible para capturar picos reales, pero sin generar falsos positivos
+        const diffPrev = point.value - prevPoint.value;
+        const diffNext = point.value - nextPoint.value;
+        const isPeak = 
+          point.value > prevPoint.value && 
+          point.value > nextPoint.value && 
+          (diffPrev > 0.8 && diffNext > 0.8);  // Umbral rebajado ligeramente para mayor sensibilidad
         
         if (isPeak) {
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
           const y = canvas.height * 0.4 + point.value;
           
-          // DEPURACIÓN: Informar cuando se detecta un pico
-          // Esto ayudará a entender la correspondencia entre picos visuales y detección
+          // Detección mejorada: Log más detallado para visualizar mejor los picos detectados
           if (i === 1) { // Solo reportar para el pico más reciente
             console.log('PPGSignalMeter - Pico detectado:', {
               amplitud: (point.value / verticalScale).toFixed(2),
               esArrhythmia: point.isArrhythmia,
-              timestamp: new Date().toISOString()
+              timestamp: new Date().toISOString(),
+              diffPrev: diffPrev.toFixed(2),
+              diffNext: diffNext.toFixed(2)
             });
           }
           

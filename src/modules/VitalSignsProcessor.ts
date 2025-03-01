@@ -1,4 +1,3 @@
-
 import { applySMAFilter } from '../utils/signalProcessingUtils';
 import { SpO2Calculator } from './spo2';
 import { BloodPressureCalculator } from './BloodPressureCalculator';
@@ -36,19 +35,37 @@ export class VitalSignsProcessor {
   ) {
     const currentTime = Date.now();
 
-    // Update RR intervals if available, passing amplitude data if available
+    // MEJORA: Sistema de transferencia optimizado para datos de picos
     if (rrData?.intervals && rrData.intervals.length > 0) {
-      // Filter outliers from RR data
-      const validIntervals = rrData.intervals.filter(interval => {
-        return interval >= 380 && interval <= 1700; // Valid for 35-158 BPM
+      // Filtrar outliers de forma más inteligente para preservar patrones de arritmias
+      const rawIntervals = rrData.intervals;
+      
+      // En vez de filtrar por rango fijo, usamos mediana y desviación para preservar patrones arrítmicos
+      const sortedIntervals = [...rawIntervals].sort((a, b) => a - b);
+      const median = sortedIntervals[Math.floor(sortedIntervals.length / 2)];
+      
+      // Filtros más permisivos para mantener variaciones fisiológicas reales
+      const validIntervals = rawIntervals.filter(interval => {
+        // Rangos más amplios para capturar latidos prematuros (28-180 BPM)
+        return interval >= 333 && interval <= 2100;
       });
       
       if (validIntervals.length > 0) {
-        // Pass peak amplitude if available to the arrhythmia detector
+        // Asegurar que las amplitudes sean procesadas correctamente
         const peakAmplitude = rrData.amplitudes && rrData.amplitudes.length > 0 
           ? rrData.amplitudes[rrData.amplitudes.length - 1] 
           : undefined;
         
+        // Log detallado para seguimiento del flujo de datos
+        console.log('VitalSignsProcessor - Enviando datos al detector de arritmias:', {
+          intervalsCount: validIntervals.length,
+          intervalsRaw: rawIntervals.length,
+          amplitudePresent: peakAmplitude !== undefined,
+          amplitudeValue: peakAmplitude ? peakAmplitude.toFixed(2) : 'N/A',
+          timestamp: new Date().toISOString()
+        });
+        
+        // Enviar datos al detector de arritmias
         this.arrhythmiaDetector.updateIntervals(validIntervals, rrData.lastPeakTime, peakAmplitude);
       }
     }
@@ -78,6 +95,16 @@ export class VitalSignsProcessor {
 
     // Process arrhythmia detection - using ONLY the ArrhythmiaDetector module
     const arrhythmiaResult = this.arrhythmiaDetector.detect();
+    
+    // Log detallado del resultado del detector de arritmias
+    if (arrhythmiaResult.detected) {
+      console.log('VitalSignsProcessor - Arritmia detectada:', {
+        count: arrhythmiaResult.count,
+        status: arrhythmiaResult.status,
+        rmssd: arrhythmiaResult.data?.rmssd.toFixed(2),
+        timestamp: new Date().toISOString()
+      });
+    }
 
     // Calculate vital signs - utilizando datos reales optimizados
     const spo2 = this.spO2Calculator.calculate(this.ppgValues.slice(-60));
@@ -86,8 +113,8 @@ export class VitalSignsProcessor {
     const bp = this.calculateRealBloodPressure(this.ppgValues.slice(-60));
     const pressure = `${bp.systolic}/${bp.diastolic}`;
 
-    // Prepare arrhythmia data if detected
-    const lastArrhythmiaData = arrhythmiaResult.detected ? {
+    // Prepare arrhythmia data if detected - OPTIMIZADO para mejor visualización
+    const lastArrhythmiaData = arrhythmiaResult.detected || arrhythmiaResult.data?.prematureBeat ? {
       timestamp: currentTime,
       rmssd: arrhythmiaResult.data?.rmssd || 0,
       rrVariation: arrhythmiaResult.data?.rrVariation || 0

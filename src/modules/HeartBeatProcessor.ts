@@ -391,11 +391,30 @@ export class HeartBeatProcessor {
   }
 
   public getRRIntervals(): { intervals: number[]; lastPeakTime: number | null; amplitudes?: number[] } {
-    // Pasar las amplitudes de los picos para la detección de arritmias
+    // Mejorar la transferencia de datos para detección de arritmias
+    let validIntervals: number[] = [];
+    
+    // Asegurar que los intervalos RR se calculen correctamente
+    if (this.bpmHistory.length > 0) {
+      validIntervals = this.bpmHistory.filter(interval => {
+        return interval >= 380 && interval <= 1700; // Validación de intervalos (35-158 BPM)
+      });
+    }
+    
+    // Normalizar las amplitudes para que sean compatibles con ArrhythmiaDetector
+    const normalizedAmplitudes = this.peakAmplitudes.map(amp => Math.abs(amp));
+    
+    // Añadir logs para verificar correcta transmisión de datos
+    console.log('HeartBeatProcessor - Enviando datos al detector de arritmias:', {
+      intervalCount: validIntervals.length,
+      amplitudeCount: normalizedAmplitudes.length,
+      timestamp: new Date().toISOString()
+    });
+    
     return {
-      intervals: [...this.bpmHistory],
+      intervals: validIntervals,
       lastPeakTime: this.lastPeakTime,
-      amplitudes: [...this.peakAmplitudes] // Usar amplitudes reales almacenadas
+      amplitudes: normalizedAmplitudes // Asegurar que las amplitudes sean positivas y normalizadas
     };
   }
 }
