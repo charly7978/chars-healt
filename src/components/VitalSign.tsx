@@ -50,6 +50,35 @@ const VitalSign: React.FC<VitalSignProps> = memo(({ label, value, unit, isFinalR
     return value;
   };
 
+  // Function to handle arrhythmia display - defined before it's used in riskInfo
+  const getArrhythmiaDisplay = () => {
+    if (!isArrhythmiaDisplay) return { text: value, color: "", label: "" };
+    
+    if (value === "--") {
+      return { 
+        text: "--", 
+        color: "#D3E4FD",
+        label: ""
+      };
+    }
+    
+    const [status, count] = String(value).split('|');
+    
+    if (status === "ARRITMIA DETECTADA") {
+      return {
+        text: count ? `ARRITMIA DETECTADA (${count})` : "ARRITMIA DETECTADA",
+        color: "#DC2626",
+        label: "ARRITMIA"
+      };
+    }
+    
+    return {
+      text: "SIN ARRITMIA DETECTADA",
+      color: "#0EA5E9",
+      label: "NORMAL"
+    };
+  };
+
   // Memoized risk information calculation to optimize rendering
   const riskInfo = useMemo(() => {
     if (isArrhythmiaDisplay) {
@@ -93,34 +122,6 @@ const VitalSign: React.FC<VitalSignProps> = memo(({ label, value, unit, isFinalR
     return { color: '#D3E4FD', label: '' };
   }, [label, value, isArrhythmiaDisplay, isBloodPressure, isFinalReading]);
   
-  const getArrhythmiaDisplay = () => {
-    if (!isArrhythmiaDisplay) return { text: value, color: "", label: "" };
-    
-    if (value === "--") {
-      return { 
-        text: "--", 
-        color: "#D3E4FD",
-        label: ""
-      };
-    }
-    
-    const [status, count] = String(value).split('|');
-    
-    if (status === "ARRITMIA DETECTADA") {
-      return {
-        text: count ? `ARRITMIA DETECTADA (${count})` : "ARRITMIA DETECTADA",
-        color: "#DC2626",
-        label: "ARRITMIA"
-      };
-    }
-    
-    return {
-      text: "SIN ARRITMIA DETECTADA",
-      color: "#0EA5E9",
-      label: "NORMAL"
-    };
-  };
-
   // Memoized display value calculation to optimize rendering
   const displayValue = useMemo(() => getDisplayValue(), [value, isBloodPressure]);
   
