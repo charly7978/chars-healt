@@ -132,13 +132,14 @@ const VitalSign: React.FC<VitalSignProps> = memo(({ label, value, unit, isFinalR
 
   return (
     <div className="relative overflow-hidden rounded-xl backdrop-blur-md shadow-lg p-2">
-      {/* Fondo degradado más opaco */}
-      <div className="absolute inset-0 bg-black/90 pointer-events-none" />
-      <div className="absolute inset-0 bg-gradient-to-br from-[#102A4C]/40 to-[#061629]/90 pointer-events-none" />
+      {/* Fondo expandido que cubre más área */}
+      <div className="absolute inset-0 bg-black/90 pointer-events-none" style={{ margin: "-8px" }} />
+      <div className="absolute inset-0 bg-gradient-to-br from-[#102A4C]/40 to-[#061629]/90 pointer-events-none" style={{ margin: "-8px" }} />
       <div className="absolute inset-0 pointer-events-none" style={{
-        backgroundImage: "radial-gradient(circle at top right, rgba(13, 148, 218, 0.25), transparent 70%)"
+        backgroundImage: "radial-gradient(circle at top right, rgba(13, 148, 218, 0.25), transparent 70%)",
+        margin: "-8px"
       }} />
-      <div className="absolute inset-0 border border-[#D3E4FD]/30 rounded-xl pointer-events-none" />
+      <div className="absolute inset-0 border border-[#D3E4FD]/30 rounded-xl pointer-events-none" style={{ margin: "-8px" }} />
       
       <div className="relative z-10 p-2">
         <h3 className="text-[#D3E4FD] text-[10px] font-medium tracking-wider mb-1">{label}</h3>
