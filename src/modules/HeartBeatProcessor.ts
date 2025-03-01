@@ -1,58 +1,84 @@
 export class HeartBeatProcessor {
+  // Buffers y estado
+  private inputBuffer: number[] = [];
+  private lastValue: number = 0;
+  private lastSmoothed: number = 0;
+  private baseline: number = 0;
+  private lastBeepTime: number = 0;
+  private lastPeakTime: number = 0;
+  private lastBpm: number = 0;
+  private rrIntervals: number[] = [];
+  private peakAmplitudes: number[] = [];
+  private timeBuffer: number[] = [];
+  private lastValues: number[] = [];
+  private valueBuffer: number[] = [];
+  private derivativeBuffer: number[] = [];
+  
+  // Contadores y flags
+  private peakCount: number = 0;
+  private confidenceValue: number = 0;
+  private isPeakFlag: boolean = false;
+  private isInitialized: boolean = false;
+  private lowSignalCount: number = 0;
+  private consecutiveNormalBeats: number = 0;
+  private peakCandidateValue: number = 0;
+  
+  // Audio Context
+  private audioContext: AudioContext | null = null;
+  
   // ────────── CONFIGURACIONES PRINCIPALES ──────────
   private readonly SAMPLE_RATE = 30;
   private readonly WINDOW_SIZE = 60;
   private readonly MIN_BPM = 40;
   private readonly MAX_BPM = 200; 
-  private readonly SIGNAL_THRESHOLD = 0.35;
+  private readonly SIGNAL_THRESHOLD = 0.25;  // Ajustado para coincidir con PPGSignalMeter
   private readonly MIN_CONFIDENCE = 0.45;
-  private readonly DERIVATIVE_THRESHOLD = 0.03;
-  private readonly MIN_PEAK_TIME_MS = 300;
-  private readonly WARMUP_TIME_MS = 1500;
-
+  private readonly DERIVATIVE_THRESHOLD = 0.02;  // Reducido para mayor sensibilidad
+  private readonly MIN_PEAK_TIME_MS = 300;  // Mayor intervalo mínimo para evitar duplicados
+  private readonly WARMUP_TIME_MS = 1000;
+  private startTime: number = 0;  // Añadido para resolver error de linter
+  
   // Parámetros de filtrado
   private readonly MEDIAN_FILTER_WINDOW = 3;
-  private readonly MOVING_AVERAGE_WINDOW = 4;
-  private readonly EMA_ALPHA = 0.35;
-  private readonly BASELINE_FACTOR = 0.98;
-
+  private readonly MOVING_AVERAGE_WINDOW = 5;  // Ajustado a 5 como en PPGSignalMeter
+  private readonly EMA_ALPHA = 0.2;
+  private readonly BASELINE_FACTOR = 0.95;
+  private medianBuffer: number[] = [];  // Añadido para resolver error de linter
+  private movingAverageBuffer: number[] = [];  // Añadido para resolver error de linter
+  private smoothedValue: number = 0;  // Añadido para resolver error de linter
+  
   // Parámetros de beep
-  private readonly BEEP_PRIMARY_FREQUENCY = 800;
-  private readonly BEEP_SECONDARY_FREQUENCY = 400;
-  private readonly BEEP_DURATION = 100;
-  private readonly BEEP_VOLUME = 1.0;
-  private readonly MIN_BEEP_INTERVAL_MS = 200;
-
+  private readonly BEEP_PRIMARY_FREQUENCY = 880;  // Frecuencia LA5
+  private readonly BEEP_SECONDARY_FREQUENCY = 440;  // Frecuencia LA4
+  private readonly BEEP_DURATION = 100;  // Duración más corta para mejor sincronización
+  private readonly BEEP_VOLUME = 1.0;  // Volumen máximo
+  private readonly MIN_BEEP_INTERVAL_MS = 300;  // Añadido para resolver error de linter
+  
   // ────────── AUTO-RESET SI LA SEÑAL ES MUY BAJA ──────────
-  private readonly LOW_SIGNAL_THRESHOLD = 0.03;
-  private readonly LOW_SIGNAL_FRAMES = 10;
-  private lowSignalCount = 0;
-
-  // Variables internas
-  private signalBuffer: number[] = [];
-  private medianBuffer: number[] = [];
-  private movingAverageBuffer: number[] = [];
-  private smoothedValue: number = 0;
-  private audioContext: AudioContext | null = null;
-  private lastBeepTime = 0;
-  private lastPeakTime: number | null = null;
-  private previousPeakTime: number | null = null;
-  private bpmHistory: number[] = [];
-  private baseline: number = 0;
-  private lastValue: number = 0;
-  private values: number[] = [];
-  private startTime: number = 0;
-  private peakConfirmationBuffer: number[] = [];
-  private lastConfirmedPeak: boolean = false;
-  private smoothBPM: number = 0;
-  private readonly BPM_ALPHA = 0.2;
-  private peakCandidateIndex: number | null = null;
-  private peakCandidateValue: number = 0;
-  private peakAmplitudes: number[] = [];
+  private readonly LOW_SIGNAL_THRESHOLD = 0.2;
+  private readonly LOW_SIGNAL_FRAMES = 15;
+  private signalBuffer: number[] = [];  // Añadido para resolver error de linter
+  private values: number[] = [];  // Añadido para resolver error de linter
+  private lastConfirmedPeak: boolean = false;  // Añadido para resolver error de linter
+  private peakConfirmationBuffer: number[] = [];  // Añadido para resolver error de linter
+  private previousPeakTime: number | null = null;  // Añadido para resolver error de linter
+  
+  // Parámetros de cálculo de BPM
+  private readonly RR_BUFFER_SIZE = 8;
+  private readonly MIN_RR_INTERVAL_MS = 300;
+  private readonly MAX_RR_INTERVAL_MS = 2000;
+  private readonly MIN_PEAKS_FOR_BPM = 3;
+  private readonly MAX_LOW_SIGNAL_COUNT = 15;
 
   constructor() {
-    this.initAudio();
-    this.startTime = Date.now();
+    this.reset();
+    
+    // Intentar iniciar el contexto de audio
+    try {
+      this.initAudio();
+    } catch (e) {
+      console.error("Error initializing audio context:", e);
+    }
   }
 
   private async initAudio() {
@@ -86,6 +112,7 @@ export class HeartBeatProcessor {
 
       const oscillator1 = this.audioContext.createOscillator();
       const oscillator2 = this.audioContext.createOscillator();
+      const oscillator3 = this.audioContext.createOscillator();
       const gainNode = this.audioContext.createGain();
 
       oscillator1.type = "sine";
@@ -100,19 +127,29 @@ export class HeartBeatProcessor {
         this.audioContext.currentTime
       );
 
+      oscillator3.type = "sine";
+      oscillator3.frequency.setValueAtTime(
+        300,
+        this.audioContext.currentTime
+      );
+
       gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
+      
       gainNode.gain.linearRampToValueAtTime(
         volume,
-        this.audioContext.currentTime + 0.005
+        this.audioContext.currentTime + 0.001
       );
+      
+      gainNode.gain.linearRampToValueAtTime(
+        volume,
+        this.audioContext.currentTime + 0.03
+      );
+      
       gainNode.gain.linearRampToValueAtTime(
         volume * 0.5,
-        this.audioContext.currentTime + 0.02
+        this.audioContext.currentTime + this.BEEP_DURATION / 1000 * 0.7
       );
-      gainNode.gain.linearRampToValueAtTime(
-        volume * 0.8,
-        this.audioContext.currentTime + 0.04
-      );
+      
       gainNode.gain.linearRampToValueAtTime(
         0,
         this.audioContext.currentTime + this.BEEP_DURATION / 1000
@@ -120,15 +157,20 @@ export class HeartBeatProcessor {
 
       oscillator1.connect(gainNode);
       oscillator2.connect(gainNode);
+      oscillator3.connect(gainNode);
       gainNode.connect(this.audioContext.destination);
 
       oscillator1.start(this.audioContext.currentTime);
-      oscillator2.start(this.audioContext.currentTime + 0.01);
+      oscillator2.start(this.audioContext.currentTime + 0.005);
+      oscillator3.start(this.audioContext.currentTime + 0.01);
       
       oscillator1.stop(
         this.audioContext.currentTime + this.BEEP_DURATION / 1000
       );
       oscillator2.stop(
+        this.audioContext.currentTime + this.BEEP_DURATION / 1000
+      );
+      oscillator3.stop(
         this.audioContext.currentTime + this.BEEP_DURATION / 1000
       );
     } catch (e) {
@@ -180,7 +222,7 @@ export class HeartBeatProcessor {
       this.signalBuffer.shift();
     }
 
-    if (this.signalBuffer.length < 10) {
+    if (this.signalBuffer.length < 5) {
       return {
         bpm: 0,
         confidence: 0,
@@ -197,13 +239,16 @@ export class HeartBeatProcessor {
     this.autoResetIfSignalIsLow(Math.abs(normalizedValue));
 
     this.values.push(smoothed);
-    if (this.values.length > 3) {
+    if (this.values.length > 5) {
       this.values.shift();
     }
 
-    let smoothDerivative = smoothed - this.lastValue;
-    if (this.values.length === 3) {
-      smoothDerivative = (this.values[2] - this.values[0]) / 2;
+    let smoothDerivative = 0;
+    if (this.values.length >= 3) {
+      smoothDerivative = (this.values[this.values.length-1] - this.values[0]) / 
+                        (this.values.length - 1);
+    } else {
+      smoothDerivative = smoothed - this.lastValue;
     }
     this.lastValue = smoothed;
 
@@ -221,7 +266,7 @@ export class HeartBeatProcessor {
         this.previousPeakTime = this.lastPeakTime;
         this.lastPeakTime = now;
         
-        this.playBeep(Math.min(0.5 + confidence * 0.8, 1.0));
+        this.playBeep(Math.max(0.6, Math.min(0.6 + confidence * 0.4, 1.0)));
         
         this.peakAmplitudes.push(Math.abs(normalizedValue));
         if (this.peakAmplitudes.length > 20) {
@@ -244,7 +289,7 @@ export class HeartBeatProcessor {
   private autoResetIfSignalIsLow(amplitude: number) {
     if (amplitude < this.LOW_SIGNAL_THRESHOLD) {
       this.lowSignalCount++;
-      if (this.lowSignalCount >= this.LOW_SIGNAL_FRAMES) {
+      if (this.lowSignalCount >= this.MAX_LOW_SIGNAL_COUNT) {
         this.resetDetectionStates();
       }
     } else {
@@ -282,16 +327,16 @@ export class HeartBeatProcessor {
       derivative > this.DERIVATIVE_THRESHOLD;
 
     const amplitudeConfidence = Math.min(
-      Math.max(normalizedValue / (this.SIGNAL_THRESHOLD * 1.5), 0),
+      Math.max(normalizedValue / (this.SIGNAL_THRESHOLD * 1.2), 0),
       1
     );
     
     const derivativeConfidence = Math.min(
-      Math.max(derivative / (this.DERIVATIVE_THRESHOLD * 1.2), 0),
+      Math.max(derivative / (this.DERIVATIVE_THRESHOLD * 1.0), 0),
       1
     );
 
-    const confidence = (amplitudeConfidence * 0.7 + derivativeConfidence * 0.3);
+    const confidence = (amplitudeConfidence * 0.8 + derivativeConfidence * 0.2);
 
     return { isPeak: isOverThreshold, confidence };
   }
@@ -302,7 +347,7 @@ export class HeartBeatProcessor {
     confidence: number
   ): boolean {
     this.peakConfirmationBuffer.push(normalizedValue);
-    if (this.peakConfirmationBuffer.length > 5) {
+    if (this.peakConfirmationBuffer.length > 6) {
       this.peakConfirmationBuffer.shift();
     }
 
@@ -364,7 +409,9 @@ export class HeartBeatProcessor {
     
     const sorted = [...this.bpmHistory].sort((a, b) => a - b);
     
-    const trimmed = sorted.slice(1, -1);
+    const trimCount = Math.max(1, Math.floor(sorted.length * 0.15));
+    const trimmed = sorted.slice(trimCount, sorted.length - trimCount);
+    
     if (!trimmed.length) return 0;
     
     const avg = trimmed.reduce((a, b) => a + b, 0) / trimmed.length;
@@ -407,6 +454,23 @@ export class HeartBeatProcessor {
     this.peakCandidateValue = 0;
     this.lowSignalCount = 0;
     this.peakAmplitudes = [];
+    this.valueBuffer = [];
+    this.derivativeBuffer = [];
+    this.signalThreshold = 0.25;
+    this.derivativeThreshold = 0.02;
+    this.movingAverageWindow = 5;
+    this.lastPeakTime = 0;
+    this.rrIntervals = [];
+    this.peakCount = 0;
+    this.lastBpm = 0;
+    this.bpmConfidence = 0;
+    this.lastValues = [];
+    this.timeBuffer = [];
+    this.beepDuration = 100;
+    this.beepVolume = 1.0;
+    this.baselineAlpha = 0.05;
+    this.minConfidence = 0.45;
+    this.minRRInterval = 300;
   }
 
   public getRRIntervals(): { intervals: number[]; lastPeakTime: number | null; amplitudes?: number[] } {

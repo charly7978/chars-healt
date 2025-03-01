@@ -192,6 +192,9 @@ const PPGSignalMeter = ({
     // Dibujar fondo y cuadrícula
     drawGrid(ctx);
 
+    // Variable para almacenar los picos detectados - MOVIDA AQUÍ para ser accesible en toda la función
+    const detectedPeaks = new Set<number>();
+
     // Obtener puntos a visualizar
     const points = dataBufferRef.current.getPoints();
     if (points.length > 1) {
@@ -251,26 +254,22 @@ const PPGSignalMeter = ({
       }
 
       // ======= ANÁLISIS Y DETECCIÓN DE PICOS =======
-      // CORREGIDO: Umbral más alto para reducir falsos picos
-      const peakThreshold = 0.5 * verticalScale;
+      // Umbral más liberal para mejor coincidencia con el HeartBeatProcessor
+      const peakThreshold = 0.25 * verticalScale;
       
-      // Usamos un conjunto para evitar detectar picos demasiado cercanos
-      const detectedPeaks = new Set<number>();
-      
-      // CORREGIDO: Ahora buscamos picos hacia ARRIBA (valores positivos)
+      // Buscamos picos hacia ARRIBA (valores positivos) - mismo criterio que HeartBeatProcessor
       for (let i = 4; i < visiblePoints.length - 4; i++) {
         // Verificar si estamos demasiado cerca de un pico ya detectado
         let tooClose = false;
         for (const peakIdx of detectedPeaks) {
-          if (Math.abs(i - peakIdx) < 6) { // Evitar picos muy cercanos
+          if (Math.abs(i - peakIdx) < 8) { // Aumentado para evitar detecciones múltiples
             tooClose = true;
             break;
           }
         }
         if (tooClose) continue;
         
-        // Considerar más puntos alrededor para mejor detección
-        const prevPoint4 = visiblePoints[i - 4];
+        // Considerar puntos alrededor para mejor detección
         const prevPoint3 = visiblePoints[i - 3];
         const prevPoint2 = visiblePoints[i - 2];
         const prevPoint = visiblePoints[i - 1];
@@ -278,20 +277,17 @@ const PPGSignalMeter = ({
         const nextPoint = visiblePoints[i + 1];
         const nextPoint2 = visiblePoints[i + 2];
         const nextPoint3 = visiblePoints[i + 3];
-        const nextPoint4 = visiblePoints[i + 4];
         
-        // CORREGIDO: Picos positivos (hacia arriba), valores mayores que vecinos
-        // Para PPG: un pico real debe ser MAYOR que sus vecinos (no menor)
+        // CRITERIO IDÉNTICO al HeartBeatProcessor
+        // Para que los picos coincidan naturalmente sin sincronización forzada
         const isPeak = 
-          point.value > peakThreshold &&               // Altura mínima significativa
-          point.value > prevPoint.value &&             // Mayor que punto anterior
-          point.value > prevPoint2.value &&            // Mayor que dos puntos antes
-          point.value > prevPoint3.value &&            // Mayor que tres puntos antes
-          point.value > prevPoint4.value &&            // Mayor que cuatro puntos antes
-          point.value > nextPoint.value &&             // Mayor que punto siguiente
-          point.value > nextPoint2.value &&            // Mayor que dos puntos después
-          point.value > nextPoint3.value &&            // Mayor que tres puntos después
-          point.value > nextPoint4.value;              // Mayor que cuatro puntos después
+          point.value > peakThreshold &&              // Altura mínima 
+          point.value > prevPoint.value &&            // Mayor que punto anterior
+          point.value > prevPoint2.value &&           // Mayor que dos puntos antes
+          point.value > prevPoint3.value &&           // Mayor que tres puntos antes
+          point.value > nextPoint.value &&            // Mayor que punto siguiente
+          point.value > nextPoint2.value &&           // Mayor que dos puntos después
+          point.value > nextPoint3.value;             // Mayor que tres puntos después
         
         if (isPeak) {
           detectedPeaks.add(i); // Registrar este pico para evitar duplicados cercanos
@@ -301,19 +297,15 @@ const PPGSignalMeter = ({
           
           // Dibujar círculo de pico más grande y visible
           ctx.beginPath();
-          ctx.arc(x, y, point.isArrhythmia ? 6 : 5, 0, Math.PI * 2);
+          ctx.arc(x, y, point.isArrhythmia ? 8 : 6, 0, Math.PI * 2);
           ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
           ctx.fill();
 
-          // Mostrar solo valores de amplitud significativos
-          const amplitude = (point.value / verticalScale).toFixed(2);
-          if (parseFloat(amplitude) > 0.6) {
-            ctx.font = 'bold 11px Inter';
-            ctx.fillStyle = '#666666';
-            ctx.textAlign = 'center';
-            ctx.fillText(amplitude, x, y - 12);
-          }
-          
+          // Añadir contorno para mejor visibilidad
+          ctx.strokeStyle = 'white';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+
           // Destacar información de latidos prematuros/arritmias
           if (point.isArrhythmia) {
             // Anillos destacando el latido prematuro
@@ -404,12 +396,42 @@ const PPGSignalMeter = ({
       }
     }
 
+    // Dibujamos BPM y mensajes adicionales para diagnóstico
+    if (isFingerDetected) {
+      // Obtener el BPM del procesador (para debug)
+      let debugBPM = 0;
+      if (typeof window !== 'undefined' && window.heartBeatProcessor) {
+        try {
+          debugBPM = window.heartBeatProcessor.getFinalBPM ? 
+                     window.heartBeatProcessor.getFinalBPM() : 0;
+        } catch (e) {
+          debugBPM = 0;
+        }
+      }
+
+      // Mostrar información de diagnóstico
+      ctx.font = 'bold 14px Inter';
+      ctx.fillStyle = '#444';
+      ctx.textAlign = 'left';
+      ctx.fillText(`Picos detectados: ${detectedPeaks.size}`, 15, 30);
+      
+      if (debugBPM > 0) {
+        ctx.fillText(`BPM (Proc): ${debugBPM}`, 15, 50);
+      }
+    }
+    
     lastRenderTimeRef.current = currentTime;
     animationFrameRef.current = requestAnimationFrame(renderSignal);
   }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus, drawGrid, smoothValue]);
 
   useEffect(() => {
-    renderSignal();
+    // Función animate sin pasar parámetro a renderSignal
+    const animate = () => {
+      animationFrameRef.current = requestAnimationFrame(animate);
+    };
+    
+    animationFrameRef.current = requestAnimationFrame(animate);
+    
     return () => {
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
