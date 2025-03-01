@@ -1,4 +1,3 @@
-
 interface RiskSegment {
   color: string;
   label: string;
@@ -48,7 +47,7 @@ export class VitalSignsRisk {
   private static lastDiastolic: number | null = null;
   
   private static bpmSegmentHistory: RiskSegment[] = [];
-  private static spo2SegmentHistory: RiskSegment[] = []; // Fixed: Added the type RiskSegment[]
+  private static spo2SegmentHistory: RiskSegment[] = [];
   private static bpSegmentHistory: RiskSegment[] = [];
 
   // Método de suavizado
@@ -361,12 +360,13 @@ export class VitalSignsRisk {
       console.log("Cálculo final de SpO2:", { avgSPO2, isFinalReading });
       
       if (avgSPO2 > 0) {
-        // Corregir umbrales de SpO2 para determinar el riesgo correctamente
+        // CORREGIDO: Umbrales de SpO2 para determinar correctamente el riesgo
         if (avgSPO2 < 90) {
           return { color: '#ea384c', label: 'INSUFICIENCIA RESPIRATORIA' };
         } else if (avgSPO2 >= 90 && avgSPO2 < 93) {
           return { color: '#F97316', label: 'LEVE INSUFICIENCIA RESPIRATORIA' };
-        } else if (avgSPO2 >= 93) {
+        } else {
+          // Para valores ≥ 93, consideramos NORMAL (rango saludable)
           return { color: '#0EA5E9', label: 'NORMAL' };
         }
       }
@@ -380,15 +380,16 @@ export class VitalSignsRisk {
     // Comportamiento para tiempo real con rangos corregidos
     let currentSegment: RiskSegment;
     
+    // CORREGIDO: Simplificamos la lógica para evitar conflictos
     if (this.isStableValue(this.spo2History, [0, 89])) {
       currentSegment = { color: '#ea384c', label: 'INSUFICIENCIA RESPIRATORIA' };
     } else if (this.isStableValue(this.spo2History, [90, 92])) {
       currentSegment = { color: '#F97316', label: 'LEVE INSUFICIENCIA RESPIRATORIA' };
     } else if (this.isStableValue(this.spo2History, [93, 100])) {
+      // CORREGIDO: Valores normales (93-100) deben mostrar NORMAL
       currentSegment = { color: '#0EA5E9', label: 'NORMAL' };
-    } else if (this.isStableValue(this.spo2History, [101, 999])) {
-      currentSegment = { color: '#FFFFFF', label: 'VALOR FUERA DE RANGO' };
     } else {
+      // Si no hay estabilidad o está fuera de rango
       currentSegment = { color: '#FFFFFF', label: 'EVALUANDO...' };
     }
     
@@ -417,7 +418,7 @@ export class VitalSignsRisk {
       const avgBP = this.getAverageBP();
       
       if (avgBP.systolic > 0 && avgBP.diastolic > 0) {
-        // Corregir umbrales de presión arterial para determinar el riesgo correctamente
+        // CORREGIDO: Umbrales de presión arterial para determinar correctamente el riesgo
         if (avgBP.systolic >= 140 && avgBP.diastolic >= 90) {
           return { color: '#ea384c', label: 'PRESIÓN ALTA' };
         } else if ((avgBP.systolic >= 130 && avgBP.systolic < 140) || 
