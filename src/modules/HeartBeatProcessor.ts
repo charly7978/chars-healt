@@ -315,9 +315,17 @@ export class HeartBeatProcessor {
   }
 
   private updateBPM() {
-    const currentBPM = this.calculateCurrentBPM();
-    if (currentBPM > 0) {
-      this.smoothBPM = this.BPM_ALPHA * currentBPM + (1 - this.BPM_ALPHA) * this.smoothBPM;
+    if (!this.lastPeakTime || !this.previousPeakTime) return;
+    const interval = this.lastPeakTime - this.previousPeakTime;
+    if (interval <= 0) return;
+
+    const instantBPM = 60000 / interval;
+    if (instantBPM >= this.MIN_BPM && instantBPM <= this.MAX_BPM) {
+      this.bpmHistory.push(instantBPM);
+      if (this.bpmHistory.length > 12) {
+        this.bpmHistory.shift();
+      }
+      this.smoothBPM = this.BPM_ALPHA * instantBPM + (1 - this.BPM_ALPHA) * this.smoothBPM;
     }
   }
 
@@ -377,8 +385,12 @@ export class HeartBeatProcessor {
   }
 
   public getRRIntervals(): { intervals: number[]; lastPeakTime: number | null } {
+    if (!this.lastPeakTime || !this.previousPeakTime) {
+      return { intervals: [], lastPeakTime: null };
+    }
+    const interval = this.lastPeakTime - this.previousPeakTime;
     return {
-      intervals: [...this.bpmHistory],
+      intervals: [interval],
       lastPeakTime: this.lastPeakTime
     };
   }
