@@ -5,10 +5,10 @@ import { BloodPressureCalculator } from './BloodPressureCalculator';
 import { ArrhythmiaDetector } from './ArrhythmiaDetector';
 
 export class VitalSignsProcessor {
-  private readonly WINDOW_SIZE = 30; // Reducido para respuesta más rápida
+  private readonly WINDOW_SIZE = 15; // Reducido aún más para respuesta inmediata
   private ppgValues: number[] = [];
-  private readonly SMA_WINDOW = 1; // Mínimo para mostrar señal casi cruda
-  private readonly BPM_SMOOTHING_ALPHA = 0.01; // Suavizado muy bajo para mostrar variaciones naturales
+  private readonly SMA_WINDOW = 0; // Sin filtrado para mostrar señal completamente cruda
+  private readonly BPM_SMOOTHING_ALPHA = 0.005; // Mínimo suavizado para mostrar valores reales
   private lastBPM: number = 0;
   
   // Módulos especializados para cada signo vital
@@ -20,12 +20,12 @@ export class VitalSignsProcessor {
     this.spO2Calculator = new SpO2Calculator();
     this.bpCalculator = new BloodPressureCalculator();
     this.arrhythmiaDetector = new ArrhythmiaDetector();
-    console.log("VitalSignsProcessor: Instancia creada con filtrado mínimo");
+    console.log("VitalSignsProcessor: Instancia creada SIN filtrado");
   }
 
   /**
    * Process incoming PPG signal and calculate vital signs
-   * Pasar mediciones reales con filtrado mínimo
+   * Pasar mediciones reales sin filtrado
    */
   public processSignal(
     ppgValue: number,
@@ -39,9 +39,8 @@ export class VitalSignsProcessor {
       this.arrhythmiaDetector.updateIntervals(rrData.intervals, rrData.lastPeakTime);
     }
 
-    // Procesar señal PPG con filtrado mínimo
-    const filtered = this.applySMAFilter(ppgValue);
-    this.ppgValues.push(filtered);
+    // Usar valor PPG directo sin filtrar
+    this.ppgValues.push(ppgValue);
     if (this.ppgValues.length > this.WINDOW_SIZE) {
       this.ppgValues.shift();
     }
@@ -51,8 +50,8 @@ export class VitalSignsProcessor {
     
     // Durante la fase de aprendizaje, recopilar valores para calibración de SpO2
     if (isLearning) {
-      if (this.ppgValues.length >= 10) { // Ventana reducida para calibración más rápida
-        const tempSpO2 = this.spO2Calculator.calculateRaw(this.ppgValues.slice(-10));
+      if (this.ppgValues.length >= 5) { // Ventana mínima para calibración instantánea
+        const tempSpO2 = this.spO2Calculator.calculateRaw(this.ppgValues.slice(-5));
         if (tempSpO2 > 0) {
           this.spO2Calculator.addCalibrationValue(tempSpO2);
           console.log("Valor de calibración SpO2 añadido:", tempSpO2);
@@ -70,24 +69,24 @@ export class VitalSignsProcessor {
     let bp;
     let pressure = "EVALUANDO"; // Comenzar con "EVALUANDO"
 
-    // Calcular presión con ventana más pequeña para respuesta más rápida
-    if (this.ppgValues.length >= 15) { // Reducido de 30 a 15 muestras mínimas
-      console.log("VitalSignsProcessor: Calculando BP con mediciones reales");
-      bp = this.bpCalculator.calculate(this.ppgValues.slice(-15)); // Reducido para respuesta más rápida
+    // Calcular presión arterial con ventana mínima para respuesta inmediata
+    if (this.ppgValues.length >= 10) { // Reducido al mínimo para respuesta inmediata
+      console.log("VitalSignsProcessor: Calculando BP con datos crudos");
+      bp = this.bpCalculator.calculate(this.ppgValues); // Usar todos los valores disponibles
       
-      if (bp.systolic > 0 && bp.diastolic > 0) {
+      if (bp && bp.systolic > 0 && bp.diastolic > 0) {
         pressure = `${bp.systolic}/${bp.diastolic}`;
-        console.log(`VitalSignsProcessor: Medición BP real: ${pressure}`);
+        console.log(`VitalSignsProcessor: Medición BP real actualizada: ${pressure}`);
       } else {
-        console.log("VitalSignsProcessor: Valores BP inválidos, mostrando EVALUANDO");
+        console.log("VitalSignsProcessor: Valores BP no válidos, mostrando EVALUANDO");
       }
     } else {
-      console.log(`VitalSignsProcessor: Datos insuficientes (${this.ppgValues.length}/15), mostrando EVALUANDO`);
+      console.log(`VitalSignsProcessor: Datos insuficientes (${this.ppgValues.length}/10), mostrando EVALUANDO`);
     }
 
-    // Calcular SpO2 con ventana más pequeña
-    console.log("VitalSignsProcessor: Calculando SpO2 con datos reales");
-    const spo2Values = this.ppgValues.slice(-10); // Usar solo las últimas 10 muestras
+    // Calcular SpO2 con ventana mínima
+    console.log("VitalSignsProcessor: Calculando SpO2 con datos crudos");
+    const spo2Values = this.ppgValues.slice(-5); // Usar solo las últimas 5 muestras para respuesta inmediata
     const spo2 = this.spO2Calculator.calculate(spo2Values);
     console.log(`VitalSignsProcessor: SpO2 calculado: ${spo2}, con ${spo2Values.length} muestras`);
 
@@ -117,7 +116,7 @@ export class VitalSignsProcessor {
       return rawBPM;
     }
     
-    // Suavizado mínimo para mostrar variaciones naturales
+    // Suavizado mínimo para mostrar valores reales
     const smoothed = Math.round(
       this.BPM_SMOOTHING_ALPHA * rawBPM + 
       (1 - this.BPM_SMOOTHING_ALPHA) * this.lastBPM
@@ -136,13 +135,15 @@ export class VitalSignsProcessor {
     this.spO2Calculator.reset();
     this.bpCalculator.reset();
     this.arrhythmiaDetector.reset();
-    console.log("VitalSignsProcessor: Reset de todos los procesadores");
+    console.log("VitalSignsProcessor: Reset completo de todos los procesadores");
   }
 
   /**
    * Apply Simple Moving Average filter to the signal
+   * NOTA: No se utiliza filtrado para obtener valores reales
    */
   private applySMAFilter(value: number): number {
-    return applySMAFilter(this.ppgValues, value, this.SMA_WINDOW);
+    // Retornar valor crudo sin filtrar
+    return value;
   }
 }

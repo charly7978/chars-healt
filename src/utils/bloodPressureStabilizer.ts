@@ -1,41 +1,35 @@
+
 /**
- * Utility for blood pressure processing without any simulation
+ * Utility for blood pressure processing without any simulation or filtering
  */
 export const createBloodPressureStabilizer = () => {
-  // Minimal tracking for signal quality
-  const bpHistoryRef: string[] = [];
-  const bpQualityRef: number[] = [];
+  // Tracking de valores sin buffer para mostrar datos inmediatos
   let lastValidBpRef: string = "";
-  
-  // Minimal constants for basic filtering of impossible values
-  const BP_BUFFER_SIZE = 1; // Absolute minimum to show direct readings
   
   /**
    * Reset stabilizer state
    */
   const reset = () => {
-    bpHistoryRef.length = 0;
-    bpQualityRef.length = 0;
     lastValidBpRef = "";
   };
   
   /**
    * Check if blood pressure is physiologically impossible
-   * Only filters medically impossible values
+   * Solo filtra valores médicamente imposibles
    */
   const isBloodPressureUnrealistic = (rawBP: string): boolean => {
-    // Don't process empty or placeholder values
+    // No procesar valores vacíos
     if (rawBP === "--/--" || rawBP === "0/0") return true;
     
-    // Check format
+    // Verificar formato
     const bpParts = rawBP.split('/');
     if (bpParts.length !== 2) return true;
     
     const systolic = parseInt(bpParts[0], 10);
     const diastolic = parseInt(bpParts[1], 10);
     
-    // Only filter extreme values that are medically impossible
-    // Very wide ranges to allow any real reading
+    // Solo filtrar valores extremos que son médicamente imposibles
+    // Rangos muy amplios para permitir cualquier lectura real
     if (isNaN(systolic) || isNaN(diastolic) ||
         systolic > 300 || systolic < 30 ||
         diastolic > 250 || diastolic < 15 ||
@@ -48,42 +42,32 @@ export const createBloodPressureStabilizer = () => {
   
   /**
    * Process blood pressure with direct pass-through
-   * Shows exactly what was measured with minimal intervention
+   * Muestra exactamente lo que se midió sin ninguna intervención
    */
   const stabilizeBloodPressure = (rawBP: string, quality: number): string => {
-    // Don't process empty values
+    // No procesar valores vacíos
     if (rawBP === "--/--" || rawBP === "0/0") return rawBP;
     
-    // Check format
+    // Verificar formato
     const bpParts = rawBP.split('/');
     if (bpParts.length !== 2) return lastValidBpRef || "--/--";
     
     const systolic = parseInt(bpParts[0], 10);
     const diastolic = parseInt(bpParts[1], 10);
     
-    // Filter only impossible values
+    // Filtrar solo valores imposibles
     if (isBloodPressureUnrealistic(rawBP)) {
       return lastValidBpRef || "--/--";
     }
     
-    // Direct measurement with no simulation
+    // Medición directa sin simulación
     const directBP = `${systolic}/${diastolic}`;
-    console.log(`BP Stabilizer: Passing through real measurement: ${directBP}`);
+    console.log(`BP Stabilizer: Medición directa: ${directBP}, calidad: ${quality}`);
     
-    // Keep track of last valid values
-    bpHistoryRef.push(directBP);
-    bpQualityRef.push(quality);
-    
-    // Minimal buffer to show real-time changes
-    if (bpHistoryRef.length > BP_BUFFER_SIZE) {
-      bpHistoryRef.shift();
-      bpQualityRef.shift();
-    }
-    
-    // Update last valid value
+    // Actualizar último valor válido
     lastValidBpRef = directBP;
     
-    // Return the actual measured value directly
+    // Retornar el valor medido real directamente
     return directBP;
   };
   
