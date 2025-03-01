@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -159,8 +160,9 @@ const PPGSignalMeter = ({
     const smoothedValue = smoothValue(value, lastValueRef.current);
     lastValueRef.current = smoothedValue;
 
-    const normalizedValue = smoothedValue - (baselineRef.current || 0);
-    const scaledValue = normalizedValue * verticalScale * -1;
+    // INVERTIR POLARIDAD: Multiplica por -1 el valor normalizado para invertir la señal
+    const normalizedValue = (smoothedValue - (baselineRef.current || 0)) * -1; // Polaridad invertida
+    const scaledValue = normalizedValue * verticalScale; // Eliminamos el segundo -1 para evitar doble inversión
     
     let isArrhythmia = false;
     if (rawArrhythmiaData && 
@@ -240,7 +242,8 @@ const PPGSignalMeter = ({
         const point = visiblePoints[i];
         const nextPoint = visiblePoints[i + 1];
         
-        if (point.value < prevPoint.value && point.value < nextPoint.value) {
+        // INVERTIR LÓGICA PARA DETECTAR PICOS: Ahora buscamos picos negativos (valles)
+        if (point.value > prevPoint.value && point.value > nextPoint.value) {
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
           const y = canvas.height * 0.4 + point.value;
           

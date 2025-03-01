@@ -11,6 +11,7 @@ interface VitalSignProps {
 const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReading = false }) => {
   const isArrhythmiaDisplay = label === "ARRITMIAS";
   const isBloodPressure = label === "PRESIÓN ARTERIAL";
+  const isSpO2Display = label === "SPO2";
 
   // Helper function to check if blood pressure value is unrealistic
   const isBloodPressureUnrealistic = (bpString: string): boolean => {
@@ -70,7 +71,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     }
 
     // For SPO2, show real value without checking risk if no measurement
-    if (label === "SPO2") {
+    if (isSpO2Display) {
       if (value === "--" || value === 0) {
         return { color: '#000000', label: '' };
       }
@@ -80,7 +81,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     }
 
     // For blood pressure, show real value without checking risk if no measurement
-    if (label === "PRESIÓN ARTERIAL") {
+    if (isBloodPressure) {
       if (value === "--/--" || value === "0/0") {
         return { color: '#000000', label: '' };
       }
