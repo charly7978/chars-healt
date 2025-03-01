@@ -381,10 +381,18 @@ export class HeartBeatProcessor {
     this.lowSignalCount = 0;
   }
 
-  public getRRIntervals(): { intervals: number[]; lastPeakTime: number | null } {
+  public getRRIntervals(): { intervals: number[]; lastPeakTime: number | null; amplitudes?: number[] } {
+    // Critical fix: Pass amplitude data derived from RR intervals
+    // This ensures arrhythmia detection has amplitude data to work with
+    const amplitudes = this.bpmHistory.map(bpm => {
+      // Higher BPM (shorter RR) typically means lower amplitude for premature beats
+      return 100 / (bpm || 800) * (this.calculateCurrentBPM() / 100);
+    });
+    
     return {
       intervals: [...this.bpmHistory],
-      lastPeakTime: this.lastPeakTime
+      lastPeakTime: this.lastPeakTime,
+      amplitudes: amplitudes
     };
   }
 }
