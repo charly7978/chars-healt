@@ -41,6 +41,8 @@ export class PPGSignalProcessor implements SignalProcessor {
   private isProcessing: boolean = false;
   private kalmanFilter: KalmanFilter;
   private lastValues: number[] = [];
+  private frameSkipCount: number = 0;  // For frame skipping optimization
+  private readonly FRAME_PROCESS_INTERVAL: number = 2;  // Process every Nth frame
   
   // Configuration settings
   private readonly DEFAULT_CONFIG = {
@@ -60,6 +62,11 @@ export class PPGSignalProcessor implements SignalProcessor {
   private isCurrentlyDetected: boolean = false;
   private lastDetectionTime: number = 0;
   private readonly DETECTION_TIMEOUT = 500; // 500ms timeout
+  
+  // Cache for optimizing repeated calculations
+  private lastRedValue: number = 0;
+  private lastProcessedTime: number = 0;
+  private processingThrottleMs: number = 33; // ~ 30fps max processing rate
 
   /**
    * Constructor
@@ -84,7 +91,10 @@ export class PPGSignalProcessor implements SignalProcessor {
       this.consecutiveDetections = 0;
       this.isCurrentlyDetected = false;
       this.lastDetectionTime = 0;
+      this.frameSkipCount = 0;
       this.kalmanFilter.reset();
+      this.lastRedValue = 0;
+      this.lastProcessedTime = 0;
       console.log("PPGSignalProcessor: Initialized");
     } catch (error) {
       console.error("PPGSignalProcessor: Initialization error", error);
@@ -113,6 +123,8 @@ export class PPGSignalProcessor implements SignalProcessor {
     this.consecutiveDetections = 0;
     this.isCurrentlyDetected = false;
     this.kalmanFilter.reset();
+    this.lastRedValue = 0;
+    this.lastProcessedTime = 0;
     console.log("PPGSignalProcessor: Stopped");
   }
 
@@ -137,13 +149,32 @@ export class PPGSignalProcessor implements SignalProcessor {
    */
   processFrame(imageData: ImageData): void {
     if (!this.isProcessing) {
-      console.log("PPGSignalProcessor: Not processing");
       return;
     }
 
+    // Frame skipping for performance optimization
+    this.frameSkipCount = (this.frameSkipCount + 1) % this.FRAME_PROCESS_INTERVAL;
+    if (this.frameSkipCount !== 0) {
+      return;
+    }
+
+    // Throttle processing rate for performance
+    const now = Date.now();
+    if (now - this.lastProcessedTime < this.processingThrottleMs) {
+      return;
+    }
+    this.lastProcessedTime = now;
+    
     try {
       // Extract PPG signal based on scientific evidence
       const redValue = this.extractRedChannel(imageData);
+      
+      // Skip processing if the value hasn't changed significantly (optimization)
+      if (Math.abs(redValue - this.lastRedValue) < 0.5 && this.lastValues.length > 0) {
+        return;
+      }
+      this.lastRedValue = redValue;
+      
       const filtered = this.kalmanFilter.filter(redValue);
       this.lastValues.push(filtered);
       
@@ -153,16 +184,9 @@ export class PPGSignalProcessor implements SignalProcessor {
 
       const { isFingerDetected, quality } = this.analyzeSignal(filtered, redValue);
 
-      console.log("PPGSignalProcessor: Analysis", {
-        redValue,
-        filtered,
-        isFingerDetected,
-        quality,
-        stableFrames: this.stableFrameCount
-      });
-
+      // Only emit signal if value has changed meaningfully or detection status changed
       const processedSignal: ProcessedSignal = {
-        timestamp: Date.now(),
+        timestamp: now,
         rawValue: redValue,
         filteredValue: filtered,
         quality: quality,
@@ -179,7 +203,7 @@ export class PPGSignalProcessor implements SignalProcessor {
   }
 
   /**
-   * Extract red channel from image data
+   * Extract red channel from image data - optimized version
    */
   private extractRedChannel(imageData: ImageData): number {
     const data = imageData.data;
@@ -194,15 +218,22 @@ export class PPGSignalProcessor implements SignalProcessor {
     const startY = Math.floor(imageData.height * 0.375);
     const endY = Math.floor(imageData.height * 0.625);
     
-    for (let y = startY; y < endY; y++) {
-      for (let x = startX; x < endX; x++) {
-        const i = (y * imageData.width + x) * 4;
+    // Optimize by sampling every other pixel when resolution is high
+    const samplingRate = (imageData.width > 640 || imageData.height > 480) ? 2 : 1;
+    
+    for (let y = startY; y < endY; y += samplingRate) {
+      const rowOffset = y * imageData.width * 4;
+      
+      for (let x = startX; x < endX; x += samplingRate) {
+        const i = rowOffset + (x * 4);
         redSum += data[i];     // Red channel
         greenSum += data[i+1]; // Green channel
         blueSum += data[i+2];  // Blue channel
         count++;
       }
     }
+    
+    if (count === 0) return 0;
     
     const avgRed = redSum / count;
     const avgGreen = greenSum / count;
