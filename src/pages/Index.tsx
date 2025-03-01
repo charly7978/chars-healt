@@ -308,13 +308,13 @@ const Index = () => {
       if (isMonitoring && videoTrack.getCapabilities()?.torch) {
         videoTrack.applyConstraints({
           advanced: [{ torch: true }]
-        }).catch(err => console.error("Error activando linterna:", err));
+        }).catch(err => console.error("Error activating flashlight:", err));
       }
       
       const tempCanvas = document.createElement('canvas');
       const tempCtx = tempCanvas.getContext('2d');
       if (!tempCtx) {
-        console.error("No se pudo obtener el contexto 2D");
+        console.error("Could not get 2D context");
         return;
       }
       
@@ -328,6 +328,10 @@ const Index = () => {
         try {
           const frame = await imageCaptureRef.current.grabFrame();
           
+          if (!isMonitoring || !isProcessingFramesRef.current) {
+            return; // Double-check we're still monitoring
+          }
+          
           tempCanvas.width = frame.width;
           tempCanvas.height = frame.height;
           tempCtx.drawImage(frame, 0, 0);
@@ -340,17 +344,19 @@ const Index = () => {
             animationFrameRef.current = requestAnimationFrame(processImage);
           }
         } catch (error) {
-          console.error("Error capturando frame:", error);
+          console.error("Error capturing frame:", error);
           
           if (isMonitoring && isProcessingFramesRef.current) {
             setTimeout(() => {
-              animationFrameRef.current = requestAnimationFrame(processImage);
+              if (isMonitoring && isProcessingFramesRef.current) {
+                animationFrameRef.current = requestAnimationFrame(processImage);
+              }
             }, 500);
           }
         }
       };
 
-      processImage();
+      animationFrameRef.current = requestAnimationFrame(processImage);
     } catch (error) {
       console.error("Error creating ImageCapture:", error);
     }
@@ -366,7 +372,7 @@ const Index = () => {
             if (videoTrack && videoTrack.getCapabilities()?.torch) {
               videoTrack.applyConstraints({
                 advanced: [{ torch: false }]
-              }).catch(err => console.error("Error desactivando linterna:", err));
+              }).catch(err => console.error("Error desactivating flashlight:", err));
             }
             stream.getTracks().forEach(track => track.stop());
           })
@@ -497,7 +503,7 @@ const Index = () => {
         
         setSignalQuality(lastSignal.quality);
       } catch (error) {
-        console.error("Error procesando señal:", error);
+        console.error("Error processing signal:", error);
       }
     }
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns, measurementComplete]);
