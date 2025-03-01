@@ -48,7 +48,7 @@ export class VitalSignsRisk {
   private static lastDiastolic: number | null = null;
   
   private static bpmSegmentHistory: RiskSegment[] = [];
-  private static spo2SegmentHistory: RiskSegment[] = [];
+  private static spo2SegmentHistory: RiskSegment[] = []; // Fixed: Added the type RiskSegment[]
   private static bpSegmentHistory: RiskSegment[] = [];
 
   // Método de suavizado
