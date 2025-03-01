@@ -220,8 +220,10 @@ const Index = () => {
             />
           </div>
 
-          <div className="absolute bottom-[200px] left-0 right-0 px-4">
-            <div className="absolute inset-0 bg-black/50 rounded-xl -m-2"></div>
+          <div className="absolute bottom-0 left-0 right-0 h-[300px] bg-black/70 z-0"></div>
+
+          <div className="absolute bottom-[200px] left-0 right-0 px-4 z-10">
+            <div className="absolute inset-0 bg-black/70 rounded-xl -m-2"></div>
             
             <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4 relative">
               <div className="grid grid-cols-4 gap-2">
@@ -249,12 +251,12 @@ const Index = () => {
           </div>
 
           {isMonitoring && (
-            <div className="absolute bottom-40 left-0 right-0 text-center">
+            <div className="absolute bottom-40 left-0 right-0 text-center z-10">
               <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 30s</span>
             </div>
           )}
 
-          <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 mt-auto">
+          <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 mt-auto relative z-10">
             <button 
               onClick={startMonitoring}
               className={`w-full h-full text-2xl font-bold text-white active:bg-gray-800 ${!permissionsGranted ? 'bg-gray-600' : 'bg-black/80'}`}
@@ -271,7 +273,7 @@ const Index = () => {
           </div>
           
           {!permissionsGranted && (
-            <div className="absolute bottom-20 left-0 right-0 text-center px-4">
+            <div className="absolute bottom-20 left-0 right-0 text-center px-4 z-10">
               <span className="text-lg font-medium text-red-400">
                 La aplicación necesita permisos de cámara para funcionar correctamente
               </span>
