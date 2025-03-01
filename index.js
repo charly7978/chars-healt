@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -222,7 +221,9 @@ const Index = () => {
           </div>
 
           <div className="absolute bottom-[200px] left-0 right-0 px-4">
-            <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4">
+            <div className="absolute inset-0 bg-black/50 rounded-xl -m-2"></div>
+            
+            <div className="bg-gray-900/30 backdrop-blur-sm rounded-xl p-4 relative">
               <div className="grid grid-cols-4 gap-2">
                 <VitalSign 
                   label="FRECUENCIA CARDÍACA"
