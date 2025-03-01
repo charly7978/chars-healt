@@ -129,10 +129,10 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     { text: displayValue, ...getRiskInfo() };
 
   return (
-    <div className="relative overflow-hidden rounded-xl backdrop-blur-md bg-[#0EA5E9]/20 border border-[#D3E4FD]/30 shadow-lg p-2">
-      <div className="absolute inset-0 bg-gradient-to-br from-[#D3E4FD]/20 to-[#0EA5E9]/10 pointer-events-none" />
+    <div className="relative overflow-hidden rounded-xl backdrop-blur-md bg-black/80 border border-[#D3E4FD]/30 shadow-lg p-2">
+      <div className="absolute inset-0 bg-gradient-to-br from-[#D3E4FD]/10 to-[#0EA5E9]/5 pointer-events-none" />
       <div className="absolute inset-0 pointer-events-none" style={{
-        backgroundImage: "radial-gradient(circle at top right, rgba(211, 228, 253, 0.15), transparent 70%)"
+        backgroundImage: "radial-gradient(circle at top right, rgba(13, 148, 218, 0.15), transparent 70%)"
       }} />
       <div className="relative z-10 p-2">
         <h3 className="text-[#D3E4FD] text-[10px] font-medium tracking-wider mb-1">{label}</h3>
