@@ -1,3 +1,4 @@
+
 interface RiskSegment {
   color: string;
   label: string;
@@ -379,7 +380,6 @@ export class VitalSignsRisk {
     // Comportamiento para tiempo real con rangos corregidos
     let currentSegment: RiskSegment;
     
-    // Comprobar la estabilidad de la señal
     if (this.isStableValue(this.spo2History, [0, 89])) {
       currentSegment = { color: '#ea384c', label: 'INSUFICIENCIA RESPIRATORIA' };
     } else if (this.isStableValue(this.spo2History, [90, 92])) {
