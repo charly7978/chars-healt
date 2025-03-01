@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -7,6 +8,7 @@ import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import PermissionsHandler from "@/components/PermissionsHandler";
 import { VitalSignsRisk } from '@/utils/vitalSignsRisk';
+import deviceContextService from '@/services/DeviceContextService';
 
 interface VitalSigns {
   spo2: number;
@@ -336,9 +338,9 @@ const Index = () => {
             return;
           }
           
-          // Verify track is still in valid state before grabbing a frame
-          const track = imageCaptureRef.current.track;
-          if (!track || track.readyState !== 'live') {
+          // The track reference is available via videoTrack
+          // NOT from imageCapture.track which doesn't exist
+          if (!videoTrack || videoTrack.readyState !== 'live') {
             console.error("Track is not in live state, skipping frame capture");
             
             // If we're still monitoring, retry after a delay
