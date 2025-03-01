@@ -8,20 +8,20 @@ import { useSignalHistory } from './useSignalHistory';
 import { VitalSignsRisk } from '../utils/vitalSignsRisk';
 
 export const useVitalSignsProcessor = () => {
-  // Procesador principal
+  // Core processor
   const processorRef = useRef<VitalSignsProcessor | null>(null);
   
-  // Módulos especializados
+  // Specialized modules
   const arrhythmiaAnalyzer = useArrhythmiaAnalyzer();
   const bloodPressureStabilizer = useRef(createBloodPressureStabilizer());
   const dataCollector = useRef(createVitalSignsDataCollector());
   const signalHistory = useSignalHistory();
   
-  // Constantes
+  // Constants
   const MAX_ARRHYTHMIAS_PER_SESSION = 15; // Máximo razonable para 30 segundos
   
   /**
-   * Inicialización perezosa del VitalSignsProcessor
+   * Lazy initialization of the VitalSignsProcessor
    */
   const getProcessor = useCallback(() => {
     if (!processorRef.current) {
@@ -32,28 +32,28 @@ export const useVitalSignsProcessor = () => {
   }, []);
   
   /**
-   * Procesar un nuevo valor de señal y actualizar todos los vitales
+   * Process a new signal value and update all vitals
    */
   const processSignal = useCallback((value: number, rrData?: { intervals: number[], lastPeakTime: number | null }) => {
     const processor = getProcessor();
     const currentTime = Date.now();
     
-    // Almacenar datos para análisis
+    // Store data for analysis
     signalHistory.addSignal(value);
     
     if (rrData) {
       signalHistory.addRRData(rrData);
       
-      // Suavizado de BPM aquí
+      // Smoothing BPM here
       if (rrData.intervals && rrData.intervals.length > 0) {
-        // Calcular BPM crudo desde intervalos
+        // Calculate raw BPM from intervals
         const avgInterval = rrData.intervals.reduce((sum, val) => sum + val, 0) / rrData.intervals.length;
         const rawBPM = Math.round(60000 / avgInterval);
         
-        // Aplicar suavizado mínimo a través del procesador
+        // Apply smoothing through processor
         const smoothedBPM = processor.smoothBPM(rawBPM);
         
-        // Reemplazar primer intervalo con valor suavizado para propagar a la visualización
+        // Replace first interval with smoothed value to propagate to heart rate display
         if (rrData.intervals.length > 0 && smoothedBPM > 0) {
           const newInterval = Math.round(60000 / smoothedBPM);
           rrData.intervals[0] = newInterval;
@@ -61,28 +61,23 @@ export const useVitalSignsProcessor = () => {
       }
     }
     
-    // Obtener resultados base del procesador principal
+    // Get base results from the core processor
     const result = processor.processSignal(value, rrData);
-    console.log("useVitalSignsProcessor: Resultados brutos:", 
-                { spo2: result.spo2, pressure: result.pressure });
     
-    // Estabilizar presión arterial pasándola directamente
+    // Stabilize blood pressure
     const signalQuality = signalHistory.getSignalQuality();
     const stabilizedBP = bloodPressureStabilizer.current.stabilizeBloodPressure(result.pressure, signalQuality);
-    console.log("useVitalSignsProcessor: BP estabilizada:", stabilizedBP);
     
-    // Recopilar datos para promedios finales solo si son valores válidos
-    if (result.spo2 > 90 && result.spo2 <= 100) {
+    // Collect data for final averages
+    if (result.spo2 > 0) {
       dataCollector.current.addSpO2(result.spo2);
-      console.log("useVitalSignsProcessor: SpO2 añadido al colector:", result.spo2);
     }
     
-    if (stabilizedBP !== "--/--" && stabilizedBP !== "0/0" && stabilizedBP !== "EVALUANDO") {
+    if (stabilizedBP !== "--/--" && stabilizedBP !== "0/0") {
       dataCollector.current.addBloodPressure(stabilizedBP);
-      console.log("useVitalSignsProcessor: BP añadida al colector:", stabilizedBP);
     }
     
-    // Análisis avanzado de arritmias
+    // Advanced arrhythmia analysis
     if (rrData?.intervals && rrData.intervals.length >= 4) {
       const arrhythmiaResult = arrhythmiaAnalyzer.processArrhythmia(rrData, MAX_ARRHYTHMIAS_PER_SESSION);
       
@@ -102,7 +97,7 @@ export const useVitalSignsProcessor = () => {
       };
     }
     
-    // Si ya analizamos arritmias antes, usar el último estado
+    // If we already analyzed arrhythmias before, use the latest status
     const arrhythmiaStatus = `SIN ARRITMIAS|${arrhythmiaAnalyzer.arrhythmiaCounter}`;
     
     return {
@@ -113,14 +108,14 @@ export const useVitalSignsProcessor = () => {
   }, [getProcessor, arrhythmiaAnalyzer, signalHistory]);
 
   /**
-   * Resetear todos los procesadores y datos
+   * Reset all processors and data
    */
   const reset = useCallback(() => {
     if (processorRef.current) {
       processorRef.current.reset();
     }
     
-    // Resetear todos los módulos especializados
+    // Reset all specialized modules
     arrhythmiaAnalyzer.reset();
     bloodPressureStabilizer.current.reset();
     dataCollector.current.reset();
@@ -131,25 +126,25 @@ export const useVitalSignsProcessor = () => {
   }, [arrhythmiaAnalyzer, signalHistory]);
   
   /**
-   * Limpieza agresiva de memoria
+   * Aggressive memory cleanup
    */
   const cleanMemory = useCallback(() => {
     console.log("useVitalSignsProcessor: Limpieza agresiva de memoria");
     
-    // Destruir procesador actual y crear uno nuevo
+    // Destroy current processor and create a new one
     if (processorRef.current) {
       processorRef.current.reset();
       processorRef.current = new VitalSignsProcessor();
     }
     
-    // Resetear todos los módulos especializados
+    // Reset all specialized modules
     arrhythmiaAnalyzer.reset();
     bloodPressureStabilizer.current.reset();
     dataCollector.current.reset();
     signalHistory.reset();
     VitalSignsRisk.resetHistory();
     
-    // Forzar la recolección de basura si está disponible
+    // Force garbage collection if available
     if (window.gc) {
       try {
         window.gc();

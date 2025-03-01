@@ -1,3 +1,4 @@
+
 interface RiskSegment {
   color: string;
   label: string;
@@ -325,24 +326,20 @@ export class VitalSignsRisk {
     // Procesamiento normal para lecturas en tiempo real
     let currentSegment: RiskSegment;
 
-    if (this.bpmHistory.length < 3) {
-      currentSegment = { color: '#FFFFFF', label: 'EVALUANDO...' };
+    if (this.isStableValue(this.bpmHistory, [140, 300])) {
+      currentSegment = { color: '#ea384c', label: 'TAQUICARDIA' };
+    } else if (this.isStableValue(this.bpmHistory, [110, 139])) {
+      currentSegment = { color: '#F97316', label: 'LEVE TAQUICARDIA' };
+    } else if (this.isStableValue(this.bpmHistory, [50, 110])) {
+      currentSegment = { color: '#0EA5E9', label: 'NORMAL' }; // Cambiado a azul (era #FFFFFF)
+    } else if (this.isStableValue(this.bpmHistory, [40, 49])) {
+      currentSegment = { color: '#F97316', label: 'BRADICARDIA' };
+    } else if (this.isStableValue(this.bpmHistory, [0, 39])) {
+      currentSegment = { color: '#ea384c', label: 'BRADICARDIA SEVERA' };
+    } else if (this.isStableValue(this.bpmHistory, [301, 999])) {
+      currentSegment = { color: '#ea384c', label: 'TAQUICARDIA SEVERA' };
     } else {
-      if (this.isStableValue(this.bpmHistory, [140, 300])) {
-        currentSegment = { color: '#ea384c', label: 'TAQUICARDIA' };
-      } else if (this.isStableValue(this.bpmHistory, [110, 139])) {
-        currentSegment = { color: '#F97316', label: 'LEVE TAQUICARDIA' };
-      } else if (this.isStableValue(this.bpmHistory, [50, 110])) {
-        currentSegment = { color: '#0EA5E9', label: 'NORMAL' }; // Cambiado a azul (era #FFFFFF)
-      } else if (this.isStableValue(this.bpmHistory, [40, 49])) {
-        currentSegment = { color: '#F97316', label: 'BRADICARDIA' };
-      } else if (this.isStableValue(this.bpmHistory, [0, 39])) {
-        currentSegment = { color: '#ea384c', label: 'BRADICARDIA SEVERA' };
-      } else if (this.isStableValue(this.bpmHistory, [301, 999])) {
-        currentSegment = { color: '#ea384c', label: 'TAQUICARDIA SEVERA' };
-      } else {
-        currentSegment = { color: '#FFFFFF', label: 'EVALUANDO...' };
-      }
+      currentSegment = { color: '#FFFFFF', label: 'EVALUANDO...' };
     }
 
     // Guardar el segmento actual para análisis final
@@ -394,7 +391,7 @@ export class VitalSignsRisk {
       this.isStableValue(this.spo2History, [101, 999]);
     
     // Si hay pocos valores o la señal es inestable, mostrar "EVALUANDO..."
-    if (this.spo2History.length < 3) {
+    if (this.spo2History.length < 5 || !isStable) {
       currentSegment = { color: '#FFFFFF', label: 'EVALUANDO...' };
       console.log("SpO2 inestable o insuficientes datos:", {
         historyLength: this.spo2History.length,
@@ -478,42 +475,38 @@ export class VitalSignsRisk {
     // Procesamiento normal para lecturas en tiempo real - con rangos expandidos
     let currentSegment: RiskSegment;
 
-    if (this.bpHistory.length < 3) {
-      currentSegment = { color: '#FFFFFF', label: 'EVALUANDO...' };
+    if (this.isStableBP({ 
+      systolic: [150, 300], 
+      diastolic: [100, 200] 
+    })) {
+      currentSegment = { color: '#ea384c', label: 'PRESIÓN ALTA' };
+    } else if (this.isStableBP({ 
+      systolic: [140, 149], 
+      diastolic: [90, 99] 
+    })) {
+      currentSegment = { color: '#F97316', label: 'LEVE PRESIÓN ALTA' };
+    } else if (this.isStableBP({ 
+      systolic: [114, 126],
+      diastolic: [76, 84]
+    })) {
+      currentSegment = { color: '#0EA5E9', label: 'PRESIÓN NORMAL' };
+    } else if (this.isStableBP({ 
+      systolic: [100, 110], 
+      diastolic: [60, 70] 
+    })) {
+      currentSegment = { color: '#F97316', label: 'LEVE PRESIÓN BAJA' };
+    } else if (this.isStableBP({ 
+      systolic: [0, 99], 
+      diastolic: [0, 59] 
+    })) {
+      currentSegment = { color: '#ea384c', label: 'PRESIÓN BAJA' };
+    } else if (this.isStableBP({ 
+      systolic: [301, 999], 
+      diastolic: [201, 999] 
+    })) {
+      currentSegment = { color: '#ea384c', label: 'PRESIÓN EXTREMADAMENTE ALTA' };
     } else {
-      if (this.isStableBP({ 
-        systolic: [150, 300], 
-        diastolic: [100, 200] 
-      })) {
-        currentSegment = { color: '#ea384c', label: 'PRESIÓN ALTA' };
-      } else if (this.isStableBP({ 
-        systolic: [140, 149], 
-        diastolic: [90, 99] 
-      })) {
-        currentSegment = { color: '#F97316', label: 'LEVE PRESIÓN ALTA' };
-      } else if (this.isStableBP({ 
-        systolic: [114, 126],
-        diastolic: [76, 84]
-      })) {
-        currentSegment = { color: '#0EA5E9', label: 'PRESIÓN NORMAL' };
-      } else if (this.isStableBP({ 
-        systolic: [100, 110], 
-        diastolic: [60, 70] 
-      })) {
-        currentSegment = { color: '#F97316', label: 'LEVE PRESIÓN BAJA' };
-      } else if (this.isStableBP({ 
-        systolic: [0, 99], 
-        diastolic: [0, 59] 
-      })) {
-        currentSegment = { color: '#ea384c', label: 'PRESIÓN BAJA' };
-      } else if (this.isStableBP({ 
-        systolic: [301, 999], 
-        diastolic: [201, 999] 
-      })) {
-        currentSegment = { color: '#ea384c', label: 'PRESIÓN EXTREMADAMENTE ALTA' };
-      } else {
-        currentSegment = { color: '#FFFFFF', label: 'EVALUANDO...' };
-      }
+      currentSegment = { color: '#FFFFFF', label: 'EVALUANDO...' };
     }
 
     // Guardar el segmento actual para análisis final

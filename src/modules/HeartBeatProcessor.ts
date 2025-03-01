@@ -71,8 +71,6 @@ export class HeartBeatProcessor {
     const now = Date.now();
     if (now - this.lastBeepTime < this.MIN_BEEP_INTERVAL_MS) return;
 
-    this.lastBeepTime = now;
-
     try {
       const primaryOscillator = this.audioContext.createOscillator();
       const primaryGain = this.audioContext.createGain();
@@ -124,6 +122,8 @@ export class HeartBeatProcessor {
 
       primaryOscillator.stop(this.audioContext.currentTime + this.BEEP_DURATION / 1000 + 0.05);
       secondaryOscillator.stop(this.audioContext.currentTime + this.BEEP_DURATION / 1000 + 0.05);
+
+      this.lastBeepTime = now;
     } catch (error) {
       console.error("HeartBeatProcessor: Error playing beep", error);
     }
@@ -287,27 +287,25 @@ export class HeartBeatProcessor {
     normalizedValue: number,
     confidence: number
   ): boolean {
-    const CONFIRMATION_THRESHOLD = 0.75;
-    const AMPLITUDE_THRESHOLD = 0.05;
-
-    if (isPeak && confidence >= CONFIRMATION_THRESHOLD && normalizedValue > AMPLITUDE_THRESHOLD) {
-      this.peakConfirmationBuffer.push(1);
-    } else {
-      this.peakConfirmationBuffer.push(0);
-    }
-
+    this.peakConfirmationBuffer.push(normalizedValue);
     if (this.peakConfirmationBuffer.length > 5) {
       this.peakConfirmationBuffer.shift();
     }
 
-    const confirmed = this.peakConfirmationBuffer.reduce((a, b) => a + b, 0) >= 3;
+    if (isPeak && !this.lastConfirmedPeak && confidence >= this.MIN_CONFIDENCE) {
+      if (this.peakConfirmationBuffer.length >= 3) {
+        const len = this.peakConfirmationBuffer.length;
+        const goingDown1 =
+          this.peakConfirmationBuffer[len - 1] < this.peakConfirmationBuffer[len - 2];
+        const goingDown2 =
+          this.peakConfirmationBuffer[len - 2] < this.peakConfirmationBuffer[len - 3];
 
-    if (confirmed && !this.lastConfirmedPeak) {
-      this.lastConfirmedPeak = true;
-      return true;
-    }
-
-    if (!confirmed) {
+        if (goingDown1 && goingDown2) {
+          this.lastConfirmedPeak = true;
+          return true;
+        }
+      }
+    } else if (!isPeak) {
       this.lastConfirmedPeak = false;
     }
 
@@ -325,7 +323,6 @@ export class HeartBeatProcessor {
       if (this.bpmHistory.length > 12) {
         this.bpmHistory.shift();
       }
-      this.smoothBPM = this.BPM_ALPHA * instantBPM + (1 - this.BPM_ALPHA) * this.smoothBPM;
     }
   }
 
@@ -385,17 +382,8 @@ export class HeartBeatProcessor {
   }
 
   public getRRIntervals(): { intervals: number[]; lastPeakTime: number | null } {
-    if (this.bpmHistory.length < 2) {
-      return { intervals: [], lastPeakTime: null };
-    }
-
-    const intervals: number[] = [];
-    for (let i = 1; i < this.bpmHistory.length; i++) {
-      intervals.push(60000 / this.bpmHistory[i]);
-    }
-
     return {
-      intervals,
+      intervals: [...this.bpmHistory],
       lastPeakTime: this.lastPeakTime
     };
   }

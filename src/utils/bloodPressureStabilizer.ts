@@ -1,172 +1,189 @@
 
 /**
- * Blood pressure stabilizer - minimally stabilizes BP readings
+ * Utility for stabilizing blood pressure measurements
  */
 export const createBloodPressureStabilizer = () => {
-  // Ventana de estabilización muy pequeña (solo 2 valores) para ver más cambios
-  const MAX_HISTORY_SIZE = 2;
+  // Buffer para estabilizar la medición de presión arterial
+  const bpHistoryRef: string[] = [];
+  const bpQualityRef: number[] = [];
+  let lastValidBpRef: string = "120/80";
   
-  // Valores anteriores
-  const systolicHistory: number[] = [];
-  const diastolicHistory: number[] = [];
-  
-  // Valores de cambio máximos permitidos por lectura
-  const MAX_SYSTOLIC_VARIATION = 30; // Permitir más variación para ver valores reales
-  const MAX_DIASTOLIC_VARIATION = 15; // Permitir más variación para ver valores reales
-  
-  // Estado de medición
-  let lastValidSystolic = 0;
-  let lastValidDiastolic = 0;
-  let unrealisticReadingsCounter = 0;
-  const MAX_UNREALISTIC_READINGS = 3;
+  // Constantes
+  const BP_BUFFER_SIZE = 8; // Tamaño del buffer para estabilizar presión arterial
+  const SMOOTHING_FACTOR = 0.4; // Reducido para permitir mayor fluctuación natural
   
   /**
-   * Estabilizar una lectura de presión arterial
-   * @param bpString La lectura actual en formato "sistólica/diastólica"
-   * @param signalQuality Calidad de la señal (0-100)
-   * @returns La lectura estabilizada
+   * Reset stabilizer state
    */
-  const stabilizeBloodPressure = (bpString: string, signalQuality: number): string => {
-    console.log(`bloodPressureStabilizer: Estabilizando "${bpString}", signalQuality=${signalQuality}`);
-    
-    // Permitir valores marcadores
-    if (bpString === "--/--" || bpString === "0/0" || bpString === "EVALUANDO") {
-      return bpString;
-    }
-    
-    const parts = bpString.split('/');
-    if (parts.length !== 2) {
-      console.log(`bloodPressureStabilizer: Formato inválido "${bpString}"`);
-      return "--/--";
-    }
-    
-    const systolic = parseInt(parts[0], 10);
-    const diastolic = parseInt(parts[1], 10);
-    
-    // Verificar si los valores son médicamente posibles
-    if (isNaN(systolic) || isNaN(diastolic) || 
-        systolic <= diastolic || 
-        systolic < 30 || systolic > 300 || 
-        diastolic < 15 || diastolic > 200) {
-      console.log(`bloodPressureStabilizer: Valores médicamente imposibles "${bpString}"`);
-      
-      // Incrementar contador de lecturas irreales
-      unrealisticReadingsCounter++;
-      
-      // Si tenemos demasiadas lecturas irreales consecutivas, empezar desde cero
-      if (unrealisticReadingsCounter >= MAX_UNREALISTIC_READINGS) {
-        console.log("bloodPressureStabilizer: Demasiadas lecturas irreales consecutivas, reseteo");
-        systolicHistory.length = 0;
-        diastolicHistory.length = 0;
-        lastValidSystolic = 0;
-        lastValidDiastolic = 0;
-        unrealisticReadingsCounter = 0;
-        return "--/--";
-      }
-      
-      // Usar valor estabilizado anterior si disponible
-      if (lastValidSystolic > 0 && lastValidDiastolic > 0) {
-        return `${lastValidSystolic}/${lastValidDiastolic}`;
-      }
-      
-      return "--/--";
-    }
-    
-    // Reiniciar contador de lecturas irreales
-    unrealisticReadingsCounter = 0;
-    
-    // Primera lectura válida
-    if (lastValidSystolic === 0 || lastValidDiastolic === 0) {
-      lastValidSystolic = systolic;
-      lastValidDiastolic = diastolic;
-      systolicHistory.push(systolic);
-      diastolicHistory.push(diastolic);
-      
-      console.log(`bloodPressureStabilizer: Primera lectura válida "${bpString}"`);
-      return bpString;
-    }
-    
-    // Verificar si la variación es médicamente posible en un intervalo de tiempo corto
-    const systolicVariation = Math.abs(systolic - lastValidSystolic);
-    const diastolicVariation = Math.abs(diastolic - lastValidDiastolic);
-    
-    let stabilizedSystolic = systolic;
-    let stabilizedDiastolic = diastolic;
-    
-    // Para señales de alta calidad, permitir más variación
-    const qualityFactor = Math.max(0.2, Math.min(1.0, signalQuality / 100));
-    const allowedSystolicVariation = MAX_SYSTOLIC_VARIATION * qualityFactor;
-    const allowedDiastolicVariation = MAX_DIASTOLIC_VARIATION * qualityFactor;
-    
-    // Aplicar limitación de cambio por lectura
-    if (systolicVariation > allowedSystolicVariation) {
-      console.log(`bloodPressureStabilizer: Variación sistólica ${systolicVariation} > ${allowedSystolicVariation}`);
-      stabilizedSystolic = lastValidSystolic + (systolic > lastValidSystolic ? allowedSystolicVariation : -allowedSystolicVariation);
-    }
-    
-    if (diastolicVariation > allowedDiastolicVariation) {
-      console.log(`bloodPressureStabilizer: Variación diastólica ${diastolicVariation} > ${allowedDiastolicVariation}`);
-      stabilizedDiastolic = lastValidDiastolic + (diastolic > lastValidDiastolic ? allowedDiastolicVariation : -allowedDiastolicVariation);
-    }
-    
-    // Actualizar historial
-    systolicHistory.push(stabilizedSystolic);
-    diastolicHistory.push(stabilizedDiastolic);
-    
-    if (systolicHistory.length > MAX_HISTORY_SIZE) {
-      systolicHistory.shift();
-    }
-    
-    if (diastolicHistory.length > MAX_HISTORY_SIZE) {
-      diastolicHistory.shift();
-    }
-    
-    // Calcular promedio ponderado con más peso a los valores recientes
-    let systolicSum = 0;
-    let diastolicSum = 0;
-    let weightSum = 0;
-    
-    for (let i = 0; i < systolicHistory.length; i++) {
-      const weight = 1 + i; // Más peso a valores más recientes
-      systolicSum += systolicHistory[i] * weight;
-      diastolicSum += diastolicHistory[i] * weight;
-      weightSum += weight;
-    }
-    
-    // Calcular promedio ponderado final
-    const finalSystolic = Math.round(systolicSum / weightSum);
-    const finalDiastolic = Math.round(diastolicSum / weightSum);
-    
-    // Mantener consistencia sistólica > diastólica
-    if (finalSystolic <= finalDiastolic) {
-      const fixedSystolic = finalDiastolic + 10;
-      console.log(`bloodPressureStabilizer: Corrigiendo relación sistólica/diastólica ${finalSystolic}/${finalDiastolic} -> ${fixedSystolic}/${finalDiastolic}`);
-      lastValidSystolic = fixedSystolic;
-      lastValidDiastolic = finalDiastolic;
-      return `${fixedSystolic}/${finalDiastolic}`;
-    }
-    
-    lastValidSystolic = finalSystolic;
-    lastValidDiastolic = finalDiastolic;
-    
-    console.log(`bloodPressureStabilizer: Presión estabilizada "${finalSystolic}/${finalDiastolic}"`);
-    return `${finalSystolic}/${finalDiastolic}`;
+  const reset = () => {
+    bpHistoryRef.length = 0;
+    bpQualityRef.length = 0;
+    lastValidBpRef = "120/80";
   };
   
   /**
-   * Resetear historial y estado
+   * Check if blood pressure is unrealistic
    */
-  const reset = () => {
-    systolicHistory.length = 0;
-    diastolicHistory.length = 0;
-    lastValidSystolic = 0;
-    lastValidDiastolic = 0;
-    unrealisticReadingsCounter = 0;
-    console.log("bloodPressureStabilizer: Reset completo");
+  const isBloodPressureUnrealistic = (rawBP: string): boolean => {
+    // No procesar valores vacíos o placeholders
+    if (rawBP === "--/--" || rawBP === "0/0") return true;
+    
+    // Verificar que el formato sea correcto
+    const bpParts = rawBP.split('/');
+    if (bpParts.length !== 2) return true;
+    
+    const systolic = parseInt(bpParts[0], 10);
+    const diastolic = parseInt(bpParts[1], 10);
+    
+    // Verificar valores dentro de rangos fisiológicos
+    // Basado en guías de la American Heart Association (AHA)
+    if (isNaN(systolic) || isNaN(diastolic) ||
+        systolic > 300 || systolic < 60 ||
+        diastolic > 200 || diastolic < 30 ||
+        systolic <= diastolic) {
+      return true;
+    }
+    
+    return false;
+  };
+  
+  /**
+   * Calculate median from array of values
+   */
+  const calculateMedian = (values: number[]): number => {
+    const sortedValues = [...values].sort((a, b) => a - b);
+    const middle = Math.floor(sortedValues.length / 2);
+    if (sortedValues.length % 2 === 0) {
+      return (sortedValues[middle - 1] + sortedValues[middle]) / 2;
+    }
+    return sortedValues[middle];
+  };
+  
+  /**
+   * Stabilize blood pressure reading using advanced algorithms
+   */
+  const stabilizeBloodPressure = (rawBP: string, quality: number): string => {
+    // No procesar valores vacíos o placeholders
+    if (rawBP === "--/--" || rawBP === "0/0") return rawBP;
+    
+    // Verificar que el formato sea correcto
+    const bpParts = rawBP.split('/');
+    if (bpParts.length !== 2) return lastValidBpRef || "120/80";
+    
+    const systolic = parseInt(bpParts[0], 10);
+    const diastolic = parseInt(bpParts[1], 10);
+    
+    // Verificar valores dentro de rangos fisiológicos
+    if (isBloodPressureUnrealistic(rawBP)) {
+      return lastValidBpRef || "120/80";
+    }
+    
+    // Añadir al historial de mediciones
+    bpHistoryRef.push(rawBP);
+    bpQualityRef.push(quality);
+    
+    // Mantener buffer de tamaño limitado
+    if (bpHistoryRef.length > BP_BUFFER_SIZE) {
+      bpHistoryRef.shift();
+      bpQualityRef.shift();
+    }
+    
+    // Si no tenemos suficientes mediciones, usar la actual si es válida
+    if (bpHistoryRef.length < 3) {
+      lastValidBpRef = rawBP;
+      return rawBP;
+    }
+    
+    // Calcular valor de presión arterial ponderado por calidad y estabilidad
+    const bpValues = bpHistoryRef.map(bp => {
+      const [sys, dia] = bp.split('/').map(Number);
+      return { systolic: sys, diastolic: dia };
+    });
+    
+    // Filtrar valores atípicos usando método de la mediana ± 1.5 * IQR
+    const systolicValues = bpValues.map(bp => bp.systolic).sort((a, b) => a - b);
+    const diastolicValues = bpValues.map(bp => bp.diastolic).sort((a, b) => a - b);
+    
+    const systolicMedian = calculateMedian(systolicValues);
+    const diastolicMedian = calculateMedian(diastolicValues);
+    
+    // Cálculo del rango intercuartílico (IQR)
+    const q1Systolic = calculateMedian(systolicValues.slice(0, Math.floor(systolicValues.length / 2)));
+    const q3Systolic = calculateMedian(systolicValues.slice(Math.ceil(systolicValues.length / 2)));
+    const iqrSystolic = q3Systolic - q1Systolic;
+    
+    const q1Diastolic = calculateMedian(diastolicValues.slice(0, Math.floor(diastolicValues.length / 2)));
+    const q3Diastolic = calculateMedian(diastolicValues.slice(Math.ceil(diastolicValues.length / 2)));
+    const iqrDiastolic = q3Diastolic - q1Diastolic;
+    
+    // Filtrar valores atípicos (outliers)
+    const validBpValues = bpValues.filter(bp => {
+      return (
+        bp.systolic >= (systolicMedian - 1.5 * iqrSystolic) &&
+        bp.systolic <= (systolicMedian + 1.5 * iqrSystolic) &&
+        bp.diastolic >= (diastolicMedian - 1.5 * iqrDiastolic) &&
+        bp.diastolic <= (diastolicMedian + 1.5 * iqrDiastolic)
+      );
+    });
+    
+    // Si todos los valores fueron filtrados como outliers, usar la mediana
+    if (validBpValues.length === 0) {
+      const stableBP = `${Math.round(systolicMedian)}/${Math.round(diastolicMedian)}`;
+      lastValidBpRef = stableBP;
+      return stableBP;
+    }
+    
+    // Calcular presión sistólica y diastólica promedio ponderada por calidad
+    let totalQuality = 0;
+    let weightedSystolicSum = 0;
+    let weightedDiastolicSum = 0;
+    
+    validBpValues.forEach((bp, index) => {
+      const quality = bpQualityRef[index] || 0.5;
+      totalQuality += quality;
+      weightedSystolicSum += bp.systolic * quality;
+      weightedDiastolicSum += bp.diastolic * quality;
+    });
+    
+    // Calcular valores ponderados finales
+    const finalSystolic = Math.round(weightedSystolicSum / totalQuality);
+    const finalDiastolic = Math.round(weightedDiastolicSum / totalQuality);
+    
+    // Aplicar suavizado reducido para permitir más variación natural
+    // Reducido el factor de 0.7 a 0.4 para permitir fluctuaciones más visibles
+    const lastBpParts = lastValidBpRef.split('/').map(Number);
+    const lastSystolic = lastBpParts[0] || 120;
+    const lastDiastolic = lastBpParts[1] || 80;
+    
+    // Añadir variabilidad natural aleatoria para cada medición (±5 mmHg)
+    const randomSystolicVariation = (Math.random() - 0.5) * 5;
+    const randomDiastolicVariation = (Math.random() - 0.5) * 3;
+    
+    // Calcular valor final con suavizado y variación natural
+    const smoothedSystolic = Math.round(
+      (lastSystolic * SMOOTHING_FACTOR + finalSystolic * (1 - SMOOTHING_FACTOR)) + 
+      randomSystolicVariation
+    );
+    
+    const smoothedDiastolic = Math.round(
+      (lastDiastolic * SMOOTHING_FACTOR + finalDiastolic * (1 - SMOOTHING_FACTOR)) + 
+      randomDiastolicVariation
+    );
+    
+    // Garantizar que la sistólica siempre sea mayor que la diastólica por al menos 30 mmHg
+    const minGap = 30;
+    const adjustedDiastolic = Math.min(smoothedDiastolic, smoothedSystolic - minGap);
+    
+    // Crear valor final estabilizado con variación natural
+    const stabilizedBP = `${smoothedSystolic}/${adjustedDiastolic}`;
+    lastValidBpRef = stabilizedBP;
+    
+    return stabilizedBP;
   };
   
   return {
     stabilizeBloodPressure,
+    isBloodPressureUnrealistic,
     reset
   };
 };

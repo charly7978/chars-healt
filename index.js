@@ -73,14 +73,6 @@ const Index = () => {
     startProcessing();
     setElapsedTime(0);
     
-    // Reset vital signs at start
-    setHeartRate(0);
-    setVitalSigns({ 
-      spo2: 0, 
-      pressure: "--/--",
-      arrhythmiaStatus: "--" 
-    });
-    
     if (measurementTimerRef.current) {
       clearInterval(measurementTimerRef.current);
     }
@@ -97,12 +89,19 @@ const Index = () => {
   };
 
   const stopMonitoring = () => {
-    console.log("Stopping monitoring with final values:", { heartRate, vitalSigns });
     setIsMonitoring(false);
     setIsCameraOn(false);
     stopProcessing();
     resetVitalSigns();
     setElapsedTime(0);
+    setHeartRate(0);
+    setVitalSigns({ 
+      spo2: 0, 
+      pressure: "--/--",
+      arrhythmiaStatus: "--" 
+    });
+    setArrhythmiaCount("--");
+    setSignalQuality(0);
     
     if (measurementTimerRef.current) {
       clearInterval(measurementTimerRef.current);
@@ -156,73 +155,18 @@ const Index = () => {
 
   useEffect(() => {
     if (lastSignal && lastSignal.fingerDetected && isMonitoring) {
-      try {
-        console.log("Processing signal:", lastSignal);
-        
-        const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
-        console.log("Heart beat result:", heartBeatResult);
-        
-        if (heartBeatResult && heartBeatResult.bpm > 0) {
-          setHeartRate(heartBeatResult.bpm);
-        }
-        
-        const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
-        console.log("Vital signs processed:", vitals);
-        
-        if (vitals) {
-          // Update SpO2
-          if (vitals.spo2 > 0) {
-            setVitalSigns(current => ({
-              ...current,
-              spo2: vitals.spo2
-            }));
-            console.log("Updated SpO2:", vitals.spo2);
-          }
-          
-          // Update blood pressure
-          if (vitals.pressure && vitals.pressure !== "--/--" && vitals.pressure !== "0/0") {
-            setVitalSigns(current => ({
-              ...current,
-              pressure: vitals.pressure
-            }));
-            console.log("Updated blood pressure:", vitals.pressure);
-          }
-          
-          // Update arrhythmia status
-          if (vitals.arrhythmiaStatus) {
-            setVitalSigns(current => ({
-              ...current,
-              arrhythmiaStatus: vitals.arrhythmiaStatus
-            }));
-            
-            const [status, count] = vitals.arrhythmiaStatus.split('|');
-            setArrhythmiaCount(count || "--");
-            console.log("Updated arrhythmia status:", vitals.arrhythmiaStatus);
-          }
-        }
-        
-        setSignalQuality(lastSignal.quality);
-      } catch (error) {
-        console.error("Error processing signal:", error);
+      const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
+      setHeartRate(heartBeatResult.bpm);
+      
+      const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
+      if (vitals) {
+        setVitalSigns(vitals);
+        setArrhythmiaCount(vitals.arrhythmiaStatus.split('|')[1] || "--");
       }
+      
+      setSignalQuality(lastSignal.quality);
     }
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
-
-  // Debug vital signs every 2 seconds
-  useEffect(() => {
-    const debugInterval = setInterval(() => {
-      if (isMonitoring) {
-        console.log("Current vital signs:", { 
-          heartRate, 
-          spo2: vitalSigns.spo2, 
-          pressure: vitalSigns.pressure,
-          arrhythmiaStatus: vitalSigns.arrhythmiaStatus
-        });
-      }
-    }, 2000);
-    
-    return () => clearInterval(debugInterval);
-  }, [isMonitoring, heartRate, vitalSigns]);
 
   return (
     <div 
@@ -260,12 +204,12 @@ const Index = () => {
               <div className="grid grid-cols-4 gap-2">
                 <VitalSign 
                   label="FRECUENCIA CARDÍACA"
-                  value={heartRate}
+                  value={heartRate || "--"}
                   unit="BPM"
                 />
                 <VitalSign 
                   label="SPO2"
-                  value={vitalSigns.spo2}
+                  value={vitalSigns.spo2 || "--"}
                   unit="%"
                 />
                 <VitalSign 

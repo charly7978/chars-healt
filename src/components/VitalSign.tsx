@@ -12,12 +12,10 @@ interface VitalSignProps {
 const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReading = false }) => {
   const isArrhythmiaDisplay = label === "ARRITMIAS";
   const isBloodPressure = label === "PRESIÓN ARTERIAL";
-  const isSpO2 = label === "SPO2";
-  const isHeartRate = label === "FRECUENCIA CARDÍACA";
 
   // Helper function to check if blood pressure value is unrealistic
   const isBloodPressureUnrealistic = (bpString: string): boolean => {
-    if (!isBloodPressure || bpString === "--/--" || bpString === "0/0" || bpString === "EVALUANDO") return false;
+    if (!isBloodPressure || bpString === "--/--" || bpString === "0/0") return false;
     
     const [systolic, diastolic] = bpString.split('/').map(Number);
     
@@ -25,8 +23,9 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     if (isNaN(systolic) || isNaN(diastolic)) return true;
     
     // Ranges based on published medical guidelines
-    if (systolic > 300 || systolic < 30) return true;
-    if (diastolic > 200 || diastolic < 15) return true;
+    // American Heart Association and European Society of Hypertension
+    if (systolic > 300 || systolic < 60) return true;
+    if (diastolic > 200 || diastolic < 30) return true;
     if (systolic <= diastolic) return true;
     
     return false;
@@ -34,42 +33,18 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
 
   // Process blood pressure display for stable, realistic readings
   const getDisplayValue = (): string | number => {
-    console.log(`[VitalSign Debug] ${label}: Recibiendo valor=${value}, Tipo=${typeof value}`);
-    
     if (isBloodPressure && typeof value === 'string') {
       // Always show placeholder values unchanged
-      if (value === "--/--" || value === "0/0" || value === "EVALUANDO") return value;
+      if (value === "--/--" || value === "0/0") return value;
       
       // Filter out clearly unrealistic readings
       if (isBloodPressureUnrealistic(value)) {
-        console.log(`[VitalSign] BP irreal filtrado: ${value}`);
+        console.log("Medically unrealistic BP filtered:", value);
         return "--/--";
       }
       
       // This is a valid reading within medical ranges
       return value;
-    }
-    
-    // For SpO2, ensure we don't show 0 values
-    if (isSpO2) {
-      if (value === 0 || value === "0" || value === "" || value === null || value === undefined) {
-        console.log(`[VitalSign] SpO2 0 convertido a "--"`);
-        return "--";
-      }
-    }
-    
-    // For heart rate, ensure we don't show 0 values
-    if (isHeartRate) {
-      if (value === 0 || value === "0" || value === "" || value === null || value === undefined) {
-        console.log(`[VitalSign] Frecuencia cardíaca 0 convertida a "--"`);
-        return "--";
-      }
-    }
-    
-    // Catch-all for any other zero-like or empty values
-    if (value === 0 || value === "0" || value === "" || value === null || value === undefined) {
-      console.log(`[VitalSign] ${label} valor vacío convertido a "--"`);
-      return "--";
     }
     
     return value;
@@ -81,34 +56,28 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     }
 
     // For heart rate, show real value without checking risk if no measurement
-    if (isHeartRate) {
-      if (value === "--" || value === 0 || value === "0" || value === "") {
+    if (label === "FRECUENCIA CARDÍACA") {
+      if (value === "--" || value === 0) {
         return { color: '#FFFFFF', label: '' };
       }
-      if (typeof value === 'number' || (typeof value === 'string' && !isNaN(Number(value)))) {
-        const numericValue = typeof value === 'number' ? value : Number(value);
-        if (numericValue > 0) {
-          return VitalSignsRisk.getBPMRisk(numericValue, isFinalReading);
-        }
+      if (typeof value === 'number') {
+        return VitalSignsRisk.getBPMRisk(value, isFinalReading);
       }
     }
 
     // For SPO2, show real value without checking risk if no measurement
-    if (isSpO2) {
-      if (value === "--" || value === 0 || value === "0" || value === "") {
+    if (label === "SPO2") {
+      if (value === "--" || value === 0) {
         return { color: '#FFFFFF', label: '' };
       }
-      if (typeof value === 'number' || (typeof value === 'string' && !isNaN(Number(value)))) {
-        const numericValue = typeof value === 'number' ? value : Number(value);
-        if (numericValue > 0) {
-          return VitalSignsRisk.getSPO2Risk(numericValue, isFinalReading);
-        }
+      if (typeof value === 'number') {
+        return VitalSignsRisk.getSPO2Risk(value, isFinalReading);
       }
     }
 
     // For blood pressure, show real value without checking risk if no measurement
-    if (isBloodPressure) {
-      if (value === "--/--" || value === "0/0" || value === "EVALUANDO" || value === "") {
+    if (label === "PRESIÓN ARTERIAL") {
+      if (value === "--/--" || value === "0/0") {
         return { color: '#FFFFFF', label: '' };
       }
       
@@ -126,7 +95,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
   const getArrhythmiaDisplay = () => {
     if (!isArrhythmiaDisplay) return { text: value, color: "", label: "" };
     
-    if (value === "--" || value === undefined || value === null || value === "") {
+    if (value === "--") {
       return { 
         text: "--", 
         color: "#FFFFFF",
@@ -134,8 +103,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
       };
     }
     
-    const valueStr = String(value);
-    const [status, count] = valueStr.includes('|') ? valueStr.split('|') : [valueStr, ""];
+    const [status, count] = String(value).split('|');
     
     if (status === "ARRITMIA DETECTADA") {
       return {
@@ -159,8 +127,6 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
   const { text, color, label: riskLabel } = isArrhythmiaDisplay ? 
     getArrhythmiaDisplay() : 
     { text: displayValue, ...getRiskInfo() };
-
-  console.log(`[DISPLAY FINAL] ${label}: Recibido=${value}, Mostrado=${displayValue || '--'}, Tipo=${typeof value}`);
 
   return (
     <div className="relative overflow-hidden rounded-xl backdrop-blur-md bg-black/60 border border-white/20 shadow-lg">

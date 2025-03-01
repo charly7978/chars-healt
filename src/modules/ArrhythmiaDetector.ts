@@ -1,8 +1,9 @@
+
 export class ArrhythmiaDetector {
   // Constants for arrhythmia detection
-  private readonly RR_WINDOW_SIZE = 10;
-  private readonly RMSSD_THRESHOLD = 200;
-  private readonly ARRHYTHMIA_LEARNING_PERIOD = 30000;
+  private readonly RR_WINDOW_SIZE = 5;
+  private readonly RMSSD_THRESHOLD = 25;
+  private readonly ARRHYTHMIA_LEARNING_PERIOD = 3000;
 
   // State variables
   private rrIntervals: number[] = [];
@@ -70,7 +71,7 @@ export class ArrhythmiaDetector {
     status: string;
     data: { rmssd: number; rrVariation: number } | null;
   } {
-    if (this.rrIntervals.length < 30 || this.isLearningPhase) {
+    if (this.rrIntervals.length < this.RR_WINDOW_SIZE || this.isLearningPhase) {
       return {
         detected: false,
         count: this.arrhythmiaCount,
@@ -100,16 +101,11 @@ export class ArrhythmiaDetector {
     this.lastRRVariation = rrVariation;
     
     // Detect arrhythmia based on thresholds
-    const newArrhythmiaState = 
-      rmssd > this.RMSSD_THRESHOLD && 
-      rrVariation > 0.90 &&
-      this.rrIntervals.length >= 40 &&
-      currentTime - this.measurementStartTime > 60000 &&
-      currentTime - this.lastArrhythmiaTime > 15000;
+    const newArrhythmiaState = rmssd > this.RMSSD_THRESHOLD && rrVariation > 0.20;
     
     // If it's a new arrhythmia and enough time has passed since the last one
     if (newArrhythmiaState && 
-        currentTime - this.lastArrhythmiaTime > 15000) {
+        currentTime - this.lastArrhythmiaTime > 1000) {
       this.arrhythmiaCount++;
       this.lastArrhythmiaTime = currentTime;
       

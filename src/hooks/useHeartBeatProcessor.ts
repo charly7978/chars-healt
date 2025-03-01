@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { HeartBeatProcessor } from '../modules/HeartBeatProcessor';
 
@@ -21,7 +22,7 @@ export const useHeartBeatProcessor = () => {
   // Nuevos buffers para mejora de filtrado de señal
   const recentValuesRef = useRef<number[]>([]);
   const recentConfidencesRef = useRef<number[]>([]);
-  const MIN_CONFIDENCE_THRESHOLD = 0.45; // Reduced for more sensitivity
+  const MIN_CONFIDENCE_THRESHOLD = 0.65; // Aumentado para reducir falsos positivos
 
   useEffect(() => {
     console.log('useHeartBeatProcessor: Creando nueva instancia de HeartBeatProcessor');
@@ -74,29 +75,31 @@ export const useHeartBeatProcessor = () => {
       signalBufferRef.current = signalBufferRef.current.slice(-300);
     }
 
-    // Utilizar filtrado básico para mantener señal real
-    const filteredValue = value; // Use direct value for minimal filtering
+    // Aplicar filtrado adicional para reducir ruido
+    // 1. Filtro de mediana para eliminar picos aleatorios
+    const filteredValue = applyMedianFilter(value);
     
-    // Procesar la señal con el filtro aplicado
+    // 2. Procesar la señal con el filtro aplicado
     const result = processorRef.current.processSignal(filteredValue);
     const rrData = processorRef.current.getRRIntervals();
 
-    // Almacenar valores recientes para validación
+    // 3. Almacenar valores recientes para validación
     recentValuesRef.current.push(filteredValue);
     recentConfidencesRef.current.push(result.confidence);
     
-    if (recentValuesRef.current.length > 5) { // Reduced for faster response
+    if (recentValuesRef.current.length > 10) {
       recentValuesRef.current.shift();
       recentConfidencesRef.current.shift();
     }
 
-    // Validación de picos con mínimo filtrado
-    const validatedResult = result;
+    // 4. Validación de picos para eliminar falsos positivos
+    const validatedResult = validatePeak(result);
 
     console.log('useHeartBeatProcessor - result:', {
       bpm: result.bpm,
       confidence: result.confidence,
       isPeak: result.isPeak,
+      validatedIsPeak: validatedResult.isPeak,
       arrhythmiaCount: result.arrhythmiaCount,
       rrIntervals: rrData.intervals,
       timestamp: new Date().toISOString()
@@ -112,6 +115,52 @@ export const useHeartBeatProcessor = () => {
       rrData
     };
   }, []);
+
+  // Función para aplicar filtro de mediana a la señal
+  const applyMedianFilter = (value: number): number => {
+    const windowSize = 5;
+    recentValuesRef.current.push(value);
+    
+    if (recentValuesRef.current.length > windowSize) {
+      recentValuesRef.current.shift();
+    }
+    
+    if (recentValuesRef.current.length === windowSize) {
+      // Copia el array para no modificar el original durante la ordenación
+      const sorted = [...recentValuesRef.current].sort((a, b) => a - b);
+      return sorted[Math.floor(windowSize / 2)];
+    }
+    
+    return value;
+  };
+
+  // Función para validar si un pico es genuino basado en consistencia y confianza
+  const validatePeak = (result: HeartBeatResult): HeartBeatResult => {
+    // Si no es un pico, no hay nada que validar
+    if (!result.isPeak) {
+      return result;
+    }
+    
+    // Verificar si la confianza está por encima del umbral
+    if (result.confidence < MIN_CONFIDENCE_THRESHOLD) {
+      return { ...result, isPeak: false };
+    }
+    
+    // Verificar la consistencia de los últimos valores
+    if (recentConfidencesRef.current.length >= 3) {
+      const avgConfidence = recentConfidencesRef.current
+        .slice(-3)
+        .reduce((sum, conf) => sum + conf, 0) / 3;
+      
+      // Si la confianza promedio es baja, es probable que sea un falso positivo
+      if (avgConfidence < MIN_CONFIDENCE_THRESHOLD) {
+        return { ...result, isPeak: false };
+      }
+    }
+    
+    // Si pasa todas las validaciones, es un pico genuino
+    return result;
+  };
 
   const reset = useCallback(() => {
     console.log('useHeartBeatProcessor: Reseteando processor');
@@ -136,6 +185,7 @@ export const useHeartBeatProcessor = () => {
     }
   }, []);
 
+  // Función para limpieza agresiva de memoria
   const cleanMemory = useCallback(() => {
     console.log('useHeartBeatProcessor: Limpieza agresiva de memoria');
     if (processorRef.current) {
