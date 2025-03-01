@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -6,6 +7,7 @@ import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import PermissionsHandler from "@/components/PermissionsHandler";
+import deviceContextService from "@/services/DeviceContextService";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -21,6 +23,10 @@ const Index = () => {
   const [elapsedTime, setElapsedTime] = useState(0);
   const [permissionsGranted, setPermissionsGranted] = useState(false);
   const measurementTimerRef = useRef(null);
+  const videoTrackRef = useRef(null);
+  const imageCaptureRef = useRef(null);
+  const processingImageRef = useRef(false);
+  const animationFrameRef = useRef(null);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
@@ -105,6 +111,13 @@ const Index = () => {
   };
 
   const stopMonitoring = () => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    
+    processingImageRef.current = false;
+    
     setIsMonitoring(false);
     setIsCameraOn(false);
     stopProcessing();
@@ -123,50 +136,129 @@ const Index = () => {
       clearInterval(measurementTimerRef.current);
       measurementTimerRef.current = null;
     }
+    
+    // Limpieza adicional
+    videoTrackRef.current = null;
+    imageCaptureRef.current = null;
   };
 
   const handleStreamReady = (stream) => {
     if (!isMonitoring) return;
     
-    const videoTrack = stream.getVideoTracks()[0];
-    const imageCapture = new ImageCapture(videoTrack);
-    
-    if (videoTrack.getCapabilities()?.torch) {
-      videoTrack.applyConstraints({
-        advanced: [{ torch: true }]
-      }).catch(err => console.error("Error activando linterna:", err));
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
     }
     
-    const tempCanvas = document.createElement('canvas');
-    const tempCtx = tempCanvas.getContext('2d');
-    if (!tempCtx) {
-      console.error("No se pudo obtener el contexto 2D");
-      return;
-    }
+    processingImageRef.current = false;
     
-    const processImage = async () => {
-      if (!isMonitoring) return;
+    try {
+      const videoTrack = stream.getVideoTracks()[0];
+      videoTrackRef.current = videoTrack;
       
-      try {
-        const frame = await imageCapture.grabFrame();
-        tempCanvas.width = frame.width;
-        tempCanvas.height = frame.height;
-        tempCtx.drawImage(frame, 0, 0);
-        const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
-        processFrame(imageData);
-        
-        if (isMonitoring) {
-          requestAnimationFrame(processImage);
-        }
-      } catch (error) {
-        console.error("Error capturando frame:", error);
-        if (isMonitoring) {
-          requestAnimationFrame(processImage);
-        }
+      if (!videoTrack || videoTrack.readyState !== 'live') {
+        console.error("Video track not available or not live");
+        return;
       }
-    };
+      
+      // Activar linterna si está disponible
+      if (videoTrack.getCapabilities()?.torch) {
+        videoTrack.applyConstraints({
+          advanced: [{ torch: true }]
+        }).catch(err => console.error("Error activando linterna:", err));
+      }
+      
+      // Crear nuevo ImageCapture para este stream
+      try {
+        const imageCapture = new ImageCapture(videoTrack);
+        imageCaptureRef.current = imageCapture;
+        console.log("ImageCapture creado correctamente");
+      } catch (error) {
+        console.error("Error creando ImageCapture:", error);
+        return;
+      }
+      
+      const tempCanvas = document.createElement('canvas');
+      const tempCtx = tempCanvas.getContext('2d');
+      
+      if (!tempCtx) {
+        console.error("No se pudo obtener el contexto 2D");
+        return;
+      }
+      
+      processingImageRef.current = true;
+      
+      const processImage = async () => {
+        if (!isMonitoring || !processingImageRef.current) {
+          return;
+        }
+        
+        try {
+          // Verificar que ImageCapture sigue siendo válido
+          if (!imageCaptureRef.current) {
+            console.error("ImageCapture ya no está disponible");
+            return;
+          }
+          
+          // Verificar que el track sigue activo
+          if (!videoTrackRef.current || videoTrackRef.current.readyState !== 'live') {
+            console.error("Track is not in live state, skipping frame capture");
+            
+            // Si seguimos monitorizando, reintentar después de un retraso
+            if (isMonitoring && processingImageRef.current) {
+              setTimeout(() => {
+                if (isMonitoring && processingImageRef.current) {
+                  animationFrameRef.current = requestAnimationFrame(processImage);
+                }
+              }, 500);
+            }
+            return;
+          }
+          
+          const frame = await imageCaptureRef.current.grabFrame();
+          
+          // Verificar que seguimos monitorizando
+          if (!isMonitoring || !processingImageRef.current) {
+            return;
+          }
+          
+          tempCanvas.width = frame.width;
+          tempCanvas.height = frame.height;
+          tempCtx.drawImage(frame, 0, 0);
+          
+          const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
+          
+          // Procesar la imagen para detección de luz ambiental
+          if (deviceContextService.processAmbientLight) {
+            deviceContextService.processAmbientLight(imageData);
+          }
+          
+          // Procesar el frame para detección de signos vitales
+          processFrame(imageData);
+          
+          // Continuar procesando frames si seguimos monitorizando
+          if (isMonitoring && processingImageRef.current) {
+            animationFrameRef.current = requestAnimationFrame(processImage);
+          }
+        } catch (error) {
+          console.error("Error capturando frame:", error);
+          
+          // Reintentar con retraso si seguimos monitorizando
+          if (isMonitoring && processingImageRef.current) {
+            setTimeout(() => {
+              if (isMonitoring && processingImageRef.current) {
+                animationFrameRef.current = requestAnimationFrame(processImage);
+              }
+            }, 500);
+          }
+        }
+      };
 
-    processImage();
+      // Iniciar procesamiento de frames
+      animationFrameRef.current = requestAnimationFrame(processImage);
+    } catch (error) {
+      console.error("Error general en handleStreamReady:", error);
+    }
   };
 
   useEffect(() => {
@@ -183,6 +275,22 @@ const Index = () => {
       setSignalQuality(lastSignal.quality);
     }
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
+
+  useEffect(() => {
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+      
+      processingImageRef.current = false;
+      
+      if (measurementTimerRef.current) {
+        clearInterval(measurementTimerRef.current);
+        measurementTimerRef.current = null;
+      }
+    };
+  }, []);
 
   return (
     <div 

@@ -34,6 +34,7 @@ const CameraView = ({
   const trackRef = useRef<MediaStreamTrack | null>(null);
   const processingFramesRef = useRef(false);
   const cameraInitTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const retryCountRef = useRef(0);
 
   // Detect if we're on Android - only compute this once
   useEffect(() => {
@@ -161,6 +162,9 @@ const CameraView = ({
     
     // Reset flash state
     flashIntensityRef.current = 0;
+    
+    // Reset retry count
+    retryCountRef.current = 0;
   }, []);
 
   // Function to start the camera with optimized settings
@@ -172,7 +176,7 @@ const CameraView = ({
     }
     
     initializingRef.current = true;
-    console.log("CameraView: Starting camera");
+    console.log("CameraView: Starting camera, attempt #" + (retryCountRef.current + 1));
     setError(null);
     
     try {
@@ -315,6 +319,9 @@ const CameraView = ({
 
       // Mark that we're ready to process frames
       processingFramesRef.current = true;
+      
+      // Reset retry counter after successful initialization
+      retryCountRef.current = 0;
 
       // Initial flash adjustment based on ambient conditions
       if (videoTrack.readyState === 'live') {
@@ -338,7 +345,22 @@ const CameraView = ({
     } catch (error) {
       console.error('Error starting camera:', error);
       setError(`Error starting camera: ${error instanceof Error ? error.message : String(error)}`);
-      stopCamera();
+      
+      // Retry logic with exponential backoff
+      if (retryCountRef.current < 3 && mountedRef.current && isMonitoring) {
+        const backoffTime = Math.min(1000 * Math.pow(2, retryCountRef.current), 5000);
+        console.log(`CameraView: Retrying in ${backoffTime}ms (attempt ${retryCountRef.current + 1})`);
+        
+        setTimeout(() => {
+          if (mountedRef.current && isMonitoring) {
+            retryCountRef.current++;
+            initializingRef.current = false;
+            startCamera();
+          }
+        }, backoffTime);
+      } else {
+        stopCamera();
+      }
     } finally {
       initializingRef.current = false;
     }
