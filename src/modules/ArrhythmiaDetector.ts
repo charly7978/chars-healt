@@ -1,3 +1,5 @@
+import { ArrhythmiaDiagnostics } from '../utils/diagnosticLogger';
+
 export class ArrhythmiaDetector {
   // Identificador de versión para diagnosticar problemas de duplicación
   private static readonly VERSION = "2.1.3"; // Identificador específico para esta versión
@@ -97,6 +99,17 @@ export class ArrhythmiaDetector {
    * Reset all state variables
    */
   reset(): void {
+    // NUEVO: Registrar reset para diagnóstico
+    ArrhythmiaDiagnostics.logReset({
+      previousState: {
+        arrhythmiaCount: this.arrhythmiaCount,
+        lastPeakTime: this.lastPeakTime,
+        isLearningPhase: this.isLearningPhase,
+        inCooldown: this.inPostArrhythmiaCooldown,
+        avgNormalAmplitude: this.avgNormalAmplitude
+      }
+    });
+    
     // Guardar la hora de inicio para referencia
     const startTime = Date.now();
     
@@ -232,6 +245,14 @@ export class ArrhythmiaDetector {
    * Update RR intervals and peak amplitudes with new data
    */
   updateIntervals(intervals: number[], lastPeakTime: number | null, peakAmplitude?: number): void {
+    // NUEVO: Registrar para diagnóstico
+    ArrhythmiaDiagnostics.logSignalProcessing({
+      intervals: intervals.length > 0 ? intervals.slice(0, 3) : [],
+      lastPeakTime,
+      amplitudeProvided: peakAmplitude !== undefined,
+      amplitude: peakAmplitude
+    });
+    
     // NUEVO: Verificar si es necesario un autoreset antes de procesar
     this.checkForAutoReset();
     
@@ -499,6 +520,20 @@ export class ArrhythmiaDetector {
           }))
         });
       }
+      
+      // NUEVO: Registrar detección para diagnóstico
+      ArrhythmiaDiagnostics.logDetection({
+        timestamp: currentTime,
+        count: this.arrhythmiaCount,
+        amplitudeData: {
+          avgNormalAmplitude: this.avgNormalAmplitude,
+          peakSequenceTypes: this.peakSequence.map(p => p.type),
+          lastPeaks: this.peakSequence.slice(-3).map(p => ({
+            ratio: p.amplitude / (this.avgNormalAmplitude || 1),
+            type: p.type
+          }))
+        }
+      });
     }
 
     this.arrhythmiaDetected = prematureBeatDetected;

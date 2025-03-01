@@ -7,6 +7,7 @@ import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import PermissionsHandler from "@/components/PermissionsHandler";
 import { VitalSignsRisk } from '@/utils/vitalSignsRisk';
+import DiagnosticOverlay from "@/components/DiagnosticOverlay";
 
 interface VitalSigns {
   spo2: number;
@@ -50,6 +51,9 @@ const Index = () => {
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat, reset: resetHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
+
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const logoClickTimesRef = useRef<number[]>([]);
 
   const handlePermissionsGranted = () => {
     console.log("Permisos concedidos correctamente");
@@ -476,6 +480,21 @@ const Index = () => {
     };
   }, []);
 
+  const handleLogoClick = () => {
+    const now = Date.now();
+    logoClickTimesRef.current.push(now);
+    
+    if (logoClickTimesRef.current.length > 3) {
+      logoClickTimesRef.current.shift();
+    }
+    
+    if (logoClickTimesRef.current.length === 3 && 
+        (logoClickTimesRef.current[2] - logoClickTimesRef.current[0]) < 1000) {
+      setShowDiagnostics(prev => !prev);
+      logoClickTimesRef.current = [];
+    }
+  };
+
   return (
     <div 
       className="fixed inset-0 flex flex-col bg-black" 
@@ -603,6 +622,15 @@ const Index = () => {
           </div>
         </div>
       )}
+
+      <div className="absolute" style={{ top: 'calc(50vh + 5px)', left: 0, right: 0, textAlign: 'center', zIndex: 30 }}>
+        <h1 className="text-xl font-bold" onClick={handleLogoClick}>
+          <span className="text-white">Chars</span>
+          <span className="text-[#ea384c]">Healt</span>
+        </h1>
+      </div>
+
+      <DiagnosticOverlay isVisible={showDiagnostics} />
     </div>
   );
 };

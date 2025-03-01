@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { VitalSignsProcessor } from '../modules/VitalSignsProcessor';
+import { useArrhythmiaAnalyzer } from './useArrhythmiaAnalyzer';
 import { createBloodPressureStabilizer } from '../utils/bloodPressureStabilizer';
 import { createVitalSignsDataCollector } from '../utils/vitalSignsDataCollector';
 import { useSignalHistory } from './useSignalHistory';
@@ -10,6 +11,7 @@ export const useVitalSignsProcessor = () => {
   const processorRef = useRef<VitalSignsProcessor | null>(null);
   
   // Specialized modules
+  const arrhythmiaAnalyzer = useArrhythmiaAnalyzer();
   const bloodPressureStabilizer = useRef(createBloodPressureStabilizer());
   const dataCollector = useRef(createVitalSignsDataCollector());
   const signalHistory = useSignalHistory();
@@ -17,6 +19,9 @@ export const useVitalSignsProcessor = () => {
   // Estado para trackear la última detección de arritmia
   const lastArrhythmiaStatusRef = useRef<string>("SIN ARRITMIAS|0");
   const lastArrhythmiaDataRef = useRef<any>(null);
+  
+  // Constants
+  const MAX_ARRHYTHMIAS_PER_SESSION = 15; // Máximo razonable para 30 segundos
   
   /**
    * Lazy initialization of the VitalSignsProcessor
@@ -59,14 +64,10 @@ export const useVitalSignsProcessor = () => {
       }
     }
     
-    // Get base results from the core processor - asegurando que pasamos tanto los intervalos como la amplitud
+    // IMPORTANTE: Asegurar que pasamos la amplitud al procesador de signos vitales
     const result = processor.processSignal(
       value, 
-      rrData ? {
-        intervals: rrData.intervals || [],
-        lastPeakTime: rrData.lastPeakTime,
-        amplitude: rrData.amplitude || value // Si no tenemos amplitud específica, usamos el valor actual
-      } : undefined
+      rrData
     );
     
     // Stabilize blood pressure
@@ -82,23 +83,47 @@ export const useVitalSignsProcessor = () => {
       dataCollector.current.addBloodPressure(stabilizedBP);
     }
     
-    // Actualizar referencias de estado de arritmias
-    if (result.arrhythmiaStatus) {
-      lastArrhythmiaStatusRef.current = result.arrhythmiaStatus;
+    // ESQUEMA COORDINADO DE DETECCIÓN DE ARRITMIAS:
+    // 1. Primero revisamos el resultado del detector interno del VitalSignsProcessor
+    // 2. Si no detectó arritmias, permitimos que el arrhythmiaAnalyzer independiente lo intente
+    // 3. Combinamos los resultados de manera coherente
+    
+    // Actualizar la detección del procesador interno
+    let finalArrhythmiaStatus = result.arrhythmiaStatus || "SIN ARRITMIAS|0";
+    let finalArrhythmiaData = result.lastArrhythmiaData || null;
+    let arrhythmiaDetected = result.arrhythmiaStatus?.includes("ARRITMIA DETECTADA");
+    
+    // Si el detector principal no detectó arritmias, permitimos que el analizador independiente lo intente
+    if (!arrhythmiaDetected && rrData?.intervals && rrData.intervals.length >= 4) {
+      const arrhythmiaResult = arrhythmiaAnalyzer.processArrhythmia(rrData, MAX_ARRHYTHMIAS_PER_SESSION);
+      
+      // Si el analizador independiente detectó una arritmia, usamos su resultado
+      if (arrhythmiaResult.detected) {
+        finalArrhythmiaStatus = arrhythmiaResult.arrhythmiaStatus;
+        finalArrhythmiaData = arrhythmiaResult.lastArrhythmiaData;
+        arrhythmiaDetected = true;
+        
+        console.log("useVitalSignsProcessor: Arritmia detectada por analizador independiente", {
+          status: finalArrhythmiaStatus,
+          time: new Date().toISOString()
+        });
+      }
     }
     
-    if (result.lastArrhythmiaData) {
-      lastArrhythmiaDataRef.current = result.lastArrhythmiaData;
+    // Actualizar referencias de estado
+    lastArrhythmiaStatusRef.current = finalArrhythmiaStatus;
+    if (finalArrhythmiaData) {
+      lastArrhythmiaDataRef.current = finalArrhythmiaData;
     }
     
-    // Devolver los resultados completos, incluyendo datos de arritmia del procesador central
+    // Devolver los resultados combinados
     return {
       spo2: result.spo2,
       pressure: stabilizedBP,
-      arrhythmiaStatus: result.arrhythmiaStatus || lastArrhythmiaStatusRef.current,
-      lastArrhythmiaData: result.lastArrhythmiaData || lastArrhythmiaDataRef.current
+      arrhythmiaStatus: finalArrhythmiaStatus,
+      lastArrhythmiaData: finalArrhythmiaData
     };
-  }, [getProcessor, signalHistory]);
+  }, [getProcessor, signalHistory, arrhythmiaAnalyzer]);
 
   /**
    * Reset all processors and data
@@ -119,6 +144,7 @@ export const useVitalSignsProcessor = () => {
     }
     
     // Reset all specialized modules
+    arrhythmiaAnalyzer.reset(); // Resetear también el analizador independiente
     bloodPressureStabilizer.current.reset();
     dataCollector.current.reset();
     signalHistory.reset();
@@ -129,7 +155,7 @@ export const useVitalSignsProcessor = () => {
     lastArrhythmiaDataRef.current = null;
     
     console.log("useVitalSignsProcessor: Reset completo");
-  }, [signalHistory]);
+  }, [signalHistory, arrhythmiaAnalyzer]);
   
   /**
    * Aggressive memory cleanup
@@ -161,16 +187,26 @@ export const useVitalSignsProcessor = () => {
     console.log("useVitalSignsProcessor: Limpieza de memoria completada");
   }, [reset]);
 
-  // Extraer contador de arritmias del estado actual
+  // Obtener el contador combinado de arritmias
   const getArrhythmiaCounter = useCallback(() => {
+    // Intentar extraer el conteo del estado actual
     const status = lastArrhythmiaStatusRef.current;
     const parts = status.split('|');
+    
+    let count = 0;
     if (parts.length > 1) {
-      const count = parseInt(parts[1], 10);
-      return isNaN(count) ? 0 : count;
+      const statusCount = parseInt(parts[1], 10);
+      if (!isNaN(statusCount)) {
+        count = statusCount;
+      }
     }
-    return 0;
-  }, []);
+    
+    // Combinar con el contador del analizador independiente
+    const analyzerCount = arrhythmiaAnalyzer.arrhythmiaCounter || 0;
+    
+    // Usar el contador mayor de los dos
+    return Math.max(count, analyzerCount);
+  }, [arrhythmiaAnalyzer]);
 
   return {
     processSignal,
