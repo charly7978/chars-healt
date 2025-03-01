@@ -9,12 +9,12 @@
 export class ArrhythmiaDetector {
   // Constants for arrhythmia detection
   private readonly RR_WINDOW_SIZE = 5;
-  private readonly ARRHYTHMIA_LEARNING_PERIOD = 5000; // Reducido aún más para detectar antes
+  private readonly ARRHYTHMIA_LEARNING_PERIOD = 3000; // Reducido a 3 segundos para detectar antes
   
   // AUMENTAR SENSIBILIDAD: Ajustes para detectar más latidos prematuros
-  private readonly PREMATURE_BEAT_THRESHOLD = 0.70; // Más estricto, era 0.60
-  private readonly AMPLITUDE_RATIO_THRESHOLD = 0.75; // Umbral más restrictivo para capturar solo picos pequeños genuinos
-  private readonly NORMAL_PEAK_MIN_THRESHOLD = 0.80; // Umbral más estricto para considerar un pico como normal
+  private readonly PREMATURE_BEAT_THRESHOLD = 0.65; // Menos estricto que 0.70
+  private readonly AMPLITUDE_RATIO_THRESHOLD = 0.80; // Menos restrictivo para capturar más picos pequeños
+  private readonly NORMAL_PEAK_MIN_THRESHOLD = 0.65; // Menos estricto para considerar un pico como normal
   
   // State variables
   private rrIntervals: number[] = [];
@@ -262,69 +262,107 @@ export class ArrhythmiaDetector {
     
     // ALGORITMO ESTRICTO: Buscar el patrón específico de latido prematuro entre normales
     if (this.peakSequence.length >= 3 && this.avgNormalAmplitude > 0) {
-      // Verificamos los 3 últimos picos 
-      const lastThreePeaks = this.peakSequence.slice(-3);
+      // Evaluamos todas las posibles secuencias de 3 picos, no solo los últimos
+      const minSequencesToCheck = Math.min(this.peakSequence.length - 2, 5); // Máximo 5 secuencias
+      let sequenceFound = false;
       
-      // Clasificar los picos explícitamente
-      for (let i = 0; i < lastThreePeaks.length; i++) {
-        const peak = lastThreePeaks[i];
-        const ratio = peak.amplitude / this.avgNormalAmplitude;
+      // Creamos un log detallado para depuración
+      console.log(`ArrhythmiaDetector - Analizando ${minSequencesToCheck} secuencias posibles...`);
+      
+      // Revisar todas las posibles secuencias de 3 picos comenzando desde el más reciente
+      for (let offset = 0; offset < minSequencesToCheck && !sequenceFound; offset++) {
+        const startIdx = this.peakSequence.length - 3 - offset;
+        if (startIdx < 0) break;
         
-        // Clasificar el pico basado en su amplitud - con criterios más estrictos
-        if (ratio >= this.NORMAL_PEAK_MIN_THRESHOLD) {
-          lastThreePeaks[i].type = 'normal';
-        } else if (ratio <= this.AMPLITUDE_RATIO_THRESHOLD) {
-          lastThreePeaks[i].type = 'premature';
-        } else {
-          lastThreePeaks[i].type = 'unknown';
+        // Obtener la secuencia actual de 3 picos a analizar
+        const threePeakSequence = this.peakSequence.slice(startIdx, startIdx + 3);
+        
+        // Verificamos que tengamos exactamente 3 picos
+        if (threePeakSequence.length !== 3) continue;
+      
+        // Clasificar los picos explícitamente
+        for (let i = 0; i < threePeakSequence.length; i++) {
+          const peak = threePeakSequence[i];
+          const ratio = peak.amplitude / this.avgNormalAmplitude;
+          
+          // Clasificar el pico basado en su amplitud
+          if (ratio >= this.NORMAL_PEAK_MIN_THRESHOLD) {
+            threePeakSequence[i].type = 'normal';
+          } else if (ratio <= this.AMPLITUDE_RATIO_THRESHOLD) {
+            threePeakSequence[i].type = 'premature';
+          } else {
+            threePeakSequence[i].type = 'unknown';
+          }
+        }
+        
+        // PATRÓN: Un pico pequeño (prematuro) entre dos picos normales
+        if (
+          threePeakSequence[0].type === 'normal' && 
+          threePeakSequence[1].type === 'premature' && 
+          threePeakSequence[2].type === 'normal'
+        ) {
+          // Calcular las proporciones para verificación
+          const firstPeakRatio = threePeakSequence[0].amplitude / this.avgNormalAmplitude;
+          const secondPeakRatio = threePeakSequence[1].amplitude / this.avgNormalAmplitude;
+          const thirdPeakRatio = threePeakSequence[2].amplitude / this.avgNormalAmplitude;
+          
+          // Verificar el patrón de amplitud
+          const amplitudePatternClear = 
+            firstPeakRatio >= this.NORMAL_PEAK_MIN_THRESHOLD && 
+            secondPeakRatio <= this.AMPLITUDE_RATIO_THRESHOLD && 
+            thirdPeakRatio >= this.NORMAL_PEAK_MIN_THRESHOLD;
+          
+          // ANÁLISIS DE INTERVALOS RR
+          let intervalCheck = false;
+          if (this.baseRRInterval > 0) {
+            // Calcular intervalos entre picos
+            const interval1 = threePeakSequence[1].time - threePeakSequence[0].time;
+            const interval2 = threePeakSequence[2].time - threePeakSequence[1].time;
+            
+            // Proporción respecto al intervalo normal
+            const interval1Ratio = interval1 / this.baseRRInterval;
+            const interval2Ratio = interval2 / this.baseRRInterval;
+            
+            // Verificar patrón típico con condiciones menos estrictas
+            intervalCheck = interval1Ratio < 0.90 && interval2Ratio > 1.05;
+            
+            console.log(`ArrhythmiaDetector - Secuencia ${offset+1}: Análisis de intervalos RR:`, {
+              interval1, 
+              interval2, 
+              baseInterval: this.baseRRInterval,
+              interval1Ratio, 
+              interval2Ratio,
+              isPattern: intervalCheck
+            });
+          }
+          
+          // Si cumple con el patrón de amplitud O el de intervalos, es una arritmia
+          if (amplitudePatternClear || intervalCheck) {
+            sequenceFound = true;
+            prematureBeatDetected = true;
+            
+            console.log(`ArrhythmiaDetector - ¡PATRÓN ENCONTRADO en secuencia ${offset+1}!`, {
+              amplitudePattern: amplitudePatternClear,
+              intervalPattern: intervalCheck,
+              firstPeakRatio,
+              secondPeakRatio,
+              thirdPeakRatio
+            });
+            
+            // Usar esta secuencia para marcar visualmente la arritmia
+            // Consideramos el pico prematuro como el más reciente para mostrarlo
+            const prematurePeakIdx = startIdx + 1;
+            if (prematurePeakIdx < this.peakSequence.length) {
+              // No necesitamos hacer nada más, solo detectamos la secuencia
+              break;
+            }
+          }
         }
       }
       
-      // PATRÓN ESTRICTO: Un pico pequeño (prematuro) entre dos picos normales
-      if (
-        lastThreePeaks[0].type === 'normal' && 
-        lastThreePeaks[1].type === 'premature' && 
-        lastThreePeaks[2].type === 'normal'
-      ) {
-        // ANÁLISIS DE INTERVALOS RR: Un latido prematuro tiene intervalos RR característicos
-        // El intervalo antes del latido prematuro debe ser más corto que el normal
-        // El intervalo después del latido prematuro debe ser más largo (pausa compensatoria)
-        let intervalCheck = false;
-        
-        if (lastThreePeaks.length >= 3 && this.baseRRInterval > 0) {
-          // Calcular intervalos entre picos
-          const interval1 = lastThreePeaks[1].time - lastThreePeaks[0].time;
-          const interval2 = lastThreePeaks[2].time - lastThreePeaks[1].time;
-          
-          // Proporción respecto al intervalo normal
-          const interval1Ratio = interval1 / this.baseRRInterval;
-          const interval2Ratio = interval2 / this.baseRRInterval;
-          
-          // Verificar patrón típico: primer intervalo más corto, segundo más largo
-          const isPrematuroPattern = interval1Ratio < 0.85 && interval2Ratio > 1.15;
-          
-          intervalCheck = isPrematuroPattern;
-          
-          console.log('ArrhythmiaDetector - Análisis de intervalos RR:', {
-            interval1, 
-            interval2, 
-            baseInterval: this.baseRRInterval,
-            interval1Ratio, 
-            interval2Ratio,
-            isPrematuroPattern
-          });
-        }
-        
-        // Para confirmar un latido prematuro, debe cumplir TANTO el patrón de amplitud como el de intervalos
-        prematureBeatDetected = intervalCheck;
-      } else {
-        // Información de depuración
-        console.log('ArrhythmiaDetector - No se encontró patrón normal-pequeño-normal:', 
-          lastThreePeaks.map(p => ({
-            type: p.type,
-            ratio: p.amplitude / this.avgNormalAmplitude
-          }))
-        );
+      // Si no encontramos ningún patrón después de revisar todas las secuencias
+      if (!sequenceFound) {
+        console.log('ArrhythmiaDetector - No se encontró patrón en ninguna secuencia');
       }
     } else {
       console.log('ArrhythmiaDetector - No hay suficientes picos o amplitud de referencia:', {

@@ -1,4 +1,3 @@
-
 interface PPGDataPoint {
   time: number;
   value: number;
@@ -23,6 +22,21 @@ export class CircularBuffer {
 
   getPoints(): PPGDataPoint[] {
     return [...this.buffer];
+  }
+
+  // Función auxiliar para marcar un punto como arritmia
+  markArrhythmia(index: number, isArrhythmia: boolean = true): void {
+    // Asegurarse de que el índice es válido
+    if (index >= 0 && index < this.buffer.length) {
+      this.buffer[index].isArrhythmia = isArrhythmia;
+    }
+  }
+
+  // Marcar el último punto añadido como arritmia
+  markLastAsArrhythmia(isArrhythmia: boolean = true): void {
+    if (this.buffer.length > 0) {
+      this.buffer[this.buffer.length - 1].isArrhythmia = isArrhythmia;
+    }
   }
 
   clear(): void {

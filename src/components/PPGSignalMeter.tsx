@@ -271,9 +271,11 @@ const PPGSignalMeter = ({
             ctx.stroke();
             ctx.setLineDash([]);
             
-            ctx.font = 'bold 10px Inter';
+            ctx.font = 'bold 11px Inter';
             ctx.fillStyle = '#FF0000';
             ctx.fillText("LATIDO PREMATURO", x, y - 35);
+            ctx.fillStyle = '#FFFF00';
+            ctx.fillText("DETECTADO", x, y - 22);
             
             if (i < visiblePoints.length - 2) {
               const nextPoint = visiblePoints[i + 1];
