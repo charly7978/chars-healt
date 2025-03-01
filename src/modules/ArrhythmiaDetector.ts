@@ -1,3 +1,4 @@
+
 /**
  * ArrhythmiaDetector.ts
  * 
@@ -9,12 +10,12 @@
 export class ArrhythmiaDetector {
   // Constants for arrhythmia detection
   private readonly RR_WINDOW_SIZE = 5;
-  private readonly ARRHYTHMIA_LEARNING_PERIOD = 2000; // Reduced from 3000ms to detect earlier
+  private readonly ARRHYTHMIA_LEARNING_PERIOD = 1000; // Reducido aún más para detectar antes
   
-  // MÁS ESTRICTO: Ajustes extremos para solo detectar latidos prematuros entre normales
-  private readonly PREMATURE_BEAT_THRESHOLD = 0.65; // Más estricto para evitar falsos positivos
-  private readonly AMPLITUDE_RATIO_THRESHOLD = 0.55; // Umbral MUCHO más bajo - solo picos muy pequeños
-  private readonly NORMAL_PEAK_MIN_THRESHOLD = 0.85; // Umbral para considerar un pico como normal
+  // AUMENTAR SENSIBILIDAD: Ajustes para detectar más latidos prematuros
+  private readonly PREMATURE_BEAT_THRESHOLD = 0.70; // Menos estricto
+  private readonly AMPLITUDE_RATIO_THRESHOLD = 0.65; // Umbral más alto para capturar más picos pequeños
+  private readonly NORMAL_PEAK_MIN_THRESHOLD = 0.80; // Umbral más bajo para considerar un pico como normal
   
   // State variables
   private rrIntervals: number[] = [];
@@ -93,7 +94,7 @@ export class ArrhythmiaDetector {
           const topAmplitudes = sortedAmplitudes.slice(0, normalCount);
           this.avgNormalAmplitude = topAmplitudes.reduce((a, b) => a + b, 0) / topAmplitudes.length;
           
-          console.log('ArrhythmiaDetector - Amplitud normal de referencia:', {
+          console.log('ArrhythmiaDetector - Amplitud normal de referencia CALIBRADA:', {
             avgNormalAmplitude: this.avgNormalAmplitude,
             totalSamples: this.amplitudes.length,
             topValues: topAmplitudes
@@ -113,7 +114,7 @@ export class ArrhythmiaDetector {
           const medianIndex = Math.floor(filteredRR.length / 2);
           this.baseRRInterval = filteredRR[medianIndex];
           
-          console.log('ArrhythmiaDetector - Intervalo RR normal:', {
+          console.log('ArrhythmiaDetector - Intervalo RR normal CALIBRADO:', {
             baseRRInterval: this.baseRRInterval,
             totalSamples: this.rrIntervals.length
           });
@@ -198,13 +199,29 @@ export class ArrhythmiaDetector {
     data: { rmssd: number; rrVariation: number; prematureBeat: boolean } | null;
   } {
     // Skip detection during learning phase or if not enough data
-    if (this.rrIntervals.length < 3 || this.amplitudes.length < 3 || this.isLearningPhase) {
+    if (this.rrIntervals.length < 3 || this.amplitudes.length < 3) {
+      console.log("ArrhythmiaDetector - Datos insuficientes para detección", {
+        rrIntervals: this.rrIntervals.length,
+        amplitudes: this.amplitudes.length,
+        isLearning: this.isLearningPhase
+      });
       return {
         detected: false,
         count: this.arrhythmiaCount,
         status: this.hasDetectedFirstArrhythmia ? 
           `ARRITMIA DETECTADA|${this.arrhythmiaCount}` : 
           `SIN ARRITMIAS|${this.arrhythmiaCount}`,
+        data: null
+      };
+    }
+
+    // Si todavía estamos en fase de aprendizaje, no detectar arritmias
+    if (this.isLearningPhase) {
+      console.log("ArrhythmiaDetector - En fase de aprendizaje, calibrando...");
+      return {
+        detected: false,
+        count: this.arrhythmiaCount,
+        status: `CALIBRANDO|${this.arrhythmiaCount}`,
         data: null
       };
     }
@@ -270,11 +287,50 @@ export class ArrhythmiaDetector {
             umbralPequeno: this.AMPLITUDE_RATIO_THRESHOLD,
             umbralNormal: this.NORMAL_PEAK_MIN_THRESHOLD
           });
+          
+          // Análisis detallado de los picos para verificación
+          console.log('Análisis detallado de picos:', {
+            normal1: {
+              amplitude: lastThreePeaks[0].amplitude,
+              ratio: firstPeakRatio,
+              time: lastThreePeaks[0].time
+            },
+            premature: {
+              amplitude: lastThreePeaks[1].amplitude,
+              ratio: secondPeakRatio,
+              time: lastThreePeaks[1].time
+            },
+            normal2: {
+              amplitude: lastThreePeaks[2].amplitude,
+              ratio: thirdPeakRatio,
+              time: lastThreePeaks[2].time
+            }
+          });
         } else {
           // Si no cumple las condiciones estrictas de amplitud, no es un latido prematuro
           prematureBeatDetected = false;
+          console.log('ArrhythmiaDetector - Patrón detectado, PERO no cumple criterios de amplitud:', {
+            prematuroRatio: secondPeakRatio,
+            normal1Ratio: firstPeakRatio,
+            normal2Ratio: thirdPeakRatio,
+            umbralPequeno: this.AMPLITUDE_RATIO_THRESHOLD,
+            umbralNormal: this.NORMAL_PEAK_MIN_THRESHOLD
+          });
         }
+      } else {
+        // Información de depuración
+        console.log('ArrhythmiaDetector - No se encontró patrón normal-pequeño-normal:', 
+          lastThreePeaks.map(p => ({
+            type: p.type,
+            ratio: p.amplitude / this.avgNormalAmplitude
+          }))
+        );
       }
+    } else {
+      console.log('ArrhythmiaDetector - No hay suficientes picos o amplitud de referencia:', {
+        peakCount: this.peakSequence.length,
+        avgNormalAmplitude: this.avgNormalAmplitude
+      });
     }
     
     // Calcular variación RR para información adicional
@@ -283,23 +339,21 @@ export class ArrhythmiaDetector {
       0;
     this.lastRRVariation = rrVariation;
     
-    // Solo contar arritmias si suficiente tiempo desde la última (500ms) para evitar duplicados
-    if (prematureBeatDetected && currentTime - this.lastArrhythmiaTime > 500) {
+    // Solo contar arritmias si suficiente tiempo desde la última (300ms) para evitar duplicados
+    if (prematureBeatDetected && currentTime - this.lastArrhythmiaTime > 300) {
       this.arrhythmiaCount++;
       this.lastArrhythmiaTime = currentTime;
       this.hasDetectedFirstArrhythmia = true;
       
-      if (this.DEBUG_MODE) {
-        console.log('ArrhythmiaDetector - NUEVA ARRITMIA CONTABILIZADA:', {
-          count: this.arrhythmiaCount,
-          timestamp: currentTime,
-          amplitudes: this.amplitudes.slice(-5),
-          peakSequence: this.peakSequence.slice(-5).map(p => ({
-            type: p.type,
-            ratio: p.amplitude / this.avgNormalAmplitude
-          }))
-        });
-      }
+      console.log('ArrhythmiaDetector - NUEVA ARRITMIA CONTABILIZADA:', {
+        count: this.arrhythmiaCount,
+        timestamp: currentTime,
+        amplitudes: this.amplitudes.slice(-5),
+        peakSequence: this.peakSequence.slice(-5).map(p => ({
+          type: p.type,
+          ratio: p.amplitude / this.avgNormalAmplitude
+        }))
+      });
     }
 
     this.arrhythmiaDetected = prematureBeatDetected;

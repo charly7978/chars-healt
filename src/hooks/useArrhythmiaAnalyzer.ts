@@ -1,5 +1,5 @@
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { ArrhythmiaDetector } from '../modules/ArrhythmiaDetector';
 
 /**
@@ -11,13 +11,23 @@ export const useArrhythmiaAnalyzer = () => {
   const [arrhythmiaCounter, setArrhythmiaCounter] = useState(0);
   const detectorRef = useRef<ArrhythmiaDetector>(new ArrhythmiaDetector());
   
+  // Limpiar detector al montar el hook
+  useEffect(() => {
+    console.log("ArrhythmiaAnalyzer - Inicializando detector");
+    detectorRef.current.reset();
+    
+    return () => {
+      detectorRef.current.cleanMemory();
+    };
+  }, []);
+  
   /**
    * Resetear todos los estados de análisis
    */
   const reset = useCallback(() => {
     setArrhythmiaCounter(0);
     detectorRef.current.reset();
-    console.log("Arrhythmia analyzer reset");
+    console.log("ArrhythmiaAnalyzer - Reset completo");
   }, []);
   
   /**
@@ -29,13 +39,21 @@ export const useArrhythmiaAnalyzer = () => {
   ) => {
     // Verificar si tenemos datos válidos
     if (!rrData?.intervals || rrData.intervals.length === 0) {
-      console.warn("useArrhythmiaAnalyzer - No interval data provided");
+      console.warn("ArrhythmiaAnalyzer - No interval data provided");
       
       return {
         detected: false,
         arrhythmiaStatus: detectorRef.current.getStatus(),
         lastArrhythmiaData: null
       };
+    }
+    
+    // Log para depuración
+    if (rrData.amplitudes && rrData.amplitudes.length > 0) {
+      console.log("ArrhythmiaAnalyzer - Procesando datos con amplitudes:", {
+        intervals: rrData.intervals.length,
+        lastAmplitude: rrData.amplitudes[rrData.amplitudes.length - 1]
+      });
     }
     
     // Actualizar datos en el detector
