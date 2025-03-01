@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -5,7 +6,9 @@ import { useSignalProcessor } from "@/hooks/useSignalProcessor";
 import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
+import PermissionsHandler from "@/components/PermissionsHandler";
 import { VitalSignsRisk } from '@/utils/vitalSignsRisk';
+import deviceContextService from '@/services/DeviceContextService';
 
 interface VitalSigns {
   spo2: number;
@@ -36,6 +39,7 @@ const Index = () => {
     spo2: number,
     pressure: string
   } | null>(null);
+  const [permissionsGranted, setPermissionsGranted] = useState(false);
   const measurementTimerRef = useRef<number | null>(null);
   
   const allHeartRateValuesRef = useRef<number[]>([]);
@@ -48,6 +52,20 @@ const Index = () => {
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat, reset: resetHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
+  
+  const imageCaptureRef = useRef<ImageCapture | null>(null);
+  const isProcessingFramesRef = useRef(false);
+  const animationFrameRef = useRef<number | null>(null);
+
+  const handlePermissionsGranted = () => {
+    console.log("Permisos concedidos correctamente");
+    setPermissionsGranted(true);
+  };
+
+  const handlePermissionsDenied = () => {
+    console.log("Permisos denegados - funcionalidad limitada");
+    setPermissionsGranted(false);
+  };
 
   const calculateFinalValues = () => {
     try {
@@ -119,6 +137,11 @@ const Index = () => {
   };
 
   const startMonitoring = () => {
+    if (!permissionsGranted) {
+      console.log("No se puede iniciar sin permisos");
+      return;
+    }
+    
     if (isMonitoring) {
       stopMonitoringOnly();
     } else {
@@ -165,6 +188,15 @@ const Index = () => {
   const stopMonitoringOnly = () => {
     try {
       console.log("Deteniendo SOLO monitorización (displays intactos)");
+      
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+      
+      isProcessingFramesRef.current = false;
+      
+      imageCaptureRef.current = null;
       
       setIsMonitoring(false);
       setIsCameraOn(false);
@@ -215,6 +247,15 @@ const Index = () => {
   const handleReset = () => {
     console.log("RESET COMPLETO solicitado");
     
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    
+    isProcessingFramesRef.current = false;
+    
+    imageCaptureRef.current = null;
+    
     setIsMonitoring(false);
     setIsCameraOn(false);
     stopProcessing();
@@ -251,106 +292,111 @@ const Index = () => {
   const handleStreamReady = (stream: MediaStream) => {
     if (!isMonitoring) return;
     
-    console.log("Index: Stream de cámara recibido y listo para procesar");
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    
+    const videoTrack = stream.getVideoTracks()[0];
+    if (!videoTrack || videoTrack.readyState !== 'live') {
+      console.error("Video track not available or not live");
+      return;
+    }
     
     try {
-      const videoTrack = stream.getVideoTracks()[0];
-      
-      // Verificar que el track esté activo
-      if (!videoTrack || videoTrack.readyState !== 'live') {
-        console.error("Index: El track de video no está activo");
-        return;
-      }
-      
+      // Create a new ImageCapture instance for this stream
       const imageCapture = new ImageCapture(videoTrack);
+      imageCaptureRef.current = imageCapture;
       
-      // Verificar la linterna sin forzar - solo si está disponible
+      // Activate torch if available
       if (isMonitoring && videoTrack.getCapabilities()?.torch) {
         videoTrack.applyConstraints({
           advanced: [{ torch: true }]
-        }).catch(err => console.warn("Aviso - No se pudo activar la linterna:", err));
+        }).catch(err => console.error("Error activating flashlight:", err));
       }
       
-      // Crear un canvas temporal para el procesamiento
+      // Prepare canvas for frame processing
       const tempCanvas = document.createElement('canvas');
-      const tempCtx = tempCanvas.getContext('2d', { 
-        alpha: false,       // Mejor rendimiento
-        desynchronized: true // Procesamiento más rápido
-      });
-      
+      const tempCtx = tempCanvas.getContext('2d');
       if (!tempCtx) {
-        console.error("No se pudo obtener el contexto 2D");
+        console.error("Could not get 2D context");
         return;
       }
       
-      // Configurar el canvas con dimensiones básicas
-      tempCanvas.width = 320;  // Reducir tamaño para mejor rendimiento
-      tempCanvas.height = 240;
-      
-      // Usar una variable para controlar el procesamiento
-      let isProcessingFrame = false;
-      let lastProcessTime = 0;
-      const THROTTLE_MS = 66; // ~15 FPS
+      isProcessingFramesRef.current = true;
       
       const processImage = async () => {
-        if (!isMonitoring) return;
-        
-        const now = performance.now();
-        const timeSinceLastProcess = now - lastProcessTime;
-        
-        // Limitar la frecuencia de procesamiento de frames para evitar sobrecarga
-        if (timeSinceLastProcess < THROTTLE_MS || isProcessingFrame) {
-          requestAnimationFrame(processImage);
+        // Early exit if we're no longer monitoring or the component is unmounted
+        if (!isMonitoring || !isProcessingFramesRef.current) {
           return;
         }
         
-        isProcessingFrame = true;
-        lastProcessTime = now;
-        
         try {
-          // Capturar frame
-          const frame = await imageCapture.grabFrame().catch(err => {
-            console.warn("Aviso - Error capturando frame:", err);
-            return null;
-          });
-          
-          if (!frame) {
-            isProcessingFrame = false;
-            if (isMonitoring) requestAnimationFrame(processImage);
+          // Check if imageCapture is still valid
+          if (!imageCaptureRef.current) {
+            console.error("ImageCapture instance no longer available");
             return;
           }
           
-          // Actualizar tamaño de canvas si es necesario
-          if (tempCanvas.width !== frame.width || tempCanvas.height !== frame.height) {
-            tempCanvas.width = frame.width;
-            tempCanvas.height = frame.height;
+          // The track reference is available via videoTrack
+          // NOT from imageCapture.track which doesn't exist
+          if (!videoTrack || videoTrack.readyState !== 'live') {
+            console.error("Track is not in live state, skipping frame capture");
+            
+            // If we're still monitoring, retry after a delay
+            if (isMonitoring && isProcessingFramesRef.current) {
+              setTimeout(() => {
+                if (isMonitoring && isProcessingFramesRef.current) {
+                  animationFrameRef.current = requestAnimationFrame(processImage);
+                }
+              }, 500);
+            }
+            return;
           }
           
-          // Dibujar y procesar el frame
+          const frame = await imageCaptureRef.current.grabFrame();
+          
+          // Double-check we're still monitoring
+          if (!isMonitoring || !isProcessingFramesRef.current) {
+            return;
+          }
+          
+          tempCanvas.width = frame.width;
+          tempCanvas.height = frame.height;
           tempCtx.drawImage(frame, 0, 0);
+          
           const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
           
-          // Procesar el frame solo si estamos monitorizando
-          if (isMonitoring) {
-            processFrame(imageData);
+          // Process the image for ambient light detection and signal processing
+          if (deviceContextService.processAmbientLight) {
+            deviceContextService.processAmbientLight(imageData);
+          }
+          
+          // Process the frame for vital sign detection
+          processFrame(imageData);
+          
+          // Continue processing frames if we're still monitoring
+          if (isMonitoring && isProcessingFramesRef.current) {
+            animationFrameRef.current = requestAnimationFrame(processImage);
           }
         } catch (error) {
-          console.error("Error procesando frame:", error);
-        } finally {
-          isProcessingFrame = false;
+          console.error("Error capturing frame:", error);
           
-          // Continuar procesando solo si estamos monitorizando
-          if (isMonitoring) {
-            requestAnimationFrame(processImage);
+          // Retry with delay if we're still monitoring
+          if (isMonitoring && isProcessingFramesRef.current) {
+            setTimeout(() => {
+              if (isMonitoring && isProcessingFramesRef.current) {
+                animationFrameRef.current = requestAnimationFrame(processImage);
+              }
+            }, 500);
           }
         }
       };
-      
-      // Iniciar el procesamiento
-      processImage();
-      
+
+      // Start processing frames
+      animationFrameRef.current = requestAnimationFrame(processImage);
     } catch (error) {
-      console.error("Error configurando procesamiento de cámara:", error);
+      console.error("Error creating ImageCapture:", error);
     }
   };
 
@@ -364,7 +410,7 @@ const Index = () => {
             if (videoTrack && videoTrack.getCapabilities()?.torch) {
               videoTrack.applyConstraints({
                 advanced: [{ torch: false }]
-              }).catch(err => console.error("Error desactivando linterna:", err));
+              }).catch(err => console.error("Error desactivating flashlight:", err));
             }
             stream.getTracks().forEach(track => track.stop());
           })
@@ -495,13 +541,20 @@ const Index = () => {
         
         setSignalQuality(lastSignal.quality);
       } catch (error) {
-        console.error("Error procesando señal:", error);
+        console.error("Error processing signal:", error);
       }
     }
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns, measurementComplete]);
 
   useEffect(() => {
     return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+      
+      isProcessingFramesRef.current = false;
+      
       if (measurementTimerRef.current) {
         clearInterval(measurementTimerRef.current);
         measurementTimerRef.current = null;
@@ -526,17 +579,27 @@ const Index = () => {
         paddingLeft: 'var(--sal)',
       }}
     >
-      {/* Capa de CameraView con posición absoluta */}
+      <PermissionsHandler 
+        onPermissionsGranted={handlePermissionsGranted}
+        onPermissionsDenied={handlePermissionsDenied}
+      />
+      
       <div className="absolute inset-0 z-0">
         <CameraView 
           onStreamReady={handleStreamReady}
-          isMonitoring={isCameraOn}
+          isMonitoring={isCameraOn && permissionsGranted}
           isFingerDetected={isMonitoring ? lastSignal?.fingerDetected : false}
           signalQuality={isMonitoring ? signalQuality : 0}
         />
+        <div 
+          className="absolute inset-0" 
+          style={{ 
+            backgroundColor: 'rgba(0, 0, 0, 0.8)', 
+            backdropFilter: 'blur(2px)' 
+          }} 
+        />
       </div>
 
-      {/* PPG Signal Meter con posición absoluta fija */}
       <div className="absolute inset-0 z-10">
         <PPGSignalMeter 
           value={isMonitoring ? lastSignal?.filteredValue || 0 : 0}
@@ -549,11 +612,8 @@ const Index = () => {
         />
       </div>
 
-      {/* Eliminando el título "Chars Healt" que estaba aquí */}
-
-      {/* Panel de signos vitales con posición fija abajo */}
       <div className="absolute z-20" style={{ bottom: '65px', left: 0, right: 0, padding: '0 12px' }}>
-        <div className="p-2 bg-black/60 rounded-lg">
+        <div className="p-2 rounded-lg">
           <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
             <VitalSign 
               label="FRECUENCIA CARDÍACA"
@@ -582,20 +642,23 @@ const Index = () => {
         </div>
       </div>
 
-      {/* Botonera fija en la parte inferior */}
       <div className="absolute z-50" style={{ bottom: 0, left: 0, right: 0, height: '55px' }}>
         <div className="grid grid-cols-2 gap-px w-full h-full">
           <button 
             onClick={startMonitoring}
             className="w-full h-full text-xl font-bold text-white transition-colors duration-200"
+            disabled={!permissionsGranted}
             style={{ 
-              backgroundImage: isMonitoring 
-                ? 'linear-gradient(135deg, #f87171, #dc2626, #b91c1c)' 
-                : 'linear-gradient(135deg, #3b82f6, #2563eb, #1d4ed8)',
-              textShadow: '0px 1px 3px rgba(0, 0, 0, 0.3)'
+              backgroundImage: !permissionsGranted 
+                ? 'linear-gradient(135deg, #64748b, #475569, #334155)'
+                : isMonitoring 
+                  ? 'linear-gradient(135deg, #f87171, #dc2626, #b91c1c)' 
+                  : 'linear-gradient(135deg, #3b82f6, #2563eb, #1d4ed8)',
+              textShadow: '0px 1px 3px rgba(0, 0, 0, 0.3)',
+              opacity: !permissionsGranted ? 0.7 : 1
             }}
           >
-            {isMonitoring ? 'DETENER' : 'INICIAR'}
+            {!permissionsGranted ? 'PERMISOS REQUERIDOS' : (isMonitoring ? 'DETENER' : 'INICIAR')}
           </button>
           <button 
             onClick={handleReset}
@@ -609,6 +672,23 @@ const Index = () => {
           </button>
         </div>
       </div>
+      
+      {!permissionsGranted && (
+        <div className="absolute z-50 top-1/2 left-0 right-0 text-center px-4 transform -translate-y-1/2">
+          <div className="bg-red-900/80 backdrop-blur-sm p-4 rounded-lg mx-auto max-w-md">
+            <h3 className="text-xl font-bold text-white mb-2">Permisos necesarios</h3>
+            <p className="text-white/90 mb-4">
+              Esta aplicación necesita acceso a la cámara para medir tus signos vitales.
+            </p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="bg-white text-red-900 font-bold py-2 px-4 rounded"
+            >
+              Reintentar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

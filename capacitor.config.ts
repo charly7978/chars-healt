@@ -1,50 +1,28 @@
+
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.charshealt.app',
+  appId: 'app.lovable.30d3cd84f3174223a76cd460578ae3cc',
   appName: 'chars-healt',
   webDir: 'dist',
   server: {
-    androidScheme: 'https',
-    cleartext: true,
-    allowNavigation: ['*']
+    url: 'https://30d3cd84-f317-4223-a76c-d460578ae3cc.lovableproject.com?forceHideBadge=true',
+    cleartext: true
   },
   android: {
-    // Configuración para Android
-    allowMixedContent: true,
-    captureInput: true,
-    webContentsDebuggingEnabled: false,
-    initialFocus: true,
-    backgroundColor: "#000000"
+    path: './android',
+    useLegacyBridge: true,
+    appendUserAgent: 'CharsHealth App',
+    permissions: [
+      "android.permission.CAMERA",
+      "android.permission.FLASHLIGHT",
+      "android.permission.MODIFY_AUDIO_SETTINGS"
+    ]
   },
   plugins: {
-    Camera: {
-      permissionType: "camera",
-      androidPermissions: [
-        "android.permission.CAMERA"
-      ]
-    },
-    Permissions: {
-      permissions: ["camera"]
-    },
-    SplashScreen: {
-      launchAutoHide: true,
-      launchShowDuration: 500,
-      backgroundColor: "#000000",
-      androidSplashResourceName: "splash",
-      showSpinner: false,
-      splashFullScreen: true,
-      splashImmersive: true
-    },
-    CapacitorHttp: {
-      enabled: true
-    },
-    WebView: {
-      allowFileAccess: true,
-      allowContentAccess: true,
-      scrollEnabled: false,
-      overScrollMode: 'never',
-      geolocationEnabled: false
+    PermissionsAndroid: {
+      camera: true,
+      microphone: true
     }
   }
 };
