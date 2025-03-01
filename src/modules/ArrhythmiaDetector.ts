@@ -12,25 +12,25 @@ export class ArrhythmiaDetector {
   // ────────── CONFIGURACIÓN AVANZADA BASADA EN LITERATURA MÉDICA ──────────
   
   // Intervalos y fases de aprendizaje
-  private readonly LEARNING_PERIOD_MS = 10000;          // 10 segundos de aprendizaje (extendido)
-  private readonly MIN_SAMPLES_FOR_BASELINE = 10;       // Mínimo de muestras para establecer línea base
-  private readonly PATTERN_MEMORY_LENGTH = 15;          // Picos a recordar para análisis (aumentado)
+  private readonly LEARNING_PERIOD_MS = 12000;          // 12 segundos de aprendizaje (extendido)
+  private readonly MIN_SAMPLES_FOR_BASELINE = 12;       // Más muestras para establecer línea base
+  private readonly PATTERN_MEMORY_LENGTH = 15;          // Picos a recordar para análisis
   private readonly RR_COMPARISON_WINDOW = 7;            // Ventana para comparar intervalos RR
   
-  // Umbrales de detección clínicamente validados
-  private readonly PREMATURE_RR_RATIO_THRESHOLD = 0.75; // Intervalo prematuro vs normal (<75%)
-  private readonly POSTEXTRASYSTOLIC_THRESHOLD = 1.20;  // Pausa compensatoria mayor (>120%)
-  private readonly AMPLITUDE_RATIO_MIN = 0.35;          // Amplitud mínima vs normal (35%)
-  private readonly AMPLITUDE_RATIO_MAX = 0.75;          // Amplitud máxima vs normal (75%)
+  // Umbrales de detección clínicamente validados - MÁS ESTRICTOS PARA REDUCIR FALSOS POSITIVOS
+  private readonly PREMATURE_RR_RATIO_THRESHOLD = 0.70; // Intervalo prematuro vs normal (<70%, más restrictivo)
+  private readonly POSTEXTRASYSTOLIC_THRESHOLD = 1.25;  // Pausa compensatoria mayor (>125%, más restrictivo)
+  private readonly AMPLITUDE_RATIO_MIN = 0.30;          // Amplitud mínima vs normal (30%, más restrictivo)
+  private readonly AMPLITUDE_RATIO_MAX = 0.65;          // Amplitud máxima vs normal (65%, más restrictivo)
   
-  // Estabilidad y validación - Más restrictivos para reducir falsos positivos
-  private readonly MIN_CONSECUTIVE_NORMAL = 5;          // Más latidos normales antes de detección
-  private readonly MIN_CONFIDENCE_THRESHOLD = 0.80;     // Mayor confianza para confirmar arritmia
-  private readonly MIN_TIME_BETWEEN_ARRHYTHMIAS = 2500; // Tiempo mayor entre arritmias (ms)
+  // Estabilidad y validación - MUCHO MÁS RESTRICTIVOS PARA REDUCIR FALSOS POSITIVOS
+  private readonly MIN_CONSECUTIVE_NORMAL = 7;          // Muchos más latidos normales requeridos (7)
+  private readonly MIN_CONFIDENCE_THRESHOLD = 0.85;     // Mayor confianza para confirmar arritmia (85%)
+  private readonly MIN_TIME_BETWEEN_ARRHYTHMIAS = 3500; // Tiempo mucho mayor entre arritmias (3.5s)
   
   // Ventanas de tiempo para análisis del ritmo
-  private readonly RHYTHM_STABILITY_WINDOW = 10;        // Más latidos para analizar estabilidad
-  private readonly BPM_FILTER_WINDOW = 7;               // Ventana ampliada para filtrar BPM
+  private readonly RHYTHM_STABILITY_WINDOW = 12;        // Más latidos para analizar estabilidad
+  private readonly BPM_FILTER_WINDOW = 8;               // Ventana ampliada para filtrar BPM
   
   // ────────── VARIABLES DE ESTADO ──────────
   
@@ -72,6 +72,8 @@ export class ArrhythmiaDetector {
   // Control adicional de falsos positivos
   private lastClassifications: string[] = []; // Historial de clasificaciones recientes
   private stableRhythmCount = 0;       // Contador de ritmo estable
+  private patternRecognitionActive = false; // Solo se activa después de suficiente estabilidad
+  private falsePositiveProtection = true;   // Protección adicional contra falsos positivos
   
   /**
    * Reinicia todos los valores del detector a su estado inicial
@@ -105,6 +107,7 @@ export class ArrhythmiaDetector {
     // Reiniciar prevención de falsos positivos
     this.lastClassifications = [];
     this.stableRhythmCount = 0;
+    this.patternRecognitionActive = false;
     
     console.log("ArrhythmiaDetector: Reinicio completo del detector");
   }
@@ -272,8 +275,8 @@ export class ArrhythmiaDetector {
       
       // Bonus por mayor desviación
       const shortening = 1 - rrRatio;
-      if (shortening > 0.30) prematureScore += 0.1;
-      if (shortening > 0.40) prematureScore += 0.1;
+      if (shortening > 0.35) prematureScore += 0.1; // Requiere una mayor desviación
+      if (shortening > 0.45) prematureScore += 0.1; // Requiere una desviación aún mayor
     } 
     // Pausa compensatoria: intervalo significativamente más largo
     else if (rrRatio > this.POSTEXTRASYSTOLIC_THRESHOLD) {
@@ -281,8 +284,8 @@ export class ArrhythmiaDetector {
       
       // Bonus por mayor compensación
       const lengthening = rrRatio - 1;
-      if (lengthening > 0.25) postPrematureScore += 0.1;
-      if (lengthening > 0.35) postPrematureScore += 0.1;
+      if (lengthening > 0.30) postPrematureScore += 0.1;
+      if (lengthening > 0.40) postPrematureScore += 0.1;
     } 
     // Intervalo normal: cerca del valor de referencia
     else if (rrRatio >= 0.92 && rrRatio <= 1.08) {
@@ -303,25 +306,30 @@ export class ArrhythmiaDetector {
         amplitudeRatio <= this.AMPLITUDE_RATIO_MAX) {
       prematureScore += 0.3;
       
+      // Criterio más restrictivo para amplitud prematura
+      if (amplitudeRatio <= (this.AMPLITUDE_RATIO_MIN + 0.1)) {
+        prematureScore += 0.1; // Bonus para amplitudes muy pequeñas
+      }
+      
       // Reducir score normal si la amplitud es atípica
-      normalScore *= 0.8;
+      normalScore *= 0.7; // Reducción más agresiva
     } 
     // Amplitud normal o alta: característica de latidos normales
     else if (amplitudeRatio > 0.85) {
       normalScore += 0.35;
       
       // Reducir score prematuro si la amplitud es normal
-      prematureScore *= 0.8;
+      prematureScore *= 0.7; // Reducción más agresiva
     }
     
     // Asignar clasificación final según el score más alto
     const maxScore = Math.max(normalScore, prematureScore, postPrematureScore);
     
-    // Aplicar reglas clínicas para clasificación final
-    if (maxScore === prematureScore && prematureScore > 0.5) {
+    // CRITERIA MÁS ESTRICTOS: Requerir un score mínimo más alto
+    if (maxScore === prematureScore && prematureScore > 0.6) { // Requerir mayor score (0.6)
       beat.classification = 'premature';
       beat.confidence = prematureScore;
-    } else if (maxScore === postPrematureScore && postPrematureScore > 0.5) {
+    } else if (maxScore === postPrematureScore && postPrematureScore > 0.6) { // Requerir mayor score (0.6)
       beat.classification = 'post_premature';
       beat.confidence = postPrematureScore;
     } else if (maxScore === normalScore && normalScore > 0.3) {
@@ -417,6 +425,12 @@ export class ArrhythmiaDetector {
         // Actualizar contador de ritmo estable
         if (this.consecutiveNormalBeats >= 3) {
           this.stableRhythmCount++;
+          
+          // Activar reconocimiento de patrones solo tras un ritmo suficientemente estable
+          if (this.stableRhythmCount >= this.MIN_CONSECUTIVE_NORMAL && !this.patternRecognitionActive) {
+            this.patternRecognitionActive = true;
+            console.log("ArrhythmiaDetector: Reconocimiento de patrones activado tras estabilidad");
+          }
         }
       } else {
         // Reducir el contador de normales pero mantener el historial 
@@ -428,10 +442,10 @@ export class ArrhythmiaDetector {
       this.lastPeakTime = lastPeakTime;
     }
     
-    // Si ya tenemos datos suficientes y no estamos en fase de aprendizaje, analizar patrones
+    // Si ya tenemos datos suficientes, no estamos en fase de aprendizaje, y el reconocimiento está activo
     if (!this.isLearningPhase && 
-        this.beatRecord.length >= 5 && // Requerir más latidos para análisis
-        this.stableRhythmCount >= 3) { // Requerir ritmo estable previo
+        this.beatRecord.length >= 5 && 
+        this.patternRecognitionActive) {
       this.analyzePatterns();
     }
   }
@@ -492,23 +506,34 @@ export class ArrhythmiaDetector {
       
       // Verificar características adicionales del patrón
       
-      // 1. El ritmo debe ser estable antes de la arritmia
+      // 1. El ritmo debe ser REALMENTE estable antes de la arritmia
       const hasPriorStability = this.stableRhythmCount >= this.MIN_CONSECUTIVE_NORMAL;
       
       // 2. El latido prematuro debe tener alta confianza 
-      const highPrematureConfidence = prematureBeat.confidence >= 0.75;
+      const highPrematureConfidence = prematureBeat.confidence >= 0.8; // MAYOR CONFIANZA REQUERIDA
       
-      // 3. El intervalo RR debe ser consistente con un latido prematuro
-      const hasValidRR = prematureBeat.normalizedRR <= this.PREMATURE_RR_RATIO_THRESHOLD;
+      // 3. El intervalo RR debe ser consistente con un latido prematuro - MÁS ESTRICTO
+      const hasValidRR = prematureBeat.normalizedRR <= (this.PREMATURE_RR_RATIO_THRESHOLD - 0.05);
       
       // 4. Verificar que no haya demasiados latidos prematuros en la ventana reciente (falsos +)
       const recentClassifications = this.lastClassifications.slice(-15);
       const prematureCount = recentClassifications.filter(c => c === 'premature').length;
       const normalCount = recentClassifications.filter(c => c === 'normal').length;
-      const reasonableRatio = normalCount > 0 && (prematureCount / normalCount) < 0.5;
+      const reasonableRatio = normalCount > 0 && (prematureCount / normalCount) < 0.4; // MÁS RESTRICTIVO
       
-      // DECISIÓN FINAL: Confirmar arritmia si cumple todos los criterios
-      if (hasPriorStability && highPrematureConfidence && hasValidRR && reasonableRatio) {
+      // 5. Verificar que la secuencia anterior no tuviera demasiados "unclassified" latidos
+      const unclassifiedCount = recentClassifications.filter(c => c === 'unclassified').length;
+      const goodClassificationRatio = unclassifiedCount / recentClassifications.length < 0.2;
+      
+      // DECISIÓN FINAL: Confirmar arritmia solo si cumple TODOS los criterios estrictos
+      const shouldDetect = 
+        hasPriorStability && 
+        highPrematureConfidence && 
+        hasValidRR && 
+        reasonableRatio && 
+        goodClassificationRatio;
+        
+      if (shouldDetect) {
         // ARRITMIA CONFIRMADA: Actualizar estado
         this.arrhythmiaCount++;
         this.hasPreviousArrhythmia = true;

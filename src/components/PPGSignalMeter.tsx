@@ -166,7 +166,7 @@ const PPGSignalMeter = ({
     const smoothedValue = smoothValue(value, lastValueRef.current);
     lastValueRef.current = smoothedValue;
 
-    // Normalizar y escalar valor para visualización
+    // CORREGIDO: Ahora la señal sube cuando aumenta (valores positivos hacia arriba)
     const normalizedValue = (smoothedValue - (baselineRef.current || 0));
     const scaledValue = normalizedValue * verticalScale;
     
@@ -213,7 +213,8 @@ const PPGSignalMeter = ({
         for (let i = 0; i < visiblePoints.length; i++) {
           const point = visiblePoints[i];
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-          const y = CANVAS_HEIGHT / 2 - point.value;  // Centro de canvas como línea base
+          // CORREGIDO: Los valores positivos suben en el gráfico
+          const y = CANVAS_HEIGHT / 2 - point.value;
           
           if (firstPoint) {
             ctx.moveTo(x, y);
@@ -250,37 +251,63 @@ const PPGSignalMeter = ({
       }
 
       // ======= ANÁLISIS Y DETECCIÓN DE PICOS =======
-      const peakThreshold = 0.3 * verticalScale;  // Mínimo para considerar un pico
+      // CORREGIDO: Umbral más alto para reducir falsos picos
+      const peakThreshold = 0.5 * verticalScale;
       
-      for (let i = 2; i < visiblePoints.length - 2; i++) {
-        const prevPoint2 = visiblePoints[i - 2]; // Dos puntos antes
-        const prevPoint = visiblePoints[i - 1];  // Punto anterior
-        const point = visiblePoints[i];          // Punto actual
-        const nextPoint = visiblePoints[i + 1];  // Punto siguiente
-        const nextPoint2 = visiblePoints[i + 2]; // Dos puntos después
+      // Usamos un conjunto para evitar detectar picos demasiado cercanos
+      const detectedPeaks = new Set<number>();
+      
+      // CORREGIDO: Ahora buscamos picos hacia ARRIBA (valores positivos)
+      for (let i = 4; i < visiblePoints.length - 4; i++) {
+        // Verificar si estamos demasiado cerca de un pico ya detectado
+        let tooClose = false;
+        for (const peakIdx of detectedPeaks) {
+          if (Math.abs(i - peakIdx) < 6) { // Evitar picos muy cercanos
+            tooClose = true;
+            break;
+          }
+        }
+        if (tooClose) continue;
         
-        // Determinar si este es un pico genuino (punto más alto entre vecinos)
-        // Un pico genuino debe ser más alto que sus vecinos inmediatos Y los siguientes
+        // Considerar más puntos alrededor para mejor detección
+        const prevPoint4 = visiblePoints[i - 4];
+        const prevPoint3 = visiblePoints[i - 3];
+        const prevPoint2 = visiblePoints[i - 2];
+        const prevPoint = visiblePoints[i - 1];
+        const point = visiblePoints[i];
+        const nextPoint = visiblePoints[i + 1];
+        const nextPoint2 = visiblePoints[i + 2];
+        const nextPoint3 = visiblePoints[i + 3];
+        const nextPoint4 = visiblePoints[i + 4];
+        
+        // CORREGIDO: Picos positivos (hacia arriba), valores mayores que vecinos
+        // Para PPG: un pico real debe ser MAYOR que sus vecinos (no menor)
         const isPeak = 
-          Math.abs(point.value) > peakThreshold &&    // Altura mínima
-          point.value < prevPoint.value &&            // Viene subiendo (recuerda que los valores negativos son hacia arriba)
-          point.value < prevPoint2.value &&           // Consistente con una subida
-          point.value < nextPoint.value &&            // Empieza a bajar
-          point.value < nextPoint2.value;             // Continúa bajando
+          point.value > peakThreshold &&               // Altura mínima significativa
+          point.value > prevPoint.value &&             // Mayor que punto anterior
+          point.value > prevPoint2.value &&            // Mayor que dos puntos antes
+          point.value > prevPoint3.value &&            // Mayor que tres puntos antes
+          point.value > prevPoint4.value &&            // Mayor que cuatro puntos antes
+          point.value > nextPoint.value &&             // Mayor que punto siguiente
+          point.value > nextPoint2.value &&            // Mayor que dos puntos después
+          point.value > nextPoint3.value &&            // Mayor que tres puntos después
+          point.value > nextPoint4.value;              // Mayor que cuatro puntos después
         
         if (isPeak) {
+          detectedPeaks.add(i); // Registrar este pico para evitar duplicados cercanos
+          
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
           const y = CANVAS_HEIGHT / 2 - point.value;
           
-          // Dibujar punto de pico
+          // Dibujar círculo de pico más grande y visible
           ctx.beginPath();
-          ctx.arc(x, y, point.isArrhythmia ? 5 : 4, 0, Math.PI * 2);
+          ctx.arc(x, y, point.isArrhythmia ? 6 : 5, 0, Math.PI * 2);
           ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
           ctx.fill();
 
-          // Opcional - Mostrar valor de amplitud
-          const amplitude = Math.abs(point.value / verticalScale).toFixed(2);
-          if (parseFloat(amplitude) > 0.3) {
+          // Mostrar solo valores de amplitud significativos
+          const amplitude = (point.value / verticalScale).toFixed(2);
+          if (parseFloat(amplitude) > 0.6) {
             ctx.font = 'bold 11px Inter';
             ctx.fillStyle = '#666666';
             ctx.textAlign = 'center';
@@ -291,13 +318,13 @@ const PPGSignalMeter = ({
           if (point.isArrhythmia) {
             // Anillos destacando el latido prematuro
             ctx.beginPath();
-            ctx.arc(x, y, 8, 0, Math.PI * 2);
+            ctx.arc(x, y, 9, 0, Math.PI * 2);
             ctx.strokeStyle = '#FFFF00';  // Amarillo
             ctx.lineWidth = 2;
             ctx.stroke();
             
             ctx.beginPath();
-            ctx.arc(x, y, 12, 0, Math.PI * 2);
+            ctx.arc(x, y, 14, 0, Math.PI * 2);
             ctx.strokeStyle = '#FF6B6B';  // Rojo claro
             ctx.lineWidth = 1;
             ctx.setLineDash([2, 2]);
@@ -310,84 +337,68 @@ const PPGSignalMeter = ({
             ctx.fillText("LATIDO PREMATURO", x, y - 30);
             
             // Líneas conectando latidos para visualizar intervalos
-            if (i > 2) {
-              // Buscar el último pico antes del prematuro
-              let prevPeakIdx = -1;
-              for (let j = i - 1; j >= 2; j--) {
-                const pj = visiblePoints[j];
-                const pj_prev = visiblePoints[j - 1];
-                const pj_prev2 = visiblePoints[j - 2];
-                const pj_next = visiblePoints[j + 1];
-                
-                if (Math.abs(pj.value) > peakThreshold && 
-                    pj.value < pj_prev.value && 
-                    pj.value < pj_prev2.value && 
-                    pj.value < pj_next.value) {
-                  prevPeakIdx = j;
-                  break;
-                }
+            // Buscar picos normales antes y después para mostrar el patrón N-P-N
+            let prevNormalIdx = -1;
+            let nextNormalIdx = -1;
+            
+            // Buscar el último pico normal antes del prematuro
+            for (let j = i - 1; j >= 4; j--) {
+              if (detectedPeaks.has(j) && !visiblePoints[j].isArrhythmia) {
+                prevNormalIdx = j;
+                break;
               }
-              
-              // Buscar el siguiente pico después del prematuro
-              let nextPeakIdx = -1;
-              for (let j = i + 1; j < visiblePoints.length - 2; j++) {
-                const pj = visiblePoints[j];
-                const pj_prev = visiblePoints[j - 1];
-                const pj_prev2 = visiblePoints[j - 2];
-                const pj_next = visiblePoints[j + 1];
-                
-                if (Math.abs(pj.value) > peakThreshold && 
-                    pj.value < pj_prev.value && 
-                    pj.value < pj_prev2.value && 
-                    pj.value < pj_next.value) {
-                  nextPeakIdx = j;
-                  break;
-                }
+            }
+            
+            // Buscar el próximo pico normal después del prematuro
+            for (let j = i + 1; j < visiblePoints.length - 4; j++) {
+              if (detectedPeaks.has(j) && !visiblePoints[j].isArrhythmia) {
+                nextNormalIdx = j;
+                break;
               }
+            }
+            
+            // Dibujar conexiones entre latidos
+            ctx.beginPath();
+            ctx.setLineDash([2, 2]);
+            ctx.strokeStyle = 'rgba(255, 107, 107, 0.8)';
+            ctx.lineWidth = 1.5;
+            
+            if (prevNormalIdx !== -1) {
+              const prevPeak = visiblePoints[prevNormalIdx];
+              const prevX = canvas.width - ((now - prevPeak.time) * canvas.width / WINDOW_WIDTH_MS);
+              const prevY = CANVAS_HEIGHT / 2 - prevPeak.value;
               
-              // Dibujar líneas entre picos y mostrar intervalos
+              ctx.moveTo(prevX, prevY - 15);
+              ctx.lineTo(x, y - 15);
+              ctx.stroke();
+              
+              // Mostrar intervalo RR corto como rasgo distintivo de extrasístole
+              const rrPre = point.time - prevPeak.time;
+              ctx.font = 'bold 9px Inter';
+              ctx.fillStyle = '#FF4500';
+              ctx.fillText(`RR: ${rrPre}ms`, (prevX + x) / 2, y - 25);
+            }
+            
+            if (nextNormalIdx !== -1) {
+              const nextPeak = visiblePoints[nextNormalIdx];
+              const nextX = canvas.width - ((now - nextPeak.time) * canvas.width / WINDOW_WIDTH_MS);
+              const nextY = CANVAS_HEIGHT / 2 - nextPeak.value;
+              
               ctx.beginPath();
               ctx.setLineDash([2, 2]);
               ctx.strokeStyle = 'rgba(255, 107, 107, 0.8)';
-              ctx.lineWidth = 1.5;
+              ctx.moveTo(x, y - 15);
+              ctx.lineTo(nextX, nextY - 15);
+              ctx.stroke();
               
-              if (prevPeakIdx !== -1) {
-                const prevPeak = visiblePoints[prevPeakIdx];
-                const prevX = canvas.width - ((now - prevPeak.time) * canvas.width / WINDOW_WIDTH_MS);
-                const prevY = CANVAS_HEIGHT / 2 - prevPeak.value;
-                
-                ctx.moveTo(prevX, prevY - 15);
-                ctx.lineTo(x, y - 15);
-                ctx.stroke();
-                
-                // Mostrar intervalo RR corto
-                const rrPre = point.time - prevPeak.time;
-                ctx.font = 'bold 9px Inter';
-                ctx.fillStyle = '#FF4500';
-                ctx.fillText(`RR: ${rrPre}ms`, (prevX + x) / 2, y - 25);
-              }
-              
-              if (nextPeakIdx !== -1) {
-                const nextPeak = visiblePoints[nextPeakIdx];
-                const nextX = canvas.width - ((now - nextPeak.time) * canvas.width / WINDOW_WIDTH_MS);
-                const nextY = CANVAS_HEIGHT / 2 - nextPeak.value;
-                
-                ctx.beginPath();
-                ctx.setLineDash([2, 2]);
-                ctx.strokeStyle = 'rgba(255, 107, 107, 0.8)';
-                ctx.moveTo(x, y - 15);
-                ctx.lineTo(nextX, nextY - 15);
-                ctx.stroke();
-                
-                // Mostrar intervalo RR largo (compensatorio)
-                const rrPost = nextPeak.time - point.time;
-                ctx.font = 'bold 9px Inter';
-                ctx.fillStyle = '#FF4500';
-                ctx.fillText(`RR: ${rrPost}ms`, (nextX + x) / 2, y - 25);
-              }
-              
-              ctx.setLineDash([]);
+              // Mostrar pausa compensatoria (intervalo largo tras un prematuro)
+              const rrPost = nextPeak.time - point.time;
+              ctx.font = 'bold 9px Inter';
+              ctx.fillStyle = '#FF4500';
+              ctx.fillText(`RR: ${rrPost}ms`, (nextX + x) / 2, y - 25);
             }
+            
+            ctx.setLineDash([]);
           }
         }
       }
