@@ -159,10 +159,8 @@ const PPGSignalMeter = ({
     const smoothedValue = smoothValue(value, lastValueRef.current);
     lastValueRef.current = smoothedValue;
 
-    // Invert the polarity of the signal by multiplying by -1
-    // This will make peaks point upward instead of downward
-    const normalizedValue = (smoothedValue - (baselineRef.current || 0));
-    const scaledValue = normalizedValue * verticalScale * -1; // Multiplying by -1 to invert the signal
+    const normalizedValue = smoothedValue - (baselineRef.current || 0);
+    const scaledValue = normalizedValue * verticalScale * -1;
     
     let isArrhythmia = false;
     if (rawArrhythmiaData && 
@@ -170,6 +168,8 @@ const PPGSignalMeter = ({
         now - rawArrhythmiaData.timestamp < 1000) {
       isArrhythmia = true;
       lastArrhythmiaTime.current = now;
+      
+      arrhythmiaCountRef.current++;
     }
 
     const dataPoint: PPGDataPoint = {
@@ -200,7 +200,7 @@ const PPGSignalMeter = ({
         for (let i = 0; i < visiblePoints.length; i++) {
           const point = visiblePoints[i];
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-          const y = canvas.height * 0.6 - point.value;
+          const y = canvas.height * 0.4 + point.value;
           
           if (firstPoint) {
             ctx.moveTo(x, y);
@@ -213,16 +213,20 @@ const PPGSignalMeter = ({
             ctx.stroke();
             ctx.beginPath();
             ctx.strokeStyle = '#DC2626';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([3, 2]);
             ctx.moveTo(x, y);
             
             const nextPoint = visiblePoints[i + 1];
             const nextX = canvas.width - ((now - nextPoint.time) * canvas.width / WINDOW_WIDTH_MS);
-            const nextY = canvas.height * 0.6 - nextPoint.value;
+            const nextY = canvas.height * 0.4 + nextPoint.value;
             ctx.lineTo(nextX, nextY);
             ctx.stroke();
             
             ctx.beginPath();
             ctx.strokeStyle = '#0EA5E9';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([]);
             ctx.moveTo(nextX, nextY);
             firstPoint = false;
           }
@@ -236,12 +240,12 @@ const PPGSignalMeter = ({
         const point = visiblePoints[i];
         const nextPoint = visiblePoints[i + 1];
         
-        if (point.value > prevPoint.value && point.value > nextPoint.value) {
+        if (point.value < prevPoint.value && point.value < nextPoint.value) {
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-          const y = canvas.height * 0.6 - point.value;
+          const y = canvas.height * 0.4 + point.value;
           
           ctx.beginPath();
-          ctx.arc(x, y, 4, 0, Math.PI * 2);
+          ctx.arc(x, y, point.isArrhythmia ? 5 : 4, 0, Math.PI * 2);
           ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
           ctx.fill();
 
@@ -257,7 +261,6 @@ const PPGSignalMeter = ({
             ctx.lineWidth = 2;
             ctx.stroke();
             
-            // Segundo círculo de alerta 
             ctx.beginPath();
             ctx.arc(x, y, 14, 0, Math.PI * 2);
             ctx.strokeStyle = '#FF6B6B';
@@ -266,18 +269,15 @@ const PPGSignalMeter = ({
             ctx.stroke();
             ctx.setLineDash([]);
             
-            // Etiqueta más específica y descriptiva
             ctx.font = 'bold 10px Inter';
             ctx.fillStyle = '#FF6B6B';
             ctx.fillText("LATIDO PREMATURO", x, y - 35);
             
-            // Indicador visual para mostrar la posición entre dos latidos normales
             ctx.beginPath();
             ctx.setLineDash([2, 2]);
             ctx.strokeStyle = 'rgba(255, 107, 107, 0.6)';
             ctx.lineWidth = 1;
             
-            // Línea que conecta con el latido anterior (si existe)
             if (i > 0) {
               const prevX = canvas.width - ((now - visiblePoints[i-1].time) * canvas.width / WINDOW_WIDTH_MS);
               const prevY = canvas.height * 0.6 - visiblePoints[i-1].value;
@@ -287,7 +287,6 @@ const PPGSignalMeter = ({
               ctx.stroke();
             }
             
-            // Línea que conecta con el latido siguiente (si existe)
             if (i < visiblePoints.length - 1) {
               const nextX = canvas.width - ((now - visiblePoints[i+1].time) * canvas.width / WINDOW_WIDTH_MS);
               const nextY = canvas.height * 0.6 - visiblePoints[i+1].value;
