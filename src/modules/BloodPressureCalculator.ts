@@ -2,9 +2,9 @@ import { calculateStandardDeviation, enhancedPeakDetection } from '../utils/sign
 
 export class BloodPressureCalculator {
   // Constants for blood pressure calculation
-  private readonly BP_BASELINE_SYSTOLIC = 125; // Base systolic value
-  private readonly BP_BASELINE_DIASTOLIC = 85; // Base diastolic value
-  private readonly BP_PTT_COEFFICIENT = 0.15; // Increased for more significant variations
+  private readonly BP_BASELINE_SYSTOLIC = 130; // Ajustado para valores más realistas
+  private readonly BP_BASELINE_DIASTOLIC = 85; // Ajustado para valores más realistas
+  private readonly BP_PTT_COEFFICIENT = 0.20; // Ajustado para reflejar variaciones más realistas
   private readonly BP_AMPLITUDE_COEFFICIENT = 0.30; // Increased for more sensitivity
   private readonly BP_STIFFNESS_FACTOR = 0.08; // Increased from 0.06 for more variation
   private readonly BP_SMOOTHING_ALPHA = 0.18; // Reduced for more natural fluctuations
@@ -20,8 +20,8 @@ export class BloodPressureCalculator {
   private bpQualityHistory: number[] = [];
   private bpCalibrationFactor: number = 0.99;
   private lastBpTimestamp: number = 0;
-  private lastValidSystolic: number = 120;
-  private lastValidDiastolic: number = 80;
+  private lastValidSystolic: number = 0;
+  private lastValidDiastolic: number = 0;
   private bpReadyForOutput: boolean = false;
   private measurementCount: number = 0;
   private breathingCyclePosition: number = 0; // Respiratory cycle
@@ -40,8 +40,8 @@ export class BloodPressureCalculator {
     this.bpQualityHistory = [];
     this.bpCalibrationFactor = 0.99;
     this.lastBpTimestamp = 0;
-    this.lastValidSystolic = 120;
-    this.lastValidDiastolic = 80;
+    this.lastValidSystolic = 0;
+    this.lastValidDiastolic = 0;
     this.bpReadyForOutput = false;
     this.measurementCount = 0;
     this.breathingCyclePosition = 0;

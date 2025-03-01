@@ -385,12 +385,17 @@ export class HeartBeatProcessor {
   }
 
   public getRRIntervals(): { intervals: number[]; lastPeakTime: number | null } {
-    if (!this.lastPeakTime || !this.previousPeakTime) {
+    if (this.bpmHistory.length < 2) {
       return { intervals: [], lastPeakTime: null };
     }
-    const interval = this.lastPeakTime - this.previousPeakTime;
+
+    const intervals: number[] = [];
+    for (let i = 1; i < this.bpmHistory.length; i++) {
+      intervals.push(60000 / this.bpmHistory[i]);
+    }
+
     return {
-      intervals: [interval],
+      intervals,
       lastPeakTime: this.lastPeakTime
     };
   }
