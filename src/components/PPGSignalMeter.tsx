@@ -129,8 +129,8 @@ const PPGSignalMeter = ({
     ctx.beginPath();
     ctx.strokeStyle = 'rgba(0, 150, 100, 0.35)';
     ctx.lineWidth = 1.5;
-    ctx.moveTo(0, CANVAS_HEIGHT * 0.6);
-    ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT * 0.6);
+    ctx.moveTo(0, CANVAS_HEIGHT * 0.35);
+    ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT * 0.35);
     ctx.stroke();
   }, []);
 
@@ -157,11 +157,13 @@ const PPGSignalMeter = ({
 
     const now = Date.now();
     
+    // OPTIMIZADO: Mejor manejo de la línea base para visualizar picos hacia arriba
     // Actualización del valor base para alinear la señal
     if (baselineRef.current === null) {
       baselineRef.current = value;
     } else {
-      baselineRef.current = baselineRef.current * 0.95 + value * 0.05;
+      // Factor más agresivo para seguir cambios en la línea base
+      baselineRef.current = baselineRef.current * 0.90 + value * 0.10;
     }
 
     // Suavizado de la señal
@@ -170,7 +172,13 @@ const PPGSignalMeter = ({
 
     // Normalización de valores - asegurando que los picos vayan hacia arriba
     const normalizedValue = (smoothedValue - (baselineRef.current || 0));
-    const scaledValue = normalizedValue * verticalScale;
+    
+    // INVERSIÓN DE SEÑAL: Asegurar que los picos siempre se visualicen hacia arriba
+    // Si la señal está invertida (picos hacia abajo), la invertimos multiplicando por -1
+    // y luego la escalamos para mejor visualización
+    const scaledValue = normalizedValue > 0 
+      ? normalizedValue * verticalScale * 2.0 
+      : -normalizedValue * verticalScale * 2.0;
     
     // Verificar si el punto actual corresponde a una arritmia
     const isArrhythmia = !!(rawArrhythmiaData && 
@@ -215,7 +223,7 @@ const PPGSignalMeter = ({
         for (let i = 0; i < visiblePoints.length; i++) {
           const point = visiblePoints[i];
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-          const y = canvas.height * 0.4 + point.value;
+          const y = (canvas.height * 0.35) + point.value;
           
           if (firstPoint) {
             ctx.moveTo(x, y);
@@ -257,27 +265,27 @@ const PPGSignalMeter = ({
         const point = visiblePoints[i];
         const nextPoint = visiblePoints[i + 1];
         
-        // DETECTOR OPTIMIZADO: Equilibrio entre sensibilidad y especificidad
-        // Más sensible para capturar picos reales, pero sin generar falsos positivos
-        const diffPrev = point.value - prevPoint.value;
-        const diffNext = point.value - nextPoint.value;
+        // DETECTOR OPTIMIZADO: Detector de picos mejorado
+        // Asegura la correcta detección de picos hacia arriba
+        // Busca picos que son puntos altos en la curva (crestas)
         const isPeak = 
           point.value > prevPoint.value && 
           point.value > nextPoint.value && 
-          (diffPrev > 0.8 && diffNext > 0.8);  // Umbral rebajado ligeramente para mayor sensibilidad
+          Math.abs(point.value) > 2.0;  // Filtro adicional para evitar detectar ruido como picos
         
         if (isPeak) {
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-          const y = canvas.height * 0.4 + point.value;
+          const y = (canvas.height * 0.35) + point.value;
           
-          // Detección mejorada: Log más detallado para visualizar mejor los picos detectados
+          // Depuración mejorada
           if (i === 1) { // Solo reportar para el pico más reciente
             console.log('PPGSignalMeter - Pico detectado:', {
               amplitud: (point.value / verticalScale).toFixed(2),
+              valorNormalizado: normalizedValue.toFixed(2),
+              valorEscalado: scaledValue.toFixed(2),
+              posY: y,
               esArrhythmia: point.isArrhythmia,
-              timestamp: new Date().toISOString(),
-              diffPrev: diffPrev.toFixed(2),
-              diffNext: diffNext.toFixed(2)
+              timestamp: new Date().toISOString()
             });
           }
           
