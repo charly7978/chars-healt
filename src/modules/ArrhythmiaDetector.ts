@@ -10,12 +10,12 @@
 export class ArrhythmiaDetector {
   // Constants for arrhythmia detection
   private readonly RR_WINDOW_SIZE = 5;
-  private readonly ARRHYTHMIA_LEARNING_PERIOD = 6000; // Reducido aún más para detectar antes
+  private readonly ARRHYTHMIA_LEARNING_PERIOD = 5000; // Reducido aún más para detectar antes
   
   // AUMENTAR SENSIBILIDAD: Ajustes para detectar más latidos prematuros
-  private readonly PREMATURE_BEAT_THRESHOLD = 0.70; // Menos estricto
-  private readonly AMPLITUDE_RATIO_THRESHOLD = 0.75; // Umbral más alto para capturar más picos pequeños
-  private readonly NORMAL_PEAK_MIN_THRESHOLD = 0.70; // Umbral más bajo para considerar un pico como normal
+  private readonly PREMATURE_BEAT_THRESHOLD = 0.60; // Menos estricto
+  private readonly AMPLITUDE_RATIO_THRESHOLD = 0.85; // Umbral más alto para capturar más picos pequeños
+  private readonly NORMAL_PEAK_MIN_THRESHOLD = 0.50; // Umbral más bajo para considerar un pico como normal
   
   // State variables
   private rrIntervals: number[] = [];
