@@ -58,7 +58,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     // For heart rate, show real value without checking risk if no measurement
     if (label === "FRECUENCIA CARDÍACA") {
       if (value === "--" || value === 0) {
-        return { color: '#FFFFFF', label: '' };
+        return { color: '#D3E4FD', label: '' };
       }
       if (typeof value === 'number') {
         return VitalSignsRisk.getBPMRisk(value, isFinalReading);
@@ -68,7 +68,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     // For SPO2, show real value without checking risk if no measurement
     if (label === "SPO2") {
       if (value === "--" || value === 0) {
-        return { color: '#FFFFFF', label: '' };
+        return { color: '#D3E4FD', label: '' };
       }
       if (typeof value === 'number') {
         return VitalSignsRisk.getSPO2Risk(value, isFinalReading);
@@ -78,7 +78,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     // For blood pressure, show real value without checking risk if no measurement
     if (label === "PRESIÓN ARTERIAL") {
       if (value === "--/--" || value === "0/0") {
-        return { color: '#FFFFFF', label: '' };
+        return { color: '#D3E4FD', label: '' };
       }
       
       // Don't try to evaluate risk if measurement is unstable/unrealistic
@@ -86,10 +86,10 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
         return VitalSignsRisk.getBPRisk(value, isFinalReading);
       }
       
-      return { color: '#FFFFFF', label: '' };
+      return { color: '#D3E4FD', label: '' };
     }
 
-    return { color: '#FFFFFF', label: '' };
+    return { color: '#D3E4FD', label: '' };
   };
   
   const getArrhythmiaDisplay = () => {
@@ -98,7 +98,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     if (value === "--") {
       return { 
         text: "--", 
-        color: "#FFFFFF",
+        color: "#D3E4FD",
         label: ""
       };
     }
@@ -129,29 +129,29 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     { text: displayValue, ...getRiskInfo() };
 
   return (
-    <div className="relative overflow-hidden rounded-xl backdrop-blur-md bg-black/60 border border-white/20 shadow-lg">
-      <div className="absolute inset-0 bg-gradient-to-br from-blue-400/10 to-teal-400/10 pointer-events-none" />
-      <div className="absolute inset-0 bg-black/40 pointer-events-none" style={{
-        backgroundImage: "radial-gradient(circle at top right, rgba(0, 0, 0, 0.2), transparent 70%)"
+    <div className="relative overflow-hidden rounded-xl backdrop-blur-md bg-[#0EA5E9]/20 border border-[#D3E4FD]/30 shadow-lg">
+      <div className="absolute inset-0 bg-gradient-to-br from-[#D3E4FD]/20 to-[#0EA5E9]/10 pointer-events-none" />
+      <div className="absolute inset-0 pointer-events-none" style={{
+        backgroundImage: "radial-gradient(circle at top right, rgba(211, 228, 253, 0.15), transparent 70%)"
       }} />
       <div className="relative z-10 p-4">
-        <h3 className="text-white text-xs font-medium tracking-wider mb-2">{label}</h3>
+        <h3 className="text-[#D3E4FD] text-xs font-medium tracking-wider mb-2">{label}</h3>
         <div className="flex flex-col items-center gap-1">
           <div className="flex items-baseline gap-1 justify-center">
             <span 
-              className={`${isArrhythmiaDisplay ? 'text-base' : 'text-xl'} font-bold transition-colors duration-300 text-white`}
-              style={{ color: color || '#FFFFFF' }}
+              className={`${isArrhythmiaDisplay ? 'text-base' : 'text-xl'} font-bold transition-colors duration-300 text-[#D3E4FD]`}
+              style={{ color: color || '#D3E4FD' }}
             >
               {isArrhythmiaDisplay ? text : displayValue}
             </span>
             {!isArrhythmiaDisplay && unit && (
-              <span className="text-white text-xs">{unit}</span>
+              <span className="text-[#D3E4FD] text-xs">{unit}</span>
             )}
           </div>
           {riskLabel && (
             <span 
-              className="text-[10px] font-semibold tracking-wider mt-1 text-white"
-              style={{ color: color || '#FFFFFF' }}
+              className="text-[10px] font-semibold tracking-wider mt-1 text-[#D3E4FD]"
+              style={{ color: color || '#D3E4FD' }}
             >
               {riskLabel}
             </span>
