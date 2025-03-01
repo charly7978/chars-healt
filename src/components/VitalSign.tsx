@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { memo, useMemo } from 'react';
 import { VitalSignsRisk } from '../utils/vitalSignsRisk';
 
 interface VitalSignProps {
@@ -9,7 +9,7 @@ interface VitalSignProps {
   isFinalReading?: boolean;
 }
 
-const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReading = false }) => {
+const VitalSign: React.FC<VitalSignProps> = memo(({ label, value, unit, isFinalReading = false }) => {
   const isArrhythmiaDisplay = label === "ARRITMIAS";
   const isBloodPressure = label === "PRESIÓN ARTERIAL";
 
@@ -50,7 +50,8 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     return value;
   };
 
-  const getRiskInfo = () => {
+  // Memoized risk information calculation to optimize rendering
+  const riskInfo = useMemo(() => {
     if (isArrhythmiaDisplay) {
       return getArrhythmiaDisplay();
     }
@@ -90,7 +91,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     }
 
     return { color: '#D3E4FD', label: '' };
-  };
+  }, [label, value, isArrhythmiaDisplay, isBloodPressure, isFinalReading]);
   
   const getArrhythmiaDisplay = () => {
     if (!isArrhythmiaDisplay) return { text: value, color: "", label: "" };
@@ -120,20 +121,24 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     };
   };
 
-  // Get the medically valid display value
-  const displayValue = getDisplayValue();
+  // Memoized display value calculation to optimize rendering
+  const displayValue = useMemo(() => getDisplayValue(), [value, isBloodPressure]);
   
   // Get the risk info based on the medically valid display value 
   const { text, color, label: riskLabel } = isArrhythmiaDisplay ? 
     getArrhythmiaDisplay() : 
-    { text: displayValue, ...getRiskInfo() };
+    { text: displayValue, ...riskInfo };
 
   return (
-    <div className="relative overflow-hidden rounded-xl backdrop-blur-md bg-black/80 border border-[#D3E4FD]/30 shadow-lg p-2">
-      <div className="absolute inset-0 bg-gradient-to-br from-[#D3E4FD]/10 to-[#0EA5E9]/5 pointer-events-none" />
+    <div className="relative overflow-hidden rounded-xl backdrop-blur-md shadow-lg p-2">
+      {/* Fondo degradado más opaco */}
+      <div className="absolute inset-0 bg-black/90 pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-br from-[#102A4C]/40 to-[#061629]/90 pointer-events-none" />
       <div className="absolute inset-0 pointer-events-none" style={{
-        backgroundImage: "radial-gradient(circle at top right, rgba(13, 148, 218, 0.15), transparent 70%)"
+        backgroundImage: "radial-gradient(circle at top right, rgba(13, 148, 218, 0.25), transparent 70%)"
       }} />
+      <div className="absolute inset-0 border border-[#D3E4FD]/30 rounded-xl pointer-events-none" />
+      
       <div className="relative z-10 p-2">
         <h3 className="text-[#D3E4FD] text-[10px] font-medium tracking-wider mb-1">{label}</h3>
         <div className="flex flex-col items-center">
@@ -160,6 +165,6 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
       </div>
     </div>
   );
-};
+});
 
 export default VitalSign;
