@@ -123,8 +123,8 @@ const PPGSignalMeter = ({
     ctx.beginPath();
     ctx.strokeStyle = 'rgba(0, 150, 100, 0.35)';
     ctx.lineWidth = 1.5;
-    ctx.moveTo(0, CANVAS_HEIGHT * 0.4); // Changed from 0.6 to 0.4 to invert the baseline
-    ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT * 0.4); // Changed from 0.6 to 0.4 to invert the baseline
+    ctx.moveTo(0, CANVAS_HEIGHT * 0.6);
+    ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT * 0.6);
     ctx.stroke();
   }, []);
 
@@ -161,8 +161,7 @@ const PPGSignalMeter = ({
     lastValueRef.current = smoothedValue;
 
     const normalizedValue = smoothedValue - (baselineRef.current || 0);
-    // Invert the scaledValue by multiplying by -1 to flip the polarity
-    const scaledValue = normalizedValue * verticalScale * -1; // Multiplied by -1 to invert the signal
+    const scaledValue = normalizedValue * verticalScale;
     
     let isArrhythmia = false;
     if (rawArrhythmiaData && 
@@ -200,9 +199,7 @@ const PPGSignalMeter = ({
         for (let i = 0; i < visiblePoints.length; i++) {
           const point = visiblePoints[i];
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-          // Change from canvas.height * 0.6 - point.value to canvas.height * 0.4 + point.value
-          // We also changed the sign of point.value above, so the "+ point.value" works with the inverted signal
-          const y = canvas.height * 0.4 + point.value;
+          const y = canvas.height * 0.6 - point.value;
           
           if (firstPoint) {
             ctx.moveTo(x, y);
@@ -219,8 +216,7 @@ const PPGSignalMeter = ({
             
             const nextPoint = visiblePoints[i + 1];
             const nextX = canvas.width - ((now - nextPoint.time) * canvas.width / WINDOW_WIDTH_MS);
-            // Update this calculation too for the inverted signal
-            const nextY = canvas.height * 0.4 + nextPoint.value;
+            const nextY = canvas.height * 0.6 - nextPoint.value;
             ctx.lineTo(nextX, nextY);
             ctx.stroke();
             
@@ -239,12 +235,9 @@ const PPGSignalMeter = ({
         const point = visiblePoints[i];
         const nextPoint = visiblePoints[i + 1];
         
-        // Invert the condition because we inverted the signal
-        // Now we're looking for points where the value is lower (more negative) than its neighbors
-        if (point.value < prevPoint.value && point.value < nextPoint.value) {
+        if (point.value > prevPoint.value && point.value > nextPoint.value) {
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-          // Update this calculation for the inverted signal
-          const y = canvas.height * 0.4 + point.value;
+          const y = canvas.height * 0.6 - point.value;
           
           ctx.beginPath();
           ctx.arc(x, y, 4, 0, Math.PI * 2);
@@ -254,7 +247,6 @@ const PPGSignalMeter = ({
           ctx.font = 'bold 12px Inter';
           ctx.fillStyle = '#666666';
           ctx.textAlign = 'center';
-          // Display the absolute value, no change needed here
           ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 20);
           
           if (point.isArrhythmia) {
