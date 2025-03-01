@@ -8,6 +8,9 @@ const config: CapacitorConfig = {
   server: {
     url: 'https://30d3cd84-f317-4223-a76c-d460578ae3cc.lovableproject.com?forceHideBadge=true',
     cleartext: true
+  },
+  android: {
+    path: './android'
   }
 };
 
