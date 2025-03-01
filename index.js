@@ -27,6 +27,7 @@ const Index = () => {
   const imageCaptureRef = useRef(null);
   const processingImageRef = useRef(false);
   const animationFrameRef = useRef(null);
+  const frameProcessingEnabled = useRef(false);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
@@ -89,28 +90,48 @@ const Index = () => {
       return;
     }
     
-    enterFullScreen();
-    setIsMonitoring(true);
-    setIsCameraOn(true);
-    startProcessing();
-    setElapsedTime(0);
-    
-    if (measurementTimerRef.current) {
-      clearInterval(measurementTimerRef.current);
+    // Reset any previous state to ensure clean start
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
     }
+    processingImageRef.current = false;
+    frameProcessingEnabled.current = false;
     
-    measurementTimerRef.current = window.setInterval(() => {
-      setElapsedTime(prev => {
-        if (prev >= 30) {
-          stopMonitoring();
-          return 30;
-        }
-        return prev + 1;
-      });
-    }, 1000);
+    // Clear previous video track
+    videoTrackRef.current = null;
+    imageCaptureRef.current = null;
+    
+    // First set the camera on, then after a small delay start the monitoring
+    setIsCameraOn(true);
+    
+    // Delay the monitoring start to allow camera to initialize
+    setTimeout(() => {
+      enterFullScreen();
+      setIsMonitoring(true);
+      startProcessing();
+      setElapsedTime(0);
+      frameProcessingEnabled.current = true;
+      
+      if (measurementTimerRef.current) {
+        clearInterval(measurementTimerRef.current);
+      }
+      
+      measurementTimerRef.current = window.setInterval(() => {
+        setElapsedTime(prev => {
+          if (prev >= 30) {
+            stopMonitoring();
+            return 30;
+          }
+          return prev + 1;
+        });
+      }, 1000);
+    }, 300);
   };
 
   const stopMonitoring = () => {
+    frameProcessingEnabled.current = false;
+    
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
@@ -143,7 +164,12 @@ const Index = () => {
   };
 
   const handleStreamReady = (stream) => {
-    if (!isMonitoring) return;
+    console.log("Stream ready received, isMonitoring:", isMonitoring);
+    
+    if (!isMonitoring) {
+      console.log("Not monitoring, ignoring stream");
+      return;
+    }
     
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
@@ -153,13 +179,21 @@ const Index = () => {
     processingImageRef.current = false;
     
     try {
-      const videoTrack = stream.getVideoTracks()[0];
+      const tracks = stream.getVideoTracks();
+      if (!tracks || tracks.length === 0) {
+        console.error("No video tracks found in stream");
+        return;
+      }
+      
+      const videoTrack = tracks[0];
       videoTrackRef.current = videoTrack;
       
       if (!videoTrack || videoTrack.readyState !== 'live') {
-        console.error("Video track not available or not live");
+        console.error("Video track not available or not live, state:", videoTrack?.readyState);
         return;
       }
+      
+      console.log("Video track is live, setting up processing");
       
       // Activar linterna si está disponible
       if (videoTrack.getCapabilities()?.torch) {
@@ -189,7 +223,12 @@ const Index = () => {
       processingImageRef.current = true;
       
       const processImage = async () => {
-        if (!isMonitoring || !processingImageRef.current) {
+        if (!isMonitoring || !processingImageRef.current || !frameProcessingEnabled.current) {
+          console.log("Skipping frame processing, conditions not met:", {
+            isMonitoring,
+            processingImage: processingImageRef.current,
+            frameProcessingEnabled: frameProcessingEnabled.current
+          });
           return;
         }
         
@@ -200,14 +239,17 @@ const Index = () => {
             return;
           }
           
+          // Get current track reference
+          const currentTrack = videoTrackRef.current;
+          
           // Verificar que el track sigue activo
-          if (!videoTrackRef.current || videoTrackRef.current.readyState !== 'live') {
-            console.error("Track is not in live state, skipping frame capture");
+          if (!currentTrack || currentTrack.readyState !== 'live') {
+            console.error("Track is not in live state, skipping frame capture, state:", currentTrack?.readyState);
             
             // Si seguimos monitorizando, reintentar después de un retraso
-            if (isMonitoring && processingImageRef.current) {
+            if (isMonitoring && processingImageRef.current && frameProcessingEnabled.current) {
               setTimeout(() => {
-                if (isMonitoring && processingImageRef.current) {
+                if (isMonitoring && processingImageRef.current && frameProcessingEnabled.current) {
                   animationFrameRef.current = requestAnimationFrame(processImage);
                 }
               }, 500);
@@ -218,7 +260,7 @@ const Index = () => {
           const frame = await imageCaptureRef.current.grabFrame();
           
           // Verificar que seguimos monitorizando
-          if (!isMonitoring || !processingImageRef.current) {
+          if (!isMonitoring || !processingImageRef.current || !frameProcessingEnabled.current) {
             return;
           }
           
@@ -237,16 +279,16 @@ const Index = () => {
           processFrame(imageData);
           
           // Continuar procesando frames si seguimos monitorizando
-          if (isMonitoring && processingImageRef.current) {
+          if (isMonitoring && processingImageRef.current && frameProcessingEnabled.current) {
             animationFrameRef.current = requestAnimationFrame(processImage);
           }
         } catch (error) {
           console.error("Error capturando frame:", error);
           
           // Reintentar con retraso si seguimos monitorizando
-          if (isMonitoring && processingImageRef.current) {
+          if (isMonitoring && processingImageRef.current && frameProcessingEnabled.current) {
             setTimeout(() => {
-              if (isMonitoring && processingImageRef.current) {
+              if (isMonitoring && processingImageRef.current && frameProcessingEnabled.current) {
                 animationFrameRef.current = requestAnimationFrame(processImage);
               }
             }, 500);
@@ -254,8 +296,13 @@ const Index = () => {
         }
       };
 
-      // Iniciar procesamiento de frames
-      animationFrameRef.current = requestAnimationFrame(processImage);
+      // Wait briefly before starting frame processing
+      setTimeout(() => {
+        if (isMonitoring && processingImageRef.current) {
+          console.log("Starting frame processing");
+          animationFrameRef.current = requestAnimationFrame(processImage);
+        }
+      }, 200);
     } catch (error) {
       console.error("Error general en handleStreamReady:", error);
     }
@@ -278,6 +325,8 @@ const Index = () => {
 
   useEffect(() => {
     return () => {
+      frameProcessingEnabled.current = false;
+      
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = null;

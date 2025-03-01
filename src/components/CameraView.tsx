@@ -35,6 +35,8 @@ const CameraView = ({
   const processingFramesRef = useRef(false);
   const cameraInitTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const retryCountRef = useRef(0);
+  const streamReadyNotifiedRef = useRef(false);
+  const stableStreamTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Detect if we're on Android - only compute this once
   useEffect(() => {
@@ -102,8 +104,14 @@ const CameraView = ({
       cameraInitTimeoutRef.current = null;
     }
     
+    if (stableStreamTimerRef.current) {
+      clearTimeout(stableStreamTimerRef.current);
+      stableStreamTimerRef.current = null;
+    }
+    
     // First, mark that we're no longer processing frames
     processingFramesRef.current = false;
+    streamReadyNotifiedRef.current = false;
     
     // Clear the video element first
     if (videoRef.current) {
@@ -178,6 +186,7 @@ const CameraView = ({
     initializingRef.current = true;
     console.log("CameraView: Starting camera, attempt #" + (retryCountRef.current + 1));
     setError(null);
+    streamReadyNotifiedRef.current = false;
     
     try {
       // Make sure any previous stream is stopped properly
@@ -337,11 +346,19 @@ const CameraView = ({
         }, 2000);
       }
 
-      // Notify that the stream is ready
-      if (onStreamReady && isMonitoring && mountedRef.current) {
-        console.log("CameraView: Notifying stream ready");
-        onStreamReady(mediaStream);
+      // Wait a bit longer for stream to stabilize before notifying
+      if (stableStreamTimerRef.current) {
+        clearTimeout(stableStreamTimerRef.current);
       }
+      
+      stableStreamTimerRef.current = setTimeout(() => {
+        // Only notify once per camera start
+        if (!streamReadyNotifiedRef.current && onStreamReady && isMonitoring && mountedRef.current) {
+          console.log("CameraView: Notifying stream ready after stabilization");
+          streamReadyNotifiedRef.current = true;
+          onStreamReady(mediaStream);
+        }
+      }, isAndroid ? 500 : 300);
     } catch (error) {
       console.error('Error starting camera:', error);
       setError(`Error starting camera: ${error instanceof Error ? error.message : String(error)}`);
@@ -402,12 +419,18 @@ const CameraView = ({
       console.log("CameraView: Component unmounting");
       mountedRef.current = false;
       processingFramesRef.current = false;
+      streamReadyNotifiedRef.current = false;
       stopCamera();
       
       // Clear any pending timeouts
       if (cameraInitTimeoutRef.current) {
         clearTimeout(cameraInitTimeoutRef.current);
         cameraInitTimeoutRef.current = null;
+      }
+      
+      if (stableStreamTimerRef.current) {
+        clearTimeout(stableStreamTimerRef.current);
+        stableStreamTimerRef.current = null;
       }
     };
   }, [stopCamera]);
