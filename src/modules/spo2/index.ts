@@ -3,4 +3,4 @@
  * Main entry point for SpO2 module
  */
 export { SpO2Calculator } from './SpO2Calculator';
-export { SpO2Constants } from './SpO2Constants';
+export { SPO2_CONSTANTS } from './SpO2Constants';
