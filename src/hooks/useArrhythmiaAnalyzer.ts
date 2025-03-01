@@ -7,11 +7,11 @@ import { useState, useRef, useCallback } from 'react';
 export const useArrhythmiaAnalyzer = () => {
   // Constants for arrhythmia detection - adjusted for better sensitivity
   const ANALYSIS_WINDOW_SIZE = 10; // Análisis sobre 10 latidos consecutivos
-  const ARRHYTHMIA_CONFIRMATION_THRESHOLD = 3; // Requiere confirmación en al menos 3 ciclos
-  const MIN_TIME_BETWEEN_ARRHYTHMIAS = 800; // Reduced from 1000ms to 800ms for faster detection
-  const PREMATURE_BEAT_RATIO = 0.78; // Increased from 0.75 to detect more subtle premature beats
-  const COMPENSATORY_PAUSE_RATIO = 1.10; // Reduced from 1.15 to be more sensitive
-  const AMPLITUDE_THRESHOLD_RATIO = 0.70; // Added explicit amplitude ratio
+  const ARRHYTHMIA_CONFIRMATION_THRESHOLD = 2; // Reduced from 3 to 2 for faster detection
+  const MIN_TIME_BETWEEN_ARRHYTHMIAS = 500; // Reduced from 800ms to 500ms for faster detection
+  const PREMATURE_BEAT_RATIO = 0.82; // Increased from 0.78 to detect more subtle premature beats
+  const COMPENSATORY_PAUSE_RATIO = 1.05; // Reduced from 1.10 to be more sensitive
+  const AMPLITUDE_THRESHOLD_RATIO = 0.75; // Increased from 0.70 to detect more subtle amplitude changes
   
   // State and refs
   const [arrhythmiaCounter, setArrhythmiaCounter] = useState(0);
@@ -29,6 +29,9 @@ export const useArrhythmiaAnalyzer = () => {
   // Enhanced tracking for better detection
   const consecutiveNormalBeatsRef = useRef<number>(0);
   const lastBeatsClassificationRef = useRef<Array<'normal' | 'premature'>>([]);
+  
+  // New variables for more effective detection
+  const detectionSensitivityRef = useRef<number>(1.1); // Increased sensitivity multiplier
   
   /**
    * Reset all analysis state
@@ -57,10 +60,10 @@ export const useArrhythmiaAnalyzer = () => {
   const calculateBaselines = useCallback((intervals: number[], amplitudes: number[] = []) => {
     if (intervals.length < 5) return;
     
-    // Enhanced baseline calculation method - use middle 60% of values
+    // Enhanced baseline calculation method - use middle 70% of values (increased from 60%)
     const sortedRR = [...intervals].sort((a, b) => a - b);
-    const startIdx = Math.floor(sortedRR.length * 0.2);
-    const endIdx = Math.floor(sortedRR.length * 0.8);
+    const startIdx = Math.floor(sortedRR.length * 0.15); // Changed from 0.2 to 0.15
+    const endIdx = Math.floor(sortedRR.length * 0.85); // Changed from 0.8 to 0.85
     const middleValues = sortedRR.slice(startIdx, endIdx);
     
     // Use median from middle values as baseline - more robust
@@ -69,9 +72,9 @@ export const useArrhythmiaAnalyzer = () => {
     // If amplitudes available, calculate baseline
     if (amplitudes.length >= 5) {
       // Normal beats typically have higher amplitude than premature beats
-      // Sort amplitudes in descending order and take top 60%
+      // Sort amplitudes in descending order and take top 70% (increased from 60%)
       const sortedAmplitudes = [...amplitudes].sort((a, b) => b - a);
-      const normalBeatsCount = Math.ceil(sortedAmplitudes.length * 0.6);
+      const normalBeatsCount = Math.ceil(sortedAmplitudes.length * 0.7);
       const normalAmplitudes = sortedAmplitudes.slice(0, normalBeatsCount);
       baselineAmplitudeRef.current = normalAmplitudes.reduce((a, b) => a + b, 0) / normalAmplitudes.length;
       
@@ -101,8 +104,8 @@ export const useArrhythmiaAnalyzer = () => {
     let prematureBeatDetected = false;
     
     // Get the most recent intervals and amplitudes for analysis
-    const recentIntervals = intervals.slice(-4);
-    const recentAmplitudes = amplitudes.slice(-4);
+    const recentIntervals = intervals.slice(-5); // Increased from 4 to 5
+    const recentAmplitudes = amplitudes.slice(-5); // Increased from 4 to 5
     
     if (recentIntervals.length >= 3 && recentAmplitudes.length >= 3 && baselineRRIntervalRef.current > 0) {
       // Get current and previous beats information
@@ -114,6 +117,11 @@ export const useArrhythmiaAnalyzer = () => {
       const previousAmp = recentAmplitudes[recentAmplitudes.length - 2];
       const beforePreviousAmp = recentAmplitudes[recentAmplitudes.length - 3];
       
+      // Apply sensitivity multiplier to detection thresholds
+      const adjustedPrematureRatio = PREMATURE_BEAT_RATIO * detectionSensitivityRef.current;
+      const adjustedCompensatoryRatio = COMPENSATORY_PAUSE_RATIO / detectionSensitivityRef.current;
+      const adjustedAmplitudeRatio = AMPLITUDE_THRESHOLD_RATIO * detectionSensitivityRef.current;
+      
       // Calculate ratios compared to baseline
       const currentRatio = current / baselineRRIntervalRef.current;
       const previousRatio = previous / baselineRRIntervalRef.current;
@@ -122,25 +130,30 @@ export const useArrhythmiaAnalyzer = () => {
       
       // Pattern 1: Classic premature beat (Normal - Premature - Compensatory)
       const isClassicPattern = 
-        (previous < beforePrevious * PREMATURE_BEAT_RATIO) && // Short premature beat
-        (current > previous * COMPENSATORY_PAUSE_RATIO) &&   // Followed by compensatory pause
-        (previousAmp < baselineAmplitudeRef.current * AMPLITUDE_THRESHOLD_RATIO); // Lower amplitude
+        (previous < beforePrevious * adjustedPrematureRatio) && // Short premature beat
+        (current > previous * adjustedCompensatoryRatio) &&     // Followed by compensatory pause
+        (previousAmp < baselineAmplitudeRef.current * adjustedAmplitudeRatio); // Lower amplitude
       
       // Pattern 2: Single premature beat among normal beats
       const isSinglePremature = 
-        (current < baselineRRIntervalRef.current * PREMATURE_BEAT_RATIO) && // Current is premature
-        (currentAmp < baselineAmplitudeRef.current * AMPLITUDE_THRESHOLD_RATIO) && // Low amplitude
-        (previous >= baselineRRIntervalRef.current * 0.85); // Previous was normal
+        (current < baselineRRIntervalRef.current * adjustedPrematureRatio) && // Current is premature
+        (currentAmp < baselineAmplitudeRef.current * adjustedAmplitudeRatio) && // Low amplitude
+        (previous >= baselineRRIntervalRef.current * 0.80); // Previous was normal (reduced from 0.85)
       
       // Pattern 3: Direct detection based on amplitude and RR differences
       const isAbnormalBeat = 
-        (current < baselineRRIntervalRef.current * PREMATURE_BEAT_RATIO) && // Short RR
-        (currentAmp < baselineAmplitudeRef.current * AMPLITUDE_THRESHOLD_RATIO) && // Low amplitude
-        (consecutiveNormalBeatsRef.current >= 2); // After some normal beats
+        (current < baselineRRIntervalRef.current * adjustedPrematureRatio) && // Short RR
+        (currentAmp < baselineAmplitudeRef.current * adjustedAmplitudeRatio) && // Low amplitude
+        (consecutiveNormalBeatsRef.current >= 1); // Reduced from 2 to 1 normal beat
+      
+      // NEW - Pattern 4: Small amplitude beat regardless of timing
+      const isSmallBeat = 
+        (currentAmp < baselineAmplitudeRef.current * 0.60) && // Very small amplitude
+        (baselineAmplitudeRef.current > 0); // Only if we have established a baseline
       
       // Calculate confidence based on pattern match
       if (isClassicPattern) {
-        prematureBeatConfidence = 0.90; // High confidence for classic pattern
+        prematureBeatConfidence = 0.95; // Increased from 0.90
         prematureBeatDetected = true;
         consecutiveNormalBeatsRef.current = 0;
         lastBeatsClassificationRef.current.push('premature');
@@ -156,7 +169,7 @@ export const useArrhythmiaAnalyzer = () => {
         });
       } 
       else if (isSinglePremature) {
-        prematureBeatConfidence = 0.80; // Good confidence for single premature
+        prematureBeatConfidence = 0.85; // Increased from 0.80
         prematureBeatDetected = true;
         consecutiveNormalBeatsRef.current = 0;
         lastBeatsClassificationRef.current.push('premature');
@@ -171,7 +184,7 @@ export const useArrhythmiaAnalyzer = () => {
         });
       }
       else if (isAbnormalBeat) {
-        prematureBeatConfidence = 0.75; // Moderate confidence
+        prematureBeatConfidence = 0.80; // Increased from 0.75
         prematureBeatDetected = true;
         consecutiveNormalBeatsRef.current = 0;
         lastBeatsClassificationRef.current.push('premature');
@@ -182,6 +195,20 @@ export const useArrhythmiaAnalyzer = () => {
           abnormalAmp: currentAmp,
           baselineAmp: baselineAmplitudeRef.current,
           pattern: 'abnormal',
+          confidence: prematureBeatConfidence
+        });
+      }
+      else if (isSmallBeat) {
+        prematureBeatConfidence = 0.75;
+        prematureBeatDetected = true;
+        consecutiveNormalBeatsRef.current = 0;
+        lastBeatsClassificationRef.current.push('premature');
+        
+        console.log('Small amplitude beat detected:', {
+          amplitude: currentAmp,
+          normalAmplitude: baselineAmplitudeRef.current,
+          ratio: currentAmp / baselineAmplitudeRef.current,
+          pattern: 'small-amplitude',
           confidence: prematureBeatConfidence
         });
       }
@@ -276,7 +303,7 @@ export const useArrhythmiaAnalyzer = () => {
     // If a premature beat is detected with sufficient confidence
     // and enough time has passed since the last one
     if (arrhythmiaAnalysis.detected && 
-        arrhythmiaAnalysis.confidence >= 0.70 && // Reduced threshold for more sensitivity 
+        arrhythmiaAnalysis.confidence >= 0.65 && // Reduced threshold for even more sensitivity 
         currentTime - lastArrhythmiaTime.current >= MIN_TIME_BETWEEN_ARRHYTHMIAS &&
         arrhythmiaCounter < maxArrhythmias) {
       

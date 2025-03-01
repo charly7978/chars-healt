@@ -1,12 +1,13 @@
+
 export class ArrhythmiaDetector {
   // Constants for arrhythmia detection
   private readonly RR_WINDOW_SIZE = 5;
-  private readonly ARRHYTHMIA_LEARNING_PERIOD = 3000;
+  private readonly ARRHYTHMIA_LEARNING_PERIOD = 2000; // Reduced from 3000ms to detect earlier
   
-  // Adjusted constants for premature beat detection
-  private readonly PREMATURE_BEAT_THRESHOLD = 0.75; // Increased from 0.70 to be more sensitive
-  private readonly AMPLITUDE_RATIO_THRESHOLD = 0.70; // Increased from 0.60 to detect more subtle premature beats
-  private readonly POST_PREMATURE_THRESHOLD = 1.15; // Reduced from 1.20 to be more sensitive
+  // More sensitive constants for premature beat detection
+  private readonly PREMATURE_BEAT_THRESHOLD = 0.80; // Increased from 0.75 to be even more sensitive
+  private readonly AMPLITUDE_RATIO_THRESHOLD = 0.80; // Increased from 0.70 to detect more subtle premature beats
+  private readonly POST_PREMATURE_THRESHOLD = 1.10; // Reduced from 1.15 to be even more sensitive
   
   // State variables
   private rrIntervals: number[] = [];
@@ -26,7 +27,11 @@ export class ArrhythmiaDetector {
   // New tracking variables to improve detection
   private consecutiveNormalBeats: number = 0;
   private lastBeatsClassification: Array<'normal' | 'premature'> = [];
-
+  
+  // New variables for more robust detection
+  private recentRRIntervals: number[] = [];
+  private detectionSensitivity: number = 1.0; // Increased sensitivity multiplier
+  
   /**
    * Reset all state variables
    */
@@ -67,13 +72,13 @@ export class ArrhythmiaDetector {
         
         // Calculate base values after learning phase
         if (this.rrIntervals.length > 5) {
-          // Enhanced baseline calculation method
+          // Enhanced baseline calculation method - now uses more aggressive filtering
           // Sort intervals to find the median value (more robust than mean)
           const sortedRR = [...this.rrIntervals].sort((a, b) => a - b);
           
-          // Take the middle 60% of values to avoid outliers
-          const startIdx = Math.floor(sortedRR.length * 0.2);
-          const endIdx = Math.floor(sortedRR.length * 0.8);
+          // Take the middle 70% of values (expanded from 60%)
+          const startIdx = Math.floor(sortedRR.length * 0.15);
+          const endIdx = Math.floor(sortedRR.length * 0.85);
           const middleValues = sortedRR.slice(startIdx, endIdx);
           
           // Calculate median from the middle values
@@ -84,8 +89,8 @@ export class ArrhythmiaDetector {
             // Sort amplitudes in descending order (highest first)
             const sortedAmplitudes = [...this.amplitudes].sort((a, b) => b - a);
             
-            // Use top 60% of amplitudes as reference for normal beats
-            const normalCount = Math.ceil(sortedAmplitudes.length * 0.6);
+            // Use top 70% of amplitudes as reference for normal beats (expanded from 60%)
+            const normalCount = Math.ceil(sortedAmplitudes.length * 0.7);
             const normalAmplitudes = sortedAmplitudes.slice(0, normalCount);
             this.avgNormalAmplitude = normalAmplitudes.reduce((a, b) => a + b, 0) / normalAmplitudes.length;
             
@@ -117,11 +122,20 @@ export class ArrhythmiaDetector {
       }
     }
     
+    // Update recent RR intervals for trend analysis
+    if (intervals.length > 0) {
+      const latestRR = intervals[intervals.length - 1];
+      this.recentRRIntervals.push(latestRR);
+      if (this.recentRRIntervals.length > 10) {
+        this.recentRRIntervals.shift();
+      }
+    }
+    
     this.updateLearningPhase();
   }
 
   /**
-   * Detect arrhythmia based on premature beat patterns
+   * Detect arrhythmia based on premature beat patterns - ENHANCED SENSITIVITY
    */
   detect(): {
     detected: boolean;
@@ -152,16 +166,16 @@ export class ArrhythmiaDetector {
     const rmssd = Math.sqrt(sumSquaredDiff / (this.rrIntervals.length - 1));
     this.lastRMSSD = rmssd;
     
-    // Get the last 4 RR intervals and amplitudes for enhanced pattern analysis
-    const lastRRs = this.rrIntervals.slice(-4);
-    const lastAmplitudes = this.amplitudes.slice(-4);
+    // Get the last 5 RR intervals and amplitudes for enhanced pattern analysis (increased from 4)
+    const lastRRs = this.rrIntervals.slice(-5);
+    const lastAmplitudes = this.amplitudes.slice(-5);
     
-    // Enhanced premature beat detection logic
+    // Enhanced premature beat detection logic with increased sensitivity
     let prematureBeatDetected = false;
     
     // We need at least 3 intervals to detect patterns
     if (lastRRs.length >= 3 && lastAmplitudes.length >= 3 && this.baseRRInterval > 0) {
-      // Analyze most recent interval in context of previous ones
+      // Analyze most recent intervals in context of previous ones
       const currentRR = lastRRs[lastRRs.length - 1];
       const previousRR = lastRRs[lastRRs.length - 2];
       const beforePreviousRR = lastRRs[lastRRs.length - 3];
@@ -171,30 +185,40 @@ export class ArrhythmiaDetector {
       const previousAmplitude = lastAmplitudes[lastAmplitudes.length - 2];
       const beforePreviousAmplitude = lastAmplitudes[lastAmplitudes.length - 3];
       
-      // Calculate ratios compared to baseline
+      // Calculate ratios compared to baseline - with increased sensitivity
       const currentRRRatio = currentRR / this.baseRRInterval;
       const previousRRRatio = previousRR / this.baseRRInterval;
       const currentAmplitudeRatio = currentAmplitude / this.avgNormalAmplitude;
       const previousAmplitudeRatio = previousAmplitude / this.avgNormalAmplitude;
       
-      // Pattern 1: Normal - Premature - Compensatory
+      // ENHANCED: New super-sensitive threshold adjusted by sensitivity multiplier
+      const prematureThreshold = this.PREMATURE_BEAT_THRESHOLD * this.detectionSensitivity;
+      const amplitudeThreshold = this.AMPLITUDE_RATIO_THRESHOLD * this.detectionSensitivity;
+      const postPrematureThreshold = this.POST_PREMATURE_THRESHOLD / this.detectionSensitivity;
+      
+      // Pattern 1: Normal - Premature - Compensatory (Classic pattern)
       // A short RR interval with low amplitude followed by a longer compensatory pause
       const isPrematurePattern = 
-        (previousRR < beforePreviousRR * this.PREMATURE_BEAT_THRESHOLD) && // Short interval
-        (currentRR > previousRR * this.POST_PREMATURE_THRESHOLD) &&        // Compensatory pause
-        (previousAmplitude < this.avgNormalAmplitude * this.AMPLITUDE_RATIO_THRESHOLD); // Lower amplitude
+        (previousRR < beforePreviousRR * prematureThreshold) && // Short interval
+        (currentRR > previousRR * postPrematureThreshold) &&    // Compensatory pause
+        (previousAmplitude < this.avgNormalAmplitude * amplitudeThreshold); // Lower amplitude
       
       // Pattern 2: Premature beat followed by normal rhythm (more sensitive detection)
       const isPrematureNormalPattern =
-        (currentRR < this.baseRRInterval * this.PREMATURE_BEAT_THRESHOLD) && // Current interval is short
-        (currentAmplitude < this.avgNormalAmplitude * this.AMPLITUDE_RATIO_THRESHOLD) && // Lower amplitude
+        (currentRR < this.baseRRInterval * prematureThreshold) && // Current interval is short
+        (currentAmplitude < this.avgNormalAmplitude * amplitudeThreshold) && // Lower amplitude
         (previousRR >= this.baseRRInterval * 0.85); // Previous beat was normal or nearly normal
       
-      // Pattern 3: Direct comparison to baseline
+      // Pattern 3: Direct comparison to baseline (most sensitive)
       const isAbnormalBeat = 
-        (currentRR < this.baseRRInterval * this.PREMATURE_BEAT_THRESHOLD) && // Short RR interval
-        (currentAmplitude < this.avgNormalAmplitude * this.AMPLITUDE_RATIO_THRESHOLD) && // Lower amplitude
-        this.consecutiveNormalBeats >= 2; // Only after we've seen some normal beats
+        (currentRR < this.baseRRInterval * prematureThreshold) && // Short RR interval
+        (currentAmplitude < this.avgNormalAmplitude * amplitudeThreshold) && // Lower amplitude
+        this.consecutiveNormalBeats >= 1; // Only need 1 normal beat now (reduced from 2)
+      
+      // NEW - Pattern 4: Detect small amplitude beat regardless of timing
+      const isSmallBeat = 
+        (currentAmplitude < this.avgNormalAmplitude * 0.65) && // Very small amplitude
+        (this.avgNormalAmplitude > 0); // Only if we have established a baseline
       
       // Check which pattern is detected
       if (isPrematurePattern) {
@@ -239,6 +263,17 @@ export class ArrhythmiaDetector {
           amplitudeRatio: currentAmplitudeRatio
         });
       }
+      else if (isSmallBeat) {
+        prematureBeatDetected = true;
+        this.consecutiveNormalBeats = 0;
+        this.lastBeatsClassification.push('premature');
+        
+        console.log('ArrhythmiaDetector - Small amplitude beat detected:', {
+          amplitude: currentAmplitude,
+          normalAmplitude: this.avgNormalAmplitude,
+          ratio: currentAmplitude / this.avgNormalAmplitude
+        });
+      }
       else {
         // Normal beat, update tracking
         this.consecutiveNormalBeats++;
@@ -255,8 +290,9 @@ export class ArrhythmiaDetector {
     const rrVariation = Math.abs(lastRRs[lastRRs.length - 1] - this.baseRRInterval) / this.baseRRInterval;
     this.lastRRVariation = rrVariation;
     
-    // Only register as a new arrhythmia if it's been at least 1 second since the last one
-    if (prematureBeatDetected && currentTime - this.lastArrhythmiaTime > 1000) {
+    // ENHANCED: Only register as a new arrhythmia if it's been at least 500ms since the last one
+    // (reduced from 1000ms to catch more closely spaced arrhythmias)
+    if (prematureBeatDetected && currentTime - this.lastArrhythmiaTime > 500) {
       this.arrhythmiaCount++;
       this.lastArrhythmiaTime = currentTime;
       
