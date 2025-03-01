@@ -131,28 +131,43 @@ const VitalSign: React.FC<VitalSignProps> = memo(({ label, value, unit, isFinalR
     { text: displayValue, ...riskInfo };
 
   return (
-    <div className="relative overflow-hidden rounded-xl shadow-lg p-2">
-      {/* Capa transparente ajustada al 70% de opacidad y posicionada solo en el componente */}
-      <div className="absolute inset-0 rounded-xl overflow-hidden">
-        <div 
-          className="absolute inset-0 bg-gradient-to-br from-black/60 to-[#061629]/70 backdrop-blur-md"
-        />
-        <div 
-          className="absolute inset-0"
-          style={{ 
-            backgroundImage: "radial-gradient(circle at top right, rgba(13, 148, 218, 0.1), transparent 60%)",
-            mixBlendMode: 'overlay',
-            opacity: 0.7
-          }}
-        />
-      </div>
-      
-      {/* Bordes y efectos sutiles del componente */}
-      <div className="absolute inset-0 border border-[#D3E4FD]/20 rounded-xl" />
-      <div className="absolute inset-0 bg-gradient-to-br from-transparent to-blue-900/5" />
-      
-      {/* Capa de brillo superior */}
-      <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#D3E4FD]/30 to-transparent" />
+    <div className="relative overflow-hidden rounded-xl backdrop-blur-md shadow-lg p-2">
+      {/* Fondo expandido considerablemente más allá del componente */}
+      <div className="absolute bg-black/90 pointer-events-none" 
+           style={{ 
+             top: '-25px', 
+             left: '-25px', 
+             right: '-25px', 
+             bottom: '-25px' 
+           }} />
+           
+      <div className="absolute pointer-events-none" 
+           style={{ 
+             top: '-25px', 
+             left: '-25px', 
+             right: '-25px', 
+             bottom: '-25px',
+             background: 'linear-gradient(135deg, rgba(16,42,76,0.4) 0%, rgba(6,22,41,0.9) 100%)' 
+           }} />
+           
+      <div className="absolute pointer-events-none" 
+           style={{
+             top: '-25px', 
+             left: '-25px', 
+             right: '-25px', 
+             bottom: '-25px',
+             backgroundImage: "radial-gradient(circle at top right, rgba(13, 148, 218, 0.25), transparent 70%)"
+           }} />
+           
+      <div className="absolute pointer-events-none" 
+           style={{ 
+             top: '-25px', 
+             left: '-25px', 
+             right: '-25px', 
+             bottom: '-25px',
+             border: '1px solid rgba(211, 228, 253, 0.3)',
+             borderRadius: '0.75rem'
+           }} />
       
       <div className="relative z-10 p-2">
         <h3 className="text-[#D3E4FD] text-[10px] font-medium tracking-wider mb-1">{label}</h3>

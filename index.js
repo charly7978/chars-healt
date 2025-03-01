@@ -1,16 +1,11 @@
-
-import React, { useState, useRef, useEffect, lazy, Suspense } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
+import CameraView from "@/components/CameraView";
 import { useSignalProcessor } from "@/hooks/useSignalProcessor";
 import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
-import { debounce, frameDebounce } from "@/utils/debounceUtils";
-import { cached } from "@/utils/cacheUtils";
+import PPGSignalMeter from "@/components/PPGSignalMeter";
 import PermissionsHandler from "@/components/PermissionsHandler";
-
-// Componentes con carga diferida
-const CameraView = lazy(() => import("@/components/CameraView"));
-const PPGSignalMeter = lazy(() => import("@/components/PPGSignalMeter"));
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -31,12 +26,6 @@ const Index = () => {
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
-  // Caché para procesar resultados y evitar cálculos duplicados
-  const cachedProcessHeartBeat = cached(processHeartBeat, (value) => `heartbeat-${Math.round(value)}`, 500);
-  
-  // Aplicar antirrebote al procesamiento de frames
-  const debouncedProcessFrame = frameDebounce(processFrame, 2);
-
   const handlePermissionsGranted = () => {
     console.log("Permisos concedidos correctamente");
     setPermissionsGranted(true);
@@ -47,7 +36,7 @@ const Index = () => {
     setPermissionsGranted(false);
   };
 
-  const enterFullScreen = debounce(async () => {
+  const enterFullScreen = async () => {
     const elem = document.documentElement;
     try {
       if (elem.requestFullscreen) {
@@ -62,7 +51,7 @@ const Index = () => {
     } catch (err) {
       console.log('Error al entrar en pantalla completa:', err);
     }
-  }, 300);
+  };
 
   useEffect(() => {
     const preventScroll = (e) => e.preventDefault();
@@ -155,22 +144,16 @@ const Index = () => {
       return;
     }
     
-    // Optimización: uso de requestAnimationFrame y skip de frames
-    let frameCount = 0;
     const processImage = async () => {
       if (!isMonitoring) return;
       
       try {
-        // Procesamos solo 1 de cada 2 frames para reducir carga
-        frameCount++;
-        if (frameCount % 2 === 0) {
-          const frame = await imageCapture.grabFrame();
-          tempCanvas.width = frame.width;
-          tempCanvas.height = frame.height;
-          tempCtx.drawImage(frame, 0, 0);
-          const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
-          debouncedProcessFrame(imageData);
-        }
+        const frame = await imageCapture.grabFrame();
+        tempCanvas.width = frame.width;
+        tempCanvas.height = frame.height;
+        tempCtx.drawImage(frame, 0, 0);
+        const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
+        processFrame(imageData);
         
         if (isMonitoring) {
           requestAnimationFrame(processImage);
@@ -188,7 +171,7 @@ const Index = () => {
 
   useEffect(() => {
     if (lastSignal && lastSignal.fingerDetected && isMonitoring) {
-      const heartBeatResult = cachedProcessHeartBeat(lastSignal.filteredValue);
+      const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
       setHeartRate(heartBeatResult.bpm);
       
       const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
@@ -199,7 +182,7 @@ const Index = () => {
       
       setSignalQuality(lastSignal.quality);
     }
-  }, [lastSignal, isMonitoring, cachedProcessHeartBeat, processVitalSigns]);
+  }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
 
   return (
     <div 
@@ -217,30 +200,26 @@ const Index = () => {
       
       <div className="flex-1 relative">
         <div className="absolute inset-0">
-          <Suspense fallback={<div className="w-full h-full bg-black flex items-center justify-center text-white">Cargando cámara...</div>}>
-            <CameraView 
-              onStreamReady={handleStreamReady}
-              isMonitoring={isCameraOn && permissionsGranted}
-              isFingerDetected={lastSignal?.fingerDetected}
-              signalQuality={signalQuality}
-            />
-          </Suspense>
+          <CameraView 
+            onStreamReady={handleStreamReady}
+            isMonitoring={isCameraOn && permissionsGranted}
+            isFingerDetected={lastSignal?.fingerDetected}
+            signalQuality={signalQuality}
+          />
         </div>
 
         <div className="absolute bottom-0 left-0 right-0 h-[400px] bg-gradient-to-t from-black/90 via-black/80 to-black/30 z-10"></div>
 
         <div className="relative z-20 h-full flex flex-col">
           <div className="flex-1">
-            <Suspense fallback={<div className="w-full h-full flex items-center justify-center text-white">Cargando monitor...</div>}>
-              <PPGSignalMeter 
-                value={lastSignal?.filteredValue || 0}
-                quality={lastSignal?.quality || 0}
-                isFingerDetected={lastSignal?.fingerDetected || false}
-                onStartMeasurement={startMonitoring}
-                onReset={stopMonitoring}
-                arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
-              />
-            </Suspense>
+            <PPGSignalMeter 
+              value={lastSignal?.filteredValue || 0}
+              quality={lastSignal?.quality || 0}
+              isFingerDetected={lastSignal?.fingerDetected || false}
+              onStartMeasurement={startMonitoring}
+              onReset={stopMonitoring}
+              arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
+            />
           </div>
 
           <div className="absolute bottom-[200px] left-0 right-0 px-4 z-30">
