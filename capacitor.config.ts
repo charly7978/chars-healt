@@ -10,13 +10,7 @@ const config: CapacitorConfig = {
     cleartext: true
   },
   android: {
-    buildOptions: {
-      keystorePath: null,
-      keystoreAlias: null,
-      keystorePassword: null,
-      keystoreAliasPassword: null,
-      signingType: null,
-    }
+    // Removing the buildOptions for now to allow debug builds
   }
 };
 
