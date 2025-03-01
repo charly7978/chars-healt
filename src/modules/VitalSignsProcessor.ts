@@ -448,534 +448,28 @@ export class VitalSignsProcessor {
     systolic: number;
     diastolic: number;
   } {
-    // Verificación de datos suficientes para el algoritmo
-    if (values.length < 30) {
-      // Si tenemos valores previos válidos, los reutilizamos en lugar de devolver 0/0
-      if (this.lastValidSystolic > 0 && this.lastValidDiastolic > 0) {
-        return { 
-          systolic: this.lastValidSystolic, 
-          diastolic: this.lastValidDiastolic 
-        };
-      }
-      return { systolic: 0, diastolic: 0 };
-    }
+    const validPTT = values.filter(ptt => ptt >= this.BP_MIN_VALID_PTT && ptt <= this.BP_MAX_VALID_PTT);
+    if (validPTT.length < 3) return { systolic: this.lastValidSystolic, diastolic: this.lastValidDiastolic };
 
-    // Detección de picos y valles mediante análisis de forma de onda avanzado
-    const { peakIndices, valleyIndices, signalQuality } = this.enhancedPeakDetection(values);
-    
-    // Verificar suficientes ciclos cardíacos para una medición confiable
-    if (peakIndices.length < 3 || valleyIndices.length < 3) {
-      if (this.lastValidSystolic > 0 && this.lastValidDiastolic > 0) {
-        return { 
-          systolic: this.lastValidSystolic, 
-          diastolic: this.lastValidDiastolic 
-        };
-      }
-      return { systolic: 0, diastolic: 0 };
-    }
+    const medianPTT = this.calculateMedian(validPTT);
+    const amplitude = this.calculateAmplitude(values, [], []);
 
-    const currentTime = Date.now();
-    const fps = 30; // Asumiendo 30 muestras por segundo
-    const msPerSample = 1000 / fps;
+    const rawSystolic = this.BP_BASELINE_SYSTOLIC - (medianPTT * this.BP_PTT_COEFFICIENT) + (amplitude * this.BP_AMPLITUDE_COEFFICIENT);
+    const rawDiastolic = this.BP_BASELINE_DIASTOLIC - (medianPTT * this.BP_PTT_COEFFICIENT * 0.5) + (amplitude * this.BP_AMPLITUDE_COEFFICIENT * 0.5);
 
-    // 1. Cálculo del tiempo de tránsito de pulso (PTT)
-    const pttValues: number[] = [];
-    const pttQualityScores: number[] = [];
-    
-    // Analizar intervalos entre picos adyacentes (aproximación al PTT)
-    for (let i = 1; i < peakIndices.length; i++) {
-      const timeDiff = (peakIndices[i] - peakIndices[i - 1]) * msPerSample;
-      
-      // ELIMINADO: Filtrar valores atípicos que excedan límites fisiológicos
-      pttValues.push(timeDiff);
-      
-      // Calcular puntuación de calidad para este intervalo
-      const peakAmplitude1 = values[peakIndices[i-1]];
-      const peakAmplitude2 = values[peakIndices[i]];
-      const valleyAmplitude = values[valleyIndices[Math.min(i, valleyIndices.length-1)]];
-      
-      // La calidad depende de la consistencia de amplitudes y la distancia entre picos
-      const amplitudeConsistency = 1 - Math.abs(peakAmplitude1 - peakAmplitude2) / 
-                               Math.max(peakAmplitude1, peakAmplitude2);
-      
-      const intervalQuality = Math.min(1.0, Math.max(0.1, amplitudeConsistency));
-      pttQualityScores.push(intervalQuality);
-    }
-    
-    if (pttValues.length === 0) {
-      // No hay suficientes PTT válidos
-      if (this.lastValidSystolic > 0 && this.lastValidDiastolic > 0) {
-        return { 
-          systolic: this.lastValidSystolic, 
-          diastolic: this.lastValidDiastolic 
-        };
-      }
-      return { systolic: 0, diastolic: 0 };
-    }
-    
-    // 2. Cálculo de PTT ponderado por calidad
-    let weightedPttSum = 0;
-    let weightSum = 0;
-    
-    for (let i = 0; i < pttValues.length; i++) {
-      const weight = pttQualityScores[i];
-      weightedPttSum += pttValues[i] * weight;
-      weightSum += weight;
-    }
-    
-    const weightedPTT = weightSum > 0 ? weightedPttSum / weightSum : 600;
-    
-    // ELIMINADO: Normalizar PTT dentro de rangos fisiológicos
-    const normalizedPTT = weightedPTT;
-    
-    // 3. Cálculo de amplitud y perfusión
-    const amplitudeValues: number[] = [];
-    for (let i = 0; i < Math.min(peakIndices.length, valleyIndices.length); i++) {
-      const peakIdx = peakIndices[i];
-      const valleyIdx = valleyIndices[i];
-      
-      // Solo considerar pares pico-valle válidos
-      if (peakIdx !== undefined && valleyIdx !== undefined) {
-        const amplitude = values[peakIdx] - values[valleyIdx];
-        if (amplitude > 0) {
-          amplitudeValues.push(amplitude);
-        }
-      }
-    }
-    
-    // Ordenar amplitudes y eliminar outliers
-    if (amplitudeValues.length >= 5) {
-      amplitudeValues.sort((a, b) => a - b);
-      // Eliminar 20% inferior y superior
-      const startIdx = Math.floor(amplitudeValues.length * 0.2);
-      const endIdx = Math.ceil(amplitudeValues.length * 0.8);
-      const trimmedAmplitudes = amplitudeValues.slice(startIdx, endIdx);
-      
-      // Calcular media robusta
-      const robustMeanAmplitude = trimmedAmplitudes.reduce((sum, val) => sum + val, 0) / 
-                               trimmedAmplitudes.length;
-      
-      // Actualizar historial de amplitudes para análisis de tendencia
-      this.amplitudeHistory.push(robustMeanAmplitude);
-      if (this.amplitudeHistory.length > this.BP_CALIBRATION_WINDOW) {
-        this.amplitudeHistory.shift();
-      }
-    }
-    
-    // Obtener amplitud media ajustada a tendencia reciente
-    const recentAmplitudes = this.amplitudeHistory.slice(-5);
-    const meanAmplitude = recentAmplitudes.length > 0 ? 
-                        recentAmplitudes.reduce((sum, val) => sum + val, 0) / recentAmplitudes.length : 
-                        amplitudeValues.length > 0 ? 
-                        amplitudeValues.reduce((sum, val) => sum + val, 0) / amplitudeValues.length : 
-                        0;
-    
-    // ELIMINADO: Normalizar amplitud para tener un valor trabajo estable
-    const normalizedAmplitude = meanAmplitude * 5;
+    const smoothedSystolic = this.lastValidSystolic * this.BP_ALPHA + rawSystolic * (1 - this.BP_ALPHA);
+    const smoothedDiastolic = this.lastValidDiastolic * this.BP_ALPHA + rawDiastolic * (1 - this.BP_ALPHA);
 
-    // 4. Almacenar datos para análisis de tendencia
-    this.pttHistory.push(normalizedPTT);
-    if (this.pttHistory.length > this.BP_CALIBRATION_WINDOW) {
-      this.pttHistory.shift();
-    }
-    
-    // Calcular calidad general de la medición
-    const overallQuality = Math.min(1.0, 
-                               signalQuality * 0.4 + 
-                               (weightSum / pttValues.length) * 0.4 + 
-                               (normalizedAmplitude / 50) * 0.2);
-    
-    // Almacenar calidad para seguimiento
-    this.bpQualityHistory.push(overallQuality);
-    if (this.bpQualityHistory.length > this.BP_CALIBRATION_WINDOW) {
-      this.bpQualityHistory.shift();
-    }
-    
-    // Verificar si la medición es de suficiente calidad
-    const isQualityGood = overallQuality >= this.BP_QUALITY_THRESHOLD;
-    
-    // 5. Autocalibrarse si tenemos suficientes mediciones de buena calidad
-    if (this.pttHistory.length >= this.BP_CALIBRATION_WINDOW && 
-        this.bpQualityHistory.filter(q => q >= this.BP_QUALITY_THRESHOLD).length >= Math.floor(this.BP_CALIBRATION_WINDOW * 0.7)) {
-      // Realizar auto-calibración adaptativa
-      // Basado en la estabilidad de las últimas mediciones
-      const pttStdev = this.calculateStandardDeviation(this.pttHistory);
-      const pttMean = this.pttHistory.reduce((sum, val) => sum + val, 0) / this.pttHistory.length;
-      
-      // Coeficiente de variación como indicador de estabilidad
-      const pttCV = pttMean > 0 ? pttStdev / pttMean : 1;
-      
-      // Ajustar factor de calibración basado en estabilidad
-      // Más estable = más confianza en calibración actual
-      if (pttCV < 0.1) {  // CV < 10% indica mediciones muy estables
-        // Recalibrar basado en tendencias de PTT y amplitud
-        const optimalCalibrationFactor = 0.99 + (0.02 * (1 - pttCV * 5));
-        
-        // Aplicar gradualmente (promedio ponderado con factor anterior)
-        this.bpCalibrationFactor = this.bpCalibrationFactor * 0.90 + optimalCalibrationFactor * 0.10;
-        
-        console.log('Auto-calibración BP actualizada:', {
-          cv: pttCV,
-          factor: this.bpCalibrationFactor
-        });
-      }
-    }
-    
-    // 6. Cálculo avanzado basado en modelos cardiovasculares
-    // Modelo básico: presión ∝ 1/PTT²
-    // Ajustado con análisis de regresión de estudios clínicos
-    const pttFactor = Math.pow(600 / normalizedPTT, 2) * this.BP_PTT_COEFFICIENT * this.bpCalibrationFactor;
-    
-    // Componente basado en amplitud (perfusión)
-    const ampFactor = normalizedAmplitude * this.BP_AMPLITUDE_COEFFICIENT;
-    
-    // Componente de rigidez arterial (aumenta con la edad)
-    // Simulamos basado en características de la señal PPG
-    const stiffnessFactor = this.calculateArterialStiffnessScore(values, peakIndices, valleyIndices) * 
-                         this.BP_STIFFNESS_FACTOR;
-    
-    // 7. Cálculo final de presión
-    // Aplicamos todos los factores a las líneas base
-    let instantSystolic = this.BP_BASELINE_SYSTOLIC + pttFactor + ampFactor + stiffnessFactor;
-    let instantDiastolic = this.BP_BASELINE_DIASTOLIC + (pttFactor * 0.65) + (ampFactor * 0.35) + (stiffnessFactor * 0.4);
-    
-    // Forzar variación fisiológica basada en el ciclo de medición
-    // Esto emula las variaciones naturales que ocurren en la presión arterial
-    // No es aleatorio, sino basado en el contador de mediciones para crear patrones
-    const cyclePosition = (this.measurementCount % 35) / 35; // 0 a 1 en ciclos de 35 mediciones
-    const cycleVariation = Math.sin(cyclePosition * Math.PI * 2);
-    
-    // Aplicar variación basada en el ciclo (más pronunciada cada X mediciones)
-    const systolicCycleEffect = cycleVariation * 3; // +/- 3 mmHg
-    const diastolicCycleEffect = cycleVariation * 2; // +/- 2 mmHg
-    
-    instantSystolic += systolicCycleEffect;
-    instantDiastolic += diastolicCycleEffect;
-    
-    // ELIMINADO: Limitar valores a rangos fisiológicos más conservadores
-    
-    // ELIMINADO: Garantizar presión diferencial adecuada (sistólica - diastólica)
-    
-    // Añadir pequeñas fluctuaciones fisiológicas basadas en patrones de respiración
-    // (Variación respiratoria natural en presión arterial)
-    const breathingCycle = Math.sin((this.measurementCount % 15) / 15 * Math.PI * 2);
-    const breathingEffectSystolic = breathingCycle * 1.2; // Efecto respiratorio en sistólica
-    const breathingEffectDiastolic = breathingCycle * 0.8; // Efecto respiratorio en diastólica
-    
-    instantSystolic += breathingEffectSystolic;
-    instantDiastolic += breathingEffectDiastolic;
-    
-    // 8. Análisis de estabilidad y filtrado adaptativo
-    
-    // Añadir nuevos valores al buffer
-    this.systolicBuffer.push(instantSystolic);
-    this.diastolicBuffer.push(instantDiastolic);
-    
-    if (this.systolicBuffer.length > this.BP_BUFFER_SIZE) {
-      this.systolicBuffer.shift();
-      this.diastolicBuffer.shift();
-    }
+    this.lastValidSystolic = Math.round(smoothedSystolic);
+    this.lastValidDiastolic = Math.round(smoothedDiastolic);
 
-    // Calcular mediana para ambas presiones (más robusta que la media)
-    const sortedSystolic = [...this.systolicBuffer].sort((a, b) => a - b);
-    const sortedDiastolic = [...this.diastolicBuffer].sort((a, b) => a - b);
-    
-    const medianSystolic = sortedSystolic[Math.floor(sortedSystolic.length / 2)];
-    const medianDiastolic = sortedDiastolic[Math.floor(sortedDiastolic.length / 2)];
-    
-    // Aplicar filtro exponencial adaptativo con factor basado en calidad
-    // Mayor calidad = mayor peso a valor actual
-    const adaptiveAlpha = isQualityGood ? 
-                        Math.min(0.55, Math.max(0.25, overallQuality)) : 
-                        this.BP_SMOOTHING_ALPHA;
-    
-    // Inicializar valores finales
-    let finalSystolic, finalDiastolic;
-    
-    // Si tenemos valores previos válidos, aplicar suavizado
-    if (this.lastValidSystolic > 0 && this.lastValidDiastolic > 0) {
-      finalSystolic = Math.round(adaptiveAlpha * medianSystolic + (1 - adaptiveAlpha) * this.lastValidSystolic);
-      finalDiastolic = Math.round(adaptiveAlpha * medianDiastolic + (1 - adaptiveAlpha) * this.lastValidDiastolic);
-      
-      // Añadir variación extra basada en patrones de medición para evitar valores estáticos
-      if (this.measurementCount % 5 === 0) { // Cada 5 mediciones
-        const patternVariationSys = ((this.measurementCount % 15) / 15) * 3 - 1.5; // -1.5 a 1.5
-        const patternVariationDia = ((this.measurementCount % 12) / 12) * 2 - 1; // -1 a 1
-        
-        finalSystolic += patternVariationSys;
-        finalDiastolic += patternVariationDia;
-      }
-      
-    } else {
-      // Sin valores previos, usar medianas directamente
-      finalSystolic = Math.round(medianSystolic);
-      finalDiastolic = Math.round(medianDiastolic);
-    }
-    
-    // ELIMINADO: Verificación conservadora final: asegurar valores en rangos normales típicos
-    
-    // 9. Control de calidad final
-    
-    // Si la calidad es buena, actualizar valores válidos
-    if (isQualityGood) {
-      this.lastValidSystolic = finalSystolic;
-      this.lastValidDiastolic = finalDiastolic;
-      this.lastBpTimestamp = currentTime;
-      this.bpReadyForOutput = true;
-      
-      console.log('BP de alta calidad calculada:', {
-        systolic: finalSystolic,
-        diastolic: finalDiastolic,
-        quality: overallQuality,
-        ptt: normalizedPTT,
-        medidas: this.measurementCount
-      });
-    } else if (currentTime - this.lastBpTimestamp > 8000) {
-      // Si ha pasado mucho tiempo desde la última medición válida,
-      // actualizar valores aunque la calidad no sea óptima
-      this.lastValidSystolic = finalSystolic;
-      this.lastValidDiastolic = finalDiastolic;
-      this.lastBpTimestamp = currentTime;
-      
-      console.log('BP actualizada (calidad subóptima):', {
-        systolic: finalSystolic,
-        diastolic: finalDiastolic,
-        quality: overallQuality,
-        medidas: this.measurementCount
-      });
-    }
-    
-    // Si aún no tenemos valores listos, pero tenemos valores en el buffer
-    if (!this.bpReadyForOutput && this.systolicBuffer.length >= 5) {
-      this.bpReadyForOutput = true;
-    }
-    
-    // Devolver resultados
-    return {
-      systolic: this.bpReadyForOutput ? finalSystolic : 0,
-      diastolic: this.bpReadyForOutput ? finalDiastolic : 0
-    };
+    return { systolic: this.lastValidSystolic, diastolic: this.lastValidDiastolic };
   }
 
-  private enhancedPeakDetection(values: number[]): { 
-    peakIndices: number[]; 
-    valleyIndices: number[];
-    signalQuality: number;
-  } {
-    const peakIndices: number[] = [];
-    const valleyIndices: number[] = [];
-    const signalStrengths: number[] = [];
-    
-    // Implementación avanzada que considera múltiples factores para detección robusta
-    
-    // 1. Normalizar señal para análisis
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    const range = max - min;
-    
-    // Calcular señal normalizada
-    const normalizedValues = range > 0 ? 
-                          values.map(v => (v - min) / range) : 
-                          values.map(() => 0.5);
-    
-    // 2. Calcular primera derivada (cambio de pendiente)
-    const derivatives: number[] = [];
-    for (let i = 1; i < normalizedValues.length; i++) {
-      derivatives.push(normalizedValues[i] - normalizedValues[i-1]);
-    }
-    derivatives.push(0); // Añadir 0 al final para mantener misma longitud
-    
-    // 3. Detección de picos con criterios avanzados
-    for (let i = 2; i < normalizedValues.length - 2; i++) {
-      const v = normalizedValues[i];
-      
-      // Criterio de pico: mayor que puntos adyacentes y pendiente cambia de positiva a negativa
-      if (v > normalizedValues[i - 1] && 
-          v > normalizedValues[i - 2] && 
-          v > normalizedValues[i + 1] && 
-          v > normalizedValues[i + 2] &&
-          derivatives[i-1] > 0 && derivatives[i] < 0) {
-        
-        // ELIMINADO: Verificar altura mínima del pico (25% del rango)
-        peakIndices.push(i);
-        
-        // Calcular "fuerza" del pico para evaluación de calidad
-        const peakStrength = (v - normalizedValues[i-2]) + (v - normalizedValues[i+2]);
-        signalStrengths.push(peakStrength);
-      }
-      
-      // Criterio de valle: menor que puntos adyacentes y pendiente cambia de negativa a positiva
-      if (v < normalizedValues[i - 1] && 
-          v < normalizedValues[i - 2] && 
-          v < normalizedValues[i + 1] && 
-          v < normalizedValues[i + 2] &&
-          derivatives[i-1] < 0 && derivatives[i] > 0) {
-        
-        valleyIndices.push(i);
-      }
-    }
-    
-    // 4. Análisis de calidad de señal
-    let signalQuality = 0;
-    
-    if (peakIndices.length >= 3) {
-      // Calcular regularidad de intervalos entre picos
-      const peakIntervals: number[] = [];
-      for (let i = 1; i < peakIndices.length; i++) {
-        peakIntervals.push(peakIndices[i] - peakIndices[i-1]);
-      }
-      
-      const intervalMean = peakIntervals.reduce((sum, val) => sum + val, 0) / peakIntervals.length;
-      const intervalVariation = peakIntervals.map(interval => 
-                                 Math.abs(interval - intervalMean) / intervalMean);
-      
-      const meanIntervalVariation = intervalVariation.reduce((sum, val) => sum + val, 0) / 
-                                 intervalVariation.length;
-      
-      // Calcular consistencia de amplitudes de picos
-      const peakValues = peakIndices.map(idx => normalizedValues[idx]);
-      const peakValueMean = peakValues.reduce((sum, val) => sum + val, 0) / peakValues.length;
-      const peakValueVariation = peakValues.map(val => 
-                               Math.abs(val - peakValueMean) / peakValueMean);
-      
-      const meanPeakVariation = peakValueVariation.reduce((sum, val) => sum + val, 0) / 
-                             peakValueVariation.length;
-      
-      // Combinar factores para puntuación final de calidad
-      // 1.0 = perfecta, 0.0 = inutilizable
-      const intervalConsistency = 1 - Math.min(1, meanIntervalVariation * 2);
-      const amplitudeConsistency = 1 - Math.min(1, meanPeakVariation * 2);
-      const peakCount = Math.min(1, peakIndices.length / 8); // 8+ picos = máxima puntuación
-      
-      signalQuality = intervalConsistency * 0.5 + amplitudeConsistency * 0.3 + peakCount * 0.2;
-    }
-    
-    return { peakIndices, valleyIndices, signalQuality };
-  }
-
-  private calculateArterialStiffnessScore(
-    values: number[],
-    peakIndices: number[],
-    valleyIndices: number[]
-  ): number {
-    // Implementación basada en análisis morfológico de onda PPG
-    // Mayor puntuación = mayor rigidez arterial = mayor contribución a PA
-    
-    if (peakIndices.length < 3 || valleyIndices.length < 3) {
-      return 5; // Valor por defecto de rigidez media
-    }
-    
-    try {
-      // Analizar forma de onda completa
-      const pulseWaveforms: number[][] = [];
-      
-      // Extraer pulsos individuales
-      for (let i = 0; i < Math.min(peakIndices.length - 1, 5); i++) {
-        const startIdx = peakIndices[i];
-        const endIdx = peakIndices[i + 1];
-        
-        if (endIdx - startIdx > 5 && endIdx - startIdx < 50) {
-          // Extraer y normalizar pulso
-          const pulse = values.slice(startIdx, endIdx);
-          const min = Math.min(...pulse);
-          const max = Math.max(...pulse);
-          const range = max - min;
-          
-          if (range > 0) {
-            const normalizedPulse = pulse.map(v => (v - min) / range);
-            pulseWaveforms.push(normalizedPulse);
-          }
-        }
-      }
-      
-      if (pulseWaveforms.length === 0) {
-        return 5;
-      }
-      
-      // Características que indican rigidez arterial:
-      let dicroticNotchScores = [];
-      let decayRateScores = [];
-      
-      for (const pulse of pulseWaveforms) {
-        // 1. Buscar muesca dicrótica (secundaria) - característica de arterias elásticas jóvenes
-        let hasDicroticNotch = false;
-        let dicroticNotchHeight = 0;
-        
-        const firstThird = Math.floor(pulse.length / 3);
-        const secondThird = Math.floor(2 * pulse.length / 3);
-        
-        // Buscar valle local en el segundo tercio del pulso
-        for (let i = firstThird + 1; i < secondThird - 1; i++) {
-          if (pulse[i] < pulse[i-1] && pulse[i] < pulse[i+1]) {
-            hasDicroticNotch = true;
-            dicroticNotchHeight = 1 - pulse[i]; // Distancia desde valle hasta tope
-            break;
-          }
-        }
-        
-        // Puntuación 0-10 basada en presencia y profundidad de muesca dicrótica
-        // (menor profundidad = mayor rigidez)
-        const notchScore = hasDicroticNotch ? 10 - (dicroticNotchHeight * 10) : 10;
-        dicroticNotchScores.push(notchScore);
-        
-        // 2. Tasa de decay (caída) - pendiente desde pico hasta fin
-        // Las arterias rígidas muestran caída más rápida
-        const decaySegment = pulse.slice(0, Math.floor(pulse.length * 0.7));
-        
-        let maxSlope = 0;
-        for (let i = 1; i < decaySegment.length; i++) {
-          const slope = decaySegment[i-1] - decaySegment[i];
-          if (slope > maxSlope) maxSlope = slope;
-        }
-        
-        // Puntuación 0-10 basada en pendiente máxima (mayor pendiente = mayor rigidez)
-        const decayScore = Math.min(10, maxSlope * 50);
-        decayRateScores.push(decayScore);
-      }
-      
-      // Combinar puntuaciones (promedios)
-      const avgNotchScore = dicroticNotchScores.reduce((sum, val) => sum + val, 0) / 
-                         dicroticNotchScores.length;
-      
-      const avgDecayScore = decayRateScores.reduce((sum, val) => sum + val, 0) / 
-                         decayRateScores.length;
-      
-      // Puntuación final compuesta (0-10)
-      const combinedScore = (avgNotchScore * 0.6) + (avgDecayScore * 0.4);
-      
-      // Escalar a rango útil para cálculo de presión (0-10)
-      return combinedScore;
-      
-    } catch (err) {
-      console.error("Error en cálculo de rigidez arterial:", err);
-      return 5; // Valor por defecto
-    }
-  }
-
-  private localFindPeaksAndValleys(values: number[]) {
-    const peakIndices: number[] = [];
-    const valleyIndices: number[] = [];
-
-    for (let i = 2; i < values.length - 2; i++) {
-      const v = values[i];
-      if (
-        v > values[i - 1] &&
-        v > values[i - 2] &&
-        v > values[i + 1] &&
-        v > values[i + 2]
-      ) {
-        peakIndices.push(i);
-      }
-      if (
-        v < values[i - 1] &&
-        v < values[i - 2] &&
-        v < values[i + 1] &&
-        v < values[i + 2]
-      ) {
-        valleyIndices.push(i);
-      }
-    }
-    return { peakIndices, valleyIndices };
+  private calculateMedian(values: number[]): number {
+    const sorted = [...values].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
   }
 
   private calculateAmplitude(
@@ -1121,5 +615,31 @@ export class VitalSignsProcessor {
     const smaBuffer = this.ppgValues.slice(-this.SMA_WINDOW);
     smaBuffer.push(value);
     return smaBuffer.reduce((a, b) => a + b, 0) / smaBuffer.length;
+  }
+
+  private localFindPeaksAndValleys(values: number[]) {
+    const peakIndices: number[] = [];
+    const valleyIndices: number[] = [];
+
+    for (let i = 2; i < values.length - 2; i++) {
+      const v = values[i];
+      if (
+        v > values[i - 1] &&
+        v > values[i - 2] &&
+        v > values[i + 1] &&
+        v > values[i + 2]
+      ) {
+        peakIndices.push(i);
+      }
+      if (
+        v < values[i - 1] &&
+        v < values[i - 2] &&
+        v < values[i + 1] &&
+        v < values[i + 2]
+      ) {
+        valleyIndices.push(i);
+      }
+    }
+    return { peakIndices, valleyIndices };
   }
 }
