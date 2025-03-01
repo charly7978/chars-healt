@@ -10,7 +10,20 @@ const config: CapacitorConfig = {
     cleartext: true
   },
   android: {
-    path: './android'
+    path: './android',
+    useLegacyBridge: true,
+    appendUserAgent: 'CharsHealth App',
+    permissions: [
+      "android.permission.CAMERA",
+      "android.permission.FLASHLIGHT",
+      "android.permission.MODIFY_AUDIO_SETTINGS"
+    ]
+  },
+  plugins: {
+    PermissionsAndroid: {
+      camera: true,
+      microphone: true
+    }
   }
 };
 
