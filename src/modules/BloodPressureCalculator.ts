@@ -2,15 +2,15 @@ import { calculateStandardDeviation, enhancedPeakDetection } from '../utils/sign
 
 export class BloodPressureCalculator {
   // Constants for blood pressure calculation
-  private readonly BP_BASELINE_SYSTOLIC = 130; // Ajustado para valores más realistas
-  private readonly BP_BASELINE_DIASTOLIC = 85; // Ajustado para valores más realistas
-  private readonly BP_PTT_COEFFICIENT = 0.20; // Ajustado para reflejar variaciones más realistas
-  private readonly BP_AMPLITUDE_COEFFICIENT = 0.30; // Increased for more sensitivity
-  private readonly BP_STIFFNESS_FACTOR = 0.08; // Increased from 0.06 for more variation
-  private readonly BP_SMOOTHING_ALPHA = 0.18; // Reduced for more natural fluctuations
-  private readonly BP_QUALITY_THRESHOLD = 0.50;
-  private readonly BP_CALIBRATION_WINDOW = 6;
-  private readonly BP_BUFFER_SIZE = 8;
+  private readonly BP_BASELINE_SYSTOLIC = 0; // Eliminado valor base fijo
+  private readonly BP_BASELINE_DIASTOLIC = 0; // Eliminado valor base fijo
+  private readonly BP_PTT_COEFFICIENT = 0.50; // Aumentado para mayor sensibilidad
+  private readonly BP_AMPLITUDE_COEFFICIENT = 0.60; // Aumentado para mayor sensibilidad
+  private readonly BP_STIFFNESS_FACTOR = 0.15; // Aumentado para mayor variación
+  private readonly BP_SMOOTHING_ALPHA = 0.25; // Aumentado para mayor respuesta
+  private readonly BP_QUALITY_THRESHOLD = 0.40; // Reducido para aceptar más señales
+  private readonly BP_CALIBRATION_WINDOW = 10;
+  private readonly BP_BUFFER_SIZE = 12;
 
   // State variables
   private systolicBuffer: number[] = [];
@@ -158,15 +158,15 @@ export class BloodPressureCalculator {
   } {
     this.measurementCount++;
 
-    // Si no hay suficientes datos, devolver ceros para mostrar "EVALUANDO"
-    if (values.length < 30) {
+    // Reducir el requisito mínimo de datos para comenzar a medir
+    if (values.length < 20) {
       return { systolic: 0, diastolic: 0 };
     }
 
     const { peakIndices, valleyIndices, signalQuality } = enhancedPeakDetection(values);
 
-    // Si la calidad de la señal es baja o no hay suficientes picos/valles, devolver ceros
-    if (signalQuality < this.BP_QUALITY_THRESHOLD || peakIndices.length < 3 || valleyIndices.length < 3) {
+    // Reducir el umbral de calidad para aceptar más señales
+    if (signalQuality < 0.30 || peakIndices.length < 2 || valleyIndices.length < 2) {
       return { systolic: 0, diastolic: 0 };
     }
 
@@ -189,28 +189,30 @@ export class BloodPressureCalculator {
     const pttStdDev = calculateStandardDeviation(pttValues);
     const pttVariability = pttStdDev / avgPTT;
     
-    // Si la variabilidad es muy alta, la señal no es confiable
-    if (pttVariability > 0.4) {
+    // Aumentar el umbral de variabilidad para aceptar más señales
+    if (pttVariability > 0.6) {
       return { systolic: 0, diastolic: 0 };
     }
     
     // Calcular el índice de rigidez arterial
     const stiffnessScore = this.calculateArterialStiffnessScore(values, peakIndices, valleyIndices);
     
-    // Calcular presión arterial basada en PTT y rigidez arterial
-    const systolic = Math.round(this.BP_BASELINE_SYSTOLIC - 
-                               (avgPTT * this.BP_PTT_COEFFICIENT) + 
-                               (stiffnessScore * this.BP_STIFFNESS_FACTOR));
-                               
-    const diastolic = Math.round(this.BP_BASELINE_DIASTOLIC - 
-                                (avgPTT * this.BP_PTT_COEFFICIENT * 0.6) + 
-                                (stiffnessScore * this.BP_STIFFNESS_FACTOR * 0.5));
+    // NUEVA FÓRMULA SIN VALORES BASE FIJOS DE 120/80
+    // Usar el PTT directamente para calcular la presión
+    const normalizedPTT = Math.min(Math.max(avgPTT, 600), 1200); // Limitar PTT entre 600-1200ms
+    
+    // Fórmula inversa: presión más alta con PTT más bajo
+    const systolicBase = 180 - (normalizedPTT - 600) * 0.075;
+    const diastolicBase = 110 - (normalizedPTT - 600) * 0.05;
+    
+    // Ajustar con rigidez arterial
+    const systolic = Math.round(systolicBase + (stiffnessScore - 5) * 2);
+    const diastolic = Math.round(diastolicBase + (stiffnessScore - 5) * 1.5);
 
-    // Validación estricta de los valores calculados
-    if (systolic >= 90 && systolic <= 180 && 
-        diastolic >= 60 && diastolic <= 110 && 
-        systolic - diastolic >= 20 && 
-        systolic - diastolic <= 60) {
+    // Validación menos estricta para permitir más mediciones
+    if (systolic >= 80 && systolic <= 190 && 
+        diastolic >= 50 && diastolic <= 120 && 
+        systolic - diastolic >= 15) {
       
       // Actualizar los valores válidos
       this.lastValidSystolic = systolic;

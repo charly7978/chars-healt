@@ -66,16 +66,11 @@ export class VitalSignsProcessor {
     let bp;
     let pressure: string;
 
-    if (this.ppgValues.length >= 100) {
-      bp = this.bpCalculator.calculate(this.ppgValues.slice(-100));
+    if (this.ppgValues.length >= 50) { // Reducido de 150 a 50 para comenzar a medir antes
+      bp = this.bpCalculator.calculate(this.ppgValues.slice(-50));
       if (bp.systolic <= 0 || bp.diastolic <= 0) {
-        // Si no hay valores válidos en esta medición, verificar si hay valores válidos anteriores
-        const lastValidPressure = this.bpCalculator.getLastValidPressure();
-        if (lastValidPressure !== "0/0") {
-          pressure = lastValidPressure;
-        } else {
-          pressure = "EVALUANDO";
-        }
+        // Si no hay valores válidos en esta medición, mostrar EVALUANDO
+        pressure = "EVALUANDO";
       } else {
         pressure = `${bp.systolic}/${bp.diastolic}`;
       }
