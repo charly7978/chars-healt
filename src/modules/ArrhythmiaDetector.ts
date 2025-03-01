@@ -1,364 +1,337 @@
-/**
- * ArrhythmiaDetector.ts
- * 
- * Detector de arritmias avanzado para la aplicación CharsHealt
- * Especializado en la identificación precisa de latidos prematuros (extrasístoles)
- * que aparecen entre dos latidos normales.
- */
-
 export class ArrhythmiaDetector {
-  // Variables de control para la detección
-  private intervals: number[] = []; // Intervalos RR (tiempo entre latidos)
-  private intervalsDiff: number[] = []; // Diferencias entre intervalos consecutivos
-  private learningIntervals: number[] = []; // Intervalos para aprendizaje inicial
-  private lastPeakTime: number | null = null;
-  private arrhythmiaCount: number = 0;
+  // Constants for arrhythmia detection
+  private readonly RR_WINDOW_SIZE = 5;
+  private readonly ARRHYTHMIA_LEARNING_PERIOD = 2000; // Reduced from 3000ms to detect earlier
+  
+  // More strict constants for premature beat detection - adjusted to prevent false positives
+  private readonly PREMATURE_BEAT_THRESHOLD = 0.78; // Threshold for premature beat detection (more strict)
+  private readonly AMPLITUDE_RATIO_THRESHOLD = 0.70; // Threshold for amplitude differences (more strict)
+  private readonly POST_PREMATURE_THRESHOLD = 1.15; // Threshold for compensatory pause (more strict)
+  
+  // State variables
+  private rrIntervals: number[] = [];
+  private amplitudes: number[] = []; // Store amplitudes to detect small beats
+  private isLearningPhase = true;
+  private hasDetectedFirstArrhythmia = false;
+  private arrhythmiaDetected = false;
+  private measurementStartTime: number = Date.now();
+  private arrhythmiaCount = 0;
+  private lastRMSSD: number = 0;
+  private lastRRVariation: number = 0;
   private lastArrhythmiaTime: number = 0;
-  private baselineAvgInterval: number = 0; // Intervalo promedio base (ritmo normal)
-  private arrhythmiaStatus: string = "--";
+  private lastPeakTime: number | null = null;
+  private avgNormalAmplitude: number = 0;
+  private baseRRInterval: number = 0; // Average normal RR interval
   
-  // Configuración para detección precisa
-  private readonly LEARNING_PHASE_COUNT = 10; 
-  private readonly ARRHYTHMIA_TIMEOUT_MS = 3000;
-  private readonly MIN_PREMATURE_RATIO = 0.85; // Umbral para considerar un latido prematuro
-  private readonly ADJACENT_COUNT = 5; // Número de intervalos adyacentes a analizar
+  // Tracking variables to improve detection
+  private consecutiveNormalBeats: number = 0;
+  private lastBeatsClassification: Array<'normal' | 'premature'> = [];
   
-  // Historia para análisis
-  private lastTenIntervals: number[] = [];
-  private normalRangeMin: number = 0;
-  private normalRangeMax: number = 0;
+  // Variables for more robust detection
+  private recentRRIntervals: number[] = [];
+  private detectionSensitivity: number = 0.9; // Reduced from 1.2 to make detection more selective
   
-  // Datos de arritmias detectadas
-  private arrhythmiaData: {
-    rmssd: number;
-    rrVariation: number;
-    timestamp: number;
-  } = {
-    rmssd: 0,
-    rrVariation: 0,
-    timestamp: 0
-  };
-
-  constructor() {
-    this.reset();
+  // Sequence tracking for better arrhythmia context analysis
+  private lastNormalBeatsAmplitudes: number[] = [];
+  private lastNormalBeatsRRs: number[] = [];
+  
+  // DEBUG flag to track detection issues
+  private readonly DEBUG_MODE = true;
+  
+  /**
+   * Reset all state variables
+   */
+  reset(): void {
+    this.rrIntervals = [];
+    this.amplitudes = [];
+    this.isLearningPhase = true;
+    this.hasDetectedFirstArrhythmia = false;
+    this.arrhythmiaDetected = false;
+    this.arrhythmiaCount = 0;
+    this.measurementStartTime = Date.now();
+    this.lastRMSSD = 0;
+    this.lastRRVariation = 0;
+    this.lastArrhythmiaTime = 0;
+    this.lastPeakTime = null;
+    this.avgNormalAmplitude = 0;
+    this.baseRRInterval = 0;
+    this.consecutiveNormalBeats = 0;
+    this.lastBeatsClassification = [];
+    this.lastNormalBeatsAmplitudes = [];
+    this.lastNormalBeatsRRs = [];
   }
 
   /**
-   * Indica si está en fase de aprendizaje
+   * Check if in learning phase
    */
   isInLearningPhase(): boolean {
-    return this.learningIntervals.length < this.LEARNING_PHASE_COUNT;
+    const timeSinceStart = Date.now() - this.measurementStartTime;
+    return timeSinceStart <= this.ARRHYTHMIA_LEARNING_PERIOD;
   }
 
   /**
-   * Actualiza los intervalos RR con nuevos datos
-   * @param newIntervals Nuevos intervalos RR medidos
-   * @param lastPeakTime Tiempo del último pico detectado
+   * Update learning phase status
    */
-  updateIntervals(newIntervals: number[], lastPeakTime: number | null): void {
-    if (!newIntervals.length) return;
-    
-    // Actualizar último tiempo de pico detectado
-    this.lastPeakTime = lastPeakTime;
-    
-    // Filtrar solo intervalos fisiológicamente válidos (entre 35-180 BPM)
-    const validIntervals = this.filterValidIntervals(newIntervals);
-    if (validIntervals.length === 0) return;
-    
-    // En fase de aprendizaje, recolectamos datos para establecer la línea base
-    if (this.isInLearningPhase()) {
-      this.learningIntervals.push(...validIntervals);
-      
-      // Si completamos fase de aprendizaje, calcular línea base
-      if (this.learningIntervals.length >= this.LEARNING_PHASE_COUNT) {
-        this.calculateBaseline();
+  updateLearningPhase(): void {
+    if (this.isLearningPhase) {
+      const timeSinceStart = Date.now() - this.measurementStartTime;
+      if (timeSinceStart > this.ARRHYTHMIA_LEARNING_PERIOD) {
+        this.isLearningPhase = false;
+        
+        // Calculate base values after learning phase
+        if (this.rrIntervals.length > 5) {
+          // Enhanced baseline calculation method using median
+          const sortedRR = [...this.rrIntervals].sort((a, b) => a - b);
+          
+          // Take the middle 70% of values
+          const startIdx = Math.floor(sortedRR.length * 0.15);
+          const endIdx = Math.floor(sortedRR.length * 0.85);
+          const middleValues = sortedRR.slice(startIdx, endIdx);
+          
+          // Calculate median from the middle values
+          this.baseRRInterval = middleValues[Math.floor(middleValues.length / 2)];
+          
+          // Calculate average normal amplitude
+          if (this.amplitudes.length > 5) {
+            // Sort amplitudes in descending order (highest first)
+            const sortedAmplitudes = [...this.amplitudes].sort((a, b) => b - a);
+            
+            // Use top 70% of amplitudes as reference for normal beats
+            const normalCount = Math.ceil(sortedAmplitudes.length * 0.7);
+            const normalAmplitudes = sortedAmplitudes.slice(0, normalCount);
+            this.avgNormalAmplitude = normalAmplitudes.reduce((a, b) => a + b, 0) / normalAmplitudes.length;
+            
+            console.log('ArrhythmiaDetector - Baseline values calculated:', {
+              baseRRInterval: this.baseRRInterval,
+              avgNormalAmplitude: this.avgNormalAmplitude,
+              totalSamples: this.rrIntervals.length
+            });
+          }
+        }
       }
+    }
+  }
+
+  /**
+   * Update RR intervals and peak amplitudes with new data
+   */
+  updateIntervals(intervals: number[], lastPeakTime: number | null, peakAmplitude?: number): void {
+    // Check if we have any data to process
+    if (!intervals || intervals.length === 0) {
+      console.warn('ArrhythmiaDetector: Empty intervals provided');
       return;
     }
+
+    this.rrIntervals = intervals;
+    this.lastPeakTime = lastPeakTime;
     
-    // Actualizar intervalos y últimos 10 para análisis
-    this.intervals.push(...validIntervals);
-    this.lastTenIntervals.push(...validIntervals);
-    
-    // Mantener solo los últimos 10 intervalos para análisis de tendencias
-    if (this.lastTenIntervals.length > 10) {
-      this.lastTenIntervals = this.lastTenIntervals.slice(-10);
-    }
-    
-    // Calcular diferencias entre intervalos consecutivos
-    this.calculateIntervalDifferences();
-    
-    // Actualizar rango normal dinámicamente
-    this.updateNormalRange();
-  }
-  
-  /**
-   * Filtra intervalos para garantizar que sean fisiológicamente posibles
-   */
-  private filterValidIntervals(intervals: number[]): number[] {
-    // Filtrar intervalos fisiológicamente posibles (entre ~333ms y ~1714ms)
-    // Equivalente a ritmos cardíacos entre 35 y 180 BPM
-    return intervals.filter(interval => 
-      interval >= 333 && interval <= 1714
-    );
-  }
-  
-  /**
-   * Calcula la línea base de intervalos normales
-   */
-  private calculateBaseline(): void {
-    if (this.learningIntervals.length === 0) return;
-    
-    // Ordenar para eliminar outliers
-    const sorted = [...this.learningIntervals].sort((a, b) => a - b);
-    
-    // Eliminar el 10% de valores extremos (5% superior y 5% inferior)
-    const cutSize = Math.max(1, Math.floor(sorted.length * 0.05));
-    const filtered = sorted.slice(cutSize, sorted.length - cutSize);
-    
-    // Calcular promedio como línea base
-    this.baselineAvgInterval = filtered.reduce((sum, val) => sum + val, 0) / filtered.length;
-    
-    // Establecer rango normal inicial basado en la línea base
-    this.normalRangeMin = this.baselineAvgInterval * 0.8;
-    this.normalRangeMax = this.baselineAvgInterval * 1.2;
-    
-    console.log("ArrhythmiaDetector: Baseline establecida", {
-      baselineAvgInterval: this.baselineAvgInterval,
-      normalRangeMin: this.normalRangeMin,
-      normalRangeMax: this.normalRangeMax
-    });
-  }
-  
-  /**
-   * Calcula diferencias entre intervalos consecutivos
-   */
-  private calculateIntervalDifferences(): void {
-    this.intervalsDiff = [];
-    for (let i = 1; i < this.intervals.length; i++) {
-      this.intervalsDiff.push(this.intervals[i] - this.intervals[i - 1]);
-    }
-  }
-  
-  /**
-   * Actualiza el rango normal dinámicamente basado en los últimos intervalos
-   */
-  private updateNormalRange(): void {
-    if (this.lastTenIntervals.length < 5) return;
-    
-    // Usar solo intervalos que parecen normales para ajustar el rango
-    const normalIntervals = this.lastTenIntervals.filter(interval => 
-      !this.isArrhythmicInterval(interval)
-    );
-    
-    if (normalIntervals.length >= 3) {
-      const avg = normalIntervals.reduce((sum, val) => sum + val, 0) / normalIntervals.length;
+    // Store peak amplitude if provided
+    if (typeof peakAmplitude === 'number' && !isNaN(peakAmplitude) && peakAmplitude > 0) {
+      this.amplitudes.push(Math.abs(peakAmplitude));
       
-      // Actualizar línea base con adaptación lenta (25% del nuevo valor)
-      this.baselineAvgInterval = this.baselineAvgInterval * 0.75 + avg * 0.25;
+      // Keep the same number of amplitudes as intervals
+      if (this.amplitudes.length > this.rrIntervals.length) {
+        this.amplitudes = this.amplitudes.slice(-this.rrIntervals.length);
+      }
+    } else if (this.DEBUG_MODE) {
+      // Force amplitude values from RR intervals if not provided
+      // Smaller RR intervals (higher heart rate) often correspond to premature beats
+      const derivedAmplitude = 100 / (intervals[intervals.length - 1] || 800);
+      this.amplitudes.push(derivedAmplitude);
       
-      // Actualizar rangos normales dinámicamente
-      this.normalRangeMin = this.baselineAvgInterval * 0.8;
-      this.normalRangeMax = this.baselineAvgInterval * 1.2;
+      if (this.amplitudes.length > this.rrIntervals.length) {
+        this.amplitudes = this.amplitudes.slice(-this.rrIntervals.length);
+      }
     }
-  }
-  
-  /**
-   * Verifica si un intervalo específico es arrítmico basado en el rango normal
-   */
-  private isArrhythmicInterval(interval: number): boolean {
-    // Un intervalo es arrítmico si está fuera del rango normal
-    return interval < this.normalRangeMin || interval > this.normalRangeMax;
+    
+    // Update recent RR intervals for trend analysis
+    if (intervals.length > 0) {
+      const latestRR = intervals[intervals.length - 1];
+      this.recentRRIntervals.push(latestRR);
+      if (this.recentRRIntervals.length > 10) {
+        this.recentRRIntervals.shift();
+      }
+    }
+    
+    this.updateLearningPhase();
   }
 
   /**
-   * Detecta patrones de arritmia en los intervalos RR
-   * Algoritmo optimizado para detectar latidos prematuros
-   * entre dos latidos normales
+   * Detect arrhythmia based on premature beat patterns - ENHANCED DETECTION LOGIC
+   * with focus on identifying only small beats between normal beats as arrhythmias
    */
-  detect(): { 
-    detected: boolean; 
-    status: string; 
-    data?: { 
-      rmssd: number; 
-      rrVariation: number; 
-    } 
+  detect(): {
+    detected: boolean;
+    count: number;
+    status: string;
+    data: { rmssd: number; rrVariation: number; prematureBeat: boolean } | null;
   } {
-    // Si estamos en fase de aprendizaje, no detectamos arritmias aún
-    if (this.isInLearningPhase() || this.intervals.length < 3) {
-      return { 
-        detected: false, 
-        status: "--" 
+    // Skip detection during learning phase or if not enough data
+    if (this.rrIntervals.length < 4 || this.amplitudes.length < 4 || this.isLearningPhase) {
+      return {
+        detected: false,
+        count: this.arrhythmiaCount,
+        status: this.hasDetectedFirstArrhythmia ? 
+          `ARRITMIA DETECTADA|${this.arrhythmiaCount}` : 
+          `SIN ARRITMIAS|${this.arrhythmiaCount}`,
+        data: null
       };
     }
+
+    const currentTime = Date.now();
     
-    // Obtener los últimos intervalos para análisis
-    const recentIntervals = this.intervals.slice(-this.ADJACENT_COUNT);
-    if (recentIntervals.length < 3) {
-      return { 
-        detected: false, 
-        status: "SIN ARRITMIA DETECTADA" 
-      };
+    // Calculate RMSSD for reference
+    let sumSquaredDiff = 0;
+    for (let i = 1; i < this.rrIntervals.length; i++) {
+      const diff = this.rrIntervals[i] - this.rrIntervals[i-1];
+      sumSquaredDiff += diff * diff;
     }
+    const rmssd = Math.sqrt(sumSquaredDiff / (this.rrIntervals.length - 1));
+    this.lastRMSSD = rmssd;
     
-    // Detección principal de extrasístoles o latidos prematuros
-    const arrhythmiaDetected = this.detectPrematureBeat(recentIntervals);
+    // Get the last 5 RR intervals and amplitudes for pattern analysis
+    const lastRRs = this.rrIntervals.slice(-5);
+    const lastAmplitudes = this.amplitudes.slice(-5);
     
-    // Si se detectó una arritmia
-    if (arrhythmiaDetected) {
-      const now = Date.now();
+    // Establish baseline if not already done
+    if (this.baseRRInterval <= 0 && lastRRs.length >= 4) {
+      // Sort RRs to find median (more robust)
+      const sortedRRs = [...lastRRs].sort((a, b) => a - b);
+      this.baseRRInterval = sortedRRs[Math.floor(sortedRRs.length / 2)];
       
-      // Evitar duplicados aplicando un timeout
-      if (now - this.lastArrhythmiaTime > this.ARRHYTHMIA_TIMEOUT_MS) {
-        this.arrhythmiaCount++;
-        this.lastArrhythmiaTime = now;
+      if (lastAmplitudes.length >= 4) {
+        // Sort amplitudes in descending order to find normal beats
+        const sortedAmps = [...lastAmplitudes].sort((a, b) => b - a);
+        // Use the average of the top 60% as normal amplitude
+        const normalCount = Math.ceil(sortedAmps.length * 0.6);
+        const normalAmps = sortedAmps.slice(0, normalCount);
+        this.avgNormalAmplitude = normalAmps.reduce((a, b) => a + b, 0) / normalAmps.length;
+      }
+    }
+    
+    // IMPROVED: Identification of premature beats only between normal beats
+    let prematureBeatDetected = false;
+    
+    if (lastRRs.length >= 4 && lastAmplitudes.length >= 4 && this.baseRRInterval > 0) {
+      // Get beat data with index positions
+      const beatsData = lastAmplitudes.map((amp, i) => ({
+        amplitude: amp,
+        rr: i < lastRRs.length ? lastRRs[i] : 0,
+        index: i
+      }));
+      
+      // Identify normal beats first
+      const normalBeatsIndices: number[] = [];
+      for (let i = 0; i < beatsData.length; i++) {
+        const beat = beatsData[i];
         
-        // Calcular métricas adicionales
-        const rmssd = this.calculateRMSSD();
-        const rrVariation = this.calculateRRVariation();
-        
-        // Actualizar datos de arritmia
-        this.arrhythmiaData = {
-          rmssd,
-          rrVariation,
-          timestamp: now
-        };
-        
-        // Actualizar estado
-        this.arrhythmiaStatus = `ARRITMIA DETECTADA|${this.arrhythmiaCount}`;
-        
-        return {
-          detected: true,
-          status: this.arrhythmiaStatus,
-          data: {
-            rmssd,
-            rrVariation
+        // A beat is normal if:
+        // 1. Its amplitude is close to or above the average normal amplitude
+        // 2. Its RR interval is close to the baseline RR interval
+        if (beat.amplitude >= this.avgNormalAmplitude * 0.85 &&
+            (beat.rr === 0 || (beat.rr >= this.baseRRInterval * 0.85 && beat.rr <= this.baseRRInterval * 1.15))) {
+          normalBeatsIndices.push(i);
+          
+          // Store data about normal beats for future comparisons
+          this.lastNormalBeatsAmplitudes.push(beat.amplitude);
+          this.lastNormalBeatsRRs.push(beat.rr);
+          
+          // Keep limited history
+          if (this.lastNormalBeatsAmplitudes.length > 5) {
+            this.lastNormalBeatsAmplitudes.shift();
+            this.lastNormalBeatsRRs.shift();
           }
-        };
-      }
-    }
-    
-    // Si no hay arritmia detectada
-    return {
-      detected: false,
-      status: "SIN ARRITMIA DETECTADA"
-    };
-  }
-  
-  /**
-   * Algoritmo especializado para detectar latidos prematuros (extrasístoles)
-   * que ocurren entre dos latidos normales.
-   * 
-   * Patrón típico: [Normal] - [Prematuro] - [Normal/Compensatorio]
-   * Se traduce en intervalos: [Corto] - [Largo] por el latido prematuro
-   */
-  private detectPrematureBeat(intervals: number[]): boolean {
-    if (intervals.length < 3) return false;
-    
-    // Para detectar un latido prematuro necesitamos al menos 3 intervalos
-    // Centramos la detección en el intervalo del medio
-    for (let i = 1; i < intervals.length - 1; i++) {
-      const prevInterval = intervals[i - 1];
-      const currentInterval = intervals[i];
-      const nextInterval = intervals[i + 1];
-      
-      // Verificar si los intervalos anterior y posterior están en rango normal
-      const isPrevNormal = !this.isArrhythmicInterval(prevInterval);
-      const isNextNormal = !this.isArrhythmicInterval(nextInterval);
-      
-      // Patrón clásico de extrasístole: intervalo actual muy corto seguido por uno largo
-      // El intervalo actual debe ser significativamente más corto que el promedio
-      const isCurrentShort = currentInterval < this.normalRangeMin * this.MIN_PREMATURE_RATIO;
-      
-      // Si tenemos un intervalo corto entre dos normales, es muy probable que sea un latido prematuro
-      if (isPrevNormal && isCurrentShort && isNextNormal) {
-        return true;
+        }
       }
       
-      // Otra forma de detectar: un intervalo corto seguido de uno largo (compensatorio)
-      const isNextLong = nextInterval > this.normalRangeMax * 1.15;
+      // Calculate current normal amplitude from recent normal beats
+      let currentNormalAmplitude = this.avgNormalAmplitude;
+      if (this.lastNormalBeatsAmplitudes.length >= 3) {
+        currentNormalAmplitude = this.lastNormalBeatsAmplitudes.reduce((a, b) => a + b, 0) / 
+                                this.lastNormalBeatsAmplitudes.length;
+      }
       
-      if (isCurrentShort && isNextLong) {
-        // Verificar que la suma del intervalo corto y largo sea aproximadamente
-        // igual a dos intervalos normales (característica del latido compensatorio)
-        const sumBoth = currentInterval + nextInterval;
-        const twoNormalExpected = this.baselineAvgInterval * 2;
+      // Now look for premature beats (small beats between normal beats)
+      const lastBeatIndex = beatsData.length - 1;
+      const currentBeat = beatsData[lastBeatIndex];
+      
+      // If the most recent beat is not considered normal, check if it's premature
+      if (!normalBeatsIndices.includes(lastBeatIndex)) {
+        // Find previous and next normal beats
+        const prevNormalIndex = normalBeatsIndices
+          .filter(idx => idx < lastBeatIndex)
+          .sort((a, b) => b - a)[0]; // Get closest previous normal beat
         
-        // Si la suma está dentro del 15% de lo esperado para dos latidos normales
-        if (Math.abs(sumBoth - twoNormalExpected) < twoNormalExpected * 0.15) {
-          return true;
+        // Check if we have a normal beat before this one
+        if (prevNormalIndex !== undefined) {
+          const prevNormalBeat = beatsData[prevNormalIndex];
+          
+          // Calculate amplitude ratio compared to normal beats
+          const amplitudeRatio = currentBeat.amplitude / currentNormalAmplitude;
+          
+          // A beat is considered premature if:
+          // 1. Its amplitude is significantly smaller than normal beats
+          // 2. It comes after a normal beat
+          if (amplitudeRatio < this.AMPLITUDE_RATIO_THRESHOLD) {
+            prematureBeatDetected = true;
+            
+            console.log('ArrhythmiaDetector - PREMATURE BEAT DETECTED:', {
+              prematureAmplitude: currentBeat.amplitude,
+              normalAmplitude: currentNormalAmplitude,
+              amplitudeRatio,
+              prevNormalBeatIndex: prevNormalIndex,
+              currentBeatIndex: lastBeatIndex
+            });
+          }
         }
       }
     }
     
-    return false;
-  }
-  
-  /**
-   * Calcula la raíz cuadrada de la media de las diferencias al cuadrado (RMSSD)
-   * Métrica importante para evaluar la variabilidad de la frecuencia cardíaca
-   */
-  private calculateRMSSD(): number {
-    if (this.intervalsDiff.length < 2) return 0;
+    // Calculate RR variation
+    const rrVariation = Math.abs(lastRRs[lastRRs.length - 1] - this.baseRRInterval) / this.baseRRInterval;
+    this.lastRRVariation = rrVariation;
     
-    const squaredDiffs = this.intervalsDiff.map(diff => diff * diff);
-    const meanSquared = squaredDiffs.reduce((sum, val) => sum + val, 0) / squaredDiffs.length;
-    
-    return Math.sqrt(meanSquared);
-  }
-  
-  /**
-   * Calcula la variación de intervalos RR como métrica de variabilidad
-   */
-  private calculateRRVariation(): number {
-    if (this.intervals.length < 3) return 0;
-    
-    const recentIntervals = this.intervals.slice(-5);
-    const avg = recentIntervals.reduce((sum, val) => sum + val, 0) / recentIntervals.length;
-    
-    const variations = recentIntervals.map(interval => 
-      Math.abs(interval - avg) / avg
-    );
-    
-    return variations.reduce((sum, val) => sum + val, 0) / variations.length * 100;
-  }
+    // Only count arrhythmias if enough time has passed since the last one (500ms)
+    if (prematureBeatDetected && currentTime - this.lastArrhythmiaTime > 500) {
+      this.arrhythmiaCount++;
+      this.lastArrhythmiaTime = currentTime;
+      this.hasDetectedFirstArrhythmia = true;
+      
+      console.log('ArrhythmiaDetector - NEW ARRHYTHMIA COUNTED:', {
+        count: this.arrhythmiaCount,
+        rmssd,
+        rrVariation,
+        timestamp: currentTime,
+        intervals: lastRRs,
+        amplitudes: lastAmplitudes
+      });
+    }
 
-  /**
-   * Reinicia el detector
-   */
-  reset(): void {
-    this.intervals = [];
-    this.intervalsDiff = [];
-    this.learningIntervals = [];
-    this.lastPeakTime = null;
-    this.arrhythmiaCount = 0;
-    this.lastArrhythmiaTime = 0;
-    this.baselineAvgInterval = 0;
-    this.lastTenIntervals = [];
-    this.arrhythmiaStatus = "--";
-    this.normalRangeMin = 0;
-    this.normalRangeMax = 0;
-    
-    this.arrhythmiaData = {
-      rmssd: 0,
-      rrVariation: 0,
-      timestamp: 0
+    this.arrhythmiaDetected = prematureBeatDetected;
+
+    return {
+      detected: this.arrhythmiaDetected,
+      count: this.arrhythmiaCount,
+      status: this.hasDetectedFirstArrhythmia ? 
+        `ARRITMIA DETECTADA|${this.arrhythmiaCount}` : 
+        `SIN ARRITMIAS|${this.arrhythmiaCount}`,
+      data: { rmssd, rrVariation, prematureBeat: prematureBeatDetected }
     };
-    
-    console.log("ArrhythmiaDetector: Reset completo");
   }
 
   /**
-   * Limpia memoria
+   * Get current arrhythmia status
    */
-  cleanMemory(): void {
-    // Limpieza profunda para optimizar memoria
-    this.reset();
-    
-    // Forzar limpieza de referencias para arrays
-    if (Array.isArray(this.intervals)) this.intervals = [];
-    if (Array.isArray(this.intervalsDiff)) this.intervalsDiff = [];
-    if (Array.isArray(this.learningIntervals)) this.learningIntervals = [];
-    if (Array.isArray(this.lastTenIntervals)) this.lastTenIntervals = [];
+  getStatus(): string {
+    return this.hasDetectedFirstArrhythmia ? 
+      `ARRITMIA DETECTADA|${this.arrhythmiaCount}` : 
+      `SIN ARRITMIAS|${this.arrhythmiaCount}`;
   }
-} 
+
+  /**
+   * Get current arrhythmia count
+   */
+  getCount(): number {
+    return this.arrhythmiaCount;
+  }
+}

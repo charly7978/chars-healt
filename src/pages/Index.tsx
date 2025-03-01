@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -8,7 +7,6 @@ import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import PermissionsHandler from "@/components/PermissionsHandler";
 import { VitalSignsRisk } from '@/utils/vitalSignsRisk';
-import deviceContextService from '@/services/DeviceContextService';
 
 interface VitalSigns {
   spo2: number;
@@ -52,10 +50,6 @@ const Index = () => {
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat, reset: resetHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
-  
-  const imageCaptureRef = useRef<ImageCapture | null>(null);
-  const isProcessingFramesRef = useRef(false);
-  const animationFrameRef = useRef<number | null>(null);
 
   const handlePermissionsGranted = () => {
     console.log("Permisos concedidos correctamente");
@@ -189,15 +183,6 @@ const Index = () => {
     try {
       console.log("Deteniendo SOLO monitorización (displays intactos)");
       
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
-      }
-      
-      isProcessingFramesRef.current = false;
-      
-      imageCaptureRef.current = null;
-      
       setIsMonitoring(false);
       setIsCameraOn(false);
       stopProcessing();
@@ -247,15 +232,6 @@ const Index = () => {
   const handleReset = () => {
     console.log("RESET COMPLETO solicitado");
     
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
-    
-    isProcessingFramesRef.current = false;
-    
-    imageCaptureRef.current = null;
-    
     setIsMonitoring(false);
     setIsCameraOn(false);
     stopProcessing();
@@ -292,112 +268,53 @@ const Index = () => {
   const handleStreamReady = (stream: MediaStream) => {
     if (!isMonitoring) return;
     
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
+    const videoTrack = stream.getVideoTracks()[0];
+    const imageCapture = new ImageCapture(videoTrack);
+    
+    if (isMonitoring && videoTrack.getCapabilities()?.torch) {
+      videoTrack.applyConstraints({
+        advanced: [{ torch: true }]
+      }).catch(err => console.error("Error activando linterna:", err));
     }
     
-    const videoTrack = stream.getVideoTracks()[0];
-    if (!videoTrack || videoTrack.readyState !== 'live') {
-      console.error("Video track not available or not live");
+    const tempCanvas = document.createElement('canvas');
+    const tempCtx = tempCanvas.getContext('2d');
+    if (!tempCtx) {
+      console.error("No se pudo obtener el contexto 2D");
       return;
     }
     
-    try {
-      // Create a new ImageCapture instance for this stream
-      const imageCapture = new ImageCapture(videoTrack);
-      imageCaptureRef.current = imageCapture;
+    const processImage = async () => {
+      if (!isMonitoring) return;
       
-      // Activate torch if available
-      if (isMonitoring && videoTrack.getCapabilities()?.torch) {
-        videoTrack.applyConstraints({
-          advanced: [{ torch: true }]
-        }).catch(err => console.error("Error activating flashlight:", err));
-      }
-      
-      // Prepare canvas for frame processing
-      const tempCanvas = document.createElement('canvas');
-      const tempCtx = tempCanvas.getContext('2d');
-      if (!tempCtx) {
-        console.error("Could not get 2D context");
-        return;
-      }
-      
-      isProcessingFramesRef.current = true;
-      
-      const processImage = async () => {
-        // Early exit if we're no longer monitoring or the component is unmounted
-        if (!isMonitoring || !isProcessingFramesRef.current) {
-          return;
-        }
+      try {
+        const frame = await imageCapture.grabFrame();
+        tempCanvas.width = frame.width;
+        tempCanvas.height = frame.height;
+        tempCtx.drawImage(frame, 0, 0);
+        const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
+        processFrame(imageData);
         
-        try {
-          // Check if imageCapture is still valid
-          if (!imageCaptureRef.current) {
-            console.error("ImageCapture instance no longer available");
-            return;
-          }
-          
-          // The track reference is available via videoTrack
-          // NOT from imageCapture.track which doesn't exist
-          if (!videoTrack || videoTrack.readyState !== 'live') {
-            console.error("Track is not in live state, skipping frame capture");
-            
-            // If we're still monitoring, retry after a delay
-            if (isMonitoring && isProcessingFramesRef.current) {
-              setTimeout(() => {
-                if (isMonitoring && isProcessingFramesRef.current) {
-                  animationFrameRef.current = requestAnimationFrame(processImage);
-                }
-              }, 500);
-            }
-            return;
-          }
-          
-          const frame = await imageCaptureRef.current.grabFrame();
-          
-          // Double-check we're still monitoring
-          if (!isMonitoring || !isProcessingFramesRef.current) {
-            return;
-          }
-          
-          tempCanvas.width = frame.width;
-          tempCanvas.height = frame.height;
-          tempCtx.drawImage(frame, 0, 0);
-          
-          const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
-          
-          // Process the image for ambient light detection and signal processing
-          if (deviceContextService.processAmbientLight) {
-            deviceContextService.processAmbientLight(imageData);
-          }
-          
-          // Process the frame for vital sign detection
-          processFrame(imageData);
-          
-          // Continue processing frames if we're still monitoring
-          if (isMonitoring && isProcessingFramesRef.current) {
-            animationFrameRef.current = requestAnimationFrame(processImage);
-          }
-        } catch (error) {
-          console.error("Error capturing frame:", error);
-          
-          // Retry with delay if we're still monitoring
-          if (isMonitoring && isProcessingFramesRef.current) {
-            setTimeout(() => {
-              if (isMonitoring && isProcessingFramesRef.current) {
-                animationFrameRef.current = requestAnimationFrame(processImage);
-              }
-            }, 500);
-          }
+        if (isMonitoring) {
+          requestAnimationFrame(processImage);
         }
-      };
+      } catch (error) {
+        console.error("Error capturando frame:", error);
+        if (isMonitoring) {
+          requestAnimationFrame(processImage);
+        }
+      }
+    };
 
-      // Start processing frames
-      animationFrameRef.current = requestAnimationFrame(processImage);
-    } catch (error) {
-      console.error("Error creating ImageCapture:", error);
-    }
+    processImage();
+    
+    return () => {
+      if (videoTrack.getCapabilities()?.torch) {
+        videoTrack.applyConstraints({
+          advanced: [{ torch: false }]
+        }).catch(err => console.error("Error desactivando linterna:", err));
+      }
+    };
   };
 
   useEffect(() => {
@@ -410,7 +327,7 @@ const Index = () => {
             if (videoTrack && videoTrack.getCapabilities()?.torch) {
               videoTrack.applyConstraints({
                 advanced: [{ torch: false }]
-              }).catch(err => console.error("Error desactivating flashlight:", err));
+              }).catch(err => console.error("Error desactivando linterna:", err));
             }
             stream.getTracks().forEach(track => track.stop());
           })
@@ -541,20 +458,13 @@ const Index = () => {
         
         setSignalQuality(lastSignal.quality);
       } catch (error) {
-        console.error("Error processing signal:", error);
+        console.error("Error procesando señal:", error);
       }
     }
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns, measurementComplete]);
 
   useEffect(() => {
     return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
-      }
-      
-      isProcessingFramesRef.current = false;
-      
       if (measurementTimerRef.current) {
         clearInterval(measurementTimerRef.current);
         measurementTimerRef.current = null;

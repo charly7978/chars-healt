@@ -1,4 +1,3 @@
-
 import * as React from "react"
 
 import type {
@@ -7,7 +6,7 @@ import type {
 } from "@/components/ui/toast"
 
 const TOAST_LIMIT = 1
-const TOAST_REMOVE_DELAY = 5000 // Changed from 1000000 to 5000 for better UX
+const TOAST_REMOVE_DELAY = 1000000
 
 type ToasterToast = ToastProps & {
   id: string
@@ -140,32 +139,7 @@ function dispatch(action: Action) {
 
 type Toast = Omit<ToasterToast, "id">
 
-// Filter to prevent toasts from showing near button area
-const shouldShowToast = (props: Toast): boolean => {
-  // Check if this is a measurement-related toast that should be hidden
-  const isMeasurementToast = 
-    props.title?.toString().toLowerCase().includes('medición') ||
-    props.description?.toString().toLowerCase().includes('medición') ||
-    props.title?.toString().toLowerCase().includes('medicion') ||
-    props.description?.toString().toLowerCase().includes('medicion') ||
-    props.title?.toString().toLowerCase().includes('measurement') ||
-    props.description?.toString().toLowerCase().includes('measurement');
-  
-  // Don't show toasts related to measurements that appear above the button area
-  return !isMeasurementToast;
-}
-
 function toast({ ...props }: Toast) {
-  // If this is a toast that should be filtered, don't display it
-  if (!shouldShowToast(props)) {
-    console.log("Toast filtered:", props.title);
-    return {
-      id: "filtered-toast",
-      dismiss: () => {},
-      update: () => {},
-    };
-  }
-
   const id = genId()
 
   const update = (props: ToasterToast) =>
