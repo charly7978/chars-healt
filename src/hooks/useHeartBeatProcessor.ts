@@ -62,39 +62,23 @@ export const useHeartBeatProcessor = () => {
   }, []);
   
   const cleanMemory = useCallback(() => {
-    console.log('useHeartBeatProcessor: Performing memory cleanup');
-    
-    // Reset states
+    console.log("useHeartBeatProcessor: Limpieza agresiva de memoria");
+    if (processorRef.current) {
+      processorRef.current.reset();
+      processorRef.current = null;
+    }
     setBpm(0);
     setConfidence(0);
     setIsPeak(false);
     
-    // Reset and nullify processor
-    if (processorRef.current) {
+    // Force garbage collection if available
+    if (window.gc) {
       try {
-        processorRef.current.reset();
-        // Remove global reference if it exists
-        if (window.heartBeatProcessor === processorRef.current) {
-          delete window.heartBeatProcessor;
-        }
-      } catch (error) {
-        console.error('Error cleaning HeartBeatProcessor memory:', error);
+        window.gc();
+      } catch (e) {
+        console.log("GC no disponible en este entorno");
       }
     }
-    
-    // Clear the reference
-    processorRef.current = null;
-    
-    // Force additional garbage collection through array clearing
-    const clearArrays = () => {
-      if (processorRef.current) {
-        // Clear any internal arrays/buffers the processor might have
-        processorRef.current.reset();
-      }
-    };
-    
-    // Execute cleanup with small delay to ensure UI updates first
-    setTimeout(clearArrays, 100);
   }, []);
   
   return {
