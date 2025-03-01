@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -159,8 +160,10 @@ const PPGSignalMeter = ({
     const smoothedValue = smoothValue(value, lastValueRef.current);
     lastValueRef.current = smoothedValue;
 
-    const normalizedValue = smoothedValue - (baselineRef.current || 0);
-    const scaledValue = normalizedValue * verticalScale;
+    // Invert the polarity of the signal by multiplying by -1
+    // This will make peaks point upward instead of downward
+    const normalizedValue = (smoothedValue - (baselineRef.current || 0));
+    const scaledValue = normalizedValue * verticalScale * -1; // Multiplying by -1 to invert the signal
     
     let isArrhythmia = false;
     if (rawArrhythmiaData && 
