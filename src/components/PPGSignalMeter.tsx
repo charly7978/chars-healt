@@ -160,9 +160,9 @@ const PPGSignalMeter = ({
     const smoothedValue = smoothValue(value, lastValueRef.current);
     lastValueRef.current = smoothedValue;
 
-    // INVERTIR POLARIDAD: Multiplica por -1 el valor normalizado para invertir la señal
-    const normalizedValue = (smoothedValue - (baselineRef.current || 0)) * -1; // Polaridad invertida
-    const scaledValue = normalizedValue * verticalScale; // Eliminamos el segundo -1 para evitar doble inversión
+    // Cambio de polaridad: Usamos el valor normalizado sin invertir
+    const normalizedValue = (smoothedValue - (baselineRef.current || 0));
+    const scaledValue = normalizedValue * verticalScale;
     
     let isArrhythmia = false;
     if (rawArrhythmiaData && 
