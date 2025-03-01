@@ -74,19 +74,19 @@ const PPGSignalMeter = ({
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     
-    // Aumentar opacidad al 70% como solicitado
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';  // Negro con 70% de opacidad
+    // Cambiado: Usar fondo blanco en lugar de negro semi-transparente
+    ctx.fillStyle = '#f3f3f3';  // Fondo gris muy claro para mejor contraste y rendimiento
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(0, 255, 127, 0.15)';
+    ctx.strokeStyle = 'rgba(0, 180, 120, 0.15)';
     ctx.lineWidth = 0.5;
 
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X) {
       ctx.moveTo(x, 0);
       ctx.lineTo(x, CANVAS_HEIGHT);
       if (x % (GRID_SIZE_X * 4) === 0) {
-        ctx.fillStyle = 'rgba(0, 255, 127, 0.9)';
+        ctx.fillStyle = 'rgba(0, 150, 100, 0.9)';
         ctx.font = '10px Inter';
         ctx.textAlign = 'center';
         ctx.fillText(`${x / 10}ms`, x, CANVAS_HEIGHT - 5);
@@ -98,7 +98,7 @@ const PPGSignalMeter = ({
       ctx.lineTo(CANVAS_WIDTH, y);
       if (y % (GRID_SIZE_Y * 4) === 0) {
         const amplitude = ((CANVAS_HEIGHT / 2) - y) / verticalScale;
-        ctx.fillStyle = 'rgba(0, 255, 127, 0.9)';
+        ctx.fillStyle = 'rgba(0, 150, 100, 0.9)';
         ctx.font = '10px Inter';
         ctx.textAlign = 'right';
         ctx.fillText(amplitude.toFixed(1), 25, y + 4);
@@ -107,7 +107,7 @@ const PPGSignalMeter = ({
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(0, 255, 127, 0.25)';
+    ctx.strokeStyle = 'rgba(0, 150, 100, 0.25)';
     ctx.lineWidth = 1;
 
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X * 4) {
@@ -122,7 +122,7 @@ const PPGSignalMeter = ({
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(0, 255, 127, 0.35)';
+    ctx.strokeStyle = 'rgba(0, 150, 100, 0.35)';
     ctx.lineWidth = 1.5;
     ctx.moveTo(0, CANVAS_HEIGHT * 0.6);
     ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT * 0.6);
@@ -246,7 +246,7 @@ const PPGSignalMeter = ({
           ctx.fill();
 
           ctx.font = 'bold 12px Inter';
-          ctx.fillStyle = '#C0C0C0';
+          ctx.fillStyle = '#666666';
           ctx.textAlign = 'center';
           ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 20);
           
