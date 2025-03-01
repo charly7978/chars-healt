@@ -1,4 +1,3 @@
-
 import React, { memo, useMemo } from 'react';
 import { VitalSignsRisk } from '../utils/vitalSignsRisk';
 
@@ -132,11 +131,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
 
   // Simplificar el renderizado para mejorar rendimiento
   return (
-    <div className="relative overflow-hidden rounded-xl backdrop-blur-md bg-black/60 border border-white/20 shadow-lg">
-      <div className="absolute inset-0 bg-gradient-to-br from-blue-400/10 to-teal-400/10 pointer-events-none" />
-      <div className="absolute inset-0 bg-black/40 pointer-events-none" style={{
-        backgroundImage: "radial-gradient(circle at top right, rgba(0, 0, 0, 0.2), transparent 70%)"
-      }} />
+    <div className="relative overflow-hidden rounded-xl bg-black shadow-lg">
       <div className="relative z-10 p-4">
         <h3 className="text-white text-xs font-medium tracking-wider mb-2">{label}</h3>
         <div className="flex flex-col items-center gap-1">
