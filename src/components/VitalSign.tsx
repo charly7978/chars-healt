@@ -1,3 +1,4 @@
+
 import React, { memo, useMemo } from 'react';
 import { VitalSignsRisk } from '../utils/vitalSignsRisk';
 
@@ -101,8 +102,8 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     
     if (value === "--") {
       return { 
-        text: "--", 
-        color: "#000000",
+        text: "ARRITMIA", 
+        color: "#FFFFFF",
         label: ""
       };
     }
@@ -111,16 +112,16 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     
     if (status === "ARRITMIA DETECTADA") {
       return {
-        text: count ? `LATIDOS PREMATUROS (${count})` : "LATIDOS PREMATUROS",
+        text: count ? `ARRITMIAS DETECTADAS: ${count}` : "ARRITMIAS DETECTADAS",
         color: "#DC2626",
-        label: "PREMATUROS"
+        label: ""
       };
     }
     
     return {
-      text: "RITMO NORMAL",
+      text: "LATIDO NORMAL",
       color: "#0EA5E9",
-      label: "NORMAL"
+      label: ""
     };
   };
 
@@ -137,7 +138,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
         <div className="flex flex-col items-center gap-1">
           <div className="flex items-baseline gap-1 justify-center">
             <span 
-              className={`${isArrhythmiaDisplay ? 'text-base' : 'text-xl'} font-bold transition-colors duration-300 text-white`}
+              className={`${isArrhythmiaDisplay ? 'text-sm' : 'text-xl'} font-bold transition-colors duration-300 text-white`}
               style={{ color: color || '#000000' }}
             >
               {text}
