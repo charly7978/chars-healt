@@ -1,4 +1,3 @@
-
 /**
  * Signal processing utility functions
  */
@@ -32,6 +31,181 @@ export const calculateAC = (values: number[]): number => {
   const max = Math.max(...values);
   const min = Math.min(...values);
   return max - min;
+};
+
+/**
+ * Calculate Standard Deviation of a signal
+ */
+export const calculateStandardDeviation = (values: number[]): number => {
+  if (values.length <= 1) return 0;
+  
+  const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
+  const squaredDifferences = values.map(val => Math.pow(val - mean, 2));
+  const variance = squaredDifferences.reduce((sum, val) => sum + val, 0) / values.length;
+  
+  return Math.sqrt(variance);
+};
+
+/**
+ * Enhanced Peak Detection with signal quality assessment
+ */
+export const enhancedPeakDetection = (values: number[]): {
+  peakIndices: number[];
+  valleyIndices: number[];
+  signalQuality: number;
+} => {
+  if (values.length < 10) {
+    return {
+      peakIndices: [],
+      valleyIndices: [],
+      signalQuality: 0
+    };
+  }
+  
+  try {
+    // Signal preprocessing
+    const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
+    
+    // Dynamic threshold based on signal amplitude
+    const max = Math.max(...values);
+    const min = Math.min(...values);
+    const amplitude = max - min;
+    
+    // Use a percentage of amplitude for peak detection
+    const peakThreshold = mean + (amplitude * 0.3);
+    const valleyThreshold = mean - (amplitude * 0.3);
+    
+    const peakIndices: number[] = [];
+    const valleyIndices: number[] = [];
+    
+    // Basic peak detection with minimal separation criteria
+    const minPeakDistance = 4; // Minimum samples between peaks
+    
+    for (let i = 2; i < values.length - 2; i++) {
+      // Check for peaks
+      if (values[i] > peakThreshold && 
+          values[i] > values[i-1] && 
+          values[i] > values[i-2] &&
+          values[i] > values[i+1] &&
+          values[i] > values[i+2]) {
+        
+        // Only add if it's far enough from the previous peak
+        if (peakIndices.length === 0 || i - peakIndices[peakIndices.length - 1] >= minPeakDistance) {
+          peakIndices.push(i);
+        } else {
+          // If we have two close peaks, keep the higher one
+          const prevPeakIdx = peakIndices[peakIndices.length - 1];
+          if (values[i] > values[prevPeakIdx]) {
+            peakIndices[peakIndices.length - 1] = i;
+          }
+        }
+      }
+      
+      // Check for valleys
+      if (values[i] < valleyThreshold && 
+          values[i] < values[i-1] && 
+          values[i] < values[i-2] &&
+          values[i] < values[i+1] &&
+          values[i] < values[i+2]) {
+        
+        // Similar logic for minimum valley distance
+        if (valleyIndices.length === 0 || i - valleyIndices[valleyIndices.length - 1] >= minPeakDistance) {
+          valleyIndices.push(i);
+        } else {
+          // For valleys, keep the lower one
+          const prevValleyIdx = valleyIndices[valleyIndices.length - 1];
+          if (values[i] < values[prevValleyIdx]) {
+            valleyIndices[valleyIndices.length - 1] = i;
+          }
+        }
+      }
+    }
+    
+    // Calculate signal quality metrics
+    
+    // 1. Peak-to-valley amplitude consistency
+    let amplitudeConsistency = 1.0;
+    const peakToValleyAmplitudes: number[] = [];
+    
+    // Map peaks to nearest valleys to measure amplitudes
+    for (const peakIdx of peakIndices) {
+      // Find closest valley before and after this peak
+      const prevValley = valleyIndices.filter(v => v < peakIdx).pop();
+      const nextValley = valleyIndices.find(v => v > peakIdx);
+      
+      if (prevValley !== undefined) {
+        peakToValleyAmplitudes.push(values[peakIdx] - values[prevValley]);
+      }
+      
+      if (nextValley !== undefined) {
+        peakToValleyAmplitudes.push(values[peakIdx] - values[nextValley]);
+      }
+    }
+    
+    if (peakToValleyAmplitudes.length >= 2) {
+      const ampMean = peakToValleyAmplitudes.reduce((sum, val) => sum + val, 0) / peakToValleyAmplitudes.length;
+      const ampStdDev = Math.sqrt(
+        peakToValleyAmplitudes.reduce((sum, val) => sum + Math.pow(val - ampMean, 2), 0) / peakToValleyAmplitudes.length
+      );
+      const ampCV = ampStdDev / (ampMean || 1); // Coefficient of variation (lower is better)
+      amplitudeConsistency = Math.max(0, Math.min(1, 1 - ampCV));
+    }
+    
+    // 2. Periodicity - consistency of peak-to-peak intervals
+    let periodConsistency = 1.0;
+    const intervals: number[] = [];
+    
+    for (let i = 1; i < peakIndices.length; i++) {
+      intervals.push(peakIndices[i] - peakIndices[i-1]);
+    }
+    
+    if (intervals.length >= 2) {
+      const intMean = intervals.reduce((sum, val) => sum + val, 0) / intervals.length;
+      const intStdDev = Math.sqrt(
+        intervals.reduce((sum, val) => sum + Math.pow(val - intMean, 2), 0) / intervals.length
+      );
+      const intCV = intStdDev / (intMean || 1);
+      periodConsistency = Math.max(0, Math.min(1, 1 - intCV));
+    }
+    
+    // 3. Signal-to-noise ratio estimation
+    let snrEstimate = 0.5; // Default medium quality
+    
+    // Calculate noise by looking at small variations between samples
+    const differences: number[] = [];
+    for (let i = 1; i < values.length; i++) {
+      differences.push(Math.abs(values[i] - values[i-1]));
+    }
+    
+    if (differences.length > 0 && amplitude > 0) {
+      const avgDiff = differences.reduce((sum, val) => sum + val, 0) / differences.length;
+      // Noise-to-signal ratio (lower is better)
+      const noiseRatio = avgDiff / amplitude;
+      // Convert to SNR (higher is better)
+      snrEstimate = Math.max(0, Math.min(1, 1 - (noiseRatio * 5)));
+    }
+    
+    // Combine metrics for overall quality score (0-1)
+    const signalQuality = (
+      (amplitudeConsistency * 0.4) + 
+      (periodConsistency * 0.4) + 
+      (snrEstimate * 0.2)
+    );
+    
+    return {
+      peakIndices,
+      valleyIndices,
+      signalQuality: parseFloat(signalQuality.toFixed(2))
+    };
+    
+  } catch (error) {
+    console.error("Error in enhanced peak detection:", error);
+    return {
+      peakIndices: [],
+      valleyIndices: [],
+      signalQuality: 0
+    };
+  }
 };
 
 /**
