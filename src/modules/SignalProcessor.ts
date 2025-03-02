@@ -48,9 +48,9 @@ export class PPGSignalProcessor implements SignalProcessor {
     MIN_RED_THRESHOLD: 40,     // Minimum threshold for red channel
     MAX_RED_THRESHOLD: 250,    // Maximum threshold for red channel
     STABILITY_WINDOW: 6,       // Window for stability analysis
-    MIN_STABILITY_COUNT: 4,    // Minimum stable samples
+    MIN_STABILITY_COUNT: 5,    // Increased from 4 to require more stable frames
     HYSTERESIS: 5,             // Hysteresis to avoid fluctuations
-    MIN_CONSECUTIVE_DETECTIONS: 3  // Minimum consecutive detections needed
+    MIN_CONSECUTIVE_DETECTIONS: 4  // Increased from 3 to require more consecutive detections
   };
 
   private currentConfig: typeof this.DEFAULT_CONFIG;
@@ -209,7 +209,7 @@ export class PPGSignalProcessor implements SignalProcessor {
     const avgBlue = blueSum / count;
 
     // Check red channel dominance (characteristic of blood-containing tissue)
-    const isRedDominant = avgRed > (avgGreen * 1.2) && avgRed > (avgBlue * 1.2);
+    const isRedDominant = avgRed > (avgGreen * 1.25) && avgRed > (avgBlue * 1.25); // Increased from 1.2 to 1.25 for stronger red dominance requirement
     
     return isRedDominant ? avgRed : 0;
   }
@@ -241,7 +241,7 @@ export class PPGSignalProcessor implements SignalProcessor {
 
     // Analyze signal stability - scientifically validated measure
     const stability = this.calculateStability();
-    if (stability > 0.7) {
+    if (stability > 0.75) { // Increased from 0.7 to 0.75 for stricter stability requirement
       this.stableFrameCount = Math.min(
         this.stableFrameCount + 1,
         this.currentConfig.MIN_STABILITY_COUNT * 2
