@@ -1,3 +1,4 @@
+
 interface PPGDataPoint {
   time: number;
   value: number;
@@ -25,10 +26,7 @@ export class CircularBuffer {
   }
 
   clear(): void {
-    const keepCount = Math.max(Math.floor(this.buffer.length * 0.3), 10);
-    if (this.buffer.length > keepCount) {
-      this.buffer = this.buffer.slice(-keepCount);
-    }
+    this.buffer = [];
   }
 }
 
