@@ -4,12 +4,9 @@ export class HeartBeatProcessor {
   private readonly WINDOW_SIZE = 60;
   private readonly MIN_BPM = 40;
   private readonly MAX_BPM = 200; // Se mantiene amplio para no perder picos fuera de rango
-  
-  // CALIBRACIÓN MEJORADA: Ajustados umbrales para detección más precisa
-  private readonly SIGNAL_THRESHOLD = 0.40;   // Reducido para mayor sensibilidad
-  private readonly MIN_CONFIDENCE = 0.60;     // Reducido para detectar latidos más sutiles
-  private readonly DERIVATIVE_THRESHOLD = 0.035; // Ajustado para mejor detección de pendiente 
-  
+  private readonly SIGNAL_THRESHOLD = 0.45; // Increased from 0.40 for better peak detection
+  private readonly MIN_CONFIDENCE = 0.65; // Increased from 0.60 for higher certainty
+  private readonly DERIVATIVE_THRESHOLD = -0.04; // Changed from -0.03 for better sensitivity
   private readonly MIN_PEAK_TIME_MS = 400; 
   private readonly WARMUP_TIME_MS = 3000; 
 
@@ -51,16 +48,10 @@ export class HeartBeatProcessor {
   private readonly BPM_ALPHA = 0.2;
   private peakCandidateIndex: number | null = null;
   private peakCandidateValue: number = 0;
-  
-  // NUEVO: Para calibración mejorada de picos
-  private derivativeBuffer: number[] = [];
-  private readonly DERIVATIVE_BUFFER_SIZE = 5;
-  private isRisingEdge: boolean = false;
-  private risingEdgeStartTime: number = 0;
+
+  // NUEVO: Almacenar amplitudes de los picos para mejorar la detección de arritmias
   private peakAmplitudes: number[] = [];
   private readonly MAX_AMPLITUDE_HISTORY = 20;
-  private averagePeakHeight: number = 0;
-  private readonly PEAK_HEIGHT_SMOOTHING = 0.3;
 
   constructor() {
     this.initAudio();
@@ -197,7 +188,6 @@ export class HeartBeatProcessor {
       };
     }
 
-    // Ajustar línea base de forma dinámica para mejor adaptación
     this.baseline =
       this.baseline * this.BASELINE_FACTOR + smoothed * (1 - this.BASELINE_FACTOR);
 
@@ -209,50 +199,18 @@ export class HeartBeatProcessor {
       this.values.shift();
     }
 
-    // Calcular derivada (tasa de cambio)
     let smoothDerivative = smoothed - this.lastValue;
     if (this.values.length === 3) {
       smoothDerivative = (this.values[2] - this.values[0]) / 2;
     }
     this.lastValue = smoothed;
-    
-    // Almacenar derivada para análisis
-    this.derivativeBuffer.push(smoothDerivative);
-    if (this.derivativeBuffer.length > this.DERIVATIVE_BUFFER_SIZE) {
-      this.derivativeBuffer.shift();
-    }
 
-    // CALIBRACIÓN MEJORADA: Detector de picos con mejor fase de subida
-    const { isPeak, confidence, isRisingEdge } = this.detectPeak(normalizedValue, smoothDerivative);
+    // Mejorado - Mayor precisión en la detección de picos
+    const { isPeak, confidence } = this.detectPeak(normalizedValue, smoothDerivative);
     
-    // Seguimiento de fase ascendente para ajustar el sonido adecuadamente
-    if (isRisingEdge && !this.isRisingEdge) {
-      this.isRisingEdge = true;
-      this.risingEdgeStartTime = Date.now();
-    } else if (!isRisingEdge && this.isRisingEdge) {
-      this.isRisingEdge = false;
-    }
-    
-    // Reproducir beep en fase ascendente con umbral de tiempo apropiado
-    const now = Date.now();
-    const timeSinceLastBeep = now - this.lastBeepTime;
-    
-    // El sonido debe ocurrir cuando la señal está claramente subiendo (pendiente positiva)
-    // y ha pasado suficiente tiempo desde el último beep
-    if (this.isRisingEdge && 
-        confidence > this.MIN_CONFIDENCE && 
-        !this.isInWarmup() && 
-        timeSinceLastBeep >= this.MIN_BEEP_INTERVAL_MS &&
-        this.derivativeBuffer.length > 0 && 
-        this.derivativeBuffer[this.derivativeBuffer.length - 1] > 0) {
-      
-      this.playBeep(0.12 * confidence);
-    }
-    
-    // Confirmación de picos para cálculo de BPM
+    // Confirmación de picos más rigurosa
     const isConfirmedPeak = this.confirmPeak(isPeak, normalizedValue, confidence);
 
-    // Tracking de picos para datos fisiológicos
     if (isConfirmedPeak && !this.isInWarmup()) {
       const now = Date.now();
       const timeSinceLastPeak = this.lastPeakTime
@@ -262,20 +220,13 @@ export class HeartBeatProcessor {
       if (timeSinceLastPeak >= this.MIN_PEAK_TIME_MS) {
         this.previousPeakTime = this.lastPeakTime;
         this.lastPeakTime = now;
+        this.playBeep(0.12); // Suena beep cuando se confirma pico
         
-        // Almacenar amplitud del pico confirmado
-        const currentPeakHeight = Math.abs(normalizedValue);
-        this.peakAmplitudes.push(currentPeakHeight);
+        // NUEVO: Almacenar amplitud del pico - CRUCIAL para detección de arritmias
+        // La amplitud es importante para identificar latidos prematuros (que suelen tener menor amplitud)
+        this.peakAmplitudes.push(Math.abs(normalizedValue));
         if (this.peakAmplitudes.length > this.MAX_AMPLITUDE_HISTORY) {
           this.peakAmplitudes.shift();
-        }
-        
-        // Ajustar altura promedio para calibración dinámica
-        if (this.averagePeakHeight === 0) {
-          this.averagePeakHeight = currentPeakHeight;
-        } else {
-          this.averagePeakHeight = this.averagePeakHeight * (1 - this.PEAK_HEIGHT_SMOOTHING) + 
-                                 currentPeakHeight * this.PEAK_HEIGHT_SMOOTHING;
         }
         
         this.updateBPM();
@@ -310,17 +261,14 @@ export class HeartBeatProcessor {
     this.peakCandidateValue = 0;
     this.peakConfirmationBuffer = [];
     this.values = [];
-    this.derivativeBuffer = [];
-    this.isRisingEdge = false;
+    // NUEVO: Limpiar también historial de amplitudes
     this.peakAmplitudes = [];
     console.log("HeartBeatProcessor: auto-reset detection states (low signal).");
   }
 
-  // CALIBRACIÓN MEJORADA: Mejor detección de subida y picos
   private detectPeak(normalizedValue: number, derivative: number): {
     isPeak: boolean;
     confidence: number;
-    isRisingEdge: boolean;
   } {
     const now = Date.now();
     const timeSinceLastPeak = this.lastPeakTime
@@ -328,52 +276,29 @@ export class HeartBeatProcessor {
       : Number.MAX_VALUE;
 
     if (timeSinceLastPeak < this.MIN_PEAK_TIME_MS) {
-      return { isPeak: false, confidence: 0, isRisingEdge: false };
+      return { isPeak: false, confidence: 0 };
     }
 
-    // CALIBRADO: Detectar fase ascendente con más precisión
-    // - Se requiere derivada positiva (señal subiendo)
-    // - Un valor ya por encima del umbral mínimo pero no demasiado alto
-    const isRisingEdge = 
-      derivative > this.DERIVATIVE_THRESHOLD && 
-      normalizedValue > this.SIGNAL_THRESHOLD * 0.4 && 
-      normalizedValue < this.SIGNAL_THRESHOLD * 2.0;
-    
-    // CALIBRADO: Detección ajustada de picos para mejor visualización
-    const isPeakCandidate = 
-      derivative < -0.01 &&  // Buscar cambio de dirección (cima)
-      normalizedValue > this.SIGNAL_THRESHOLD && 
-      this.lastValue > this.baseline * 0.95; // Permitir picos un poco más cercanos a la línea base
+    // Ajuste para mayor robustez en la detección de picos
+    const isOverThreshold =
+      derivative < this.DERIVATIVE_THRESHOLD &&
+      normalizedValue > this.SIGNAL_THRESHOLD &&
+      this.lastValue > this.baseline * 0.98;
 
-    // Confianza ajustada para mejores resultados visuales
+    // Refinamiento del cálculo de confianza
     const amplitudeConfidence = Math.min(
-      Math.max(Math.abs(normalizedValue) / (this.SIGNAL_THRESHOLD * 1.3), 0),
+      Math.max(Math.abs(normalizedValue) / (this.SIGNAL_THRESHOLD * 1.5), 0),
       1
     );
-    
     const derivativeConfidence = Math.min(
-      Math.max(Math.abs(derivative) / Math.abs(this.DERIVATIVE_THRESHOLD * 0.8), 0),
+      Math.max(Math.abs(derivative) / Math.abs(this.DERIVATIVE_THRESHOLD * 0.9), 0),
       1
     );
 
-    // Confianza adaptativa basada en historial de picos
-    const confidenceBase = (amplitudeConfidence * 0.7 + derivativeConfidence * 0.3);
-    
-    // Mejorar confianza si el pico tiene amplitud consistente con picos anteriores
-    let confidence = confidenceBase;
-    if (this.averagePeakHeight > 0 && normalizedValue > 0) {
-      const heightRatio = normalizedValue / this.averagePeakHeight;
-      if (heightRatio > 0.7 && heightRatio < 1.3) {
-        // Bonificación para picos que tienen altura similar a picos anteriores
-        confidence = Math.min(1.0, confidence * 1.2);
-      }
-    }
+    // Cálculo de confianza mejorado
+    const confidence = (amplitudeConfidence * 0.6 + derivativeConfidence * 0.4);
 
-    return { 
-      isPeak: isPeakCandidate, 
-      confidence, 
-      isRisingEdge 
-    };
+    return { isPeak: isOverThreshold, confidence };
   }
 
   private confirmPeak(
@@ -473,13 +398,12 @@ export class HeartBeatProcessor {
     this.peakCandidateIndex = null;
     this.peakCandidateValue = 0;
     this.lowSignalCount = 0;
-    this.derivativeBuffer = [];
-    this.isRisingEdge = false;
+    // NUEVO: Limpiar también historial de amplitudes
     this.peakAmplitudes = [];
-    this.averagePeakHeight = 0;
   }
 
   public getRRIntervals(): { intervals: number[]; lastPeakTime: number | null; amplitudes?: number[] } {
+    // CRUCIAL: Pasar los datos de amplitud REALES en lugar de estimados
     return {
       intervals: this.bpmHistory.map(bpm => Math.round(60000 / bpm)), // Convertir BPM a intervalos RR en ms
       lastPeakTime: this.lastPeakTime,
