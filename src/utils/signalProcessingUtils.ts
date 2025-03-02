@@ -1,190 +1,303 @@
-
 /**
- * Utility functions for signal processing
+ * Utilidades avanzadas para procesamiento de señales PPG
+ * Incluye implementaciones de filtros y algoritmos de detección
  */
 
 /**
- * Calculate Simple Moving Average
+ * Applies a Simple Moving Average (SMA) filter to the signal
+ * @param buffer - Buffer de valores previos
+ * @param newValue - Nuevo valor a filtrar
+ * @param windowSize - Tamaño de la ventana de filtrado
  */
-export const applySMAFilter = (values: number[], newValue: number, windowSize: number): number => {
-  const smaBuffer = values.slice(-windowSize);
-  smaBuffer.push(newValue);
-  return smaBuffer.reduce((a, b) => a + b, 0) / smaBuffer.length;
-};
+export function applySMAFilter(buffer: number[], newValue: number, windowSize: number): number {
+  // Si no hay suficientes valores en el buffer, retornar el valor actual
+  if (buffer.length < windowSize - 1) {
+    return newValue;
+  }
+  
+  // Calcular el promedio incluyendo el nuevo valor
+  const values = [...buffer.slice(-(windowSize - 1)), newValue];
+  const sum = values.reduce((acc, val) => acc + val, 0);
+  return sum / values.length;
+}
 
 /**
- * Calculate AC component (amplitude) of a signal
+ * Calcula la desviación estándar de un conjunto de valores
+ * @param values - Array de valores
  */
-export const calculateAC = (values: number[]): number => {
-  if (values.length === 0) return 0;
-  return Math.max(...values) - Math.min(...values);
-};
+export function calculateStandardDeviation(values: number[]): number {
+  if (values.length < 2) return 0;
+  
+  const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
+  const squaredDiffs = values.map(val => Math.pow(val - mean, 2));
+  const variance = squaredDiffs.reduce((sum, val) => sum + val, 0) / values.length;
+  
+  return Math.sqrt(variance);
+}
 
 /**
- * Calculate DC component (average) of a signal
+ * Implementación del filtro Butterworth paso bajo
+ * Diseñado para señales PPG (frecuencia de corte ~5Hz para muestreo a 30Hz)
+ * @param values - Array de valores a filtrar
  */
-export const calculateDC = (values: number[]): number => {
-  if (values.length === 0) return 0;
-  return values.reduce((a, b) => a + b, 0) / values.length;
-};
+export function applyButterworthFilter(values: number[]): number[] {
+  if (values.length < 3) return [...values];
+  
+  const a = [1.0, -1.5784, 0.6126];
+  const b = [0.0086, 0.0172, 0.0086];
+  const order = 2;
+  
+  // Preparar arrays para entrada y salida
+  const inputs = [...values];
+  const outputs = new Array(values.length).fill(0);
+  
+  // Aplicar el filtro
+  for (let n = 0; n < values.length; n++) {
+    outputs[n] = b[0] * inputs[n];
+    
+    for (let i = 1; i <= order; i++) {
+      if (n - i >= 0) {
+        outputs[n] += b[i] * inputs[n - i];
+      }
+      
+      if (n - i >= 0) {
+        outputs[n] -= a[i] * outputs[n - i];
+      }
+    }
+  }
+  
+  return outputs;
+}
 
 /**
- * Calculate standard deviation of values
+ * NUEVO: Filtro adaptativo para señales PPG
+ * Se ajusta automáticamente según la calidad de la señal
+ * @param values - Array de valores a filtrar
+ * @param quality - Calidad de la señal (0-100)
  */
-export const calculateStandardDeviation = (values: number[]): number => {
-  const n = values.length;
-  if (n === 0) return 0;
-  const mean = values.reduce((a, b) => a + b, 0) / n;
-  const sqDiffs = values.map((v) => Math.pow(v - mean, 2));
-  const avgSqDiff = sqDiffs.reduce((a, b) => a + b, 0) / n;
-  return Math.sqrt(avgSqDiff);
-};
+export function applyAdaptiveFilter(values: number[], quality: number): number[] {
+  if (values.length < 5) return [...values];
+  
+  // Ajustar parámetros según la calidad de la señal
+  // Más agresivo con baja calidad, más sutil con alta calidad
+  const adaptiveFactor = 1.0 - (quality / 100) * 0.8;
+  
+  const filtered = [];
+  const windowSize = Math.min(5, values.length);
+  
+  for (let i = 0; i < values.length; i++) {
+    if (i < windowSize - 1) {
+      filtered.push(values[i]);
+      continue;
+    }
+    
+    // Calcular promedio de la ventana
+    let sum = 0;
+    for (let j = 0; j < windowSize; j++) {
+      sum += values[i - j];
+    }
+    const avg = sum / windowSize;
+    
+    // Aplicar filtrado adaptativo
+    filtered.push(values[i] * (1 - adaptiveFactor) + avg * adaptiveFactor);
+  }
+  
+  return filtered;
+}
 
 /**
- * Find peaks and valleys in a signal
+ * MEJORADO: Detección avanzada de picos y valles en señal PPG
+ * @param values - Array de valores para análisis
  */
-export const findPeaksAndValleys = (values: number[]) => {
+export function enhancedPeakDetection(values: number[]): {
+  peakIndices: number[],
+  valleyIndices: number[],
+  signalQuality: number
+} {
+  if (values.length < 10) {
+    return { peakIndices: [], valleyIndices: [], signalQuality: 0 };
+  }
+  
   const peakIndices: number[] = [];
   const valleyIndices: number[] = [];
-
+  
+  // Primera pasada: detectar todos los picos y valles
   for (let i = 2; i < values.length - 2; i++) {
-    const v = values[i];
-    if (
-      v > values[i - 1] &&
-      v > values[i - 2] &&
-      v > values[i + 1] &&
-      v > values[i + 2]
-    ) {
+    // Detectar pico (máximo local)
+    if (values[i] > values[i-1] && values[i] > values[i+1] &&
+        values[i] > values[i-2] && values[i] > values[i+2]) {
       peakIndices.push(i);
     }
-    if (
-      v < values[i - 1] &&
-      v < values[i - 2] &&
-      v < values[i + 1] &&
-      v < values[i + 2]
-    ) {
-      valleyIndices.push(i);
-    }
-  }
-  return { peakIndices, valleyIndices };
-};
-
-/**
- * Enhanced peak detection with quality assessment
- */
-export const enhancedPeakDetection = (values: number[]): { 
-  peakIndices: number[]; 
-  valleyIndices: number[];
-  signalQuality: number;
-} => {
-  const peakIndices: number[] = [];
-  const valleyIndices: number[] = [];
-  const signalStrengths: number[] = [];
-  
-  // 1. Normalize signal for analysis
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min;
-  
-  // Calculate normalized values
-  const normalizedValues = range > 0 ? 
-                        values.map(v => (v - min) / range) : 
-                        values.map(() => 0.5);
-  
-  // 2. Calculate first derivative (slope change)
-  const derivatives: number[] = [];
-  for (let i = 1; i < normalizedValues.length; i++) {
-    derivatives.push(normalizedValues[i] - normalizedValues[i-1]);
-  }
-  derivatives.push(0); // Add 0 at the end to maintain same length
-  
-  // 3. Detect peaks with advanced criteria
-  for (let i = 2; i < normalizedValues.length - 2; i++) {
-    const v = normalizedValues[i];
     
-    // Peak criteria: higher than adjacent points and slope changes from positive to negative
-    if (v > normalizedValues[i - 1] && 
-        v > normalizedValues[i - 2] && 
-        v > normalizedValues[i + 1] && 
-        v > normalizedValues[i + 2] &&
-        derivatives[i-1] > 0 && derivatives[i] < 0) {
-      
-      peakIndices.push(i);
-      
-      // Calculate peak "strength" for quality evaluation
-      const peakStrength = (v - normalizedValues[i-2]) + (v - normalizedValues[i+2]);
-      signalStrengths.push(peakStrength);
-    }
-    
-    // Valley criteria: lower than adjacent points and slope changes from negative to positive
-    if (v < normalizedValues[i - 1] && 
-        v < normalizedValues[i - 2] && 
-        v < normalizedValues[i + 1] && 
-        v < normalizedValues[i + 2] &&
-        derivatives[i-1] < 0 && derivatives[i] > 0) {
-      
+    // Detectar valle (mínimo local)
+    if (values[i] < values[i-1] && values[i] < values[i+1] &&
+        values[i] < values[i-2] && values[i] < values[i+2]) {
       valleyIndices.push(i);
     }
   }
   
-  // 4. Signal quality analysis
+  // Segunda pasada: filtrar picos y valles espurios
+  const filteredPeaks: number[] = [];
+  const filteredValleys: number[] = [];
+  
+  // Calcular amplitud promedio
+  let totalAmp = 0;
+  let count = 0;
+  
+  for (let i = 0; i < peakIndices.length; i++) {
+    const peakIdx = peakIndices[i];
+    let closestValleyIdx = -1;
+    let minDist = Number.MAX_VALUE;
+    
+    // Encontrar valle más cercano
+    for (const valleyIdx of valleyIndices) {
+      const dist = Math.abs(peakIdx - valleyIdx);
+      if (dist < minDist) {
+        minDist = dist;
+        closestValleyIdx = valleyIdx;
+      }
+    }
+    
+    if (closestValleyIdx >= 0) {
+      // Calcular amplitud pico-valle
+      const amplitude = values[peakIdx] - values[closestValleyIdx];
+      totalAmp += amplitude;
+      count++;
+    }
+  }
+  
+  // Calcular amplitud promedio
+  const avgAmp = count > 0 ? totalAmp / count : 0;
+  
+  // Si no se detectó amplitud, retornar arrays vacíos
+  if (avgAmp <= 0) {
+    return { peakIndices: [], valleyIndices: [], signalQuality: 0 };
+  }
+  
+  // Filtrar picos basados en amplitud mínima (30% del promedio)
+  const minAmp = avgAmp * 0.3;
+  
+  for (let i = 0; i < peakIndices.length; i++) {
+    const peakIdx = peakIndices[i];
+    let validPeak = false;
+    
+    // Verificar que haya un valle cercano con amplitud suficiente
+    for (const valleyIdx of valleyIndices) {
+      const dist = Math.abs(peakIdx - valleyIdx);
+      if (dist <= 10) { // Valle en ventana de 10 muestras
+        const amplitude = values[peakIdx] - values[valleyIdx];
+        if (amplitude >= minAmp) {
+          validPeak = true;
+          break;
+        }
+      }
+    }
+    
+    if (validPeak) {
+      filteredPeaks.push(peakIdx);
+    }
+  }
+  
+  // Filtrar valles con criterio similar
+  for (const valleyIdx of valleyIndices) {
+    let validValley = false;
+    
+    for (const peakIdx of filteredPeaks) {
+      const dist = Math.abs(peakIdx - valleyIdx);
+      if (dist <= 10) {
+        const amplitude = values[peakIdx] - values[valleyIdx];
+        if (amplitude >= minAmp) {
+          validValley = true;
+          break;
+        }
+      }
+    }
+    
+    if (validValley) {
+      filteredValleys.push(valleyIdx);
+    }
+  }
+  
+  // Calcular calidad de la señal
   let signalQuality = 0;
   
-  if (peakIndices.length >= 3) {
-    // Calculate regularity of intervals between peaks
-    const peakIntervals: number[] = [];
-    for (let i = 1; i < peakIndices.length; i++) {
-      peakIntervals.push(peakIndices[i] - peakIndices[i-1]);
+  if (filteredPeaks.length >= 2) {
+    // Calcular intervalos entre picos consecutivos
+    const intervals: number[] = [];
+    for (let i = 1; i < filteredPeaks.length; i++) {
+      intervals.push(filteredPeaks[i] - filteredPeaks[i-1]);
     }
     
-    const intervalMean = peakIntervals.reduce((sum, val) => sum + val, 0) / peakIntervals.length;
-    const intervalVariation = peakIntervals.map(interval => 
-                               Math.abs(interval - intervalMean) / intervalMean);
+    // Calcular variabilidad de intervalos (menor = mejor)
+    const avgInterval = intervals.reduce((sum, val) => sum + val, 0) / intervals.length;
+    const variability = intervals.reduce((sum, val) => sum + Math.abs(val - avgInterval), 0) / intervals.length;
     
-    const meanIntervalVariation = intervalVariation.reduce((sum, val) => sum + val, 0) / 
-                               intervalVariation.length;
+    // Normalizar variabilidad: 0 = muy variable, 1 = muy estable
+    const intervalStability = Math.max(0, Math.min(1, 1 - (variability / avgInterval)));
     
-    // Calculate consistency of peak amplitudes
-    const peakValues = peakIndices.map(idx => normalizedValues[idx]);
-    const peakValueMean = peakValues.reduce((sum, val) => sum + val, 0) / peakValues.length;
-    const peakValueVariation = peakValues.map(val => 
-                             Math.abs(val - peakValueMean) / peakValueMean);
+    // Calcular proporción de picos/valles a longitud de señal (indicador de ruido)
+    const signalLengthRatio = Math.min(1, (filteredPeaks.length * 4) / values.length);
     
-    const meanPeakVariation = peakValueVariation.reduce((sum, val) => sum + val, 0) / 
-                           peakValueVariation.length;
+    // Calcular amplitud normalizada (1 = alta amplitud, 0 = baja amplitud)
+    const amplitudeQuality = Math.min(1, avgAmp / 50);
     
-    // Combine factors for final quality score
-    // 1.0 = perfect, 0.0 = unusable
-    const intervalConsistency = 1 - Math.min(1, meanIntervalVariation * 2);
-    const amplitudeConsistency = 1 - Math.min(1, meanPeakVariation * 2);
-    const peakCount = Math.min(1, peakIndices.length / 8); // 8+ peaks = maximum score
-    
-    signalQuality = intervalConsistency * 0.5 + amplitudeConsistency * 0.3 + peakCount * 0.2;
+    // Combinar factores para calidad final
+    signalQuality = (intervalStability * 0.6 + signalLengthRatio * 0.2 + amplitudeQuality * 0.2) * 100;
   }
   
-  return { peakIndices, valleyIndices, signalQuality };
-};
+  return { 
+    peakIndices: filteredPeaks, 
+    valleyIndices: filteredValleys,
+    signalQuality: Math.round(signalQuality)
+  };
+}
 
 /**
- * Calculate amplitude from peaks and valleys
+ * Fusión de sensores ponderada para combinar múltiples mediciones
+ * @param values - Array de mediciones
+ * @param weights - Array de pesos correspondientes (opcional)
  */
-export const calculateAmplitude = (
-  values: number[],
-  peaks: number[],
-  valleys: number[]
-): number => {
-  if (peaks.length === 0 || valleys.length === 0) return 0;
-
-  const amps: number[] = [];
-  const len = Math.min(peaks.length, valleys.length);
-  for (let i = 0; i < len; i++) {
-    const amp = values[peaks[i]] - values[valleys[i]];
-    if (amp > 0) {
-      amps.push(amp);
-    }
+export function weightedSensorFusion(values: number[], weights?: number[]): number {
+  if (values.length === 0) return 0;
+  if (values.length === 1) return values[0];
+  
+  // Si no se proporcionan pesos, usar uniformes
+  const actualWeights = weights || new Array(values.length).fill(1.0 / values.length);
+  
+  // Asegurar que tenemos la misma cantidad de pesos que valores
+  if (actualWeights.length !== values.length) {
+    throw new Error('La cantidad de pesos debe coincidir con la cantidad de valores');
   }
-  if (amps.length === 0) return 0;
+  
+  // Aplicar fusion ponderada
+  let weightedSum = 0;
+  let totalWeight = 0;
+  
+  for (let i = 0; i < values.length; i++) {
+    weightedSum += values[i] * actualWeights[i];
+    totalWeight += actualWeights[i];
+  }
+  
+  // Normalizar por suma de pesos
+  return totalWeight > 0 ? weightedSum / totalWeight : 0;
+}
 
-  const mean = amps.reduce((a, b) => a + b, 0) / amps.length;
-  return mean;
-};
+/**
+ * Detección de outliers y valores atípicos
+ * @param values - Array de valores
+ * @param stdDevFactor - Factor de desviación estándar para considerar outlier (default: 2.0)
+ */
+export function removeOutliers(values: number[], stdDevFactor: number = 2.0): number[] {
+  if (values.length < 4) return [...values];
+  
+  // Calcular estadísticas
+  const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
+  const stdDev = calculateStandardDeviation(values);
+  
+  // Límites para detección de outliers
+  const lowerBound = mean - stdDevFactor * stdDev;
+  const upperBound = mean + stdDevFactor * stdDev;
+  
+  // Filtrar valores dentro de límites
+  return values.filter(val => val >= lowerBound && val <= upperBound);
+}
