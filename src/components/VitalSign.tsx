@@ -98,16 +98,16 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
   };
   
   const getArrhythmiaRiskLabel = (count: number): string => {
-    // Based on medical literature:
-    // - Less than 5 per hour is generally considered minimal risk
-    // - 5-30 per hour is low risk
-    // - More than 30 per hour is moderate risk
-    // - Very frequent (>60 per hour) is high risk and may indicate significant cardiac issues
+    // Updated thresholds based on user requirements:
+    // - 1-3 arrhythmias: minimal risk
+    // - 4-6 arrhythmias: low risk
+    // - 6-8 arrhythmias: moderate risk
+    // - More than 8 arrhythmias: high risk
     
     if (count <= 0) return "";
-    if (count < 5) return "RIESGO MÍNIMO";
-    if (count < 30) return "RIESGO BAJO";
-    if (count < 60) return "RIESGO MODERADO";
+    if (count <= 3) return "RIESGO MÍNIMO";
+    if (count <= 6) return "RIESGO BAJO";
+    if (count <= 8) return "RIESGO MODERADO";
     return "RIESGO ALTO";
   };
   
@@ -130,7 +130,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
       const riskLabel = getArrhythmiaRiskLabel(count);
       
       return {
-        text: `ARRITMIAS DETECTADAS: ${count}`,
+        text: `${count}`,
         color: "#DC2626",
         label: riskLabel
       };
@@ -156,7 +156,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
         <div className="flex flex-col items-center gap-1">
           <div className="flex items-baseline gap-1 justify-center">
             <span 
-              className={`${isArrhythmiaDisplay ? 'text-sm' : 'text-xl'} font-bold transition-colors duration-300 text-white`}
+              className={`text-xl font-bold transition-colors duration-300 text-white`}
               style={{ color: color || '#000000' }}
             >
               {text}
