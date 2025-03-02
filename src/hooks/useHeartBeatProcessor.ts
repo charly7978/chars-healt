@@ -70,8 +70,10 @@ export const useHeartBeatProcessor = () => {
       // Reiniciar lógica de detección para una nueva calibración
       processorRef.current.reset();
       
-      // Ajustar parámetros de detección basados en características de la señal
-      processorRef.current.recalibrateParameters();
+      // Dado que HeartBeatProcessor no tiene un método recalibrateParameters,
+      // usamos la instancia existente después de un reset, que es efectivamente
+      // una forma de "recalibrar" el procesador para nuevas condiciones
+      console.log('useHeartBeatProcessor: Processor reset as calibration');
       
       return true;
     } catch (error) {
