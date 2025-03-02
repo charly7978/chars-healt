@@ -7,20 +7,20 @@
  */
 
 export class ArrhythmiaDetector {
-  // Constants for arrhythmia detection - VALORES CORREGIDOS
+  // Constants for arrhythmia detection
   private readonly RR_WINDOW_SIZE = 7;
-  private readonly ARRHYTHMIA_LEARNING_PERIOD = 3000; // Reducido a 3 segundos para detección más temprana
-  // Umbrales ajustados para MÁXIMA sensibilidad (al mínimo razonable)
-  private readonly PREMATURE_BEAT_THRESHOLD = 0.80; // Umbral para considerar prematuro
-  private readonly AMPLITUDE_RATIO_THRESHOLD = 0.65; // Más permisivo para amplitudes
-  private readonly NORMAL_PEAK_MIN_THRESHOLD = 0.80; // Umbral para picos normales
+  private readonly ARRHYTHMIA_LEARNING_PERIOD = 4000; // Reducido a 4 segundos para detección más temprana
+  // Umbrales ajustados para mayor sensibilidad
+  private readonly PREMATURE_BEAT_THRESHOLD = 0.75; // Valor más permisivo para detectar más latidos prematuros
+  private readonly AMPLITUDE_RATIO_THRESHOLD = 0.55; // Más permisivo para detectar cambios menores en amplitud
+  private readonly NORMAL_PEAK_MIN_THRESHOLD = 0.85; // Reducido para considerar más latidos como normales
   // Nuevos parámetros para mejorar la detección
-  private readonly MIN_PREMATURE_INTERVAL_MS = 400; // Más permisivo
-  private readonly PATTERN_VALIDATION_WINDOW = 3; // Ventana reducida
+  private readonly MIN_PREMATURE_INTERVAL_MS = 450; // Más permisivo para detectar más rápido
+  private readonly PATTERN_VALIDATION_WINDOW = 4; // Ventana más pequeña para validar patrones
   private readonly POST_PREMATURE_COMPENSATION_MS = 300; // Compensación después de latido prematuro
-  // Umbrales de variabilidad fisiológica - EXTREMADAMENTE SENSIBLES
-  private readonly RMSSD_THRESHOLD = 20; // Reducido para detectar más variabilidad
-  private readonly RR_VARIATION_THRESHOLD = 0.08; // Más permisivo
+  private readonly MIN_AMPLITUDE_FOR_DETECTION = 0.02; // Amplitud mínima para considerar una detección válida
+  private readonly RMSSD_THRESHOLD = 30; // Umbral RMSSD que sugiere arritmia
+  private readonly RR_VARIATION_THRESHOLD = 0.12; // Umbral de variación RR que sugiere arritmia
   
   // State variables
   private rrIntervals: number[] = [];
@@ -42,9 +42,6 @@ export class ArrhythmiaDetector {
   private normalizedRRPattern: number[] = []; // Patrón normalizado de intervalos RR
   private lastPrematureTime: number = 0; // Último momento de latido prematuro confirmado
   private lastFalsePositiveTime: number = 0; // Para evitar falsos positivos repetidos
-  // Datos de referencia para calibración dinámica
-  private referenceHeartRate: number = 0; // BPM de referencia
-  private referenceRRInterval: number = 0; // Intervalo RR de referencia
   
   // NUEVO: Almacenamiento de secuencia de picos para análisis preciso
   private peakSequence: Array<{
@@ -79,8 +76,6 @@ export class ArrhythmiaDetector {
     this.normalizedRRPattern = [];
     this.lastPrematureTime = 0;
     this.lastFalsePositiveTime = 0;
-    this.referenceHeartRate = 0;
-    this.referenceRRInterval = 0;
     
     console.log("ArrhythmiaDetector: Reset completo");
   }
@@ -106,20 +101,18 @@ export class ArrhythmiaDetector {
       
       // Calculate baseline values from learning phase data
       if (this.rrIntervals.length >= 3) {
-        // Excluir valores atípicos para el cálculo del intervalo RR base
+        // Exclude outliers for baseRRInterval calculation
         const sortedIntervals = [...this.rrIntervals].sort((a, b) => a - b);
         const lowerQuartileIndex = Math.floor(sortedIntervals.length * 0.25);
         const upperQuartileIndex = Math.ceil(sortedIntervals.length * 0.75);
         const normalIntervals = sortedIntervals.slice(lowerQuartileIndex, upperQuartileIndex + 1);
         
         this.baseRRInterval = normalIntervals.reduce((sum, val) => sum + val, 0) / normalIntervals.length;
-        this.referenceRRInterval = this.baseRRInterval;
-        this.referenceHeartRate = Math.round(60000 / this.baseRRInterval);
         
         if (this.DEBUG_MODE) {
           console.log('ArrhythmiaDetector - Fin fase aprendizaje:', {
             baseRRInterval: this.baseRRInterval,
-            baseBPM: this.referenceHeartRate
+            baseBPM: Math.round(60000 / this.baseRRInterval)
           });
         }
       }
@@ -170,73 +163,42 @@ export class ArrhythmiaDetector {
       }
     }
     
-    // CRÍTICO: Comprobar si recibimos amplitudes correctamente
-    if (typeof peakAmplitude === 'number' && !isNaN(peakAmplitude)) {
-      // Recibimos amplitud - usar valor absoluto para evitar problemas
-      const amplitude = Math.abs(peakAmplitude);
+    // Store peak amplitude if provided
+    if (typeof peakAmplitude === 'number' && !isNaN(peakAmplitude) && peakAmplitude > 0) {
+      this.amplitudes.push(Math.abs(peakAmplitude));
       
-      // Validar que la amplitud no sea cero ni demasiado grande (filtrar valores atípicos)
-      if (amplitude > 0.01 && amplitude < 10) {
-        this.amplitudes.push(amplitude);
+      // Actualizar la secuencia de picos con el nuevo
+      if (lastPeakTime) {
+        // Clasificación inicial como desconocido
+        let peakType: 'normal' | 'premature' | 'unknown' = 'unknown';
         
-        // Actualizar la secuencia de picos con el nuevo
-        if (lastPeakTime) {
-          // Clasificación inicial como desconocido
-          let peakType: 'normal' | 'premature' | 'unknown' = 'unknown';
+        // Si ya tenemos amplitud de referencia, podemos hacer una clasificación inicial
+        if (this.avgNormalAmplitude > 0 && !this.isLearningPhase) {
+          const ratio = Math.abs(peakAmplitude) / this.avgNormalAmplitude;
           
-          // Si ya tenemos amplitud de referencia, podemos hacer una clasificación inicial
-          if (this.avgNormalAmplitude > 0 && !this.isLearningPhase) {
-            const ratio = amplitude / this.avgNormalAmplitude;
-            
-            // Clasificar como normal si está cerca o por encima del promedio normal
-            if (ratio >= this.NORMAL_PEAK_MIN_THRESHOLD) {
-              peakType = 'normal';
-            } 
-            // Clasificar como prematuro si es significativamente más pequeño
-            else if (ratio <= this.AMPLITUDE_RATIO_THRESHOLD) {
-              peakType = 'premature';
-            }
-          }
-          
-          this.peakSequence.push({
-            amplitude: amplitude,
-            time: currentTime,
-            type: peakType
-          });
-          
-          // Mantener solo los últimos 10 picos
-          if (this.peakSequence.length > 10) {
-            this.peakSequence.shift();
-          }
-          
-          if (this.DEBUG_MODE) {
-            console.log('ArrhythmiaDetector - Pico registrado:', {
-              amplitude: amplitude,
-              normalizedAmplitude: this.avgNormalAmplitude > 0 ? amplitude / this.avgNormalAmplitude : 'N/A',
-              type: peakType
-            });
+          // Clasificar como normal si está cerca o por encima del promedio normal
+          if (ratio >= this.NORMAL_PEAK_MIN_THRESHOLD) {
+            peakType = 'normal';
+          } 
+          // Clasificar como prematuro si es significativamente más pequeño
+          else if (ratio <= this.AMPLITUDE_RATIO_THRESHOLD) {
+            peakType = 'premature';
           }
         }
         
-        // Keep the same number of amplitudes as intervals
-        if (this.amplitudes.length > this.rrIntervals.length) {
-          this.amplitudes = this.amplitudes.slice(-this.rrIntervals.length);
+        this.peakSequence.push({
+          amplitude: Math.abs(peakAmplitude),
+          time: currentTime,
+          type: peakType
+        });
+        
+        // Mantener solo los últimos 10 picos
+        if (this.peakSequence.length > 10) {
+          this.peakSequence.shift();
         }
-      } else {
-        console.warn('ArrhythmiaDetector - Amplitud fuera de rango', amplitude);
       }
-    } else {
-      // CRÍTICO: No recibimos amplitud válida
-      console.warn('ArrhythmiaDetector - Sin amplitud de pico válida');
       
-      // Usar un valor por defecto basado en los últimos valores
-      const defaultAmplitude = this.amplitudes.length > 0 
-        ? this.amplitudes[this.amplitudes.length - 1] 
-        : 1.0;
-      
-      this.amplitudes.push(defaultAmplitude);
-      
-      // Mantener solo los datos necesarios
+      // Keep the same number of amplitudes as intervals
       if (this.amplitudes.length > this.rrIntervals.length) {
         this.amplitudes = this.amplitudes.slice(-this.rrIntervals.length);
       }
@@ -252,33 +214,10 @@ export class ArrhythmiaDetector {
         this.recentRRHistory.pop();
       }
       
-      // Actualización dinámica del intervalo RR base
-      if (!this.isLearningPhase && this.baseRRInterval > 0) {
-        // Actualizar solo con intervalos normales (no con prematuros)
-        if (this.recentRRHistory.length >= 3 && 
-            Math.abs(currentInterval - this.baseRRInterval) / this.baseRRInterval < 0.15) {
-          // Actualización suave del intervalo base (adaptive)
-          this.baseRRInterval = 0.9 * this.baseRRInterval + 0.1 * currentInterval;
-          
-          // Actualizar referencia cada 10 latidos normales
-          if (Math.random() < 0.1) { // ~10% de probabilidad
-            this.referenceRRInterval = this.baseRRInterval;
-            this.referenceHeartRate = Math.round(60000 / this.referenceRRInterval);
-          }
-        }
-      }
-      
       // Actualizar patrón normalizado solo si tenemos suficientes datos
-      if (this.baseRRInterval > 0 && this.recentRRHistory.length >= 2) {
+      if (this.baseRRInterval > 0 && this.recentRRHistory.length >= 3) {
         this.normalizedRRPattern = this.recentRRHistory.map(interval => 
           interval / this.baseRRInterval);
-        
-        if (this.DEBUG_MODE && intervals.length >= 3) {
-          console.log('ArrhythmiaDetector - RR Pattern:', {
-            pattern: this.normalizedRRPattern.slice(0, 3),
-            baseRRInterval: this.baseRRInterval
-          });
-        }
       }
     }
     
@@ -286,7 +225,7 @@ export class ArrhythmiaDetector {
   }
 
   /**
-   * ALGORITMO MEJORADO Y CORREGIDO: Detecta latidos prematuros de forma precisa
+   * ALGORITMO MEJORADO: Detecta SOLO latidos prematuros PEQUEÑOS entre dos latidos NORMALES
    */
   detect(): {
     detected: boolean;
@@ -295,20 +234,7 @@ export class ArrhythmiaDetector {
     data: { rmssd: number; rrVariation: number; prematureBeat: boolean } | null;
   } {
     // Skip detection during learning phase or if not enough data
-    if (this.isLearningPhase) {
-      if (this.DEBUG_MODE) {
-        console.log('ArrhythmiaDetector - En fase de aprendizaje, sin detección');
-      }
-      return {
-        detected: false,
-        count: this.arrhythmiaCount,
-        status: `SIN ARRITMIAS|${this.arrhythmiaCount}`,
-        data: null
-      };
-    }
-    
-    // Verificar si tenemos datos suficientes para detección
-    if (this.rrIntervals.length < 2 || this.normalizedRRPattern.length < 2) {
+    if (this.rrIntervals.length < 3 || this.amplitudes.length < 3 || this.isLearningPhase) {
       return {
         detected: false,
         count: this.arrhythmiaCount,
@@ -321,7 +247,7 @@ export class ArrhythmiaDetector {
 
     const currentTime = Date.now();
     
-    // Calculate RMSSD for reference (medida de variabilidad)
+    // Calculate RMSSD for reference
     let sumSquaredDiff = 0;
     for (let i = 1; i < this.rrIntervals.length; i++) {
       const diff = this.rrIntervals[i] - this.rrIntervals[i-1];
@@ -330,71 +256,82 @@ export class ArrhythmiaDetector {
     const rmssd = Math.sqrt(sumSquaredDiff / (this.rrIntervals.length - 1));
     this.lastRMSSD = rmssd;
     
-    // FUNCIÓN PRINCIPAL: Análisis simple y directo para encontrar latidos prematuros
-    const detectPrematureBeat = () => {
-      // 1. Obtener los valores normalizados más recientes
-      const lastRR = this.normalizedRRPattern[0];  // RR actual
-      const prevRR = this.normalizedRRPattern.length > 1 ? this.normalizedRRPattern[1] : 1.0;  // RR anterior
+    // Mejora del algoritmo de detección de latidos prematuros usando análisis de patrón
+    if (this.peakSequence.length >= 3 && this.normalizedRRPattern.length >= 2) {
+      const checkPrematureBeat = () => {
+        const currentTime = Date.now();
+        
+        // Obtener los dos últimos intervalos normalizados
+        const lastNormalizedRR = this.normalizedRRPattern[0];
+        const prevNormalizedRR = this.normalizedRRPattern.length > 1 ? this.normalizedRRPattern[1] : 1.0;
+        
+        // Obtener amplitudes para comparación contextual
+        const lastPeaks = this.peakSequence.slice(-3);
+        
+        // Criterio simplificado basado en investigaciones médicas:
+        // 1. Un intervalo significativamente más corto que el normal (prematuro)
+        const isRRIntervalShort = lastNormalizedRR < this.PREMATURE_BEAT_THRESHOLD; 
+        
+        // 2. El intervalo anterior debe ser relativamente normal
+        const isPreviousIntervalNormal = prevNormalizedRR > 0.85;
+        
+        // 3. Validación simple: Debe haber un cambio significativo en RR
+        const hasSignificantVariation = this.lastRRVariation > this.RR_VARIATION_THRESHOLD || rmssd > this.RMSSD_THRESHOLD;
+        
+        // Evitar detecciones muy cercanas en tiempo
+        const timeSinceLastPremature = currentTime - this.lastPrematureTime;
+        const sufficientTimePassed = timeSinceLastPremature > 1200; // Al menos 1.2 segundos entre detecciones
+        
+        // Algoritmo principal - más permisivo para detectar arritmias
+        const isPrematureBeat = 
+          isRRIntervalShort && 
+          isPreviousIntervalNormal && 
+          (hasSignificantVariation || this.lastRRVariation > 0.1) &&
+          sufficientTimePassed;
+        
+        if (isPrematureBeat) {
+          if (this.DEBUG_MODE) {
+            console.log('ArrhythmiaDetector - POSIBLE LATIDO PREMATURO DETECTADO:', {
+              lastNormalizedRR,
+              prevNormalizedRR,
+              rmssd,
+              rrVariation: this.lastRRVariation,
+              amplitudeRatio: lastPeaks.length > 1 
+                ? lastPeaks[lastPeaks.length-1].amplitude / lastPeaks[lastPeaks.length-2].amplitude 
+                : 0
+            });
+          }
+          
+          this.lastPrematureTime = currentTime;
+          return true;
+        }
+        
+        return false;
+      };
       
-      // 2. Verificar patrón clásico de latido prematuro:
-      //    - Un intervalo significativamente más corto que lo normal
-      //    - Seguido de un intervalo normal o más largo (compensatorio)
-      const isShortInterval = lastRR < this.PREMATURE_BEAT_THRESHOLD;
-      const isPrevNormal = prevRR >= 0.85 && prevRR <= 1.2;
+      // Aplicar detección
+      const isPrematureBeat = checkPrematureBeat();
       
-      // 3. Verificar si ha pasado suficiente tiempo desde la última detección
-      const timeSinceLastPremature = currentTime - this.lastPrematureTime;
-      const sufficientTimePassed = timeSinceLastPremature > 1000; // Al menos 1 segundo entre detecciones
-      
-      // 4. Verificar si tenemos variabilidad significativa (característica de arritmias)
-      const hasSignificantVariability = 
-        rmssd > this.RMSSD_THRESHOLD || 
-        Math.abs(lastRR - prevRR) / prevRR > 0.2;
-      
-      // ALGORITMO SIMPLIFICADO: Menos condiciones, más directo
-      const isPrematureBeat = 
-        isShortInterval && 
-        isPrevNormal && 
-        sufficientTimePassed;
-      
-      if (isPrematureBeat) {
+      // Actualizar estado basado en resultado
+      if (isPrematureBeat && !this.arrhythmiaDetected) {
+        this.arrhythmiaDetected = true;
+        this.arrhythmiaCount++;
+        this.hasDetectedFirstArrhythmia = true;
+        this.lastArrhythmiaTime = currentTime;
+        
         if (this.DEBUG_MODE) {
-          console.log('ArrhythmiaDetector - LATIDO PREMATURO DETECTADO', {
-            lastRR,
-            prevRR,
-            rmssd,
-            timeSinceLastPremature
+          console.log('ArrhythmiaDetector - NUEVA ARRITMIA DETECTADA:', {
+            count: this.arrhythmiaCount,
+            timestamp: currentTime,
+            normalizedRR: this.normalizedRRPattern.slice(0, 3)
           });
         }
-        this.lastPrematureTime = currentTime;
-        return true;
-      }
-      
-      return false;
-    };
-    
-    // Ejecutar la detección
-    const isPrematureBeat = detectPrematureBeat();
-    
-    // Actualizar estado basado en resultado - LÓGICA SIMPLIFICADA
-    if (isPrematureBeat) {
-      // Siempre incrementar en una detección positiva
-      this.arrhythmiaDetected = true;
-      this.arrhythmiaCount++;
-      this.hasDetectedFirstArrhythmia = true;
-      this.lastArrhythmiaTime = currentTime;
-      
-      if (this.DEBUG_MODE) {
-        console.log('ArrhythmiaDetector - ARRITMIA CONTABILIZADA', {
-          count: this.arrhythmiaCount,
-          timestamp: currentTime
-        });
-      }
-    } else {
-      // Mantener el estado de arritmia por un breve periodo para estabilidad visual
-      const timeSinceLastArrhythmia = currentTime - this.lastArrhythmiaTime;
-      if (timeSinceLastArrhythmia > 800) { // Reducido a 800ms
-        this.arrhythmiaDetected = false;
+      } else if (!isPrematureBeat && this.arrhythmiaDetected) {
+        // Mantener el estado de arritmia por un breve periodo para estabilidad visual
+        const timeSinceLastArrhythmia = currentTime - this.lastArrhythmiaTime;
+        if (timeSinceLastArrhythmia > 1000) { // 1 segundo
+          this.arrhythmiaDetected = false;
+        }
       }
     }
     

@@ -2,120 +2,119 @@ import { useState, useRef, useCallback } from 'react';
 import { ArrhythmiaDetector } from '../modules/ArrhythmiaDetector';
 
 /**
- * Hook para analizar arritmias en datos de ritmo cardíaco
- * VERSIÓN CORREGIDA Y SIMPLIFICADA
+ * Hook for analyzing arrhythmias in heart rate data
  */
 export const useArrhythmiaAnalyzer = () => {
   const [arrhythmiaCounter, setArrhythmiaCounter] = useState(0);
   const detectorRef = useRef<ArrhythmiaDetector | null>(null);
   
-  // CRUCIALES: Referencias para solucionar problemas de estado
-  const lastDetectionTimeRef = useRef(0);
-  const processingDataRef = useRef(false);
+  // Parámetros más sensibles para mejorar la detección
+  const STABILIZATION_PERIOD_MS = 3000; // Reducido a 3 segundos
+  const MIN_CONFIDENCE_THRESHOLD = 0.5; // Reducido para ser más permisivo
   
-  // Inicialización lazy del detector - GARANTIZAR UNA SOLA INSTANCIA
+  // Cache para análisis de confianza en detecciones
+  const confidenceCache = useRef<{
+    lastDetectionTime: number;
+    detectionCount: number;
+    falsePositiveCount: number;
+    consecutiveDetections: number;
+  }>({
+    lastDetectionTime: 0,
+    detectionCount: 0,
+    falsePositiveCount: 0,
+    consecutiveDetections: 0
+  });
+
+  // Inicialización lazy del detector
   const getDetector = useCallback(() => {
     if (!detectorRef.current) {
-      console.log("useArrhythmiaAnalyzer: CREANDO NUEVO DETECTOR");
       detectorRef.current = new ArrhythmiaDetector();
-      // Hacer accesible para debugging
-      (window as any).arrhythmiaDetector = detectorRef.current;
+      console.log("useArrhythmiaAnalyzer: Detector creado");
     }
     return detectorRef.current;
   }, []);
 
-  // Función SIMPLIFICADA para procesar arritmias - ALGORITMO DIRECTO
+  // Función principal para procesar arritmias con verificación mejorada
   const processArrhythmia = useCallback(
     (rrData: { intervals: number[]; lastPeakTime: number | null; amplitudes?: number[] }, 
      maxArrhythmias: number) => {
-      // Protección contra llamadas concurrentes
-      if (processingDataRef.current) {
-        console.warn("useArrhythmiaAnalyzer: Omitiendo procesamiento concurrente");
-        return {
-          detected: false,
-          arrhythmiaStatus: `SIN ARRITMIAS|${arrhythmiaCounter}`,
-          lastArrhythmiaData: null
-        };
-      }
+      const detector = getDetector();
+      const currentTime = Date.now();
+      const startTime = detector.getStartTime ? detector.getStartTime() : 0;
+      const timeElapsed = currentTime - startTime;
       
-      processingDataRef.current = true;
+      // Verificar si estamos en periodo de estabilización inicial
+      const isStabilizing = timeElapsed < STABILIZATION_PERIOD_MS;
       
-      try {
-        const detector = getDetector();
-        const currentTime = Date.now();
+      // Actualizar detector con nuevos datos incluyendo amplitudes
+      detector.updateIntervals(
+        rrData.intervals,
+        rrData.lastPeakTime,
+        rrData.amplitudes && rrData.amplitudes.length > 0 
+          ? rrData.amplitudes[rrData.amplitudes.length - 1] 
+          : undefined
+      );
+      
+      // Obtener resultado inicial de detección
+      const result = detector.detect();
+      
+      // Análisis simplificado para mayor sensibilidad
+      if (result.detected) {
+        // Verificar tiempo desde última detección
+        const timeSinceLastDetection = currentTime - confidenceCache.current.lastDetectionTime;
         
-        // 1. CRÍTICO: Verificar que tenemos datos válidos para procesar
-        if (!rrData.intervals || rrData.intervals.length < 2) {
-          console.log("useArrhythmiaAnalyzer: Datos insuficientes");
-          return {
-            detected: false,
-            arrhythmiaStatus: `SIN ARRITMIAS|${arrhythmiaCounter}`,
-            lastArrhythmiaData: null
-          };
-        }
-        
-        // 2. CRÍTICO: Asegurar que tenemos amplitudes o proveer valores por defecto
-        const validAmplitudes = rrData.amplitudes && rrData.amplitudes.length > 0;
-        if (!validAmplitudes) {
-          console.warn("useArrhythmiaAnalyzer: Sin amplitudes, usando valores por defecto");
-          // Crear amplitudes artificiales
-          rrData.amplitudes = rrData.intervals.map((_, i) => 1.0);
-        }
-        
-        // 3. Actualizar el detector con los nuevos datos
-        detector.updateIntervals(
-          rrData.intervals,
-          rrData.lastPeakTime,
-          rrData.amplitudes && rrData.amplitudes.length > 0 
-            ? rrData.amplitudes[rrData.amplitudes.length - 1] 
-            : 1.0
-        );
-        
-        // 4. Obtener resultado de detección
-        const result = detector.detect();
-        
-        // 5. SIMPLIFICADO: Respuesta directa del detector sin lógica adicional
-        if (result.detected) {
-          // Solo incrementar el contador si es una nueva arritmia (no continuación)
-          const timeSinceLastDetection = currentTime - lastDetectionTimeRef.current;
+        // Si es una nueva arritmia (no continuación de la anterior)
+        if (timeSinceLastDetection > 1000) { // Reducido a 1 segundo
+          confidenceCache.current.consecutiveDetections = 1;
           
-          if (timeSinceLastDetection > 1000 && arrhythmiaCounter < maxArrhythmias) {
+          // Solo incrementar si estamos por debajo del máximo
+          if (arrhythmiaCounter < maxArrhythmias) {
             setArrhythmiaCounter(prev => prev + 1);
-            lastDetectionTimeRef.current = currentTime;
-            console.log("useArrhythmiaAnalyzer: NUEVA ARRITMIA #", arrhythmiaCounter + 1);
+            console.log("useArrhythmiaAnalyzer: Nueva arritmia contabilizada, total:", arrhythmiaCounter + 1);
           }
+        } else {
+          confidenceCache.current.consecutiveDetections++;
         }
         
-        // 6. Generar respuesta para la UI
-        return {
-          detected: result.detected,
-          arrhythmiaStatus: result.detected 
-            ? `ARRITMIA DETECTADA|${arrhythmiaCounter}` 
-            : `SIN ARRITMIAS|${arrhythmiaCounter}`,
-          lastArrhythmiaData: result.detected ? {
-            timestamp: currentTime,
-            rmssd: result.data?.rmssd || 0,
-            rrVariation: result.data?.rrVariation || 0
-          } : null
-        };
-      } finally {
-        processingDataRef.current = false;
+        // Registrar tiempo de detección
+        confidenceCache.current.lastDetectionTime = currentTime;
+        confidenceCache.current.detectionCount++;
+      } else if (!result.detected) {
+        // Reiniciar contador de detecciones consecutivas si ha pasado suficiente tiempo
+        if (currentTime - confidenceCache.current.lastDetectionTime > 1500) { // Reducido a 1.5 segundos
+          confidenceCache.current.consecutiveDetections = 0;
+        }
       }
+            
+      // Prepara datos para mostrar en la interfaz
+      return {
+        detected: result.detected,
+        arrhythmiaStatus: result.detected 
+          ? `ARRITMIA DETECTADA|${arrhythmiaCounter}` 
+          : `SIN ARRITMIAS|${arrhythmiaCounter}`,
+        lastArrhythmiaData: result.detected ? {
+          timestamp: currentTime,
+          rmssd: result.data?.rmssd || 0,
+          rrVariation: result.data?.rrVariation || 0
+        } : null
+      };
     },
     [arrhythmiaCounter, getDetector]
   );
 
-  // Reset completo y claro
+  // Reiniciar detector y contadores
   const reset = useCallback(() => {
-    console.log("useArrhythmiaAnalyzer: RESET COMPLETO");
-    
     if (detectorRef.current) {
       detectorRef.current.reset();
     }
-    
     setArrhythmiaCounter(0);
-    lastDetectionTimeRef.current = 0;
-    processingDataRef.current = false;
+    confidenceCache.current = {
+      lastDetectionTime: 0,
+      detectionCount: 0,
+      falsePositiveCount: 0,
+      consecutiveDetections: 0
+    };
+    console.log("useArrhythmiaAnalyzer: Reset completo");
   }, []);
 
   return {
