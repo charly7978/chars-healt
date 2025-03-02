@@ -1,4 +1,3 @@
-
 /**
  * ArrhythmiaDetector.ts
  * 
@@ -10,18 +9,18 @@
 export class ArrhythmiaDetector {
   // Constants for arrhythmia detection
   private readonly RR_WINDOW_SIZE = 5;
-  private readonly ARRHYTHMIA_LEARNING_PERIOD = 2500; // Slightly increased from 2000ms to allow more learning
+  private readonly ARRHYTHMIA_LEARNING_PERIOD = 2800; // Aumentado de 2500ms a 2800ms para mejor aprendizaje
   
   // Enfoque mejorado para detectar SOLO latidos prematuros fuera del patrón rítmico
-  private readonly PREMATURE_BEAT_THRESHOLD = 0.70; // Ajustado para ser menos estricto
-  private readonly AMPLITUDE_RATIO_THRESHOLD = 0.65; // Aumentado de 0.60 a 0.65 para ser más exigente
-  private readonly NORMAL_PEAK_MIN_THRESHOLD = 0.85; // Mantener umbral para considerar un pico como normal
+  private readonly PREMATURE_BEAT_THRESHOLD = 0.73; // Ajustado de 0.70 a 0.73 para ser más estricto
+  private readonly AMPLITUDE_RATIO_THRESHOLD = 0.68; // Aumentado de 0.65 a 0.68 para mayor exigencia
+  private readonly NORMAL_PEAK_MIN_THRESHOLD = 0.88; // Aumentado de 0.85 a 0.88 para mayor seguridad
   
   // NUEVO: Umbral para detectar latidos fuera del patrón rítmico aprendido
-  private readonly RHYTHM_DEVIATION_THRESHOLD = 0.30; // Aumentado de 0.25 a 0.30 para más precisión
+  private readonly RHYTHM_DEVIATION_THRESHOLD = 0.33; // Aumentado de 0.30 a 0.33 para mayor precisión
   
   // NUEVO: Umbral de confianza mínima para contabilizar una arritmia
-  private readonly MIN_CONFIDENCE_THRESHOLD = 0.75; // Confianza mínima para contar una arritmia
+  private readonly MIN_CONFIDENCE_THRESHOLD = 0.82; // Aumentado de 0.75 a 0.82 para mayor precisión
 
   // State variables
   private rrIntervals: number[] = [];
@@ -289,7 +288,7 @@ export class ArrhythmiaDetector {
     // NUEVO: Verificar si el último latido ocurrió muy temprano respecto al patrón rítmico
     // Y que exista suficiente estabilidad en el ritmo (al menos 3 latidos normales previos)
     if (this.lastPeakTime && this.expectedNextBeatTime > 0 && this.peakSequence.length >= 3 && 
-        this.consecutiveNormalBeats >= 2) { // Necesitamos al menos 2 latidos normales previos
+        this.consecutiveNormalBeats >= 3) { // Aumentado de 2 a 3 latidos normales previos para mayor seguridad
       
       // Si el latido ocurrió antes de lo esperado (prematuramente) por un margen significativo
       const timeDifference = this.lastPeakTime - this.expectedNextBeatTime;
@@ -350,7 +349,10 @@ export class ArrhythmiaDetector {
         const secondPeakRatio = lastThreePeaks[1].amplitude / this.avgNormalAmplitude;
         const thirdPeakRatio = lastThreePeaks[2].amplitude / this.avgNormalAmplitude;
         
+        // Ajustado para ser más estricto: el pico prematuro debe ser claramente más pequeño
         if (secondPeakRatio <= this.AMPLITUDE_RATIO_THRESHOLD && 
+            secondPeakRatio < firstPeakRatio * 0.75 && // Añadido: debe ser 25% más pequeño que el anterior
+            secondPeakRatio < thirdPeakRatio * 0.75 && // Añadido: debe ser 25% más pequeño que el siguiente
             firstPeakRatio >= this.NORMAL_PEAK_MIN_THRESHOLD && 
             thirdPeakRatio >= this.NORMAL_PEAK_MIN_THRESHOLD) {
           
@@ -378,10 +380,10 @@ export class ArrhythmiaDetector {
     // Solo contar arritmias si:
     // 1. Se detectó un latido prematuro
     // 2. La confianza supera el umbral mínimo
-    // 3. Ha pasado suficiente tiempo desde la última (500ms) para evitar duplicados
+    // 3. Ha pasado suficiente tiempo desde la última (600ms) para evitar duplicados
     if (prematureBeatDetected && 
         detectionConfidence >= this.MIN_CONFIDENCE_THRESHOLD && 
-        currentTime - this.lastArrhythmiaTime > 500) {
+        currentTime - this.lastArrhythmiaTime > 600) { // Aumentado de 500 a 600ms
       
       this.arrhythmiaCount++;
       this.lastArrhythmiaTime = currentTime;
