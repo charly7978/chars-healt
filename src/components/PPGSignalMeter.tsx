@@ -238,33 +238,51 @@ const PPGSignalMeter = ({
         ctx.stroke();
       }
 
-      // MODIFICACIÓN PRINCIPAL: Solo detecta y dibuja círculos en los picos máximos
-      // Encontrar picos reales (máximos locales)
-      const peakIndices: number[] = [];
+      // ALGORITMO MEJORADO PARA DETECTAR SOLO PICOS MÁXIMOS VERDADEROS
+      // En lugar de detectar mínimos (valles), detectamos solo máximos (picos) con criterios más estrictos
+      const maxPeakIndices: number[] = [];
+      
+      // Primero encontramos todos los candidatos a picos máximos (puntos más altos que sus vecinos)
       for (let i = 2; i < visiblePoints.length - 2; i++) {
-        const prevPoint = visiblePoints[i - 1];
         const point = visiblePoints[i];
-        const nextPoint = visiblePoints[i + 1];
+        const prevPoint1 = visiblePoints[i - 1];
+        const prevPoint2 = visiblePoints[i - 2];
+        const nextPoint1 = visiblePoints[i + 1];
+        const nextPoint2 = visiblePoints[i + 2];
         
-        // Un punto es un pico máximo si es menor que los puntos adyacentes
-        // y cumple con ciertos criterios de amplitud
-        if (point.value < prevPoint.value && point.value < nextPoint.value) {
-          // Verificar que sea un pico significativo (no solo ruido)
-          // Comprobación de amplitud mínima para considerar un pico válido
+        // Un punto es candidato a pico máximo si es más alto que sus vecinos inmediatos
+        if (point.value > prevPoint1.value && 
+            point.value > prevPoint2.value && 
+            point.value > nextPoint1.value && 
+            point.value > nextPoint2.value) {
+          
+          // Verificar amplitud mínima respecto a la línea base (elimina picos pequeños/ruido)
+          const baselineValue = canvas.height * 0.4;
           const peakAmplitude = Math.abs(point.value);
-          if (peakAmplitude > 3.0) { // Umbral de amplitud para considerar un pico real
-            peakIndices.push(i);
+          
+          // Solo aceptar picos con amplitud significativa (ajustado para ser más selectivo)
+          if (peakAmplitude > 7.0) {
+            // Buscar si ya hay un pico cercano en tiempo (prevenir duplicados)
+            const peakTime = point.time;
+            const hasPeakNearby = maxPeakIndices.some(idx => {
+              const existingPeakTime = visiblePoints[idx].time;
+              return Math.abs(existingPeakTime - peakTime) < 250; // 250ms ventana
+            });
+            
+            if (!hasPeakNearby) {
+              maxPeakIndices.push(i);
+            }
           }
         }
       }
       
-      // Dibujar solo los picos máximos
-      for (let idx of peakIndices) {
+      // Ahora dibujamos solo los picos máximos verdaderos
+      for (let idx of maxPeakIndices) {
         const point = visiblePoints[idx];
         const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
         const y = canvas.height * 0.4 + point.value;
         
-        // Dibujar círculo en el pico
+        // Dibujar círculo en el pico máximo
         ctx.beginPath();
         ctx.arc(x, y, point.isArrhythmia ? 5 : 4, 0, Math.PI * 2);
         ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
