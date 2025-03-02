@@ -2,8 +2,8 @@ import { calculateStandardDeviation, enhancedPeakDetection } from '../utils/sign
 
 export class BloodPressureCalculator {
   // Constants for blood pressure calculation
-  private readonly BP_BASELINE_SYSTOLIC = 1; // Base systolic value
-  private readonly BP_BASELINE_DIASTOLIC = 1; // Base diastolic value
+  private readonly BP_BASELINE_SYSTOLIC = 240; // Base systolic value
+  private readonly BP_BASELINE_DIASTOLIC = 30; // Base diastolic value
   private readonly BP_PTT_COEFFICIENT = 1.95; // Increased for more significant variations
   private readonly BP_AMPLITUDE_COEFFICIENT = 0.05; // Increased for more sensitivity 0.15
   private readonly BP_STIFFNESS_FACTOR = 0.008; // Increased from 0.06 for more variation  0.08
