@@ -8,6 +8,25 @@ interface CameraViewProps {
   signalQuality?: number;
 }
 
+// Define custom interface extending the standard definitions
+interface ExtendedMediaTrackCapabilities extends MediaTrackCapabilities {
+  exposureTime?: {
+    min: number;
+    max: number;
+    step: number;
+  };
+  zoom?: {
+    min: number;
+    max: number;
+    step: number;
+  };
+}
+
+interface ExtendedMediaTrackConstraints extends MediaTrackConstraints {
+  exposureTime?: number;
+  zoom?: number;
+}
+
 const CameraView = ({
   onStreamReady,
   isMonitoring,
@@ -21,20 +40,20 @@ const CameraView = ({
   const [error, setError] = useState<string | null>(null);
   const [isAndroid, setIsAndroid] = useState(false);
 
-  // Detectar si estamos en Android
+  // Detect if we're on Android - only compute this once
   useEffect(() => {
     const userAgent = navigator.userAgent.toLowerCase();
     setIsAndroid(/android/i.test(userAgent));
   }, []);
 
-  // Función para detener la cámara y liberar recursos
+  // Function to stop the camera and release resources
   const stopCamera = useCallback(() => {
     console.log("CameraView: Deteniendo cámara");
     
     if (streamRef.current) {
       const tracks = streamRef.current.getTracks();
       tracks.forEach(track => {
-        // Primero desactivar la linterna si está disponible
+        // First disable torch if available
         if (track.getCapabilities()?.torch) {
           try {
             console.log("CameraView: Desactivando linterna");
@@ -46,7 +65,7 @@ const CameraView = ({
           }
         }
         
-        // Esperar un momento antes de detener la pista (ayuda con Android)
+        // Wait a moment before stopping the track (helps with Android)
         setTimeout(() => {
           try {
             if (track.readyState === 'live') {
@@ -62,7 +81,7 @@ const CameraView = ({
       streamRef.current = null;
     }
 
-    // Limpiar el video element
+    // Clear the video element
     if (videoRef.current) {
       try {
         videoRef.current.pause();
@@ -73,7 +92,7 @@ const CameraView = ({
     }
   }, []);
 
-  // Función para iniciar la cámara
+  // Function to start the camera with optimized settings
   const startCamera = useCallback(async () => {
     if (!mountedRef.current || initializingRef.current) return;
     if (!isMonitoring) {
@@ -86,28 +105,38 @@ const CameraView = ({
     setError(null);
     
     try {
-      // Asegurarse de que cualquier stream previo está detenido
+      // Make sure any previous stream is stopped
       stopCamera();
       
-      // Esperar un momento para que los recursos se liberen (especialmente en Android)
+      // Wait for resources to be released (especially on Android)
       await new Promise(resolve => setTimeout(resolve, isAndroid ? 300 : 50));
 
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error('La API getUserMedia no está disponible');
       }
 
-      // Configuración de la cámara optimizada para cada plataforma
-      const constraints: MediaStreamConstraints = {
-        video: {
-          facingMode: 'environment',
-          width: isAndroid ? { ideal: 1280 } : { ideal: 640 },
-          height: isAndroid ? { ideal: 720 } : { ideal: 480 },
-          frameRate: { ideal: isAndroid ? 24 : 30 }
-        },
-        audio: false
-      };
+      // Optimized camera configuration for each platform
+      const constraints: MediaStreamConstraints = isAndroid 
+        ? {
+            video: {
+              facingMode: 'environment',
+              width: { ideal: 640, max: 1280 },  // Reduced resolution for better performance
+              height: { ideal: 480, max: 720 },
+              frameRate: { ideal: 15, max: 24 }  // Reduced frame rate for better performance
+            },
+            audio: false
+          }
+        : {
+            video: {
+              facingMode: 'environment',
+              width: { ideal: 640 },
+              height: { ideal: 480 },
+              frameRate: { ideal: 20, max: 30 }
+            },
+            audio: false
+          };
 
-      // Intentar obtener acceso a la cámara
+      // Try to access the camera
       console.log("CameraView: Solicitando acceso a la cámara con constraints:", constraints);
       const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
       console.log("CameraView: Acceso a la cámara concedido, tracks:", mediaStream.getTracks().length);
@@ -121,19 +150,32 @@ const CameraView = ({
 
       streamRef.current = mediaStream;
 
-      // Configurar optimizaciones específicas para Android
+      // Apply specific optimizations for Android
       if (isAndroid) {
         console.log("CameraView: Aplicando optimizaciones para Android");
         const videoTrack = mediaStream.getVideoTracks()[0];
         if (videoTrack) {
           try {
-            // Optimizaciones para Android
-            const capabilities = videoTrack.getCapabilities();
-            const settings: MediaTrackConstraints = {};
+            // Android optimizations
+            const capabilities = videoTrack.getCapabilities() as ExtendedMediaTrackCapabilities;
+            const settings: ExtendedMediaTrackConstraints = {};
             
+            // Only apply constraints that are actually available and beneficial
             if (capabilities.exposureMode && capabilities.exposureMode.includes('continuous')) {
               settings.exposureMode = 'continuous';
             }
+            
+            // Skip exposureTime setting as it's not standard
+            /* 
+            if (capabilities.exposureTime) {
+              // Set a moderate exposure time for better performance
+              const min = capabilities.exposureTime.min || 0;
+              const max = capabilities.exposureTime.max || 10000;
+              if (min < max) {
+                settings.exposureTime = Math.min(Math.max(min + (max - min) * 0.3, min), max);
+              }
+            }
+            */
             
             if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
               settings.focusMode = 'continuous';
@@ -142,6 +184,18 @@ const CameraView = ({
             if (capabilities.whiteBalanceMode && capabilities.whiteBalanceMode.includes('continuous')) {
               settings.whiteBalanceMode = 'continuous';
             }
+            
+            // Skip zoom setting as it's not standard
+            /*
+            if (capabilities.zoom) {
+              // Apply a slight zoom to focus on the center
+              const min = capabilities.zoom.min || 1;
+              const max = capabilities.zoom.max || 1;
+              if (max > min) {
+                settings.zoom = Math.min(min + (max - min) * 0.1, max);
+              }
+            }
+            */
             
             if (Object.keys(settings).length > 0) {
               await videoTrack.applyConstraints(settings);
@@ -153,20 +207,24 @@ const CameraView = ({
         }
       }
 
-      // Configurar el elemento de video
+      // Set up the video element
       if (videoRef.current) {
         console.log("CameraView: Asignando stream al elemento video");
         
-        // Optimizaciones específicas para el elemento video en Android
+        // Specific optimizations for the video element on Android
         if (isAndroid) {
           videoRef.current.style.willChange = 'transform';
           videoRef.current.style.transform = 'translateZ(0)';
           videoRef.current.style.backfaceVisibility = 'hidden';
+          
+          // Set playsinline and muted to improve performance
+          videoRef.current.setAttribute('playsinline', '');
+          videoRef.current.muted = true;
         }
         
         videoRef.current.srcObject = mediaStream;
         
-        // En Android, esperar a que las optimizaciones se apliquen antes de reproducir
+        // On Android, wait for optimizations to apply before playing
         await new Promise(resolve => setTimeout(resolve, isAndroid ? 100 : 0));
         
         await videoRef.current.play().catch(e => {
@@ -178,10 +236,10 @@ const CameraView = ({
         console.error("CameraView: El elemento video no está disponible");
       }
 
-      // Esperar un momento antes de activar la linterna en Android
+      // Wait a moment before activating the flashlight on Android
       await new Promise(resolve => setTimeout(resolve, isAndroid ? 200 : 0));
 
-      // Intentar activar la linterna si estamos monitorizando
+      // Try to activate the flashlight if we're monitoring
       const videoTrack = mediaStream.getVideoTracks()[0];
       if (videoTrack && videoTrack.getCapabilities()?.torch) {
         try {
@@ -197,7 +255,7 @@ const CameraView = ({
         console.log("CameraView: Linterna no disponible");
       }
 
-      // Notificar que el stream está listo
+      // Notify that the stream is ready
       if (onStreamReady && isMonitoring) {
         console.log("CameraView: Notificando stream listo");
         onStreamReady(mediaStream);
@@ -211,30 +269,30 @@ const CameraView = ({
     }
   }, [isMonitoring, onStreamReady, stopCamera, isAndroid]);
 
-  // Efecto para iniciar/detener la cámara cuando cambia isMonitoring
+  // Effect to start/stop the camera when isMonitoring changes
   useEffect(() => {
     console.log("CameraView: isMonitoring cambió a:", isMonitoring);
     
     if (isMonitoring) {
-      // Usar un timeout más largo para Android
+      // Use a longer timeout for Android
       const timeoutId = setTimeout(() => {
         startCamera();
-      }, isAndroid ? 500 : 100);
+      }, isAndroid ? 300 : 100);
       return () => clearTimeout(timeoutId);
     } else {
       stopCamera();
     }
   }, [isMonitoring, startCamera, stopCamera, isAndroid]);
 
-  // Efecto de limpieza al montar/desmontar el componente
+  // Cleanup effect when mounting/unmounting the component
   useEffect(() => {
     mountedRef.current = true;
     console.log("CameraView: Componente montado");
 
-    // Asegurarse de que los permisos de la cámara estén disponibles
+    // Check if camera permissions are available
     navigator.mediaDevices?.getUserMedia({ video: true, audio: false })
       .then(stream => {
-        // Solo comprobamos los permisos, detenemos el stream inmediatamente
+        // Just checking permissions, stop the stream immediately
         stream.getTracks().forEach(track => track.stop());
         console.log("CameraView: Permisos de cámara verificados");
       })

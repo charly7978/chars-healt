@@ -1,191 +1,209 @@
+
 import { useState, useRef, useCallback } from 'react';
-import { ArrhythmiaDetector } from '../modules/ArrhythmiaDetector';
 
 /**
- * Hook que proporciona funcionalidad para analizar arritmias cardíacas
- * en datos de fotopletismografía (PPG).
- * 
- * Integra el detector avanzado de arritmias y maneja su ciclo de vida.
+ * Hook for analyzing arrhythmias in heart rate data
  */
 export const useArrhythmiaAnalyzer = () => {
-  // Estado público para comunicar el conteo de arritmias a la UI
+  // Constants for arrhythmia detection
+  const ANALYSIS_WINDOW_SIZE = 10; // Análisis sobre 10 latidos consecutivos
+  const ARRHYTHMIA_CONFIRMATION_THRESHOLD = 3; // Requiere confirmación en al menos 3 ciclos
+  const MIN_TIME_BETWEEN_ARRHYTHMIAS = 1000; // Mínimo 1 segundo entre arritmias
+  
+  // State and refs
   const [arrhythmiaCounter, setArrhythmiaCounter] = useState(0);
+  const lastArrhythmiaTime = useRef<number>(0);
+  const hasDetectedArrhythmia = useRef<boolean>(false);
   
-  // Referencia al detector principal para mantenerlo entre renders
-  const detectorRef = useRef<ArrhythmiaDetector | null>(null);
-  
-  // Referencias para métricas y datos
-  const lastDataRef = useRef<{
-    timestamp: number;
-    rmssd: number;
-    rrVariation: number;
-    arrhythmiaStatus: string;
-  }>({
-    timestamp: 0,
-    rmssd: 0,
-    rrVariation: 0,
-    arrhythmiaStatus: 'SIN ARRITMIAS|0'
-  });
-  
-  // Flag para evitar detecciones en los primeros segundos
-  const isInitializedRef = useRef<boolean>(false);
-  
-  // Constantes para el análisis
-  const MAX_ARRHYTHMIAS_PER_MINUTE = 30; // Límite razonable
+  // Analysis buffers
+  const rrIntervalsHistoryRef = useRef<number[][]>([]);
+  const rmssdHistoryRef = useRef<number[]>([]);
+  const rrVariationHistoryRef = useRef<number[]>([]);
   
   /**
-   * Inicializa el detector si no existe
-   */
-  const getDetector = useCallback(() => {
-    if (!detectorRef.current) {
-      console.log("useArrhythmiaAnalyzer: Creando nueva instancia del detector");
-      detectorRef.current = new ArrhythmiaDetector();
-      isInitializedRef.current = false;
-      
-      // Marcar como inicializado después de un tiempo para evitar falsas detecciones iniciales
-      setTimeout(() => {
-        isInitializedRef.current = true;
-      }, 2000);
-    }
-    return detectorRef.current;
-  }, []);
-  
-  /**
-   * Resetea el estado del detector y las métricas
+   * Reset all analysis state
    */
   const reset = useCallback(() => {
-    if (detectorRef.current) {
-      detectorRef.current.reset();
-    }
-    
     setArrhythmiaCounter(0);
-    isInitializedRef.current = false;
+    lastArrhythmiaTime.current = 0;
+    hasDetectedArrhythmia.current = false;
     
-    lastDataRef.current = {
-      timestamp: 0,
-      rmssd: 0, 
-      rrVariation: 0,
-      arrhythmiaStatus: 'SIN ARRITMIAS|0'
-    };
+    // Clear buffers
+    rrIntervalsHistoryRef.current = [];
+    rmssdHistoryRef.current = [];
+    rrVariationHistoryRef.current = [];
     
-    console.log("useArrhythmiaAnalyzer: Detector y métricas reseteados");
-    
-    // Re-marcar como inicializado después de un breve retraso
-    setTimeout(() => {
-      isInitializedRef.current = true;
-    }, 2000);
+    console.log("Arrhythmia analyzer reset");
   }, []);
   
   /**
-   * Procesa los datos de intervalos RR para detectar arritmias
-   * @param rrData - Datos de intervalos RR, tiempos de picos y amplitudes
-   * @param maxArrhythmiasCount - Límite máximo de arritmias a detectar
+   * Analyze RR intervals to detect arrhythmias based on medical algorithms
+   */
+  const analyzeArrhythmia = useCallback((intervals: number[]) => {
+    if (intervals.length < 4) return { detected: false, confidence: 0, rmssd: 0, rrVariation: 0 };
+    
+    // Seleccionar últimos 4 intervalos para análisis (suficientes para detectar la mayoría de arritmias)
+    const recentIntervals = intervals.slice(-4);
+    
+    // 1. Calcular RMSSD (Root Mean Square of Successive Differences)
+    // Un indicador clave de la variabilidad de la frecuencia cardíaca
+    let sumSquaredDiff = 0;
+    for (let i = 1; i < recentIntervals.length; i++) {
+      const diff = recentIntervals[i] - recentIntervals[i-1];
+      sumSquaredDiff += Math.pow(diff, 2);
+    }
+    const rmssd = Math.sqrt(sumSquaredDiff / (recentIntervals.length - 1));
+    
+    // 2. Calcular variación porcentual de intervalos RR
+    const avgRR = recentIntervals.reduce((a, b) => a + b, 0) / recentIntervals.length;
+    // Tomar el último intervalo R-R para compararlo con el promedio
+    const lastRR = recentIntervals[recentIntervals.length - 1];
+    const rrVariation = Math.abs(lastRR - avgRR) / avgRR;
+    
+    // 3. Calcular Índice de Arritmia basado en el coeficiente de variación
+    const rrStandardDeviation = Math.sqrt(
+      recentIntervals.reduce((sum, rr) => sum + Math.pow(rr - avgRR, 2), 0) / recentIntervals.length
+    );
+    const coefficientOfVariation = rrStandardDeviation / avgRR;
+    
+    // 4. Calcular Poincaré SD1 (variabilidad a corto plazo)
+    let sd1Sum = 0;
+    for (let i = 0; i < recentIntervals.length - 1; i++) {
+      const x1 = recentIntervals[i];
+      const x2 = recentIntervals[i + 1];
+      sd1Sum += Math.pow((x2 - x1) / Math.sqrt(2), 2);
+    }
+    const sd1 = Math.sqrt(sd1Sum / (recentIntervals.length - 1));
+    
+    // 5. Buscar presencia de latidos ectópicos (significativamente diferentes)
+    const ectopicBeatDetected = recentIntervals.some(interval => 
+      Math.abs(interval - avgRR) > (avgRR * 0.40) // 40% de diferencia es indicativo de latido ectópico
+    );
+    
+    // 6. Algoritmo avanzado para detección de arritmias combinando múltiples indicadores
+    // Criterios basados en literatura médica para arritmias cardíacas
+    let arrhythmiaConfidence = 
+      (rmssd > 50 ? 0.35 : 0) +                    // Alta RMSSD
+      (rrVariation > 0.2 ? 0.25 : 0) +             // Alta variación RR
+      (coefficientOfVariation > 0.15 ? 0.20 : 0) + // Alto coeficiente de variación
+      (sd1 > 30 ? 0.10 : 0) +                      // Alta variabilidad a corto plazo
+      (ectopicBeatDetected ? 0.10 : 0);            // Presencia de latidos ectópicos
+    
+    // Guardar datos para análisis de tendencias
+    rrIntervalsHistoryRef.current.push(recentIntervals);
+    if (rrIntervalsHistoryRef.current.length > ANALYSIS_WINDOW_SIZE) {
+      rrIntervalsHistoryRef.current.shift();
+    }
+    
+    rmssdHistoryRef.current.push(rmssd);
+    if (rmssdHistoryRef.current.length > ANALYSIS_WINDOW_SIZE) {
+      rmssdHistoryRef.current.shift();
+    }
+    
+    rrVariationHistoryRef.current.push(rrVariation);
+    if (rrVariationHistoryRef.current.length > ANALYSIS_WINDOW_SIZE) {
+      rrVariationHistoryRef.current.shift();
+    }
+    
+    // Análisis de tendencias para confirmar arritmias y reducir falsos positivos
+    let confirmedArrhythmia = arrhythmiaConfidence >= 0.70; // Alta confianza en detección inmediata
+    
+    // Si no está confirmado por alta confianza, verificar persistencia en ventana de análisis
+    if (!confirmedArrhythmia && rmssdHistoryRef.current.length >= 3) {
+      // Contar cuántos de los últimos análisis mostraron alta RMSSD y variación RR
+      let confirmationCount = 0;
+      for (let i = 1; i <= Math.min(ARRHYTHMIA_CONFIRMATION_THRESHOLD, rmssdHistoryRef.current.length); i++) {
+        const historicIndex = rmssdHistoryRef.current.length - i;
+        if (historicIndex >= 0 && 
+            rmssdHistoryRef.current[historicIndex] > 40 && 
+            rrVariationHistoryRef.current[historicIndex] > 0.18) {
+          confirmationCount++;
+        }
+      }
+      
+      // Confirmar arritmia si hay suficientes ciclos que la respaldan
+      if (confirmationCount >= ARRHYTHMIA_CONFIRMATION_THRESHOLD - 1) {
+        confirmedArrhythmia = true;
+        // Ajustar confianza basada en persistencia
+        arrhythmiaConfidence = Math.max(arrhythmiaConfidence, 0.65);
+      }
+    }
+    
+    return {
+      detected: confirmedArrhythmia,
+      confidence: arrhythmiaConfidence,
+      rmssd,
+      rrVariation
+    };
+  }, []);
+  
+  /**
+   * Process new RR interval data and update arrhythmia state
    */
   const processArrhythmia = useCallback((
-    rrData: { 
-      intervals: number[]; 
-      lastPeakTime: number | null; 
-      amplitudes?: number[] 
-    },
-    maxArrhythmiasCount: number = MAX_ARRHYTHMIAS_PER_MINUTE
+    rrData: { intervals: number[], lastPeakTime: number | null },
+    maxArrhythmias: number = 15
   ) => {
-    const detector = getDetector();
-    const currentTime = Date.now();
-    
-    // Actualizar los intervalos en el detector
-    if (rrData.intervals && rrData.intervals.length > 0) {
-      // Extraer la amplitud del último pico si está disponible
-      const peakAmplitude = rrData.amplitudes && rrData.amplitudes.length > 0 ?
-        rrData.amplitudes[rrData.amplitudes.length - 1] : undefined;
-        
-      detector.updateIntervals(rrData.intervals, rrData.lastPeakTime, peakAmplitude);
-      
-      // No analizar si estamos en fase de aprendizaje
-      if (detector.isInLearningPhase()) {
-        lastDataRef.current = {
-          timestamp: currentTime,
-          rmssd: 0,
-          rrVariation: 0,
-          arrhythmiaStatus: 'CALIBRANDO|0'
-        };
-        
-        return {
-          detected: false,
-          arrhythmiaStatus: 'CALIBRANDO|0',
-          lastArrhythmiaData: null
-        };
-      }
-      
-      // Ejecutar la detección si ya estamos inicializados
-      if (isInitializedRef.current) {
-        const result = detector.detect();
-        
-        // Si detectamos una arritmia y estamos por debajo del límite
-        if (result.detected && result.count <= maxArrhythmiasCount) {
-          setArrhythmiaCounter(result.count);
-          
-          // Guardar datos para análisis y UI
-          if (result.data) {
-            lastDataRef.current = {
-              timestamp: currentTime,
-              rmssd: result.data.rmssd,
-              rrVariation: result.data.rrVariation,
-              arrhythmiaStatus: result.status
-            };
-            
-            return {
-              detected: true,
-              arrhythmiaStatus: result.status,
-              lastArrhythmiaData: {
-                timestamp: currentTime,
-                rmssd: result.data.rmssd,
-                rrVariation: result.data.rrVariation
-              }
-            };
-          }
-        }
-        
-        // Actualizar solo el estado si no hubo detección activa
-        lastDataRef.current = {
-          timestamp: currentTime,
-          rmssd: result.data?.rmssd || 0,
-          rrVariation: result.data?.rrVariation || 0,
-          arrhythmiaStatus: result.status
-        };
-        
-        return {
-          detected: false,
-          arrhythmiaStatus: result.status,
-          lastArrhythmiaData: null
-        };
-      }
+    if (!rrData?.intervals || rrData.intervals.length < 4) {
+      return {
+        detected: false,
+        arrhythmiaStatus: hasDetectedArrhythmia.current 
+          ? `ARRITMIA DETECTADA|${arrhythmiaCounter}`
+          : `SIN ARRITMIAS|${arrhythmiaCounter}`,
+        lastArrhythmiaData: null
+      };
     }
     
-    // Si no tenemos suficientes datos o no estamos inicializados
+    const currentTime = Date.now();
+    const arrhythmiaAnalysis = analyzeArrhythmia(rrData.intervals);
+    
+    if (arrhythmiaAnalysis.detected && 
+        arrhythmiaAnalysis.confidence >= 0.65 && 
+        currentTime - lastArrhythmiaTime.current >= MIN_TIME_BETWEEN_ARRHYTHMIAS &&
+        arrhythmiaCounter < maxArrhythmias) {
+      
+      hasDetectedArrhythmia.current = true;
+      setArrhythmiaCounter(prev => prev + 1);
+      lastArrhythmiaTime.current = currentTime;
+      
+      console.log("Arritmia detectada:", {
+        rmssd: arrhythmiaAnalysis.rmssd,
+        rrVariation: arrhythmiaAnalysis.rrVariation,
+        confidence: arrhythmiaAnalysis.confidence,
+        intervals: rrData.intervals.slice(-4),
+        counter: arrhythmiaCounter + 1
+      });
+
+      return {
+        detected: true,
+        arrhythmiaStatus: `ARRITMIA DETECTADA|${arrhythmiaCounter + 1}`,
+        lastArrhythmiaData: {
+          timestamp: currentTime,
+          rmssd: arrhythmiaAnalysis.rmssd,
+          rrVariation: arrhythmiaAnalysis.rrVariation
+        }
+      };
+    }
+    
+    // Si ya detectamos una arritmia antes, mantenemos el estado
+    if (hasDetectedArrhythmia.current) {
+      return {
+        detected: false,
+        arrhythmiaStatus: `ARRITMIA DETECTADA|${arrhythmiaCounter}`,
+        lastArrhythmiaData: null
+      };
+    }
+    
     return {
       detected: false,
-      arrhythmiaStatus: lastDataRef.current.arrhythmiaStatus,
+      arrhythmiaStatus: `SIN ARRITMIAS|${arrhythmiaCounter}`,
       lastArrhythmiaData: null
     };
-  }, [getDetector]);
-  
-  /**
-   * Limpieza agresiva de memoria
-   */
-  const cleanMemory = useCallback(() => {
-    if (detectorRef.current) {
-      detectorRef.current.cleanMemory();
-      detectorRef.current = null;
-    }
-    
-    console.log("useArrhythmiaAnalyzer: Memoria liberada");
-  }, []);
+  }, [arrhythmiaCounter, analyzeArrhythmia]);
   
   return {
     processArrhythmia,
     reset,
-    cleanMemory,
-    arrhythmiaCounter,
-    getLastData: () => lastDataRef.current
+    arrhythmiaCounter
   };
 };

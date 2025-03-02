@@ -8,10 +8,9 @@ interface VitalSignProps {
   isFinalReading?: boolean;
 }
 
-const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReading = false }) => {
+const VitalSign: React.FC<VitalSignProps> = memo(({ label, value, unit, isFinalReading = false }) => {
   const isArrhythmiaDisplay = label === "ARRITMIAS";
   const isBloodPressure = label === "PRESIÓN ARTERIAL";
-  const isSpO2Display = label === "SPO2";
 
   // Helper function to check if blood pressure value is unrealistic
   const isBloodPressureUnrealistic = (bpString: string): boolean => {
@@ -31,79 +30,33 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     return false;
   };
 
-  // Cache para optimizar procesamiento de valores repetidos
-  const displayValueCache = new Map<string, string | number>();
-  
   // Process blood pressure display for stable, realistic readings
-  const processedDisplayValue = useMemo(() => {
-    const cacheKey = `${label}-${value}`;
-    if (displayValueCache.has(cacheKey)) {
-      return displayValueCache.get(cacheKey);
-    }
-    
-    let result = value;
+  const getDisplayValue = (): string | number => {
     if (isBloodPressure && typeof value === 'string') {
       // Always show placeholder values unchanged
-      if (value === "--/--" || value === "0/0") {
-        result = value;
-      } else if (isBloodPressureUnrealistic(value)) {
-        result = "--/--";
+      if (value === "--/--" || value === "0/0") return value;
+      
+      // Filter out clearly unrealistic readings
+      if (isBloodPressureUnrealistic(value)) {
+        console.log("Medically unrealistic BP filtered:", value);
+        return "--/--";
       }
+      
+      // This is a valid reading within medical ranges
+      return value;
     }
     
-    displayValueCache.set(cacheKey, result);
-    return result;
-  }, [value, isBloodPressure, label]);
-
-  const getRiskInfo = () => {
-    if (isArrhythmiaDisplay) {
-      return getArrhythmiaDisplay();
-    }
-
-    // For heart rate, show real value without checking risk if no measurement
-    if (label === "FRECUENCIA CARDÍACA") {
-      if (value === "--" || value === 0) {
-        return { color: '#000000', label: '' };
-      }
-      if (typeof value === 'number') {
-        return VitalSignsRisk.getBPMRisk(value, isFinalReading);
-      }
-    }
-
-    // For SPO2, show real value without checking risk if no measurement
-    if (isSpO2Display) {
-      if (value === "--" || value === 0) {
-        return { color: '#000000', label: '' };
-      }
-      if (typeof value === 'number') {
-        return VitalSignsRisk.getSPO2Risk(value, isFinalReading);
-      }
-    }
-
-    // For blood pressure, show real value without checking risk if no measurement
-    if (isBloodPressure) {
-      if (value === "--/--" || value === "0/0") {
-        return { color: '#000000', label: '' };
-      }
-      
-      // Don't try to evaluate risk if measurement is unstable/unrealistic
-      if (typeof value === 'string' && !isBloodPressureUnrealistic(value)) {
-        return VitalSignsRisk.getBPRisk(value, isFinalReading);
-      }
-      
-      return { color: '#000000', label: '' };
-    }
-
-    return { color: '#000000', label: '' };
+    return value;
   };
-  
+
+  // Function to handle arrhythmia display - defined before it's used in riskInfo
   const getArrhythmiaDisplay = () => {
     if (!isArrhythmiaDisplay) return { text: value, color: "", label: "" };
     
     if (value === "--") {
       return { 
         text: "--", 
-        color: "#000000",
+        color: "#D3E4FD",
         label: ""
       };
     }
@@ -112,45 +65,99 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     
     if (status === "ARRITMIA DETECTADA") {
       return {
-        text: count ? `LATIDOS PREMATUROS (${count})` : "LATIDOS PREMATUROS",
+        text: count ? `ARRITMIA DETECTADA (${count})` : "ARRITMIA DETECTADA",
         color: "#DC2626",
-        label: "PREMATUROS"
+        label: "ARRITMIA"
       };
     }
     
     return {
-      text: "RITMO NORMAL",
+      text: "SIN ARRITMIA DETECTADA",
       color: "#0EA5E9",
       label: "NORMAL"
     };
   };
 
+  // Memoized risk information calculation to optimize rendering
+  const riskInfo = useMemo(() => {
+    if (isArrhythmiaDisplay) {
+      return getArrhythmiaDisplay();
+    }
+
+    // For heart rate, show real value without checking risk if no measurement
+    if (label === "FRECUENCIA CARDÍACA") {
+      if (value === "--" || value === 0) {
+        return { color: '#D3E4FD', label: '' };
+      }
+      if (typeof value === 'number') {
+        return VitalSignsRisk.getBPMRisk(value, isFinalReading);
+      }
+    }
+
+    // For SPO2, show real value without checking risk if no measurement
+    if (label === "SPO2") {
+      if (value === "--" || value === 0) {
+        return { color: '#D3E4FD', label: '' };
+      }
+      if (typeof value === 'number') {
+        return VitalSignsRisk.getSPO2Risk(value, isFinalReading);
+      }
+    }
+
+    // For blood pressure, show real value without checking risk if no measurement
+    if (label === "PRESIÓN ARTERIAL") {
+      if (value === "--/--" || value === "0/0") {
+        return { color: '#D3E4FD', label: '' };
+      }
+      
+      // Don't try to evaluate risk if measurement is unstable/unrealistic
+      if (typeof value === 'string' && !isBloodPressureUnrealistic(value)) {
+        return VitalSignsRisk.getBPRisk(value, isFinalReading);
+      }
+      
+      return { color: '#D3E4FD', label: '' };
+    }
+
+    return { color: '#D3E4FD', label: '' };
+  }, [label, value, isArrhythmiaDisplay, isBloodPressure, isFinalReading]);
+  
+  // Memoized display value calculation to optimize rendering
+  const displayValue = useMemo(() => getDisplayValue(), [value, isBloodPressure]);
+  
   // Get the risk info based on the medically valid display value 
   const { text, color, label: riskLabel } = isArrhythmiaDisplay ? 
     getArrhythmiaDisplay() : 
-    { text: processedDisplayValue, ...getRiskInfo() };
+    { text: displayValue, ...riskInfo };
 
-  // Simplificar el renderizado para mejorar rendimiento
   return (
-    <div className="relative overflow-hidden rounded-xl bg-black shadow-lg">
-      <div className="relative z-10 p-4">
-        <h3 className="text-white text-xs font-medium tracking-wider mb-2">{label}</h3>
-        <div className="flex flex-col items-center gap-1">
+    <div className="relative overflow-hidden rounded-xl backdrop-blur-md shadow-lg p-2">
+      {/* Capa transparente al 70% que cubre solo la superficie del display */}
+      <div 
+        className="absolute inset-0 rounded-xl" 
+        style={{ 
+          backgroundColor: 'rgba(0, 0, 0, 0.7)', 
+          backdropFilter: 'blur(2px)' 
+        }} 
+      />
+      
+      <div className="relative z-10 p-2">
+        <h3 className="text-[#D3E4FD] text-[10px] font-medium tracking-wider mb-1">{label}</h3>
+        <div className="flex flex-col items-center">
           <div className="flex items-baseline gap-1 justify-center">
             <span 
-              className={`${isArrhythmiaDisplay ? 'text-base' : 'text-xl'} font-bold transition-colors duration-300 text-white`}
-              style={{ color: color || '#000000' }}
+              className={`${isArrhythmiaDisplay ? 'text-sm' : 'text-lg'} font-bold transition-colors duration-300 text-[#D3E4FD]`}
+              style={{ color: color || '#D3E4FD' }}
             >
-              {text}
+              {isArrhythmiaDisplay ? text : displayValue}
             </span>
             {!isArrhythmiaDisplay && unit && (
-              <span className="text-white text-xs">{unit}</span>
+              <span className="text-[#D3E4FD] text-[9px]">{unit}</span>
             )}
           </div>
           {riskLabel && (
             <span 
-              className="text-[10px] font-semibold tracking-wider mt-1 text-white"
-              style={{ color: color || '#000000' }}
+              className="text-[9px] font-semibold tracking-wider mt-0.5 text-[#D3E4FD]"
+              style={{ color: color || '#D3E4FD' }}
             >
               {riskLabel}
             </span>
@@ -159,6 +166,6 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
       </div>
     </div>
   );
-};
+});
 
 export default VitalSign;

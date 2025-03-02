@@ -34,7 +34,7 @@ export const useVitalSignsProcessor = () => {
   /**
    * Process a new signal value and update all vitals
    */
-  const processSignal = useCallback((value: number, rrData?: { intervals: number[], lastPeakTime: number | null, amplitudes?: number[] }) => {
+  const processSignal = useCallback((value: number, rrData?: { intervals: number[], lastPeakTime: number | null }) => {
     const processor = getProcessor();
     const currentTime = Date.now();
     
@@ -77,9 +77,8 @@ export const useVitalSignsProcessor = () => {
       dataCollector.current.addBloodPressure(stabilizedBP);
     }
     
-    // Advanced arrhythmia analysis - ensure we're passing peak amplitudes if available
+    // Advanced arrhythmia analysis
     if (rrData?.intervals && rrData.intervals.length >= 4) {
-      // Make sure to pass amplitude data to the arrhythmia analyzer if available
       const arrhythmiaResult = arrhythmiaAnalyzer.processArrhythmia(rrData, MAX_ARRHYTHMIAS_PER_SESSION);
       
       if (arrhythmiaResult.detected) {

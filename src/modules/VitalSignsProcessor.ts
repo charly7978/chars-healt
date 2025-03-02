@@ -1,6 +1,6 @@
 
 import { applySMAFilter } from '../utils/signalProcessingUtils';
-import { SpO2Calculator } from './spo2';
+import { SpO2Calculator } from './SpO2Calculator';
 import { BloodPressureCalculator } from './BloodPressureCalculator';
 import { ArrhythmiaDetector } from './ArrhythmiaDetector';
 
@@ -32,24 +32,20 @@ export class VitalSignsProcessor {
    */
   public processSignal(
     ppgValue: number,
-    rrData?: { intervals: number[]; lastPeakTime: number | null; amplitudes?: number[] }
+    rrData?: { intervals: number[]; lastPeakTime: number | null }
   ) {
     const currentTime = Date.now();
 
-    // Update RR intervals if available, passing amplitude data if available
+    // Update RR intervals if available
     if (rrData?.intervals && rrData.intervals.length > 0) {
-      // Filter outliers from RR data
+      // Slight adjustment to arrhythmia sensitivity: filter outliers from RR data
       const validIntervals = rrData.intervals.filter(interval => {
+        // Ligeramente menos estricto para permitir detectar arritmias sutiles
         return interval >= 380 && interval <= 1700; // Valid for 35-158 BPM
       });
       
       if (validIntervals.length > 0) {
-        // Pass peak amplitude if available to the arrhythmia detector
-        const peakAmplitude = rrData.amplitudes && rrData.amplitudes.length > 0 
-          ? rrData.amplitudes[rrData.amplitudes.length - 1] 
-          : undefined;
-        
-        this.arrhythmiaDetector.updateIntervals(validIntervals, rrData.lastPeakTime, peakAmplitude);
+        this.arrhythmiaDetector.updateIntervals(validIntervals, rrData.lastPeakTime);
       }
     }
 
@@ -76,7 +72,7 @@ export class VitalSignsProcessor {
       this.spO2Calculator.calibrate();
     }
 
-    // Process arrhythmia detection - using ONLY the ArrhythmiaDetector module
+    // Process arrhythmia detection
     const arrhythmiaResult = this.arrhythmiaDetector.detect();
 
     // Calculate vital signs - utilizando datos reales optimizados
