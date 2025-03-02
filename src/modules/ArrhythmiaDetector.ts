@@ -14,11 +14,14 @@ export class ArrhythmiaDetector {
   
   // Enfoque mejorado para detectar SOLO latidos prematuros fuera del patrón rítmico
   private readonly PREMATURE_BEAT_THRESHOLD = 0.70; // Ajustado para ser menos estricto
-  private readonly AMPLITUDE_RATIO_THRESHOLD = 0.60; // Ligeramente más permisivo para amplitudes pequeñas
+  private readonly AMPLITUDE_RATIO_THRESHOLD = 0.65; // Aumentado de 0.60 a 0.65 para ser más exigente
   private readonly NORMAL_PEAK_MIN_THRESHOLD = 0.85; // Mantener umbral para considerar un pico como normal
   
   // NUEVO: Umbral para detectar latidos fuera del patrón rítmico aprendido
-  private readonly RHYTHM_DEVIATION_THRESHOLD = 0.25; // Desviación de 25% del patrón rítmico
+  private readonly RHYTHM_DEVIATION_THRESHOLD = 0.30; // Aumentado de 0.25 a 0.30 para más precisión
+  
+  // NUEVO: Umbral de confianza mínima para contabilizar una arritmia
+  private readonly MIN_CONFIDENCE_THRESHOLD = 0.75; // Confianza mínima para contar una arritmia
 
   // State variables
   private rrIntervals: number[] = [];
@@ -47,6 +50,9 @@ export class ArrhythmiaDetector {
     type: 'normal' | 'premature' | 'unknown';
   }> = [];
   
+  // NUEVO: Contador de latidos normales consecutivos para aumentar confianza
+  private consecutiveNormalBeats: number = 0;
+  
   // DEBUG flag to track detection issues
   private readonly DEBUG_MODE = true;
   
@@ -71,6 +77,7 @@ export class ArrhythmiaDetector {
     this.peakSequence = [];
     this.rhythmPattern = [];
     this.expectedNextBeatTime = 0;
+    this.consecutiveNormalBeats = 0;
     
     console.log("ArrhythmiaDetector: Reset completo");
   }
@@ -210,10 +217,14 @@ export class ArrhythmiaDetector {
           // Clasificar como normal si está cerca o por encima del promedio normal
           if (ratio >= this.NORMAL_PEAK_MIN_THRESHOLD) {
             peakType = 'normal';
+            this.consecutiveNormalBeats++;
           } 
           // Clasificar como prematuro si es significativamente más pequeño
           else if (ratio <= this.AMPLITUDE_RATIO_THRESHOLD) {
             peakType = 'premature';
+            this.consecutiveNormalBeats = 0;
+          } else {
+            this.consecutiveNormalBeats = 0;
           }
         }
         
@@ -240,12 +251,13 @@ export class ArrhythmiaDetector {
 
   /**
    * ALGORITMO MEJORADO: Detecta SOLO latidos prematuros que rompen el patrón rítmico aprendido
+   * con mayor precisión y eliminando el límite de detecciones
    */
   detect(): {
     detected: boolean;
     count: number;
     status: string;
-    data: { rmssd: number; rrVariation: number; prematureBeat: boolean } | null;
+    data: { rmssd: number; rrVariation: number; prematureBeat: boolean; confidence?: number } | null;
   } {
     // Skip detection during learning phase or if not enough data
     if (this.rrIntervals.length < 3 || this.amplitudes.length < 3 || this.isLearningPhase) {
@@ -272,9 +284,13 @@ export class ArrhythmiaDetector {
     
     // ALGORITMO MEJORADO: Buscar latidos que rompan el patrón rítmico aprendido
     let prematureBeatDetected = false;
+    let detectionConfidence = 0;
     
     // NUEVO: Verificar si el último latido ocurrió muy temprano respecto al patrón rítmico
-    if (this.lastPeakTime && this.expectedNextBeatTime > 0 && this.peakSequence.length >= 3) {
+    // Y que exista suficiente estabilidad en el ritmo (al menos 3 latidos normales previos)
+    if (this.lastPeakTime && this.expectedNextBeatTime > 0 && this.peakSequence.length >= 3 && 
+        this.consecutiveNormalBeats >= 2) { // Necesitamos al menos 2 latidos normales previos
+      
       // Si el latido ocurrió antes de lo esperado (prematuramente) por un margen significativo
       const timeDifference = this.lastPeakTime - this.expectedNextBeatTime;
       const relativeDeviation = Math.abs(timeDifference) / this.baseRRInterval;
@@ -288,19 +304,23 @@ export class ArrhythmiaDetector {
         
         if (lastPeak.amplitude < previousPeak.amplitude * this.AMPLITUDE_RATIO_THRESHOLD) {
           prematureBeatDetected = true;
+          detectionConfidence = 0.85 + (relativeDeviation * 0.1); // Mayor confianza si es más prematuro
           
           console.log('ArrhythmiaDetector - Latido prematuro detectado por patrón rítmico:', {
             esperado: this.expectedNextBeatTime,
             actual: this.lastPeakTime,
             desviación: relativeDeviation,
             umbral: this.RHYTHM_DEVIATION_THRESHOLD,
-            amplitudRelativa: lastPeak.amplitude / previousPeak.amplitude
+            amplitudRelativa: lastPeak.amplitude / previousPeak.amplitude,
+            confianza: detectionConfidence,
+            consecutiveNormalBeats: this.consecutiveNormalBeats
           });
         }
       }
     }
     
     // PATRÓN CLÁSICO: Un pico pequeño (prematuro) entre dos picos normales
+    // Solo verificar si no se detectó ya por patrón rítmico
     if (!prematureBeatDetected && this.peakSequence.length >= 3) {
       const lastThreePeaks = this.peakSequence.slice(-3);
       
@@ -335,13 +355,15 @@ export class ArrhythmiaDetector {
             thirdPeakRatio >= this.NORMAL_PEAK_MIN_THRESHOLD) {
           
           prematureBeatDetected = true;
+          detectionConfidence = 0.90; // Alta confianza para este patrón clásico
           
           console.log('ArrhythmiaDetector - ¡LATIDO PREMATURO DETECTADO! Patrón normal-pequeño-normal:', {
             prematuroRatio: secondPeakRatio,
             normal1Ratio: firstPeakRatio,
             normal2Ratio: thirdPeakRatio,
             umbralPequeno: this.AMPLITUDE_RATIO_THRESHOLD,
-            umbralNormal: this.NORMAL_PEAK_MIN_THRESHOLD
+            umbralNormal: this.NORMAL_PEAK_MIN_THRESHOLD,
+            confianza: detectionConfidence
           });
         }
       }
@@ -353,11 +375,18 @@ export class ArrhythmiaDetector {
       0;
     this.lastRRVariation = rrVariation;
     
-    // Solo contar arritmias si suficiente tiempo desde la última (500ms) para evitar duplicados
-    if (prematureBeatDetected && currentTime - this.lastArrhythmiaTime > 500) {
+    // Solo contar arritmias si:
+    // 1. Se detectó un latido prematuro
+    // 2. La confianza supera el umbral mínimo
+    // 3. Ha pasado suficiente tiempo desde la última (500ms) para evitar duplicados
+    if (prematureBeatDetected && 
+        detectionConfidence >= this.MIN_CONFIDENCE_THRESHOLD && 
+        currentTime - this.lastArrhythmiaTime > 500) {
+      
       this.arrhythmiaCount++;
       this.lastArrhythmiaTime = currentTime;
       this.hasDetectedFirstArrhythmia = true;
+      this.consecutiveNormalBeats = 0; // Reiniciar contador de latidos normales
       
       // NUEVO: Actualizar el patrón rítmico después de cada arritmia para adaptarse
       if (this.rrIntervals.length >= 4) {
@@ -368,6 +397,7 @@ export class ArrhythmiaDetector {
         console.log('ArrhythmiaDetector - NUEVA ARRITMIA CONTABILIZADA:', {
           count: this.arrhythmiaCount,
           timestamp: currentTime,
+          confidence: detectionConfidence,
           amplitudes: this.amplitudes.slice(-5),
           peakSequence: this.peakSequence.slice(-5).map(p => ({
             type: p.type,
@@ -385,7 +415,12 @@ export class ArrhythmiaDetector {
       status: this.hasDetectedFirstArrhythmia ? 
         `ARRITMIA DETECTADA|${this.arrhythmiaCount}` : 
         `SIN ARRITMIAS|${this.arrhythmiaCount}`,
-      data: { rmssd, rrVariation, prematureBeat: prematureBeatDetected }
+      data: { 
+        rmssd, 
+        rrVariation, 
+        prematureBeat: prematureBeatDetected,
+        confidence: detectionConfidence
+      }
     };
   }
 

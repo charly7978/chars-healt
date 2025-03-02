@@ -1,4 +1,3 @@
-
 import { useState, useRef, useCallback } from 'react';
 
 /**
@@ -12,6 +11,9 @@ export const useArrhythmiaAnalyzer = () => {
   const PREMATURE_BEAT_RATIO = 0.82; // Threshold for premature beat detection
   const COMPENSATORY_PAUSE_RATIO = 1.05; // Threshold for compensatory pause
   const AMPLITUDE_THRESHOLD_RATIO = 0.75; // Threshold for amplitude differences
+  
+  // NUEVO: Umbral mínimo de confianza para contar una arritmia
+  const MIN_CONFIDENCE_THRESHOLD = 0.70;
   
   // State and refs
   const [arrhythmiaCounter, setArrhythmiaCounter] = useState(0);
@@ -275,6 +277,23 @@ export const useArrhythmiaAnalyzer = () => {
       if (lastBeatsClassificationRef.current.length > 8) {
         lastBeatsClassificationRef.current.shift();
       }
+      
+      // Incrementar el contador de latidos normales consecutivos cuando se detecta un latido normal
+      // Esto ayuda a aumentar la precisión de la detección de latidos prematuros
+      if (!prematureBeatDetected && currentAmpRatio >= 0.85) {
+        consecutiveNormalBeatsRef.current++;
+      } else if (prematureBeatDetected) {
+        consecutiveNormalBeatsRef.current = 0;
+      }
+      
+      // Log de diagnóstico
+      if (prematureBeatDetected && DEBUG_MODE) {
+        console.log('Arrhythmia Analyzer - Premature beat detected with confidence:', {
+          confidence: prematureBeatConfidence,
+          normalBeatsInSequence: consecutiveNormalBeatsRef.current,
+          pattern: prematureBeatDetected ? 'Premature beat detected' : 'Normal beat'
+        });
+      }
     }
     
     // Calculate additional metrics for monitoring
@@ -318,10 +337,10 @@ export const useArrhythmiaAnalyzer = () => {
   
   /**
    * Process new RR interval data and update arrhythmia state
+   * Now without arrhythmia count limit
    */
   const processArrhythmia = useCallback((
-    rrData: { intervals: number[], lastPeakTime: number | null, amplitudes?: number[] },
-    maxArrhythmias: number = 15
+    rrData: { intervals: number[], lastPeakTime: number | null, amplitudes?: number[] }
   ) => {
     // Critical fix: check if we have valid interval data
     if (!rrData?.intervals || rrData.intervals.length === 0) {
@@ -371,12 +390,14 @@ export const useArrhythmiaAnalyzer = () => {
       rrData.amplitudes || []
     );
     
-    // Critical fix: Reduced confidence threshold to 0.60 (was 0.65)
-    // and reduced minimum time between arrhythmias to 300ms (was 500ms)
+    // Verificar que se cumplen todos los criterios para contar una arritmia:
+    // 1. Se detectó un latido prematuro
+    // 2. La confianza es suficientemente alta
+    // 3. Ha pasado suficiente tiempo desde la última detección para evitar duplicados
+    // 4. Quitamos el límite de arritmias para permitir contar todas las que se detecten
     if (arrhythmiaAnalysis.detected && 
-        arrhythmiaAnalysis.confidence >= 0.60 && 
-        currentTime - lastArrhythmiaTime.current >= MIN_TIME_BETWEEN_ARRHYTHMIAS &&
-        arrhythmiaCounter < maxArrhythmias) {
+        arrhythmiaAnalysis.confidence >= MIN_CONFIDENCE_THRESHOLD && 
+        currentTime - lastArrhythmiaTime.current >= MIN_TIME_BETWEEN_ARRHYTHMIAS) {
       
       hasDetectedArrhythmia.current = true;
       setArrhythmiaCounter(prev => prev + 1);
@@ -398,7 +419,8 @@ export const useArrhythmiaAnalyzer = () => {
           timestamp: currentTime,
           rmssd: arrhythmiaAnalysis.rmssd,
           rrVariation: arrhythmiaAnalysis.rrVariation,
-          isPrematureBeat: true
+          isPrematureBeat: true,
+          confidence: arrhythmiaAnalysis.confidence
         }
       };
     }

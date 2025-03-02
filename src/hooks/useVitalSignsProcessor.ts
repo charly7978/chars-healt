@@ -17,8 +17,7 @@ export const useVitalSignsProcessor = () => {
   const dataCollector = useRef(createVitalSignsDataCollector());
   const signalHistory = useSignalHistory();
   
-  // Constants
-  const MAX_ARRHYTHMIAS_PER_SESSION = 15; // Máximo razonable para 30 segundos
+  // Removed the MAX_ARRHYTHMIAS_PER_SESSION limit
   
   /**
    * Lazy initialization of the VitalSignsProcessor
@@ -80,7 +79,8 @@ export const useVitalSignsProcessor = () => {
     // Advanced arrhythmia analysis - ensure we're passing peak amplitudes if available
     if (rrData?.intervals && rrData.intervals.length >= 4) {
       // Make sure to pass amplitude data to the arrhythmia analyzer if available
-      const arrhythmiaResult = arrhythmiaAnalyzer.processArrhythmia(rrData, MAX_ARRHYTHMIAS_PER_SESSION);
+      // Removed the MAX_ARRHYTHMIAS_PER_SESSION limit
+      const arrhythmiaResult = arrhythmiaAnalyzer.processArrhythmia(rrData);
       
       if (arrhythmiaResult.detected) {
         return {
