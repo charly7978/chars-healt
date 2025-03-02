@@ -18,6 +18,7 @@ interface PPGSignalMeterProps {
   } | null;
   isDicroticPoint?: boolean;
   visualAmplitude?: number;
+  isSystolicPeak?: boolean;
 }
 
 const PPGSignalMeter = ({ 
@@ -29,7 +30,8 @@ const PPGSignalMeter = ({
   arrhythmiaStatus,
   rawArrhythmiaData,
   isDicroticPoint = false,
-  visualAmplitude = 0
+  visualAmplitude = 0,
+  isSystolicPeak = false
 }: PPGSignalMeterProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isRecording, setIsRecording] = useState(false);
@@ -37,6 +39,11 @@ const PPGSignalMeter = ({
   const [elapsedTime, setElapsedTime] = useState(0);
   const bufferRef = useRef(new CircularBuffer(150));
   const frameRef = useRef(0);
+  const lastProcessedPeakTimeRef = useRef(0);
+  const currentWaveMaxRef = useRef<PPGDataPoint | null>(null);
+  const lastCircleDrawTimeRef = useRef(0);
+  const lastValueRef = useRef(0);
+  const risingEdgeDetectedRef = useRef(false);
   
   const colors = {
     waveform: '#0EA5E9',
@@ -56,6 +63,11 @@ const PPGSignalMeter = ({
       setStartTime(Date.now());
       onStartMeasurement();
       bufferRef.current.clear();
+      lastProcessedPeakTimeRef.current = 0;
+      currentWaveMaxRef.current = null;
+      lastCircleDrawTimeRef.current = 0;
+      lastValueRef.current = 0;
+      risingEdgeDetectedRef.current = false;
     }
   };
 
@@ -79,10 +91,13 @@ const PPGSignalMeter = ({
     if (!isRecording) return;
     
     const arrhythmiaDetected = arrhythmiaStatus?.includes('ARRITMIA DETECTADA') || false;
+    const currentTime = Date.now();
+    
+    const displayValue = visualAmplitude > 0 ? visualAmplitude : value;
     
     const point: PPGDataPoint = {
-      time: Date.now(),
-      value: visualAmplitude > 0 ? visualAmplitude : value,
+      time: currentTime,
+      value: displayValue,
       isArrhythmia: arrhythmiaDetected
     };
     
@@ -90,11 +105,27 @@ const PPGSignalMeter = ({
     
     drawWaveform();
     
-    if (isDicroticPoint) {
-      drawPointMarker(point);
+    if (displayValue > lastValueRef.current && !risingEdgeDetectedRef.current) {
+      risingEdgeDetectedRef.current = true;
+      currentWaveMaxRef.current = null;
     }
     
-  }, [value, isRecording, arrhythmiaStatus, isDicroticPoint, visualAmplitude]);
+    if (risingEdgeDetectedRef.current) {
+      if (!currentWaveMaxRef.current || displayValue > currentWaveMaxRef.current.value) {
+        currentWaveMaxRef.current = point;
+      }
+      
+      if (displayValue < lastValueRef.current && currentWaveMaxRef.current &&
+          currentTime - lastCircleDrawTimeRef.current > 300) {
+        drawPointMarker(currentWaveMaxRef.current);
+        lastCircleDrawTimeRef.current = currentTime;
+        risingEdgeDetectedRef.current = false;
+      }
+    }
+    
+    lastValueRef.current = displayValue;
+    
+  }, [value, isRecording, arrhythmiaStatus, isDicroticPoint, visualAmplitude, isSystolicPeak]);
 
   const drawWaveform = () => {
     const canvas = canvasRef.current;
@@ -157,7 +188,21 @@ const PPGSignalMeter = ({
     const y = yMiddle - (point.value * yScale);
     
     ctx.beginPath();
-    ctx.arc(x, y, 6, 0, Math.PI * 2);
+    ctx.arc(x, y, 12, 0, Math.PI * 2);
+    ctx.fillStyle = point.isArrhythmia ? 
+      'rgba(220, 38, 38, 0.3)' :
+      'rgba(14, 165, 233, 0.2)';
+    ctx.fill();
+    
+    ctx.beginPath();
+    ctx.arc(x, y, 8, 0, Math.PI * 2);
+    ctx.fillStyle = point.isArrhythmia ? 
+      'rgba(220, 38, 38, 0.7)' :
+      'rgba(14, 165, 233, 0.5)';
+    ctx.fill();
+    
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, Math.PI * 2);
     ctx.fillStyle = point.isArrhythmia ? colors.arrhythmia : colors.waveform;
     ctx.fill();
     
