@@ -531,8 +531,8 @@ const Index = () => {
         />
       </div>
 
-      <div className="absolute z-20" style={{ bottom: '65px', left: 0, right: 0, padding: '0 12px' }}>
-        <div className="p-2 rounded-lg">
+      <div className="absolute z-20" style={{ bottom: '65px', left: 0, right: 0, padding: '0 16px' }}>
+        <div className="p-1 rounded-lg">
           <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
             <VitalSign 
               label="FRECUENCIA CARDÍACA"
