@@ -12,7 +12,7 @@ export const useHeartBeatProcessor = () => {
       console.log('useHeartBeatProcessor: Creando nueva instancia de HeartBeatProcessor');
       processorRef.current = new HeartBeatProcessor();
       // Make it globally accessible for debugging
-      window.heartBeatProcessor = processorRef.current;
+      (window as any).heartBeatProcessor = processorRef.current;
     }
     return processorRef.current;
   }, []);
@@ -27,14 +27,22 @@ export const useHeartBeatProcessor = () => {
       setConfidence(result.confidence);
       setIsPeak(result.isPeak);
       
-      // Get RR intervals for arrhythmia detection, including amplitudes if available
+      // CRÍTICO: Obtener RR intervals Y amplitudes para detección de arritmias
       const rrData = processor.getRRIntervals();
+      
+      // Verificar si tenemos datos para detección de arritmias
+      if (rrData.intervals.length > 0) {
+        // Log para debug - verificar que estamos obteniendo amplitudes
+        if (result.isPeak && (!rrData.amplitudes || rrData.amplitudes.length === 0)) {
+          console.warn('ALERTA: Pico detectado pero sin amplitudes asociadas');
+        }
+      }
       
       return {
         bpm: result.bpm,
         confidence: result.confidence,
         isPeak: result.isPeak,
-        rrData
+        rrData: rrData  // Asegurar que incluya amplitudes
       };
     } catch (error) {
       console.error('Error processing signal:', error);
@@ -42,7 +50,7 @@ export const useHeartBeatProcessor = () => {
         bpm: 0,
         confidence: 0,
         isPeak: false,
-        rrData: { intervals: [], lastPeakTime: null }
+        rrData: { intervals: [], lastPeakTime: null, amplitudes: [] }
       };
     }
   }, [getProcessor]);
@@ -54,6 +62,7 @@ export const useHeartBeatProcessor = () => {
     setBpm(0);
     setConfidence(0);
     setIsPeak(false);
+    console.log('useHeartBeatProcessor: Reset completo');
   }, []);
   
   const getFinalBPM = useCallback(() => {
@@ -72,9 +81,9 @@ export const useHeartBeatProcessor = () => {
     setIsPeak(false);
     
     // Force garbage collection if available
-    if (window.gc) {
+    if ((window as any).gc) {
       try {
-        window.gc();
+        (window as any).gc();
       } catch (e) {
         console.log("GC no disponible en este entorno");
       }
