@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useCallback } from 'react';
-import { Fingerprint, Trash2 } from 'lucide-react';
+import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
 
 interface PPGSignalMeterProps {
@@ -35,12 +35,12 @@ const PPGSignalMeter = ({
   const arrhythmiaCountRef = useRef<number>(0);
   
   const WINDOW_WIDTH_MS = 4000;
-  const CANVAS_WIDTH = 350;
-  const CANVAS_HEIGHT = 350;
-  const GRID_SIZE_X = 20;
-  const GRID_SIZE_Y = 15;
-  const verticalScale = 35.0;
-  const SMOOTHING_FACTOR = 0.25;
+  const CANVAS_WIDTH = 450;
+  const CANVAS_HEIGHT = 450;
+  const GRID_SIZE_X = 10;
+  const GRID_SIZE_Y = 10;
+  const verticalScale = 25.0;
+  const SMOOTHING_FACTOR = 0.7;
   const TARGET_FPS = 60;
   const FRAME_TIME = 1000 / TARGET_FPS;
   const BUFFER_SIZE = 200;
@@ -48,20 +48,6 @@ const PPGSignalMeter = ({
   useEffect(() => {
     if (!dataBufferRef.current) {
       dataBufferRef.current = new CircularBuffer(BUFFER_SIZE);
-    }
-  }, []);
-
-  const clearOldHistory = useCallback(() => {
-    if (dataBufferRef.current) {
-      const buffer = dataBufferRef.current;
-      const points = buffer.getPoints();
-      const pointsToKeep = Math.floor(points.length * 0.3);
-      if (pointsToKeep > 0) {
-        const newPoints = points.slice(-pointsToKeep);
-        buffer.clear();
-        newPoints.forEach(point => buffer.push(point));
-        console.log(`Cleared history. Kept ${newPoints.length} recent points.`);
-      }
     }
   }, []);
 
@@ -173,7 +159,7 @@ const PPGSignalMeter = ({
     const smoothedValue = smoothValue(value, lastValueRef.current);
     lastValueRef.current = smoothedValue;
 
-    const normalizedValue = smoothedValue - (baselineRef.current || 0);
+    const normalizedValue = (smoothedValue - (baselineRef.current || 0));
     const scaledValue = normalizedValue * verticalScale;
     
     let isArrhythmia = false;
@@ -254,7 +240,7 @@ const PPGSignalMeter = ({
         const point = visiblePoints[i];
         const nextPoint = visiblePoints[i + 1];
         
-        if (point.value > prevPoint.value && point.value > nextPoint.value) {
+        if (point.value < prevPoint.value && point.value < nextPoint.value) {
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
           const y = canvas.height * 0.4 + point.value;
           
@@ -380,15 +366,6 @@ const PPGSignalMeter = ({
           <span className="text-[#ea384c]">Healt</span>
         </h1>
       </div>
-
-      <button 
-        onClick={clearOldHistory}
-        className="absolute z-30 flex items-center gap-1 bg-slate-800/60 text-white px-2 py-1 rounded-md text-xs"
-        style={{ top: '10px', left: '10px' }}
-      >
-        <Trash2 size={12} />
-        Limpiar histórico
-      </button>
     </>
   );
 };
