@@ -76,10 +76,9 @@ export const useVitalSignsProcessor = () => {
       dataCollector.current.addBloodPressure(stabilizedBP);
     }
     
-    // Advanced arrhythmia analysis - ensure we're passing peak amplitudes if available
+    // Advanced arrhythmia analysis - asegurarse de pasar los datos de amplitud si están disponibles
     if (rrData?.intervals && rrData.intervals.length >= 4) {
-      // Make sure to pass amplitude data to the arrhythmia analyzer if available
-      // Removed the MAX_ARRHYTHMIAS_PER_SESSION limit
+      // Asegurarse de pasar los datos de amplitud al analizador de arritmias si están disponibles
       const arrhythmiaResult = arrhythmiaAnalyzer.processArrhythmia(rrData);
       
       if (arrhythmiaResult.detected) {
@@ -98,7 +97,7 @@ export const useVitalSignsProcessor = () => {
       };
     }
     
-    // If we already analyzed arrhythmias before, use the latest status
+    // Si ya analizamos arritmias antes, usar el último estado
     const arrhythmiaStatus = `SIN ARRITMIAS|${arrhythmiaAnalyzer.arrhythmiaCounter}`;
     
     return {
