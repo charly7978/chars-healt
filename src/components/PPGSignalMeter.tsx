@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useCallback } from 'react';
-import { Fingerprint } from 'lucide-react';
+import { Fingerprint, Trash2 } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
 
 interface PPGSignalMeterProps {
@@ -48,6 +48,20 @@ const PPGSignalMeter = ({
   useEffect(() => {
     if (!dataBufferRef.current) {
       dataBufferRef.current = new CircularBuffer(BUFFER_SIZE);
+    }
+  }, []);
+
+  const clearOldHistory = useCallback(() => {
+    if (dataBufferRef.current) {
+      const buffer = dataBufferRef.current;
+      const points = buffer.getPoints();
+      const pointsToKeep = Math.floor(points.length * 0.3);
+      if (pointsToKeep > 0) {
+        const newPoints = points.slice(-pointsToKeep);
+        buffer.clear();
+        newPoints.forEach(point => buffer.push(point));
+        console.log(`Cleared history. Kept ${newPoints.length} recent points.`);
+      }
     }
   }, []);
 
@@ -160,7 +174,7 @@ const PPGSignalMeter = ({
     lastValueRef.current = smoothedValue;
 
     const normalizedValue = smoothedValue - (baselineRef.current || 0);
-    const scaledValue = normalizedValue * verticalScale * -1;
+    const scaledValue = normalizedValue * verticalScale;
     
     let isArrhythmia = false;
     if (rawArrhythmiaData && 
@@ -240,7 +254,7 @@ const PPGSignalMeter = ({
         const point = visiblePoints[i];
         const nextPoint = visiblePoints[i + 1];
         
-        if (point.value < prevPoint.value && point.value < nextPoint.value) {
+        if (point.value > prevPoint.value && point.value > nextPoint.value) {
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
           const y = canvas.height * 0.4 + point.value;
           
@@ -366,6 +380,15 @@ const PPGSignalMeter = ({
           <span className="text-[#ea384c]">Healt</span>
         </h1>
       </div>
+
+      <button 
+        onClick={clearOldHistory}
+        className="absolute z-30 flex items-center gap-1 bg-slate-800/60 text-white px-2 py-1 rounded-md text-xs"
+        style={{ top: '10px', left: '10px' }}
+      >
+        <Trash2 size={12} />
+        Limpiar histórico
+      </button>
     </>
   );
 };
