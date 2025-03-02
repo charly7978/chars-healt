@@ -1,5 +1,4 @@
-
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
 
@@ -27,380 +26,362 @@ const PPGSignalMeter = ({
   rawArrhythmiaData
 }: PPGSignalMeterProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const dataBufferRef = useRef<CircularBuffer | null>(null);
-  const baselineRef = useRef<number | null>(null);
-  const lastValueRef = useRef<number | null>(null);
-  const animationFrameRef = useRef<number>();
-  const lastRenderTimeRef = useRef<number>(0);
-  const lastArrhythmiaTime = useRef<number>(0);
-  const arrhythmiaCountRef = useRef<number>(0);
+  const bufferRef = useRef<CircularBuffer>(new CircularBuffer(300)); // 10 segundos a 30 fps
+  const [lastHighestPoint, setLastHighestPoint] = useState(0);
+  const [isAscending, setIsAscending] = useState(false);
+  const [lastBeepTime, setLastBeepTime] = useState(0);
+  const [arrhythmiaCount, setArrhythmiaCount] = useState(0);
+  const [showArrhythmiaAlert, setShowArrhythmiaAlert] = useState(false);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const heartSoundRef = useRef<AudioBuffer | null>(null);
   
-  const WINDOW_WIDTH_MS = 2500;
-  const CANVAS_WIDTH = 700;
-  const CANVAS_HEIGHT = 550;
-  const GRID_SIZE_X = 70;
-  const GRID_SIZE_Y = 60;
-  const verticalScale = 30.0;
-  const SMOOTHING_FACTOR = 0.40;
-  const TARGET_FPS = 60;
-  const FRAME_TIME = 1000 / TARGET_FPS;
-  const BUFFER_SIZE = 500;
-
+  // Variables para seguimiento de fase ascendente
+  const lastValuesRef = useRef<number[]>([]);
+  const MIN_BEEP_INTERVAL_MS = 600; // Mínimo tiempo entre beeps en ms
+  const RISING_EDGE_THRESHOLD = 0.03; // Umbral para detectar fase ascendente
+  const MAX_VALUES_HISTORY = 5; // Número de valores para detectar tendencia
+  
+  // Para cargar el sonido real de monitor cardíaco
   useEffect(() => {
-    if (!dataBufferRef.current) {
-      dataBufferRef.current = new CircularBuffer(BUFFER_SIZE);
+    // Crear contexto de audio una sola vez
+    if (!audioContextRef.current) {
+      try {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        
+        // Cargar el sonido real de monitor cardíaco
+        fetch("https://assets.mixkit.co/active_storage/sfx/2429/2429-preview.mp3")
+          .then(response => {
+            if (!response.ok) {
+              throw new Error("Error al cargar el sonido");
+            }
+            return response.arrayBuffer();
+          })
+          .then(arrayBuffer => {
+            if (audioContextRef.current) {
+              return audioContextRef.current.decodeAudioData(arrayBuffer);
+            }
+            throw new Error("Contexto de audio no disponible");
+          })
+          .then(audioBuffer => {
+            heartSoundRef.current = audioBuffer;
+            console.log("Sonido de monitor cardíaco cargado correctamente");
+          })
+          .catch(error => {
+            console.error("Error cargando el sonido real:", error);
+          });
+      } catch (error) {
+        console.error("Error creando contexto de audio:", error);
+      }
     }
-  }, []);
-
-  const getQualityColor = useCallback((q: number) => {
-    if (!isFingerDetected) return 'from-gray-400 to-gray-500';
-    if (q > 75) return 'from-green-500 to-emerald-500';
-    if (q > 50) return 'from-yellow-500 to-orange-500';
-    if (q > 30) return 'from-orange-500 to-red-500';
-    return 'from-red-500 to-rose-500';
-  }, [isFingerDetected]);
-
-  const getQualityText = useCallback((q: number) => {
-    if (!isFingerDetected) return 'Sin detección';
-    if (q > 75) return 'Señal óptima';
-    if (q > 50) return 'Señal aceptable';
-    if (q > 30) return 'Señal débil';
-    return 'Señal muy débil';
-  }, [isFingerDetected]);
-
-  const smoothValue = useCallback((currentValue: number, previousValue: number | null): number => {
-    if (previousValue === null) return currentValue;
-    return previousValue + SMOOTHING_FACTOR * (currentValue - previousValue);
-  }, []);
-
-  const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
-    ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-
-    ctx.beginPath();
-    ctx.strokeStyle = 'rgba(0, 180, 120, 0.15)';
-    ctx.lineWidth = 0.5;
-
-    for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X) {
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, CANVAS_HEIGHT);
-      if (x % (GRID_SIZE_X * 4) === 0) {
-        ctx.fillStyle = 'rgba(0, 150, 100, 0.9)';
-        ctx.font = '10px Inter';
-        ctx.textAlign = 'center';
-        ctx.fillText(`${x / 10}ms`, x, CANVAS_HEIGHT - 5);
+    return () => {
+      // Limpiar contexto de audio al desmontar
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close().catch(console.error);
       }
-    }
-
-    for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y) {
-      ctx.moveTo(0, y);
-      ctx.lineTo(CANVAS_WIDTH, y);
-      if (y % (GRID_SIZE_Y * 4) === 0) {
-        const amplitude = ((CANVAS_HEIGHT / 2) - y) / verticalScale;
-        ctx.fillStyle = 'rgba(0, 150, 100, 0.9)';
-        ctx.font = '10px Inter';
-        ctx.textAlign = 'right';
-        ctx.fillText(amplitude.toFixed(1), 25, y + 4);
-      }
-    }
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.strokeStyle = 'rgba(0, 150, 100, 0.25)';
-    ctx.lineWidth = 1;
-
-    for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X * 4) {
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, CANVAS_HEIGHT);
-    }
-
-    for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y * 4) {
-      ctx.moveTo(0, y);
-      ctx.lineTo(CANVAS_WIDTH, y);
-    }
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.strokeStyle = 'rgba(0, 150, 100, 0.35)';
-    ctx.lineWidth = 1.5;
-    ctx.moveTo(0, CANVAS_HEIGHT * 0.6);
-    ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT * 0.6);
-    ctx.stroke();
+    };
   }, []);
-
-  const renderSignal = useCallback(() => {
-    if (!canvasRef.current || !dataBufferRef.current) {
-      animationFrameRef.current = requestAnimationFrame(renderSignal);
-      return;
-    }
-
-    const currentTime = performance.now();
-    const timeSinceLastRender = currentTime - lastRenderTimeRef.current;
-
-    if (timeSinceLastRender < FRAME_TIME) {
-      animationFrameRef.current = requestAnimationFrame(renderSignal);
-      return;
-    }
-
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d', { alpha: true, desynchronized: true });
-    if (!ctx) {
-      animationFrameRef.current = requestAnimationFrame(renderSignal);
-      return;
-    }
-
+  
+  // Función para reproducir el sonido del monitor
+  const playHeartSound = useCallback((volume = 0.9) => {
     const now = Date.now();
     
-    if (baselineRef.current === null) {
-      baselineRef.current = value;
-    } else {
-      baselineRef.current = baselineRef.current * 0.95 + value * 0.05;
+    // Verificar tiempo mínimo entre beeps
+    if (now - lastBeepTime < MIN_BEEP_INTERVAL_MS) {
+      return;
     }
-
-    const smoothedValue = smoothValue(value, lastValueRef.current);
-    lastValueRef.current = smoothedValue;
-
-    const normalizedValue = smoothedValue - (baselineRef.current || 0);
-    const scaledValue = normalizedValue * verticalScale;
     
-    let isArrhythmia = false;
-    if (rawArrhythmiaData && 
-        arrhythmiaStatus?.includes("ARRITMIA") && 
-        now - rawArrhythmiaData.timestamp < 1000) {
-      isArrhythmia = true;
-      lastArrhythmiaTime.current = now;
-      
-      arrhythmiaCountRef.current++;
-    }
-
-    const dataPoint: PPGDataPoint = {
-      time: now,
-      value: scaledValue,
-      isArrhythmia
-    };
+    setLastBeepTime(now);
     
-    dataBufferRef.current.push(dataPoint);
-
-    drawGrid(ctx);
-
-    const points = dataBufferRef.current.getPoints();
-    if (points.length > 1) {
-      const visiblePoints = points.filter(
-        point => (now - point.time) <= WINDOW_WIDTH_MS
-      );
-      
-      if (visiblePoints.length > 1) {
-        ctx.beginPath();
-        ctx.strokeStyle = '#0EA5E9';
-        ctx.lineWidth = 2;
-        ctx.lineJoin = 'round';
-        ctx.lineCap = 'round';
+    if (!audioContextRef.current) return;
+    
+    try {
+      // Si tenemos el sonido de monitor cardíaco, usarlo
+      if (heartSoundRef.current) {
+        const source = audioContextRef.current.createBufferSource();
+        const gainNode = audioContextRef.current.createGain();
         
-        let firstPoint = true;
+        source.buffer = heartSoundRef.current;
+        source.connect(gainNode);
+        gainNode.connect(audioContextRef.current.destination);
         
-        for (let i = 0; i < visiblePoints.length; i++) {
-          const point = visiblePoints[i];
-          const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-          const y = canvas.height * 0.6 - point.value;
-          
-          if (firstPoint) {
-            ctx.moveTo(x, y);
-            firstPoint = false;
-          } else {
-            ctx.lineTo(x, y);
-          }
-          
-          if (point.isArrhythmia && i < visiblePoints.length - 1) {
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.strokeStyle = '#DC2626';
-            ctx.lineWidth = 3;
-            ctx.setLineDash([3, 2]);
-            ctx.moveTo(x, y);
-            
-            const nextPoint = visiblePoints[i + 1];
-            const nextX = canvas.width - ((now - nextPoint.time) * canvas.width / WINDOW_WIDTH_MS);
-            const nextY = canvas.height * 0.6 - nextPoint.value;
-            ctx.lineTo(nextX, nextY);
-            ctx.stroke();
-            
-            ctx.beginPath();
-            ctx.strokeStyle = '#0EA5E9';
-            ctx.lineWidth = 2;
-            ctx.setLineDash([]);
-            ctx.moveTo(nextX, nextY);
-            firstPoint = false;
-          }
-        }
+        // Ajustar volumen según la calidad de la señal
+        gainNode.gain.value = Math.min(1.0, Math.max(0.3, volume * Math.min(1.0, quality * 1.5)));
         
-        ctx.stroke();
+        source.start();
+      } else {
+        // Sonido de respaldo: beep sintético
+        const oscillator = audioContextRef.current.createOscillator();
+        const gainNode = audioContextRef.current.createGain();
+        
+        oscillator.type = 'sine';
+        oscillator.frequency.value = 880;
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContextRef.current.destination);
+        
+        gainNode.gain.value = Math.min(0.9, volume * Math.min(1.0, quality));
+        
+        oscillator.start();
+        oscillator.stop(audioContextRef.current.currentTime + 0.08);
       }
-
-      const maxPeakIndices: number[] = [];
-      
-      for (let i = 2; i < visiblePoints.length - 2; i++) {
-        const point = visiblePoints[i];
-        const prevPoint1 = visiblePoints[i - 1];
-        const prevPoint2 = visiblePoints[i - 2];
-        const nextPoint1 = visiblePoints[i + 1];
-        const nextPoint2 = visiblePoints[i + 2];
-        
-        if (point.value > prevPoint1.value && 
-            point.value > prevPoint2.value && 
-            point.value > nextPoint1.value && 
-            point.value > nextPoint2.value) {
-          
-          const peakAmplitude = Math.abs(point.value);
-          
-          if (peakAmplitude > 7.0) {
-            const peakTime = point.time;
-            const hasPeakNearby = maxPeakIndices.some(idx => {
-              const existingPeakTime = visiblePoints[idx].time;
-              return Math.abs(existingPeakTime - peakTime) < 250;
-            });
-            
-            if (!hasPeakNearby) {
-              maxPeakIndices.push(i);
-            }
-          }
-        }
-      }
-      
-      for (let idx of maxPeakIndices) {
-        const point = visiblePoints[idx];
-        const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-        const y = canvas.height * 0.6 - point.value;
-        
-        ctx.beginPath();
-        ctx.arc(x, y, point.isArrhythmia ? 5 : 4, 0, Math.PI * 2);
-        ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
-        ctx.fill();
-
-        ctx.font = 'bold 12px Inter';
-        ctx.fillStyle = '#666666';
-        ctx.textAlign = 'center';
-        ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 20);
-        
-        if (point.isArrhythmia) {
-          ctx.beginPath();
-          ctx.arc(x, y, 9, 0, Math.PI * 2);
-          ctx.strokeStyle = '#FFFF00';
-          ctx.lineWidth = 2;
-          ctx.stroke();
-          
-          ctx.beginPath();
-          ctx.arc(x, y, 14, 0, Math.PI * 2);
-          ctx.strokeStyle = '#FF6B6B';
-          ctx.lineWidth = 1;
-          ctx.setLineDash([2, 2]);
-          ctx.stroke();
-          ctx.setLineDash([]);
-          
-          ctx.font = 'bold 10px Inter';
-          ctx.fillStyle = '#FF6B6B';
-          ctx.fillText("LATIDO PREMATURO", x, y - 35);
-          
-          ctx.beginPath();
-          ctx.setLineDash([2, 2]);
-          ctx.strokeStyle = 'rgba(255, 107, 107, 0.6)';
-          ctx.lineWidth = 1;
-          
-          if (idx > 0) {
-            const prevX = canvas.width - ((now - visiblePoints[idx-1].time) * canvas.width / WINDOW_WIDTH_MS);
-            const prevY = canvas.height * 0.6 - visiblePoints[idx-1].value;
-            
-            ctx.moveTo(prevX, prevY - 15);
-            ctx.lineTo(x, y - 15);
-            ctx.stroke();
-          }
-          
-          if (idx < visiblePoints.length - 1) {
-            const nextX = canvas.width - ((now - visiblePoints[idx+1].time) * canvas.width / WINDOW_WIDTH_MS);
-            const nextY = canvas.height * 0.6 - visiblePoints[idx+1].value;
-            
-            ctx.moveTo(x, y - 15);
-            ctx.lineTo(nextX, nextY - 15);
-            ctx.stroke();
-          }
-          
-          ctx.setLineDash([]);
-        }
-      }
+    } catch (error) {
+      console.error("Error reproduciendo sonido:", error);
     }
-
-    lastRenderTimeRef.current = currentTime;
-    animationFrameRef.current = requestAnimationFrame(renderSignal);
-  }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus, drawGrid, smoothValue]);
-
+  }, [lastBeepTime, quality]);
+  
+  // Monitorear detección de arritmias
   useEffect(() => {
-    renderSignal();
-    return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-    };
-  }, [renderSignal]);
-
-  return (
-    <>
-      <div className="absolute top-0 right-1 z-30 flex items-center gap-2 rounded-lg p-2"
-           style={{ top: '5px', right: '5px' }}>
-        <div className="w-[190px]">
-          <div className={`h-1.5 w-full rounded-full bg-gradient-to-r ${getQualityColor(quality)} transition-all duration-1000 ease-in-out`}>
-            <div
-              className="h-full rounded-full bg-white/20 animate-pulse transition-all duration-1000"
-              style={{ width: `${isFingerDetected ? quality : 0}%` }}
-            />
-          </div>
-          <span className="text-[9px] text-center mt-0.5 font-medium transition-colors duration-700 block text-white" 
-                style={{ 
-                  color: quality > 75 ? '#0EA5E9' : 
-                         quality > 50 ? '#F59E0B' : 
-                         quality > 30 ? '#DC2626' : '#FF4136' 
-                }}>
-            {getQualityText(quality)}
-          </span>
-        </div>
-
-        <div className="flex flex-col items-center">
-          <Fingerprint
-            className={`h-12 w-12 transition-colors duration-300 ${
-              !isFingerDetected ? 'text-gray-400' :
-              quality > 75 ? 'text-green-500' :
-              quality > 50 ? 'text-yellow-500' :
-              quality > 30 ? 'text-orange-500' :
-              'text-red-500'
-            }`}
-            strokeWidth={1.5}
-          />
-          <span className={`text-[9px] text-center mt-0.5 font-medium ${
-            !isFingerDetected ? 'text-gray-400' : 
-            quality > 50 ? 'text-green-500' : 'text-yellow-500'
-          }`}>
-            {isFingerDetected ? "Dedo detectado" : "Ubique su dedo en la Lente"}
-          </span>
-        </div>
-      </div>
-
-      <div className="absolute inset-0 w-full" style={{ height: '50vh', top: 0 }}>
-        <canvas
-          ref={canvasRef}
-          width={CANVAS_WIDTH}
-          height={CANVAS_HEIGHT}
-          className="w-full h-full"
-          style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 }}
-        />
-      </div>
+    if (!arrhythmiaStatus) return;
+    
+    const [status, countStr] = arrhythmiaStatus.split('|');
+    const count = parseInt(countStr || '0', 10);
+    
+    // Si se detectó una nueva arritmia, mostrar alerta
+    if (count > arrhythmiaCount) {
+      setArrhythmiaCount(count);
+      setShowArrhythmiaAlert(true);
       
-      <div className="absolute" style={{ top: 'calc(50vh + 5px)', left: 0, right: 0, textAlign: 'center', zIndex: 30 }}>
-        <h1 className="text-xl font-bold">
-          <span className="text-white">Chars</span>
-          <span className="text-[#ea384c]">Healt</span>
-        </h1>
-      </div>
-    </>
+      // Ocultar alerta después de 3 segundos
+      setTimeout(() => {
+        setShowArrhythmiaAlert(false);
+      }, 3000);
+    }
+  }, [arrhythmiaStatus, arrhythmiaCount]);
+  
+  // Función principal para dibujar la forma de onda
+  const drawWaveform = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    // Obtener dimensiones reales del canvas
+    const width = canvas.width;
+    const height = canvas.height;
+    
+    // Crear un fondo con gradiente
+    const gradient = ctx.createLinearGradient(0, 0, 0, height);
+    gradient.addColorStop(0, '#000811');
+    gradient.addColorStop(1, '#001a2c');
+    
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+    
+    // Dibujar líneas de cuadrícula
+    ctx.strokeStyle = 'rgba(0, 255, 0, 0.2)';
+    ctx.lineWidth = 1;
+    
+    // Líneas horizontales
+    const horizontalLines = 5;
+    for (let i = 1; i < horizontalLines; i++) {
+      const y = (i / horizontalLines) * height;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(width, y);
+      ctx.stroke();
+    }
+    
+    // Líneas verticales
+    const verticalLines = 10;
+    for (let i = 1; i < verticalLines; i++) {
+      const x = (i / verticalLines) * width;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, height);
+      ctx.stroke();
+    }
+    
+    // Obtener los puntos del buffer
+    const points = bufferRef.current.getPoints();
+    if (points.length === 0) return;
+    
+    // Dibujar la forma de onda del PPG
+    ctx.beginPath();
+    
+    // Iniciar el camino en el primer punto
+    const firstPoint = points[0];
+    const firstX = 0;
+    const firstY = height - (firstPoint.value * height * 0.8);
+    ctx.moveTo(firstX, firstY);
+    
+    // Calcular el ancho de cada segmento
+    const segmentWidth = width / (points.length - 1);
+    
+    // Actualizar el último valor más alto
+    let currentHighestPoint = Math.max(...points.map(p => p.value));
+    
+    // Procesar los valores para detección de fase ascendente
+    const latestValue = points[points.length - 1].value;
+    lastValuesRef.current.push(latestValue);
+    
+    // Mantener un tamaño fijo en el array
+    if (lastValuesRef.current.length > MAX_VALUES_HISTORY) {
+      lastValuesRef.current.shift();
+    }
+    
+    // Detectar fase ascendente analizando tendencia
+    if (lastValuesRef.current.length >= 3) {
+      const values = lastValuesRef.current;
+      const len = values.length;
+      
+      // Calcular derivada aproximada (velocidad de cambio)
+      const derivative = (values[len-1] - values[len-3]) / 2;
+      
+      // Determinar si estamos en fase ascendente
+      const wasAscending = isAscending;
+      const newIsAscending = derivative > RISING_EDGE_THRESHOLD;
+      
+      // Reproducir sonido en la fase ascendente (borde ascendente)
+      if (newIsAscending && !wasAscending && isFingerDetected && quality > 0.4) {
+        // Estamos en el borde ascendente del pico - REPRODUCIR SONIDO AQUÍ
+        playHeartSound(Math.min(1.0, currentHighestPoint * 2));
+      }
+      
+      // Actualizar estado de fase ascendente
+      setIsAscending(newIsAscending);
+    }
+    
+    // Actualizar el punto más alto
+    setLastHighestPoint(currentHighestPoint);
+    
+    // Dibujar cada punto con un estilo específico según sus propiedades
+    for (let i = 1; i < points.length; i++) {
+      const point = points[i];
+      const x = i * segmentWidth;
+      const y = height - (point.value * height * 0.8);
+      
+      // Si este punto es una arritmia, marcarlo de manera especial
+      if (point.isArrhythmia) {
+        // Cambiar color para puntos de arritmia
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        
+        // Marcar punto de arritmia
+        ctx.beginPath();
+        ctx.arc(x, y, 4, 0, Math.PI * 2);
+        ctx.fillStyle = '#ff3333';
+        ctx.fill();
+        
+        // Continuar la línea
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.strokeStyle = '#3cff00';
+      } else {
+        // Línea normal
+        ctx.lineTo(x, y);
+      }
+    }
+    
+    // Establecer el estilo de la línea principal
+    ctx.strokeStyle = quality > 0.5 ? '#3cff00' : 'rgba(60, 255, 0, 0.7)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    
+  }, [isFingerDetected, quality, playHeartSound, isAscending]);
+  
+  // Añadir nuevos puntos al buffer y dibujar
+  useEffect(() => {
+    // Solo procesar cuando se detecta el dedo
+    if (isFingerDetected) {
+      const timestamp = Date.now();
+      
+      // Obtener estado de arritmia si está disponible
+      let isArrhythmiaPoint = false;
+      if (arrhythmiaStatus && arrhythmiaStatus.includes("ARRITMIA DETECTADA")) {
+        // Si tenemos datos crudos y están cerca del timestamp actual (< 500ms)
+        if (rawArrhythmiaData && 
+            Math.abs(rawArrhythmiaData.timestamp - timestamp) < 500) {
+          isArrhythmiaPoint = true;
+        }
+      }
+      
+      // Añadir el nuevo punto al buffer
+      bufferRef.current.push({
+        time: timestamp,
+        value: value,
+        isArrhythmia: isArrhythmiaPoint
+      });
+      
+      // Dibujar la forma de onda
+      drawWaveform();
+    }
+  }, [value, isFingerDetected, drawWaveform, arrhythmiaStatus, rawArrhythmiaData]);
+  
+  // Limpiar buffer cuando se reinicia
+  useEffect(() => {
+    if (!isFingerDetected) {
+      bufferRef.current.clear();
+      lastValuesRef.current = [];
+      setIsAscending(false);
+      drawWaveform();
+    }
+  }, [isFingerDetected, drawWaveform]);
+  
+  return (
+    <div className="relative w-full aspect-[2/1] bg-black rounded-xl overflow-hidden shadow-lg">
+      {/* Canvas para la forma de onda */}
+      <canvas 
+        ref={canvasRef}
+        className="w-full h-full"
+        width={600}
+        height={300}
+      />
+      
+      {/* Capa de sombreado cuando no se detecta el dedo */}
+      {!isFingerDetected && (
+        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex flex-col items-center justify-center">
+          <Fingerprint size={48} className="text-medical-blue mb-4" />
+          <p className="text-white text-center px-4">
+            Coloca tu dedo índice sobre la cámara trasera
+          </p>
+          <button
+            onClick={onStartMeasurement}
+            className="mt-4 bg-medical-blue text-white px-4 py-2 rounded-lg"
+          >
+            Iniciar medición
+          </button>
+        </div>
+      )}
+      
+      {/* Indicador de calidad de señal */}
+      {isFingerDetected && (
+        <div className="absolute top-2 right-2 flex items-center gap-2">
+          <div className={`h-2 w-2 rounded-full ${quality > 0.7 ? 'bg-green-500' : quality > 0.4 ? 'bg-yellow-500' : 'bg-red-500'}`}></div>
+          <span className="text-xs text-white">
+            {quality > 0.7 ? 'Señal óptima' : quality > 0.4 ? 'Señal aceptable' : 'Señal débil'}
+          </span>
+        </div>
+      )}
+      
+      {/* Indicador de arritmias */}
+      {isFingerDetected && arrhythmiaCount > 0 && (
+        <div className="absolute top-2 left-2 flex items-center">
+          <div className="bg-red-500/80 text-white text-xs font-bold px-2 py-1 rounded">
+            Arritmias: {arrhythmiaCount}
+          </div>
+        </div>
+      )}
+      
+      {/* Alerta de arritmia detectada */}
+      {showArrhythmiaAlert && (
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 
+                        bg-red-500/90 text-white px-4 py-2 rounded-lg 
+                        animate-pulse shadow-lg">
+          ¡ARRITMIA DETECTADA!
+        </div>
+      )}
+      
+      {/* Botón de reset */}
+      {isFingerDetected && (
+        <button
+          onClick={onReset}
+          className="absolute bottom-2 right-2 bg-gray-700/70 text-white text-xs px-2 py-1 rounded"
+        >
+          Reiniciar
+        </button>
+      )}
+    </div>
   );
 };
 

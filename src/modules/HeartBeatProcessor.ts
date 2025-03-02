@@ -4,11 +4,11 @@ export class HeartBeatProcessor {
   private readonly WINDOW_SIZE = 60;
   private readonly MIN_BPM = 40;
   private readonly MAX_BPM = 200; // Se mantiene amplio para no perder picos fuera de rango
-  private readonly SIGNAL_THRESHOLD = 0.45; // Increased from 0.40 for better peak detection
-  private readonly MIN_CONFIDENCE = 0.65; // Increased from 0.60 for higher certainty
   
-  // CORREGIDO: Cambiamos a valor positivo para detectar subida (no bajada)
-  private readonly DERIVATIVE_THRESHOLD = 0.04; // Cambiado de -0.04 a 0.04 para detectar pico ascendente
+  // CALIBRACIÓN MEJORADA: Ajustados umbrales para detección más precisa
+  private readonly SIGNAL_THRESHOLD = 0.40;   // Reducido para mayor sensibilidad
+  private readonly MIN_CONFIDENCE = 0.60;     // Reducido para detectar latidos más sutiles
+  private readonly DERIVATIVE_THRESHOLD = 0.035; // Ajustado para mejor detección de pendiente 
   
   private readonly MIN_PEAK_TIME_MS = 400; 
   private readonly WARMUP_TIME_MS = 3000; 
@@ -19,19 +19,12 @@ export class HeartBeatProcessor {
   private readonly EMA_ALPHA = 0.4; 
   private readonly BASELINE_FACTOR = 1.0; 
 
-  // Parámetros de beep mejorados para sonido más realista
-  private readonly BEEP_PRIMARY_FREQUENCY = 660; // Frecuencia principal más baja (sonido más médico)
-  private readonly BEEP_SECONDARY_FREQUENCY = 330; // Frecuencia secundaria más baja
-  private readonly BEEP_DURATION = 60; // Duración más corta para "beep" más punzante y realista
-  private readonly BEEP_VOLUME = 0.85; // Volumen ligeramente reducido
+  // Parámetros de beep
+  private readonly BEEP_PRIMARY_FREQUENCY = 880; 
+  private readonly BEEP_SECONDARY_FREQUENCY = 440; 
+  private readonly BEEP_DURATION = 80; 
+  private readonly BEEP_VOLUME = 0.9; 
   private readonly MIN_BEEP_INTERVAL_MS = 300;
-  
-  // NUEVO: Variables para monitor cardíaco más realista
-  private readonly USE_REAL_HEART_SOUND = true; // Usar sonido real de monitor
-  private heartSoundBuffer: AudioBuffer | null = null;
-  private heartSoundUrl = 'https://assets.mixkit.co/active_storage/sfx/2429/2429-preview.mp3'; // Sonido de latido cardíaco
-  private isHeartSoundLoaded = false;
-  private isHeartSoundLoading = false;
 
   // ────────── AUTO-RESET SI LA SEÑAL ES MUY BAJA ──────────
   private readonly LOW_SIGNAL_THRESHOLD = 0.03;
@@ -59,17 +52,15 @@ export class HeartBeatProcessor {
   private peakCandidateIndex: number | null = null;
   private peakCandidateValue: number = 0;
   
-  // NUEVO: Almacenar valores de derivada para detección mejorada
+  // NUEVO: Para calibración mejorada de picos
   private derivativeBuffer: number[] = [];
   private readonly DERIVATIVE_BUFFER_SIZE = 5;
-
-  // NUEVO: Almacenar amplitudes de los picos para mejorar la detección de arritmias
-  private peakAmplitudes: number[] = [];
-  private readonly MAX_AMPLITUDE_HISTORY = 20;
-  
-  // NUEVO: Indica si estamos en fase ascendente hacia un pico
   private isRisingEdge: boolean = false;
   private risingEdgeStartTime: number = 0;
+  private peakAmplitudes: number[] = [];
+  private readonly MAX_AMPLITUDE_HISTORY = 20;
+  private averagePeakHeight: number = 0;
+  private readonly PEAK_HEIGHT_SMOOTHING = 0.3;
 
   constructor() {
     this.initAudio();
@@ -80,37 +71,10 @@ export class HeartBeatProcessor {
     try {
       this.audioContext = new AudioContext();
       await this.audioContext.resume();
-      
-      // Inicializar con un beep muy silencioso para activar el audio
       await this.playBeep(0.01);
-      
-      // Cargar sonido de latido de corazón en segundo plano
-      if (this.USE_REAL_HEART_SOUND) {
-        this.loadHeartSound();
-      }
-      
       console.log("HeartBeatProcessor: Audio Context Initialized");
     } catch (error) {
       console.error("HeartBeatProcessor: Error initializing audio", error);
-    }
-  }
-  
-  // NUEVO: Cargar sonido de monitor cardíaco real
-  private async loadHeartSound() {
-    if (!this.audioContext || this.isHeartSoundLoaded || this.isHeartSoundLoading) return;
-    
-    try {
-      this.isHeartSoundLoading = true;
-      const response = await fetch(this.heartSoundUrl);
-      const arrayBuffer = await response.arrayBuffer();
-      this.heartSoundBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
-      this.isHeartSoundLoaded = true;
-      this.isHeartSoundLoading = false;
-      console.log("HeartBeatProcessor: Heart sound loaded");
-    } catch (error) {
-      console.error("HeartBeatProcessor: Error loading heart sound:", error);
-      this.isHeartSoundLoading = false;
-      // Si falla, seguiremos usando el beep sintético
     }
   }
 
@@ -119,27 +83,8 @@ export class HeartBeatProcessor {
 
     const now = Date.now();
     if (now - this.lastBeepTime < this.MIN_BEEP_INTERVAL_MS) return;
-    this.lastBeepTime = now;
-    
+
     try {
-      // NUEVO: Usar sonido de latido real si está disponible
-      if (this.USE_REAL_HEART_SOUND && this.heartSoundBuffer && this.isHeartSoundLoaded) {
-        const source = this.audioContext.createBufferSource();
-        const gainNode = this.audioContext.createGain();
-        
-        source.buffer = this.heartSoundBuffer;
-        gainNode.gain.value = volume;
-        
-        source.connect(gainNode);
-        gainNode.connect(this.audioContext.destination);
-        
-        // Reproducir solo la parte inicial del sonido (primeros 150ms)
-        const duration = Math.min(0.15, this.heartSoundBuffer.duration);
-        source.start(0, 0, duration);
-        return;
-      }
-      
-      // Fallback: usar beep sintético si el sonido real no está disponible
       const primaryOscillator = this.audioContext.createOscillator();
       const primaryGain = this.audioContext.createGain();
 
@@ -158,22 +103,22 @@ export class HeartBeatProcessor {
         this.audioContext.currentTime
       );
 
-      // Envelope del sonido principal con ataque más rápido
+      // Envelope del sonido principal
       primaryGain.gain.setValueAtTime(0, this.audioContext.currentTime);
       primaryGain.gain.linearRampToValueAtTime(
         volume,
-        this.audioContext.currentTime + 0.005 // Ataque más rápido
+        this.audioContext.currentTime + 0.01
       );
       primaryGain.gain.exponentialRampToValueAtTime(
         0.01,
         this.audioContext.currentTime + this.BEEP_DURATION / 1000
       );
 
-      // Envelope del sonido secundario con ataque más rápido
+      // Envelope del sonido secundario
       secondaryGain.gain.setValueAtTime(0, this.audioContext.currentTime);
       secondaryGain.gain.linearRampToValueAtTime(
-        volume * 0.4, // Más proporción para segundo armónico (más realista)
-        this.audioContext.currentTime + 0.005 // Ataque más rápido
+        volume * 0.3,
+        this.audioContext.currentTime + 0.01
       );
       secondaryGain.gain.exponentialRampToValueAtTime(
         0.01,
@@ -191,6 +136,7 @@ export class HeartBeatProcessor {
       primaryOscillator.stop(this.audioContext.currentTime + this.BEEP_DURATION / 1000 + 0.05);
       secondaryOscillator.stop(this.audioContext.currentTime + this.BEEP_DURATION / 1000 + 0.05);
 
+      this.lastBeepTime = now;
     } catch (error) {
       console.error("HeartBeatProcessor: Error playing beep", error);
     }
@@ -251,6 +197,7 @@ export class HeartBeatProcessor {
       };
     }
 
+    // Ajustar línea base de forma dinámica para mejor adaptación
     this.baseline =
       this.baseline * this.BASELINE_FACTOR + smoothed * (1 - this.BASELINE_FACTOR);
 
@@ -275,10 +222,10 @@ export class HeartBeatProcessor {
       this.derivativeBuffer.shift();
     }
 
-    // MEJORADO: Detector de picos optimizado para sonido más natural
+    // CALIBRACIÓN MEJORADA: Detector de picos con mejor fase de subida
     const { isPeak, confidence, isRisingEdge } = this.detectPeak(normalizedValue, smoothDerivative);
     
-    // NUEVO: Detección mejorada de fase ascendente
+    // Seguimiento de fase ascendente para ajustar el sonido adecuadamente
     if (isRisingEdge && !this.isRisingEdge) {
       this.isRisingEdge = true;
       this.risingEdgeStartTime = Date.now();
@@ -286,22 +233,26 @@ export class HeartBeatProcessor {
       this.isRisingEdge = false;
     }
     
-    // Confirmación de picos más rigurosa
-    const isConfirmedPeak = this.confirmPeak(isPeak, normalizedValue, confidence);
-    
-    // CORREGIDO: Reproducir beep durante la fase ASCENDENTE del pico
-    // en lugar de esperar a que se confirme en la cima o bajada
+    // Reproducir beep en fase ascendente con umbral de tiempo apropiado
     const now = Date.now();
-    const shouldPlayBeep = this.isRisingEdge && 
-                         confidence > this.MIN_CONFIDENCE && 
-                         !this.isInWarmup() &&
-                         (now - this.lastBeepTime) >= this.MIN_BEEP_INTERVAL_MS;
+    const timeSinceLastBeep = now - this.lastBeepTime;
     
-    if (shouldPlayBeep) {
-      this.playBeep(0.12 * confidence); // Ajustar volumen según confianza
+    // El sonido debe ocurrir cuando la señal está claramente subiendo (pendiente positiva)
+    // y ha pasado suficiente tiempo desde el último beep
+    if (this.isRisingEdge && 
+        confidence > this.MIN_CONFIDENCE && 
+        !this.isInWarmup() && 
+        timeSinceLastBeep >= this.MIN_BEEP_INTERVAL_MS &&
+        this.derivativeBuffer.length > 0 && 
+        this.derivativeBuffer[this.derivativeBuffer.length - 1] > 0) {
+      
+      this.playBeep(0.12 * confidence);
     }
+    
+    // Confirmación de picos para cálculo de BPM
+    const isConfirmedPeak = this.confirmPeak(isPeak, normalizedValue, confidence);
 
-    // La detección del pico sigue funcionando igual para el cálculo de BPM
+    // Tracking de picos para datos fisiológicos
     if (isConfirmedPeak && !this.isInWarmup()) {
       const now = Date.now();
       const timeSinceLastPeak = this.lastPeakTime
@@ -312,10 +263,19 @@ export class HeartBeatProcessor {
         this.previousPeakTime = this.lastPeakTime;
         this.lastPeakTime = now;
         
-        // NUEVO: Almacenar amplitud del pico para detección de arritmias
-        this.peakAmplitudes.push(Math.abs(normalizedValue));
+        // Almacenar amplitud del pico confirmado
+        const currentPeakHeight = Math.abs(normalizedValue);
+        this.peakAmplitudes.push(currentPeakHeight);
         if (this.peakAmplitudes.length > this.MAX_AMPLITUDE_HISTORY) {
           this.peakAmplitudes.shift();
+        }
+        
+        // Ajustar altura promedio para calibración dinámica
+        if (this.averagePeakHeight === 0) {
+          this.averagePeakHeight = currentPeakHeight;
+        } else {
+          this.averagePeakHeight = this.averagePeakHeight * (1 - this.PEAK_HEIGHT_SMOOTHING) + 
+                                 currentPeakHeight * this.PEAK_HEIGHT_SMOOTHING;
         }
         
         this.updateBPM();
@@ -356,6 +316,7 @@ export class HeartBeatProcessor {
     console.log("HeartBeatProcessor: auto-reset detection states (low signal).");
   }
 
+  // CALIBRACIÓN MEJORADA: Mejor detección de subida y picos
   private detectPeak(normalizedValue: number, derivative: number): {
     isPeak: boolean;
     confidence: number;
@@ -370,34 +331,43 @@ export class HeartBeatProcessor {
       return { isPeak: false, confidence: 0, isRisingEdge: false };
     }
 
-    // CORREGIDO: Detectar fase ascendente del pico (cuando la señal sube rápidamente)
-    // Esto permite que el beep suene cuando el pico va subiendo, como en monitores reales
+    // CALIBRADO: Detectar fase ascendente con más precisión
+    // - Se requiere derivada positiva (señal subiendo)
+    // - Un valor ya por encima del umbral mínimo pero no demasiado alto
     const isRisingEdge = 
       derivative > this.DERIVATIVE_THRESHOLD && 
-      normalizedValue > this.SIGNAL_THRESHOLD * 0.5 && 
-      normalizedValue < this.SIGNAL_THRESHOLD * 1.5;
-      
-    // La detección del pico real para el cálculo de BPM sigue usando la lógica anterior
-    // pero adaptada para funcionar con la nueva mecánica de detección
+      normalizedValue > this.SIGNAL_THRESHOLD * 0.4 && 
+      normalizedValue < this.SIGNAL_THRESHOLD * 2.0;
+    
+    // CALIBRADO: Detección ajustada de picos para mejor visualización
     const isPeakCandidate = 
-      derivative < -0.01 &&  // Ahora buscamos cuando empieza a bajar (cima del pico)
-      normalizedValue > this.SIGNAL_THRESHOLD &&
-      this.lastValue > this.baseline * 0.98;
+      derivative < -0.01 &&  // Buscar cambio de dirección (cima)
+      normalizedValue > this.SIGNAL_THRESHOLD && 
+      this.lastValue > this.baseline * 0.95; // Permitir picos un poco más cercanos a la línea base
 
-    // Refinamiento del cálculo de confianza
+    // Confianza ajustada para mejores resultados visuales
     const amplitudeConfidence = Math.min(
-      Math.max(Math.abs(normalizedValue) / (this.SIGNAL_THRESHOLD * 1.5), 0),
+      Math.max(Math.abs(normalizedValue) / (this.SIGNAL_THRESHOLD * 1.3), 0),
       1
     );
     
-    // Derivada para confianza: valor absoluto para que funcione en ambas direcciones
     const derivativeConfidence = Math.min(
-      Math.max(Math.abs(derivative) / Math.abs(this.DERIVATIVE_THRESHOLD * 0.9), 0),
+      Math.max(Math.abs(derivative) / Math.abs(this.DERIVATIVE_THRESHOLD * 0.8), 0),
       1
     );
 
-    // Cálculo de confianza mejorado
-    const confidence = (amplitudeConfidence * 0.6 + derivativeConfidence * 0.4);
+    // Confianza adaptativa basada en historial de picos
+    const confidenceBase = (amplitudeConfidence * 0.7 + derivativeConfidence * 0.3);
+    
+    // Mejorar confianza si el pico tiene amplitud consistente con picos anteriores
+    let confidence = confidenceBase;
+    if (this.averagePeakHeight > 0 && normalizedValue > 0) {
+      const heightRatio = normalizedValue / this.averagePeakHeight;
+      if (heightRatio > 0.7 && heightRatio < 1.3) {
+        // Bonificación para picos que tienen altura similar a picos anteriores
+        confidence = Math.min(1.0, confidence * 1.2);
+      }
+    }
 
     return { 
       isPeak: isPeakCandidate, 
@@ -506,10 +476,10 @@ export class HeartBeatProcessor {
     this.derivativeBuffer = [];
     this.isRisingEdge = false;
     this.peakAmplitudes = [];
+    this.averagePeakHeight = 0;
   }
 
   public getRRIntervals(): { intervals: number[]; lastPeakTime: number | null; amplitudes?: number[] } {
-    // CRUCIAL: Pasar los datos de amplitud REALES en lugar de estimados
     return {
       intervals: this.bpmHistory.map(bpm => Math.round(60000 / bpm)), // Convertir BPM a intervalos RR en ms
       lastPeakTime: this.lastPeakTime,
