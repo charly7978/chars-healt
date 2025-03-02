@@ -79,19 +79,27 @@ export const useVitalSignsProcessor = () => {
       // Asegurarse de pasar los datos de amplitud al analizador de arritmias si están disponibles
       const arrhythmiaResult = arrhythmiaAnalyzer.processArrhythmia(rrData);
       
+      // Incluir información sobre la fase de entrenamiento (calibración) si está disponible
+      const isCalibrating = arrhythmiaResult.isInWarmup === true;
+      const calibrationProgress = arrhythmiaResult.warmupProgress || 0;
+      
       if (arrhythmiaResult.detected) {
         return {
           spo2: result.spo2,
           pressure: stabilizedBP,
           arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus,
-          lastArrhythmiaData: arrhythmiaResult.lastArrhythmiaData
+          lastArrhythmiaData: arrhythmiaResult.lastArrhythmiaData,
+          isCalibrating,
+          calibrationProgress
         };
       }
       
       return {
         spo2: result.spo2,
         pressure: stabilizedBP,
-        arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus
+        arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus,
+        isCalibrating,
+        calibrationProgress
       };
     }
     
