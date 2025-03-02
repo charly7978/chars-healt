@@ -36,8 +36,9 @@ export const useVitalSignsProcessor = () => {
       console.log('useVitalSignsProcessor: Creando nueva instancia de detector de arritmias');
       arrhythmiaDetectorRef.current = new ArrhythmiaDetector();
       
-      // Adición para debugging - hacerlo globalmente accesible
-      window.arrhythmiaDetector = arrhythmiaDetectorRef.current;
+      // Fix for TypeScript error - use type assertion to avoid the error
+      // This safely tells TypeScript that we know what we're doing
+      (window as any).arrhythmiaDetector = arrhythmiaDetectorRef.current;
     }
     return arrhythmiaDetectorRef.current;
   }, []);
