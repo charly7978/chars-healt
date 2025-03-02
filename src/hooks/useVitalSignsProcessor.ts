@@ -1,3 +1,4 @@
+
 import { useState, useCallback, useRef } from 'react';
 import { VitalSignsProcessor } from '../modules/VitalSignsProcessor';
 import { useArrhythmiaAnalyzer } from './useArrhythmiaAnalyzer';
@@ -15,6 +16,9 @@ export const useVitalSignsProcessor = () => {
   const bloodPressureStabilizer = useRef(createBloodPressureStabilizer());
   const dataCollector = useRef(createVitalSignsDataCollector());
   const signalHistory = useSignalHistory();
+  
+  // Constants
+  const MAX_ARRHYTHMIAS_PER_SESSION = 15; // Máximo razonable para 30 segundos
   
   /**
    * Lazy initialization of the VitalSignsProcessor
@@ -75,7 +79,8 @@ export const useVitalSignsProcessor = () => {
     
     // Advanced arrhythmia analysis - ensure we're passing peak amplitudes if available
     if (rrData?.intervals && rrData.intervals.length >= 4) {
-      const arrhythmiaResult = arrhythmiaAnalyzer.processArrhythmia(rrData);
+      // Make sure to pass amplitude data to the arrhythmia analyzer if available
+      const arrhythmiaResult = arrhythmiaAnalyzer.processArrhythmia(rrData, MAX_ARRHYTHMIAS_PER_SESSION);
       
       if (arrhythmiaResult.detected) {
         return {
