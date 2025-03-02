@@ -341,16 +341,16 @@ export const useArrhythmiaAnalyzer = () => {
     
     if (validIntervals.length < 3) {
       if (DEBUG_MODE) console.warn("Arrhythmia analyzer - Not enough valid intervals:", validIntervals);
-      
-      return {
-        detected: false,
+        
+        return {
+          detected: false,
         arrhythmiaStatus: hasDetectedArrhythmia.current 
           ? `ARRITMIA DETECTADA|${arrhythmiaCounter}`
           : `SIN ARRITMIAS|${arrhythmiaCounter}`,
-        lastArrhythmiaData: null
-      };
-    }
-    
+          lastArrhythmiaData: null
+        };
+      }
+      
     // Store interval history for trend analysis
     rrIntervalsHistoryRef.current.push([...validIntervals]);
     if (rrIntervalsHistoryRef.current.length > ANALYSIS_WINDOW_SIZE) {
@@ -390,12 +390,12 @@ export const useArrhythmiaAnalyzer = () => {
         amplitudes: rrData.amplitudes?.slice(-3) || [],
         counter: arrhythmiaCounter + 1
       });
-
-      return {
-        detected: true,
+            
+            return {
+              detected: true,
         arrhythmiaStatus: `ARRITMIA DETECTADA|${arrhythmiaCounter + 1}`,
-        lastArrhythmiaData: {
-          timestamp: currentTime,
+              lastArrhythmiaData: {
+                timestamp: currentTime,
           rmssd: arrhythmiaAnalysis.rmssd,
           rrVariation: arrhythmiaAnalysis.rrVariation,
           isPrematureBeat: true
@@ -405,11 +405,11 @@ export const useArrhythmiaAnalyzer = () => {
     
     // If we've already detected an arrhythmia, maintain the count in status
     if (hasDetectedArrhythmia.current) {
-      return {
-        detected: false,
+        return {
+          detected: false,
         arrhythmiaStatus: `ARRITMIA DETECTADA|${arrhythmiaCounter}`,
-        lastArrhythmiaData: null
-      };
+          lastArrhythmiaData: null
+        };
     }
     
     return {
