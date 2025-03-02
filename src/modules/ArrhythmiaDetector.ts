@@ -8,7 +8,7 @@
 
 export class ArrhythmiaDetector {
   // Constants for arrhythmia detection
-  private readonly RR_WINDOW_SIZE = 5;
+  private readonly RR_WINDOW_SIZE = 7;
   private readonly ARRHYTHMIA_LEARNING_PERIOD = 6000; // Reduced from 3000ms to detect earlier
   
   // MÁS ESTRICTO: Ajustes extremos para solo detectar latidos prematuros entre normales
