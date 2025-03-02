@@ -1,6 +1,8 @@
-import React, { useEffect, useRef, useCallback } from 'react';
-import { Fingerprint } from 'lucide-react';
+
+import React, { useEffect, useRef, useCallback, useState } from 'react';
+import { Fingerprint, ActivitySquare, Zap } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
+import { transformPPGtoECGLike, analyzeCardiacWaveform } from '../utils/signalProcessingUtils';
 
 interface PPGSignalMeterProps {
   value: number;
@@ -14,6 +16,8 @@ interface PPGSignalMeterProps {
     rmssd: number;
     rrVariation: number;
   } | null;
+  isCalibrating?: boolean;
+  calibrationProgress?: number;
 }
 
 const PPGSignalMeter = ({ 
@@ -23,7 +27,9 @@ const PPGSignalMeter = ({
   onStartMeasurement,
   onReset,
   arrhythmiaStatus,
-  rawArrhythmiaData
+  rawArrhythmiaData,
+  isCalibrating = false,
+  calibrationProgress = 0
 }: PPGSignalMeterProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dataBufferRef = useRef<CircularBuffer | null>(null);
@@ -33,13 +39,16 @@ const PPGSignalMeter = ({
   const lastRenderTimeRef = useRef<number>(0);
   const lastArrhythmiaTime = useRef<number>(0);
   const arrhythmiaCountRef = useRef<number>(0);
+  const [displayMode, setDisplayMode] = useState<'normal' | 'ecg-like'>('normal');
+  const ecgTransformedBufferRef = useRef<number[]>([]);
+  const cardiacAnalysisRef = useRef<ReturnType<typeof analyzeCardiacWaveform> | null>(null);
   
   const WINDOW_WIDTH_MS = 5700;
   const CANVAS_WIDTH = 650;
   const CANVAS_HEIGHT = 450;
   const GRID_SIZE_X = 10;
   const GRID_SIZE_Y = 3;
-  const verticalScale = 30.0;
+  const verticalScale = displayMode === 'normal' ? 30.0 : 15.0;
   const SMOOTHING_FACTOR = 0.25;
   const TARGET_FPS = 240;
   const FRAME_TIME = 1000 / TARGET_FPS;
@@ -49,6 +58,11 @@ const PPGSignalMeter = ({
     if (!dataBufferRef.current) {
       dataBufferRef.current = new CircularBuffer(BUFFER_SIZE);
     }
+  }, []);
+
+  // Cambiar entre modos de visualización
+  const toggleDisplayMode = useCallback(() => {
+    setDisplayMode(prev => prev === 'normal' ? 'ecg-like' : 'normal');
   }, []);
 
   const getQualityColor = useCallback((q: number) => {
@@ -75,21 +89,40 @@ const PPGSignalMeter = ({
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     
-    ctx.fillStyle = '#f3f3f3';
+    // Fondo al estilo papel de ECG para el modo ECG
+    if (displayMode === 'ecg-like') {
+      ctx.fillStyle = '#F8F4E3'; // Color crema claro similar al papel de ECG
+    } else {
+      ctx.fillStyle = '#f3f3f3'; // Color original
+    }
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
+    // Estilo de cuadrícula según el modo
+    const gridColor = displayMode === 'ecg-like' ? 'rgba(255, 102, 102, 0.15)' : 'rgba(0, 180, 120, 0.15)';
+    const boldGridColor = displayMode === 'ecg-like' ? 'rgba(255, 102, 102, 0.3)' : 'rgba(0, 150, 100, 0.25)';
+    const textColor = displayMode === 'ecg-like' ? 'rgba(255, 102, 102, 0.9)' : 'rgba(0, 150, 100, 0.9)';
+    const centerLineColor = displayMode === 'ecg-like' ? 'rgba(255, 102, 102, 0.35)' : 'rgba(0, 150, 100, 0.35)';
+
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(0, 180, 120, 0.15)';
+    ctx.strokeStyle = gridColor;
     ctx.lineWidth = 0.5;
 
+    // Dibujar cuadrícula fina
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X) {
       ctx.moveTo(x, 0);
       ctx.lineTo(x, CANVAS_HEIGHT);
       if (x % (GRID_SIZE_X * 4) === 0) {
-        ctx.fillStyle = 'rgba(0, 150, 100, 0.9)';
+        ctx.fillStyle = textColor;
         ctx.font = '10px Inter';
         ctx.textAlign = 'center';
-        ctx.fillText(`${x / 10}ms`, x, CANVAS_HEIGHT - 5);
+        
+        // Etiquetas de tiempo para ECG (milisegundos -> segundos)
+        if (displayMode === 'ecg-like') {
+          const timeInSec = (x / 10) / 100;
+          ctx.fillText(`${timeInSec.toFixed(2)}s`, x, CANVAS_HEIGHT - 5);
+        } else {
+          ctx.fillText(`${x / 10}ms`, x, CANVAS_HEIGHT - 5);
+        }
       }
     }
 
@@ -98,7 +131,7 @@ const PPGSignalMeter = ({
       ctx.lineTo(CANVAS_WIDTH, y);
       if (y % (GRID_SIZE_Y * 4) === 0) {
         const amplitude = ((CANVAS_HEIGHT / 2) - y) / verticalScale;
-        ctx.fillStyle = 'rgba(0, 150, 100, 0.9)';
+        ctx.fillStyle = textColor;
         ctx.font = '10px Inter';
         ctx.textAlign = 'right';
         ctx.fillText(amplitude.toFixed(1), 25, y + 4);
@@ -106,8 +139,9 @@ const PPGSignalMeter = ({
     }
     ctx.stroke();
 
+    // Dibujar cuadrícula gruesa (cada 4 líneas)
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(0, 150, 100, 0.25)';
+    ctx.strokeStyle = boldGridColor;
     ctx.lineWidth = 1;
 
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X * 4) {
@@ -121,13 +155,57 @@ const PPGSignalMeter = ({
     }
     ctx.stroke();
 
+    // Línea central
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(0, 150, 100, 0.35)';
+    ctx.strokeStyle = centerLineColor;
     ctx.lineWidth = 1.5;
     ctx.moveTo(0, CANVAS_HEIGHT * 0.6);
     ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT * 0.6);
     ctx.stroke();
-  }, []);
+    
+    // Si estamos en modo ECG, dibujar leyenda de papel de ECG
+    if (displayMode === 'ecg-like') {
+      ctx.fillStyle = 'rgba(255, 102, 102, 0.7)';
+      ctx.font = 'bold 10px Inter';
+      ctx.textAlign = 'left';
+      ctx.fillText('Visualización ECG - 25mm/s', 30, 20);
+      
+      // Dibujar regla de calibración estándar ECG (1mV = 10mm)
+      ctx.beginPath();
+      ctx.strokeStyle = 'rgba(255, 102, 102, 0.9)';
+      ctx.lineWidth = 2;
+      ctx.moveTo(CANVAS_WIDTH - 50, CANVAS_HEIGHT - 50);
+      ctx.lineTo(CANVAS_WIDTH - 50, CANVAS_HEIGHT - 50 - 10 * 4); // 10mm vertical
+      ctx.lineTo(CANVAS_WIDTH - 50 + 25, CANVAS_HEIGHT - 50 - 10 * 4); // 25mm horizontal (1 segundo)
+      ctx.stroke();
+      
+      ctx.fillStyle = 'rgba(255, 102, 102, 0.9)';
+      ctx.font = '9px Inter';
+      ctx.textAlign = 'center';
+      ctx.fillText('1mV', CANVAS_WIDTH - 50, CANVAS_HEIGHT - 30);
+      ctx.fillText('1s', CANVAS_WIDTH - 37, CANVAS_HEIGHT - 50 - 10 * 4 - 5);
+    }
+    
+    // Si estamos calibrando, mostrar indicador de progreso
+    if (isCalibrating) {
+      const progressWidth = (CANVAS_WIDTH - 100) * (calibrationProgress / 100);
+      
+      // Barra de progreso
+      ctx.fillStyle = 'rgba(100, 100, 255, 0.2)';
+      ctx.fillRect(50, CANVAS_HEIGHT * 0.8 - 15, CANVAS_WIDTH - 100, 30);
+      
+      ctx.fillStyle = 'rgba(0, 100, 255, 0.4)';
+      ctx.fillRect(50, CANVAS_HEIGHT * 0.8 - 15, progressWidth, 30);
+      
+      // Texto de calibración
+      ctx.fillStyle = 'rgba(0, 60, 220, 0.9)';
+      ctx.font = 'bold 14px Inter';
+      ctx.textAlign = 'center';
+      ctx.fillText(`CALIBRANDO: ${calibrationProgress}%`, CANVAS_WIDTH / 2, CANVAS_HEIGHT * 0.8 + 5);
+      ctx.font = '11px Inter';
+      ctx.fillText('No mueva el dedo durante la calibración', CANVAS_WIDTH / 2, CANVAS_HEIGHT * 0.8 + 25);
+    }
+  }, [displayMode, isCalibrating, calibrationProgress, verticalScale]);
 
   const renderSignal = useCallback(() => {
     if (!canvasRef.current || !dataBufferRef.current) {
@@ -181,6 +259,20 @@ const PPGSignalMeter = ({
     };
     
     dataBufferRef.current.push(dataPoint);
+    
+    // Actualizar el buffer para transformación ECG-like
+    const bufferPoints = dataBufferRef.current.getPoints();
+    if (bufferPoints.length > 20) {
+      const rawValues = bufferPoints.map(point => point.value / verticalScale);
+      
+      // Transformar a estilo ECG para modo alternativo
+      ecgTransformedBufferRef.current = transformPPGtoECGLike(rawValues);
+      
+      // Realizar análisis cardíaco si tenemos suficientes datos
+      if (bufferPoints.length > 60) {
+        cardiacAnalysisRef.current = analyzeCardiacWaveform(rawValues);
+      }
+    }
 
     drawGrid(ctx);
 
@@ -192,8 +284,8 @@ const PPGSignalMeter = ({
       
       if (visiblePoints.length > 1) {
         ctx.beginPath();
-        ctx.strokeStyle = '#0EA5E9';
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = displayMode === 'ecg-like' ? '#E63946' : '#0EA5E9';
+        ctx.lineWidth = displayMode === 'ecg-like' ? 2.5 : 2;
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
         
@@ -202,7 +294,15 @@ const PPGSignalMeter = ({
         for (let i = 0; i < visiblePoints.length; i++) {
           const point = visiblePoints[i];
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-          const y = canvas.height * 0.6 - point.value;
+          
+          // Usar valores transformados para modo ECG
+          let y;
+          if (displayMode === 'ecg-like' && ecgTransformedBufferRef.current.length > 0) {
+            const transformedIndex = Math.min(i, ecgTransformedBufferRef.current.length - 1);
+            y = canvas.height * 0.6 - ecgTransformedBufferRef.current[transformedIndex] * verticalScale * 3;
+          } else {
+            y = canvas.height * 0.6 - point.value;
+          }
           
           if (firstPoint) {
             ctx.moveTo(x, y);
@@ -221,13 +321,21 @@ const PPGSignalMeter = ({
             
             const nextPoint = visiblePoints[i + 1];
             const nextX = canvas.width - ((now - nextPoint.time) * canvas.width / WINDOW_WIDTH_MS);
-            const nextY = canvas.height * 0.6 - nextPoint.value;
+            
+            let nextY;
+            if (displayMode === 'ecg-like' && ecgTransformedBufferRef.current.length > 0) {
+              const nextTransformedIndex = Math.min(i + 1, ecgTransformedBufferRef.current.length - 1);
+              nextY = canvas.height * 0.6 - ecgTransformedBufferRef.current[nextTransformedIndex] * verticalScale * 3;
+            } else {
+              nextY = canvas.height * 0.6 - nextPoint.value;
+            }
+            
             ctx.lineTo(nextX, nextY);
             ctx.stroke();
             
             ctx.beginPath();
-            ctx.strokeStyle = '#0EA5E9';
-            ctx.lineWidth = 2;
+            ctx.strokeStyle = displayMode === 'ecg-like' ? '#E63946' : '#0EA5E9';
+            ctx.lineWidth = displayMode === 'ecg-like' ? 2.5 : 2;
             ctx.setLineDash([]);
             ctx.moveTo(nextX, nextY);
             firstPoint = false;
@@ -237,6 +345,7 @@ const PPGSignalMeter = ({
         ctx.stroke();
       }
 
+      // Detección de picos y marcado
       const maxPeakIndices: number[] = [];
       
       for (let i = 2; i < visiblePoints.length - 2; i++) {
@@ -246,14 +355,33 @@ const PPGSignalMeter = ({
         const nextPoint1 = visiblePoints[i + 1];
         const nextPoint2 = visiblePoints[i + 2];
         
-        if (point.value > prevPoint1.value && 
-            point.value > prevPoint2.value && 
-            point.value > nextPoint1.value && 
-            point.value > nextPoint2.value) {
+        // En modo ECG, usar valores transformados para detectar picos
+        let isPeak = false;
+        if (displayMode === 'ecg-like' && ecgTransformedBufferRef.current.length > i + 2) {
+          const val = ecgTransformedBufferRef.current[i];
+          const prev1 = ecgTransformedBufferRef.current[i - 1];
+          const prev2 = ecgTransformedBufferRef.current[i - 2];
+          const next1 = ecgTransformedBufferRef.current[i + 1];
+          const next2 = ecgTransformedBufferRef.current[i + 2];
           
-          const peakAmplitude = Math.abs(point.value);
+          isPeak = val > prev1 && val > prev2 && val > next1 && val > next2 && val > 0.4;
+        } else {
+          // Modo normal
+          isPeak = point.value > prevPoint1.value && 
+                  point.value > prevPoint2.value && 
+                  point.value > nextPoint1.value && 
+                  point.value > nextPoint2.value;
+        }
+        
+        if (isPeak) {
+          const peakAmplitude = displayMode === 'ecg-like' 
+            ? Math.abs(ecgTransformedBufferRef.current[i] * 3) 
+            : Math.abs(point.value / verticalScale);
           
-          if (peakAmplitude > 7.0) {
+          // Umbral ajustado según modo
+          const amplitudeThreshold = displayMode === 'ecg-like' ? 0.3 : 7.0;
+          
+          if (peakAmplitude > amplitudeThreshold) {
             const peakTime = point.time;
             const hasPeakNearby = maxPeakIndices.some(idx => {
               const existingPeakTime = visiblePoints[idx].time;
@@ -267,21 +395,39 @@ const PPGSignalMeter = ({
         }
       }
       
+      // Dibujar picos detectados
       for (let idx of maxPeakIndices) {
         const point = visiblePoints[idx];
         const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-        const y = canvas.height * 0.6 - point.value;
+        
+        let y;
+        if (displayMode === 'ecg-like' && ecgTransformedBufferRef.current.length > idx) {
+          y = canvas.height * 0.6 - ecgTransformedBufferRef.current[idx] * verticalScale * 3;
+        } else {
+          y = canvas.height * 0.6 - point.value;
+        }
+        
+        // Color según modo
+        const peakFillColor = displayMode === 'ecg-like' 
+          ? (point.isArrhythmia ? '#DC2626' : '#E63946') 
+          : (point.isArrhythmia ? '#DC2626' : '#0EA5E9');
         
         ctx.beginPath();
         ctx.arc(x, y, point.isArrhythmia ? 5 : 4, 0, Math.PI * 2);
-        ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
+        ctx.fillStyle = peakFillColor;
         ctx.fill();
 
+        // Etiquetar amplitud
+        const valueToShow = displayMode === 'ecg-like' 
+          ? Math.abs(ecgTransformedBufferRef.current[idx]).toFixed(2)
+          : Math.abs(point.value / verticalScale).toFixed(2);
+          
         ctx.font = 'bold 12px Inter';
         ctx.fillStyle = '#666666';
         ctx.textAlign = 'center';
-        ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 20);
+        ctx.fillText(valueToShow, x, y - 20);
         
+        // Marcar arritmias de forma distintiva
         if (point.isArrhythmia) {
           ctx.beginPath();
           ctx.arc(x, y, 9, 0, Math.PI * 2);
@@ -308,7 +454,9 @@ const PPGSignalMeter = ({
           
           if (idx > 0) {
             const prevX = canvas.width - ((now - visiblePoints[idx-1].time) * canvas.width / WINDOW_WIDTH_MS);
-            const prevY = canvas.height * 0.6 - visiblePoints[idx-1].value;
+            const prevY = displayMode === 'ecg-like' && ecgTransformedBufferRef.current.length > idx-1
+              ? canvas.height * 0.6 - ecgTransformedBufferRef.current[idx-1] * verticalScale * 3
+              : canvas.height * 0.6 - visiblePoints[idx-1].value;
             
             ctx.moveTo(prevX, prevY - 15);
             ctx.lineTo(x, y - 15);
@@ -317,7 +465,9 @@ const PPGSignalMeter = ({
           
           if (idx < visiblePoints.length - 1) {
             const nextX = canvas.width - ((now - visiblePoints[idx+1].time) * canvas.width / WINDOW_WIDTH_MS);
-            const nextY = canvas.height * 0.6 - visiblePoints[idx+1].value;
+            const nextY = displayMode === 'ecg-like' && ecgTransformedBufferRef.current.length > idx+1
+              ? canvas.height * 0.6 - ecgTransformedBufferRef.current[idx+1] * verticalScale * 3
+              : canvas.height * 0.6 - visiblePoints[idx+1].value;
             
             ctx.moveTo(x, y - 15);
             ctx.lineTo(nextX, nextY - 15);
@@ -327,11 +477,36 @@ const PPGSignalMeter = ({
           ctx.setLineDash([]);
         }
       }
+      
+      // Si estamos en modo ECG-like, mostrar análisis cardíaco
+      if (displayMode === 'ecg-like' && cardiacAnalysisRef.current) {
+        const analysis = cardiacAnalysisRef.current;
+        
+        ctx.fillStyle = 'rgba(220, 53, 69, 0.8)';
+        ctx.font = '12px Inter';
+        ctx.textAlign = 'left';
+        
+        // Mostrar calidad de forma de onda
+        const qualityText = `Calidad onda: ${Math.round(analysis.waveQuality * 100)}%`;
+        ctx.fillText(qualityText, 30, 40);
+        
+        // Mostrar morfología QRS
+        ctx.fillText(`QRS: ${analysis.qrs.morphology} (${Math.round(analysis.qrs.duration)}ms)`, 30, 60);
+        
+        // Mostrar si hay ondas P y T
+        ctx.fillText(`Onda P: ${analysis.pWave.present ? 'presente' : 'no detectada'}`, 30, 80);
+        ctx.fillText(`Onda T: ${analysis.tWave.present ? 'presente' : 'no detectada'}`, 30, 100);
+        
+        // Mostrar intervalos si son válidos
+        if (analysis.segments.qt > 0) {
+          ctx.fillText(`QT: ${Math.round(analysis.segments.qt)}ms`, 30, 120);
+        }
+      }
     }
 
     lastRenderTimeRef.current = currentTime;
     animationFrameRef.current = requestAnimationFrame(renderSignal);
-  }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus, drawGrid, smoothValue]);
+  }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus, drawGrid, smoothValue, displayMode, verticalScale]);
 
   useEffect(() => {
     renderSignal();
@@ -381,6 +556,22 @@ const PPGSignalMeter = ({
             {isFingerDetected ? "Dedo detectado" : "Ubique su dedo en la Lente"}
           </span>
         </div>
+      </div>
+
+      <div className="absolute top-1 left-1 z-30 flex items-center gap-1">
+        <button 
+          onClick={toggleDisplayMode}
+          className="bg-black/30 p-2 rounded-lg text-white hover:bg-black/40 transition-colors"
+        >
+          {displayMode === 'normal' ? (
+            <ActivitySquare size={20} className="text-blue-300" />
+          ) : (
+            <Zap size={20} className="text-red-300" />
+          )}
+        </button>
+        <span className="text-[9px] font-medium text-white/80">
+          {displayMode === 'normal' ? 'PPG' : 'ECG'}
+        </span>
       </div>
 
       <div className="absolute inset-0 w-full" style={{ height: '50vh', top: 0 }}>
