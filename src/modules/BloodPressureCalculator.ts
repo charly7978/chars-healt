@@ -2,13 +2,13 @@ import { calculateStandardDeviation, enhancedPeakDetection } from '../utils/sign
 
 export class BloodPressureCalculator {
   // Constants for blood pressure calculation
-  private readonly BP_BASELINE_SYSTOLIC = 125; // Base systolic value
-  private readonly BP_BASELINE_DIASTOLIC = 85; // Base diastolic value
-  private readonly BP_PTT_COEFFICIENT = 0.15; // Increased for more significant variations
-  private readonly BP_AMPLITUDE_COEFFICIENT = 0.30; // Increased for more sensitivity
-  private readonly BP_STIFFNESS_FACTOR = 0.08; // Increased from 0.06 for more variation
-  private readonly BP_SMOOTHING_ALPHA = 0.18; // Reduced for more natural fluctuations
-  private readonly BP_QUALITY_THRESHOLD = 0.50;
+  private readonly BP_BASELINE_SYSTOLIC = 170; // Base systolic value
+  private readonly BP_BASELINE_DIASTOLIC = 60; // Base diastolic value
+  private readonly BP_PTT_COEFFICIENT = 0.015; // Increased for more significant variations
+  private readonly BP_AMPLITUDE_COEFFICIENT = 0.20; // Increased for more sensitivity 0.15
+  private readonly BP_STIFFNESS_FACTOR = 0.28; // Increased from 0.06 for more variation  0.08
+  private readonly BP_SMOOTHING_ALPHA = 0.58; // Reduced for more natural fluctuations 0.18
+  private readonly BP_QUALITY_THRESHOLD = 1.50; // 0.50
   private readonly BP_CALIBRATION_WINDOW = 6;
   private readonly BP_BUFFER_SIZE = 8;
 
