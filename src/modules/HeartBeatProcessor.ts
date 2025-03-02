@@ -1,4 +1,3 @@
-
 export class HeartBeatProcessor {
   // ────────── CONFIGURACIONES PRINCIPALES ──────────
   private readonly SAMPLE_RATE = 30;
@@ -49,6 +48,10 @@ export class HeartBeatProcessor {
   private readonly BPM_ALPHA = 0.2;
   private peakCandidateIndex: number | null = null;
   private peakCandidateValue: number = 0;
+
+  // NUEVO: Almacenar amplitudes de los picos para mejorar la detección de arritmias
+  private peakAmplitudes: number[] = [];
+  private readonly MAX_AMPLITUDE_HISTORY = 20;
 
   constructor() {
     this.initAudio();
@@ -218,6 +221,14 @@ export class HeartBeatProcessor {
         this.previousPeakTime = this.lastPeakTime;
         this.lastPeakTime = now;
         this.playBeep(0.12); // Suena beep cuando se confirma pico
+        
+        // NUEVO: Almacenar amplitud del pico - CRUCIAL para detección de arritmias
+        // La amplitud es importante para identificar latidos prematuros (que suelen tener menor amplitud)
+        this.peakAmplitudes.push(Math.abs(normalizedValue));
+        if (this.peakAmplitudes.length > this.MAX_AMPLITUDE_HISTORY) {
+          this.peakAmplitudes.shift();
+        }
+        
         this.updateBPM();
       }
     }
@@ -250,6 +261,8 @@ export class HeartBeatProcessor {
     this.peakCandidateValue = 0;
     this.peakConfirmationBuffer = [];
     this.values = [];
+    // NUEVO: Limpiar también historial de amplitudes
+    this.peakAmplitudes = [];
     console.log("HeartBeatProcessor: auto-reset detection states (low signal).");
   }
 
@@ -385,20 +398,16 @@ export class HeartBeatProcessor {
     this.peakCandidateIndex = null;
     this.peakCandidateValue = 0;
     this.lowSignalCount = 0;
+    // NUEVO: Limpiar también historial de amplitudes
+    this.peakAmplitudes = [];
   }
 
   public getRRIntervals(): { intervals: number[]; lastPeakTime: number | null; amplitudes?: number[] } {
-    // Critical fix: Pass amplitude data derived from RR intervals
-    // This ensures arrhythmia detection has amplitude data to work with
-    const amplitudes = this.bpmHistory.map(bpm => {
-      // Higher BPM (shorter RR) typically means lower amplitude for premature beats
-      return 100 / (bpm || 800) * (this.calculateCurrentBPM() / 100);
-    });
-    
+    // CRUCIAL: Pasar los datos de amplitud REALES en lugar de estimados
     return {
-      intervals: [...this.bpmHistory],
+      intervals: this.bpmHistory.map(bpm => Math.round(60000 / bpm)), // Convertir BPM a intervalos RR en ms
       lastPeakTime: this.lastPeakTime,
-      amplitudes: amplitudes
+      amplitudes: this.peakAmplitudes  // Pasar amplitudes reales de los picos
     };
   }
 }
