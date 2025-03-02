@@ -4,11 +4,11 @@ export class BloodPressureCalculator {
   // Constants for blood pressure calculation
   private readonly BP_BASELINE_SYSTOLIC = 240; // Base systolic value
   private readonly BP_BASELINE_DIASTOLIC = 30; // Base diastolic value
-  private readonly BP_PTT_COEFFICIENT = 1.01; // Increased for more significant variations
+  private readonly BP_PTT_COEFFICIENT = 5.01; // Increased for more significant variations
   private readonly BP_AMPLITUDE_COEFFICIENT = 0.05; // Increased for more sensitivity 0.15
-  private readonly BP_STIFFNESS_FACTOR = 0.008; // Increased from 0.06 for more variation  0.08
+  private readonly BP_STIFFNESS_FACTOR = 0.090 // Increased from 0.06 for more variation  0.08
   private readonly BP_SMOOTHING_ALPHA = 0.058; // Reduced for more natural fluctuations 0.18
-  private readonly BP_QUALITY_THRESHOLD = 0.050; // 0.50
+  private readonly BP_QUALITY_THRESHOLD = 0.80; // 0.50
   private readonly BP_CALIBRATION_WINDOW = 2;
   private readonly BP_BUFFER_SIZE = 8;
 
@@ -18,7 +18,7 @@ export class BloodPressureCalculator {
   private pttHistory: number[] = [];
   private amplitudeHistory: number[] = [];
   private bpQualityHistory: number[] = [];
-  private bpCalibrationFactor: number = 0.19; //0.99
+  private bpCalibrationFactor: number = 1.19; //0.99
   private lastBpTimestamp: number = 0;
   private lastValidSystolic: number = 0;
   private lastValidDiastolic: number = 0;
