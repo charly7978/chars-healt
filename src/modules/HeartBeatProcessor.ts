@@ -1,18 +1,19 @@
+
 export class HeartBeatProcessor {
   // ────────── CONFIGURACIONES PRINCIPALES ──────────
   private readonly SAMPLE_RATE = 30;
   private readonly WINDOW_SIZE = 60;
   private readonly MIN_BPM = 40;
   private readonly MAX_BPM = 200; // Se mantiene amplio para no perder picos fuera de rango
-  private readonly SIGNAL_THRESHOLD = 0.40; 
-  private readonly MIN_CONFIDENCE = 0.60;
-  private readonly DERIVATIVE_THRESHOLD = -0.03; 
+  private readonly SIGNAL_THRESHOLD = 0.45; // Increased from 0.40 for better peak detection
+  private readonly MIN_CONFIDENCE = 0.65; // Increased from 0.60 for higher certainty
+  private readonly DERIVATIVE_THRESHOLD = -0.04; // Changed from -0.03 for better sensitivity
   private readonly MIN_PEAK_TIME_MS = 400; 
   private readonly WARMUP_TIME_MS = 3000; 
 
   // Parámetros de filtrado
   private readonly MEDIAN_FILTER_WINDOW = 3; 
-  private readonly MOVING_AVERAGE_WINDOW = 3; 
+  private readonly MOVING_AVERAGE_WINDOW = 5; // Increased from 3 to reduce noise
   private readonly EMA_ALPHA = 0.4; 
   private readonly BASELINE_FACTOR = 1.0; 
 
@@ -201,7 +202,10 @@ export class HeartBeatProcessor {
     }
     this.lastValue = smoothed;
 
+    // Mejorado - Mayor precisión en la detección de picos
     const { isPeak, confidence } = this.detectPeak(normalizedValue, smoothDerivative);
+    
+    // Confirmación de picos más rigurosa
     const isConfirmedPeak = this.confirmPeak(isPeak, normalizedValue, confidence);
 
     if (isConfirmedPeak && !this.isInWarmup()) {
@@ -262,22 +266,24 @@ export class HeartBeatProcessor {
       return { isPeak: false, confidence: 0 };
     }
 
+    // Ajuste para mayor robustez en la detección de picos
     const isOverThreshold =
       derivative < this.DERIVATIVE_THRESHOLD &&
       normalizedValue > this.SIGNAL_THRESHOLD &&
       this.lastValue > this.baseline * 0.98;
 
+    // Refinamiento del cálculo de confianza
     const amplitudeConfidence = Math.min(
-      Math.max(Math.abs(normalizedValue) / (this.SIGNAL_THRESHOLD * 1.8), 0),
+      Math.max(Math.abs(normalizedValue) / (this.SIGNAL_THRESHOLD * 1.5), 0),
       1
     );
     const derivativeConfidence = Math.min(
-      Math.max(Math.abs(derivative) / Math.abs(this.DERIVATIVE_THRESHOLD * 0.8), 0),
+      Math.max(Math.abs(derivative) / Math.abs(this.DERIVATIVE_THRESHOLD * 0.9), 0),
       1
     );
 
-    // Aproximación a la confianza final
-    const confidence = (amplitudeConfidence + derivativeConfidence) / 2;
+    // Cálculo de confianza mejorado
+    const confidence = (amplitudeConfidence * 0.6 + derivativeConfidence * 0.4);
 
     return { isPeak: isOverThreshold, confidence };
   }
