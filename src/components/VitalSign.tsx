@@ -1,4 +1,3 @@
-
 import React, { memo, useMemo } from 'react';
 import { VitalSignsRisk } from '../utils/vitalSignsRisk';
 
@@ -131,6 +130,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
       
       return {
         text: `${count}`,
+        title: "ARRITMIA DETECTADA",
         color: "#DC2626",
         label: riskLabel
       };
@@ -144,9 +144,9 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
   };
 
   // Get the risk info based on the medically valid display value 
-  const { text, color, label: riskLabel } = isArrhythmiaDisplay ? 
+  const { text, title, color, label: riskLabel } = isArrhythmiaDisplay ? 
     getArrhythmiaDisplay() : 
-    { text: processedDisplayValue, ...getRiskInfo() };
+    { text: processedDisplayValue, title: undefined, ...getRiskInfo() };
 
   // Simplificar el renderizado para mejorar rendimiento
   return (
@@ -154,9 +154,14 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
       <div className="relative z-10 p-4">
         <h3 className="text-white text-xs font-medium tracking-wider mb-2">{label}</h3>
         <div className="flex flex-col items-center gap-1">
+          {isArrhythmiaDisplay && title && (
+            <span className="text-xs font-medium tracking-wider" style={{ color: color || '#FFFFFF' }}>
+              {title}
+            </span>
+          )}
           <div className="flex items-baseline gap-1 justify-center">
             <span 
-              className={`text-xl font-bold transition-colors duration-300 text-white`}
+              className="text-xl font-bold transition-colors duration-300 text-white"
               style={{ color: color || '#000000' }}
             >
               {text}
