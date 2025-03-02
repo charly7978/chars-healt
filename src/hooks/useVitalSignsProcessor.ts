@@ -30,7 +30,13 @@ export const useVitalSignsProcessor = () => {
   /**
    * Process a new signal value and update all vitals
    */
-  const processSignal = useCallback((value: number, rrData?: { intervals: number[], lastPeakTime: number | null, amplitudes?: number[] }) => {
+  const processSignal = useCallback((value: number, rrData?: { 
+    intervals: number[], 
+    lastPeakTime: number | null, 
+    amplitudes?: number[],
+    isDicroticPoint?: boolean,
+    visualAmplitude?: number
+  }) => {
     const processor = getProcessor();
     const currentTime = Date.now();
     
@@ -74,7 +80,7 @@ export const useVitalSignsProcessor = () => {
     }
     
     // Advanced arrhythmia analysis - ensure we're passing peak amplitudes if available
-    if (rrData?.intervals && rrData.intervals.length >= 4) {
+    if (rrData?.intervals && rrData.intervals.length >= 2) {
       const arrhythmiaResult = arrhythmiaAnalyzer.processArrhythmia(rrData);
       
       if (arrhythmiaResult.detected) {
@@ -82,14 +88,18 @@ export const useVitalSignsProcessor = () => {
           spo2: result.spo2,
           pressure: stabilizedBP,
           arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus,
-          lastArrhythmiaData: arrhythmiaResult.lastArrhythmiaData
+          lastArrhythmiaData: arrhythmiaResult.lastArrhythmiaData,
+          isDicroticPoint: rrData.isDicroticPoint,
+          visualAmplitude: rrData.visualAmplitude
         };
       }
       
       return {
         spo2: result.spo2,
         pressure: stabilizedBP,
-        arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus
+        arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus,
+        isDicroticPoint: rrData.isDicroticPoint,
+        visualAmplitude: rrData.visualAmplitude
       };
     }
     
@@ -99,7 +109,9 @@ export const useVitalSignsProcessor = () => {
     return {
       spo2: result.spo2,
       pressure: stabilizedBP,
-      arrhythmiaStatus
+      arrhythmiaStatus,
+      isDicroticPoint: rrData?.isDicroticPoint,
+      visualAmplitude: rrData?.visualAmplitude
     };
   }, [getProcessor, arrhythmiaAnalyzer, signalHistory]);
 

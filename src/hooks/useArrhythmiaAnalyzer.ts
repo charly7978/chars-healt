@@ -2,23 +2,23 @@ import { useState, useRef, useCallback } from 'react';
 
 /**
  * Hook para analizar arritmias en datos de frecuencia cardíaca
- * ACTUALIZADO: Sin límite de arritmias y mejor integración con ArrhythmiaDetector
+ * ACTUALIZADO: Sin límite de arritmias y sincronización mejorada
  */
 export const useArrhythmiaAnalyzer = () => {
-  // Constants for arrhythmia detection - adjusted for better sensitivity
+  // Parámetros optimizados para la detección de arritmias
   const ANALYSIS_WINDOW_SIZE = 10; // Análisis sobre 10 latidos consecutivos
-  const ARRHYTHMIA_CONFIRMATION_THRESHOLD = 2; // Reduced from 3 to 2 for faster detection
-  const MIN_TIME_BETWEEN_ARRHYTHMIAS = 300; // Reduced from 500ms to 300ms for more reliable counting
-  const PREMATURE_BEAT_RATIO = 0.82; // Threshold for premature beat detection
-  const COMPENSATORY_PAUSE_RATIO = 1.05; // Threshold for compensatory pause
-  const AMPLITUDE_THRESHOLD_RATIO = 0.75; // Threshold for amplitude differences
+  const ARRHYTHMIA_CONFIRMATION_THRESHOLD = 2; // Umbral ajustado para mejor detección
+  const MIN_TIME_BETWEEN_ARRHYTHMIAS = 1000; // AJUSTADO: Tiempo mínimo entre arritmias distintas
+  const PREMATURE_BEAT_RATIO = 0.80; // AJUSTADO: Umbral para detección de latidos prematuros
+  const COMPENSATORY_PAUSE_RATIO = 1.10; // Umbral para pausa compensatoria
+  const AMPLITUDE_THRESHOLD_RATIO = 0.65; // AJUSTADO: Umbral para diferencias de amplitud
   
-  // State and refs
+  // Estado y referencias
   const [arrhythmiaCounter, setArrhythmiaCounter] = useState(0);
   const lastArrhythmiaTime = useRef<number>(0);
   const hasDetectedArrhythmia = useRef<boolean>(false);
   
-  // Analysis buffers
+  // Buffers de análisis
   const rrBufferRef = useRef<number[]>([]);
   const amplitudeBufferRef = useRef<number[]>([]);
   
@@ -35,12 +35,14 @@ export const useArrhythmiaAnalyzer = () => {
   
   /**
    * Process RR intervals to detect arrhythmias
-   * ACTUALIZADO: Eliminado el límite MAX_ARRHYTHMIAS_PER_SESSION
+   * ACTUALIZADO: Sin límite de arritmias
    */
   const processArrhythmia = useCallback((rrData: { 
     intervals: number[], 
     lastPeakTime: number | null,
-    amplitudes?: number[]
+    amplitudes?: number[],
+    // NUEVO: Parámetros adicionales
+    isDicroticPoint?: boolean
   }) => {
     const currentTime = Date.now();
     
@@ -83,25 +85,36 @@ export const useArrhythmiaAnalyzer = () => {
     let detectionConfidence = 0;
     let prematureBeatDetected = false;
     
-    // Check if middle beat is premature (shorter than expected)
-    if (recentRR[1] < avgRR * PREMATURE_BEAT_RATIO) {
-      detectionConfidence++;
-      
-      // Check for compensatory pause after premature beat
-      if (recentRR[2] > avgRR * COMPENSATORY_PAUSE_RATIO) {
+    // MEJORADO: Verificar patrón específico de latido prematuro
+    if (recentRR.length >= 3) {
+      // Verificar si el intervalo medio es significativamente corto (prematuro)
+      if (recentRR[1] < avgRR * PREMATURE_BEAT_RATIO) {
         detectionConfidence++;
-      }
-      
-      // Check amplitude variations if available
-      if (amplitudeBufferRef.current.length >= 3) {
-        const recentAmplitudes = amplitudeBufferRef.current.slice(-3);
-        const avgAmplitude = amplitudeBufferRef.current.reduce((sum, val) => sum + val, 0) / 
-                            amplitudeBufferRef.current.length;
         
-        // Check if premature beat has different amplitude
-        if (Math.abs(recentAmplitudes[1] - avgAmplitude) / avgAmplitude > AMPLITUDE_THRESHOLD_RATIO) {
-          detectionConfidence++;
+        // Verificar si el siguiente intervalo es largo (pausa compensatoria)
+        if (recentRR[2] > avgRR * COMPENSATORY_PAUSE_RATIO) {
+          detectionConfidence += 2; // Dar más peso a este patrón característico
         }
+        
+        // Verificar amplitud si está disponible
+        if (amplitudeBufferRef.current.length >= 3) {
+          const recentAmplitudes = amplitudeBufferRef.current.slice(-3);
+          const avgAmplitude = amplitudeBufferRef.current.reduce((sum, val) => sum + val, 0) / 
+                              amplitudeBufferRef.current.length;
+          
+          // Verificar si la amplitud del latido prematuro es diferente
+          if (Math.abs(recentAmplitudes[1] - avgAmplitude) / avgAmplitude > AMPLITUDE_THRESHOLD_RATIO) {
+            detectionConfidence++;
+          }
+        }
+      }
+    }
+    
+    // Verificar patrón alternante (posible arritmia)
+    if (recentRR.length >= 5) {
+      const alternating = checkForAlternatingPattern(recentRR);
+      if (alternating) {
+        detectionConfidence++;
       }
     }
     
@@ -109,19 +122,16 @@ export const useArrhythmiaAnalyzer = () => {
     prematureBeatDetected = detectionConfidence >= ARRHYTHMIA_CONFIRMATION_THRESHOLD;
     
     // Only count as a new arrhythmia if it's been a while since the last one
-    // This avoids counting the same premature beat multiple times
     const sufficientTimeSinceLastArrhythmia = 
       currentTime - lastArrhythmiaTime.current > MIN_TIME_BETWEEN_ARRHYTHMIAS;
     
     let increment = false;
     
     if (prematureBeatDetected && sufficientTimeSinceLastArrhythmia) {
-      // ELIMINADO: Verificación de si hemos llegado al límite máximo
-      // if (arrhythmiaCounter < MAX_ARRHYTHMIAS_PER_SESSION) {
-        lastArrhythmiaTime.current = currentTime;
-        increment = true;
-        hasDetectedArrhythmia.current = true;
-      // }
+      // ELIMINADO: Verificación de si hemos llegado al límite máximo - SIN LÍMITE
+      lastArrhythmiaTime.current = currentTime;
+      increment = true;
+      hasDetectedArrhythmia.current = true;
     }
     
     // Update arrhythmia counter
@@ -144,6 +154,30 @@ export const useArrhythmiaAnalyzer = () => {
       } : null
     };
   }, [arrhythmiaCounter]);
+  
+  /**
+   * NUEVO: Verifica si hay un patrón alternante en los intervalos RR
+   */
+  const checkForAlternatingPattern = (intervals: number[]): boolean => {
+    if (intervals.length < 4) return false;
+    
+    // Calcular diferencias consecutivas
+    const diffs = [];
+    for (let i = 1; i < intervals.length; i++) {
+      diffs.push(intervals[i] - intervals[i-1]);
+    }
+    
+    // Verificar si las diferencias alternan entre signo positivo y negativo
+    let alternatingCount = 0;
+    for (let i = 1; i < diffs.length; i++) {
+      if (Math.sign(diffs[i]) !== Math.sign(diffs[i-1])) {
+        alternatingCount++;
+      }
+    }
+    
+    // Si la mayoría de diferencias alternan, es un patrón alternante
+    return alternatingCount >= Math.floor(diffs.length * 0.7);
+  };
   
   /**
    * Calculate RR interval variability
