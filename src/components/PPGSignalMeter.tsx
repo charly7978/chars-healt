@@ -163,7 +163,8 @@ const PPGSignalMeter = ({
     lastValueRef.current = smoothedValue;
 
     const normalizedValue = smoothedValue - (baselineRef.current || 0);
-    const scaledValue = normalizedValue * verticalScale * -1;
+    // CAMBIO: Invertimos el signo para invertir la polaridad del gráfico
+    const scaledValue = normalizedValue * verticalScale; // Eliminamos el -1
     
     let isArrhythmia = false;
     if (rawArrhythmiaData && 
@@ -203,7 +204,8 @@ const PPGSignalMeter = ({
         for (let i = 0; i < visiblePoints.length; i++) {
           const point = visiblePoints[i];
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-          const y = canvas.height * 0.4 + point.value;
+          // CAMBIO: Invertimos la referencia para la coordenada Y
+          const y = canvas.height * 0.6 - point.value; // Cambiado de 0.4 + a 0.6 -
           
           if (firstPoint) {
             ctx.moveTo(x, y);
@@ -222,7 +224,8 @@ const PPGSignalMeter = ({
             
             const nextPoint = visiblePoints[i + 1];
             const nextX = canvas.width - ((now - nextPoint.time) * canvas.width / WINDOW_WIDTH_MS);
-            const nextY = canvas.height * 0.4 + nextPoint.value;
+            // CAMBIO: Invertimos también aquí la coordenada Y
+            const nextY = canvas.height * 0.6 - nextPoint.value;
             ctx.lineTo(nextX, nextY);
             ctx.stroke();
             
@@ -239,10 +242,10 @@ const PPGSignalMeter = ({
       }
 
       // ALGORITMO MEJORADO PARA DETECTAR SOLO PICOS MÁXIMOS VERDADEROS
-      // En lugar de detectar mínimos (valles), detectamos solo máximos (picos) con criterios más estrictos
+      // CAMBIO: Ahora detectamos los mínimos en lugar de los máximos debido a la inversión de polaridad
       const maxPeakIndices: number[] = [];
       
-      // Primero encontramos todos los candidatos a picos máximos (puntos más altos que sus vecinos)
+      // Primero encontramos todos los candidatos a picos (ahora son mínimos debido a la inversión)
       for (let i = 2; i < visiblePoints.length - 2; i++) {
         const point = visiblePoints[i];
         const prevPoint1 = visiblePoints[i - 1];
@@ -250,14 +253,15 @@ const PPGSignalMeter = ({
         const nextPoint1 = visiblePoints[i + 1];
         const nextPoint2 = visiblePoints[i + 2];
         
-        // Un punto es candidato a pico máximo si es más alto que sus vecinos inmediatos
-        if (point.value > prevPoint1.value && 
-            point.value > prevPoint2.value && 
-            point.value > nextPoint1.value && 
-            point.value > nextPoint2.value) {
+        // CAMBIO: Invertimos la lógica de comparación debido a la inversión de polaridad
+        // Ahora buscamos puntos menores que sus vecinos (antes eran mayores)
+        if (point.value < prevPoint1.value && 
+            point.value < prevPoint2.value && 
+            point.value < nextPoint1.value && 
+            point.value < nextPoint2.value) {
           
           // Verificar amplitud mínima respecto a la línea base (elimina picos pequeños/ruido)
-          const baselineValue = canvas.height * 0.4;
+          // CAMBIO: Ajustamos para la polaridad invertida
           const peakAmplitude = Math.abs(point.value);
           
           // Solo aceptar picos con amplitud significativa (ajustado para ser más selectivo)
@@ -276,11 +280,12 @@ const PPGSignalMeter = ({
         }
       }
       
-      // Ahora dibujamos solo los picos máximos verdaderos
+      // Ahora dibujamos solo los picos verdaderos (mínimos con la polaridad invertida)
       for (let idx of maxPeakIndices) {
         const point = visiblePoints[idx];
         const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-        const y = canvas.height * 0.4 + point.value;
+        // CAMBIO: Ajustamos la coordenada Y para la polaridad invertida
+        const y = canvas.height * 0.6 - point.value;
         
         // Dibujar círculo en el pico máximo
         ctx.beginPath();
@@ -322,7 +327,8 @@ const PPGSignalMeter = ({
           
           if (idx > 0) {
             const prevX = canvas.width - ((now - visiblePoints[idx-1].time) * canvas.width / WINDOW_WIDTH_MS);
-            const prevY = canvas.height * 0.4 + visiblePoints[idx-1].value;
+            // CAMBIO: Ajustamos la coordenada Y para previo punto
+            const prevY = canvas.height * 0.6 - visiblePoints[idx-1].value;
             
             ctx.moveTo(prevX, prevY - 15);
             ctx.lineTo(x, y - 15);
@@ -331,7 +337,8 @@ const PPGSignalMeter = ({
           
           if (idx < visiblePoints.length - 1) {
             const nextX = canvas.width - ((now - visiblePoints[idx+1].time) * canvas.width / WINDOW_WIDTH_MS);
-            const nextY = canvas.height * 0.4 + visiblePoints[idx+1].value;
+            // CAMBIO: Ajustamos la coordenada Y para siguiente punto
+            const nextY = canvas.height * 0.6 - visiblePoints[idx+1].value;
             
             ctx.moveTo(x, y - 15);
             ctx.lineTo(nextX, nextY - 15);
