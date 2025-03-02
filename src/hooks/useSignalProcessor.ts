@@ -9,53 +9,18 @@ export const useSignalProcessor = () => {
   const [lastSignal, setLastSignal] = useState<ProcessedSignal | null>(null);
   const [error, setError] = useState<ProcessingError | null>(null);
   
-  // Signal queue for optimizing updates
-  const pendingSignalsRef = useRef<ProcessedSignal[]>([]);
-  const processingSignalRef = useRef(false);
-  const lastProcessTimeRef = useRef(0);
-  const SIGNAL_THROTTLE_MS = 33; // ~30fps max update rate
-  
-  // Process signals in a batch to reduce React render cycles
-  const processSignalQueue = useCallback(() => {
-    if (processingSignalRef.current) return;
-    
-    processingSignalRef.current = true;
-    
-    try {
-      const now = Date.now();
-      if (now - lastProcessTimeRef.current < SIGNAL_THROTTLE_MS) {
-        processingSignalRef.current = false;
-        return;
-      }
-      
-      if (pendingSignalsRef.current.length === 0) {
-        processingSignalRef.current = false;
-        return;
-      }
-      
-      // Get the latest signal and clear the queue
-      const latestSignal = pendingSignalsRef.current[pendingSignalsRef.current.length - 1];
-      pendingSignalsRef.current = [];
-      
-      setLastSignal(latestSignal);
-      lastProcessTimeRef.current = now;
-    } finally {
-      processingSignalRef.current = false;
-    }
-  }, []);
-  
-  // Use lazy initialization for the processor
+  // Usar inicialización lazy para el procesador
   useEffect(() => {
     console.log("useSignalProcessor: Creando nueva instancia del procesador");
     processorRef.current = new PPGSignalProcessor();
     
     processorRef.current.onSignalReady = (signal: ProcessedSignal) => {
-      // Instead of immediately updating state, queue the signal
-      pendingSignalsRef.current.push(signal);
-      
-      // Use requestAnimationFrame for smoother updates synchronized with display refresh
-      requestAnimationFrame(processSignalQueue);
-      
+      console.log("useSignalProcessor: Señal recibida:", {
+        timestamp: signal.timestamp,
+        quality: signal.quality,
+        filteredValue: signal.filteredValue
+      });
+      setLastSignal(signal);
       setError(null);
     };
 
@@ -73,16 +38,13 @@ export const useSignalProcessor = () => {
       console.log("useSignalProcessor: Limpiando y destruyendo procesador");
       if (processorRef.current) {
         processorRef.current.stop();
-        // Explicitly free references
+        // Liberar referencias explícitamente
         processorRef.current.onSignalReady = null;
         processorRef.current.onError = null;
         processorRef.current = null;
       }
-      
-      // Clear any pending signals
-      pendingSignalsRef.current = [];
     };
-  }, [processSignalQueue]);
+  }, []);
 
   const startProcessing = useCallback(() => {
     console.log("useSignalProcessor: Iniciando procesamiento");
@@ -98,10 +60,9 @@ export const useSignalProcessor = () => {
       processorRef.current.stop();
     }
     setIsProcessing(false);
-    // Explicitly free memory
+    // Liberar memoria explícitamente
     setLastSignal(null);
     setError(null);
-    pendingSignalsRef.current = [];
   }, []);
 
   const calibrate = useCallback(async () => {
@@ -119,21 +80,16 @@ export const useSignalProcessor = () => {
     }
   }, []);
 
-  // Optimize frame processing by using a ref to track the processing state
-  // instead of using the state value directly
-  const isProcessingRef = useRef(false);
-  
-  useEffect(() => {
-    isProcessingRef.current = isProcessing;
-  }, [isProcessing]);
-  
   const processFrame = useCallback((imageData: ImageData) => {
-    if (isProcessingRef.current && processorRef.current) {
+    if (isProcessing && processorRef.current) {
+      console.log("useSignalProcessor: Procesando nuevo frame");
       processorRef.current.processFrame(imageData);
+    } else {
+      console.log("useSignalProcessor: Frame ignorado (no está procesando)");
     }
-  }, []);
+  }, [isProcessing]);
 
-  // Function to aggressively free memory
+  // Función para liberar memoria de forma más agresiva
   const cleanMemory = useCallback(() => {
     console.log("useSignalProcessor: Limpieza agresiva de memoria");
     if (processorRef.current) {
@@ -141,9 +97,8 @@ export const useSignalProcessor = () => {
     }
     setLastSignal(null);
     setError(null);
-    pendingSignalsRef.current = [];
     
-    // Force garbage collector if available
+    // Forzar limpieza del garbage collector si está disponible
     if (window.gc) {
       try {
         window.gc();

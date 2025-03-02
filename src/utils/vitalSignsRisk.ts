@@ -1,4 +1,3 @@
-
 interface RiskSegment {
   color: string;
   label: string;
@@ -221,7 +220,6 @@ export class VitalSignsRisk {
     return counts.sort((a, b) => b.count - a.count)[0].segment;
   }
 
-  // Función para calcular el promedio del historial de BPM
   static getAverageBPM(): number {
     if (this.bpmHistory.length === 0) return 0;
     
@@ -243,7 +241,6 @@ export class VitalSignsRisk {
     return avg;
   }
 
-  // Función para calcular el promedio del historial de SpO2
   static getAverageSPO2(): number {
     if (this.spo2History.length === 0) return 0;
     
@@ -265,7 +262,6 @@ export class VitalSignsRisk {
     return avg;
   }
 
-  // Función para calcular el promedio del historial de presión arterial
   static getAverageBP(): { systolic: number, diastolic: number } {
     if (this.bpHistory.length === 0) return { systolic: 0, diastolic: 0 };
     
@@ -361,70 +357,57 @@ export class VitalSignsRisk {
       console.log("Cálculo final de SpO2:", { avgSPO2, isFinalReading });
       
       if (avgSPO2 > 0) {
-        // Determinar el riesgo basado en el promedio
-        if (avgSPO2 <= 90) {
+        // CLASIFICACIÓN PARA VALORES FINALES:
+        // Reglas definidas: 
+        // - Menor a 90%: Insuficiencia respiratoria (rojo)
+        // - 90-92%: Leve insuficiencia respiratoria (naranja)
+        // - 93% o mayor: Normal (azul)
+        
+        if (avgSPO2 < 90) {
           return { color: '#ea384c', label: 'INSUFICIENCIA RESPIRATORIA' };
-        } else if (avgSPO2 <= 92) {
+        } else if (avgSPO2 >= 90 && avgSPO2 < 93) {
           return { color: '#F97316', label: 'LEVE INSUFICIENCIA RESPIRATORIA' };
-        } else if (avgSPO2 <= 100) {
-          return { color: '#0EA5E9', label: 'NORMAL' };
         } else {
-          // Valores por encima de 100 (que normalmente no existen en SpO2 real)
-          return { color: '#FFFFFF', label: 'VALOR FUERA DE RANGO' };
+          return { color: '#0EA5E9', label: 'NORMAL' };
         }
       }
       
-      // Si no hay suficientes datos para calcular el promedio, usar el historial de segmentos
+      // Si no hay promedio, usar el historial de segmentos
       if (this.spo2SegmentHistory.length > 0) {
         return this.getMostFrequentSegment(this.spo2SegmentHistory);
       }
     }
     
-    // RESTAURADO: Comportamiento original para tiempo real con rangos extendidos
+    // COMPORTAMIENTO EN TIEMPO REAL
+    // Lógica más simple para evitar conflictos
     let currentSegment: RiskSegment;
     
-    // Comprobar la estabilidad de la señal
-    const isStable = 
-      this.isStableValue(this.spo2History, [0, 90]) || 
-      this.isStableValue(this.spo2History, [90, 92]) || 
-      this.isStableValue(this.spo2History, [93, 100]) ||
-      this.isStableValue(this.spo2History, [101, 999]);
+    // Aplicamos las mismas reglas de clasificación para tiempo real:
+    // - Menor a 90%: Insuficiencia respiratoria (rojo)
+    // - 90-92%: Leve insuficiencia respiratoria (naranja)
+    // - 93-100%: Normal (azul)
     
-    // Si hay pocos valores o la señal es inestable, mostrar "EVALUANDO..."
-    if (this.spo2History.length < 5 || !isStable) {
+    if (this.isStableValue(this.spo2History, [0, 89])) {
+      // SpO2 < 90% = Insuficiencia respiratoria (rojo)
+      currentSegment = { color: '#ea384c', label: 'INSUFICIENCIA RESPIRATORIA' };
+    } else if (this.isStableValue(this.spo2History, [90, 92])) {
+      // SpO2 90-92% = Leve insuficiencia respiratoria (naranja)
+      currentSegment = { color: '#F97316', label: 'LEVE INSUFICIENCIA RESPIRATORIA' };
+    } else if (this.isStableValue(this.spo2History, [93, 100])) {
+      // SpO2 93-100% = Normal (azul)
+      currentSegment = { color: '#0EA5E9', label: 'NORMAL' };
+    } else {
+      // Valores inestables o fuera de rango
       currentSegment = { color: '#FFFFFF', label: 'EVALUANDO...' };
-      console.log("SpO2 inestable o insuficientes datos:", {
-        historyLength: this.spo2History.length,
-        isStable,
-        status: 'EVALUANDO'
-      });
-    } 
-    // Si la señal es estable, determinar el nivel de riesgo
-    else {
-      if (this.isStableValue(this.spo2History, [0, 90])) {
-        currentSegment = { color: '#ea384c', label: 'INSUFICIENCIA RESPIRATORIA' };
-      } else if (this.isStableValue(this.spo2History, [90, 92])) {
-        currentSegment = { color: '#F97316', label: 'LEVE INSUFICIENCIA RESPIRATORIA' };
-      } else if (this.isStableValue(this.spo2History, [93, 100])) {
-        currentSegment = { color: '#0EA5E9', label: 'NORMAL' };
-      } else if (this.isStableValue(this.spo2History, [101, 999])) {
-        currentSegment = { color: '#FFFFFF', label: 'VALOR FUERA DE RANGO' };
-      } else {
-        // Esto no debería ocurrir dado el chequeo de isStable previo
-        currentSegment = { color: '#FFFFFF', label: 'EVALUANDO...' };
-      }
-      
-      console.log("SpO2 estable:", {
-        valor: spo2,
-        estado: currentSegment.label
-      });
     }
     
-    // Guardar el segmento actual para análisis final solo si no es "EVALUANDO..."
+    // Guardar el segmento actual para análisis final
     if (currentSegment.label !== 'EVALUANDO...') {
       this.spo2SegmentHistory.push(currentSegment);
+      console.log(`Añadiendo segmento SpO2: ${currentSegment.label} para valor ${spo2}`);
     }
     
+    console.log(`SPO2Risk resultado: ${currentSegment.label} para valor ${spo2}`);
     return currentSegment;
   }
 
@@ -445,18 +428,19 @@ export class VitalSignsRisk {
       const avgBP = this.getAverageBP();
       
       if (avgBP.systolic > 0 && avgBP.diastolic > 0) {
-        // Determinar categoría para mostrar colores - sin limitar valores
-        if (avgBP.systolic >= 150 && avgBP.diastolic >= 100) {
+        // CORREGIDO: Umbrales de presión arterial para determinar correctamente el riesgo
+        if (avgBP.systolic >= 140 && avgBP.diastolic >= 90) {
           return { color: '#ea384c', label: 'PRESIÓN ALTA' };
-        } else if (avgBP.systolic >= 140 && avgBP.diastolic >= 90) {
+        } else if ((avgBP.systolic >= 130 && avgBP.systolic < 140) || 
+                  (avgBP.diastolic >= 85 && avgBP.diastolic < 90)) {
           return { color: '#F97316', label: 'LEVE PRESIÓN ALTA' };
-        } else if (avgBP.systolic >= 114 && avgBP.systolic <= 126 && 
-                 avgBP.diastolic >= 76 && avgBP.diastolic <= 84) {
+        } else if (avgBP.systolic >= 90 && avgBP.systolic < 130 && 
+                 avgBP.diastolic >= 60 && avgBP.diastolic < 85) {
           return { color: '#0EA5E9', label: 'PRESIÓN NORMAL' };
-        } else if (avgBP.systolic >= 100 && avgBP.systolic <= 110 && 
-                 avgBP.diastolic >= 60 && avgBP.diastolic <= 70) {
+        } else if (avgBP.systolic >= 80 && avgBP.systolic < 90 && 
+                 avgBP.diastolic >= 50 && avgBP.diastolic < 60) {
           return { color: '#F97316', label: 'LEVE PRESIÓN BAJA' };
-        } else if (avgBP.systolic < 100 || avgBP.diastolic < 60) {
+        } else if (avgBP.systolic < 80 || avgBP.diastolic < 50) {
           return { color: '#ea384c', label: 'PRESIÓN BAJA' };
         } else if (avgBP.systolic > 180 || avgBP.diastolic > 120) {
           return { color: '#ea384c', label: 'PRESIÓN MUY ALTA' };
@@ -472,39 +456,39 @@ export class VitalSignsRisk {
       }
     }
 
-    // Procesamiento normal para lecturas en tiempo real - con rangos expandidos
+    // Procesamiento normal para lecturas en tiempo real - con rangos corregidos
     let currentSegment: RiskSegment;
 
     if (this.isStableBP({ 
-      systolic: [150, 300], 
-      diastolic: [100, 200] 
+      systolic: [140, 300], 
+      diastolic: [90, 200] 
     })) {
       currentSegment = { color: '#ea384c', label: 'PRESIÓN ALTA' };
     } else if (this.isStableBP({ 
-      systolic: [140, 149], 
-      diastolic: [90, 99] 
+      systolic: [130, 139], 
+      diastolic: [85, 89] 
     })) {
       currentSegment = { color: '#F97316', label: 'LEVE PRESIÓN ALTA' };
     } else if (this.isStableBP({ 
-      systolic: [114, 126],
-      diastolic: [76, 84]
+      systolic: [90, 129],
+      diastolic: [60, 84]
     })) {
       currentSegment = { color: '#0EA5E9', label: 'PRESIÓN NORMAL' };
     } else if (this.isStableBP({ 
-      systolic: [100, 110], 
-      diastolic: [60, 70] 
+      systolic: [80, 89], 
+      diastolic: [50, 59] 
     })) {
       currentSegment = { color: '#F97316', label: 'LEVE PRESIÓN BAJA' };
     } else if (this.isStableBP({ 
-      systolic: [0, 99], 
-      diastolic: [0, 59] 
+      systolic: [0, 79], 
+      diastolic: [0, 49] 
     })) {
       currentSegment = { color: '#ea384c', label: 'PRESIÓN BAJA' };
     } else if (this.isStableBP({ 
-      systolic: [301, 999], 
-      diastolic: [201, 999] 
+      systolic: [181, 999], 
+      diastolic: [121, 999] 
     })) {
-      currentSegment = { color: '#ea384c', label: 'PRESIÓN EXTREMADAMENTE ALTA' };
+      currentSegment = { color: '#ea384c', label: 'PRESIÓN MUY ALTA' };
     } else {
       currentSegment = { color: '#FFFFFF', label: 'EVALUANDO...' };
     }

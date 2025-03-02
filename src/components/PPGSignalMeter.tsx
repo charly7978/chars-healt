@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -35,13 +34,13 @@ const PPGSignalMeter = ({
   const lastArrhythmiaTime = useRef<number>(0);
   const arrhythmiaCountRef = useRef<number>(0);
   
-  const WINDOW_WIDTH_MS = 3000;
+  const WINDOW_WIDTH_MS = 4000;
   const CANVAS_WIDTH = 450;
   const CANVAS_HEIGHT = 450;
   const GRID_SIZE_X = 10;
   const GRID_SIZE_Y = 10;
   const verticalScale = 25.0;
-  const SMOOTHING_FACTOR = 0.9;
+  const SMOOTHING_FACTOR = 0.7;
   const TARGET_FPS = 60;
   const FRAME_TIME = 1000 / TARGET_FPS;
   const BUFFER_SIZE = 200;
@@ -123,8 +122,8 @@ const PPGSignalMeter = ({
     ctx.beginPath();
     ctx.strokeStyle = 'rgba(0, 150, 100, 0.35)';
     ctx.lineWidth = 1.5;
-    ctx.moveTo(0, CANVAS_HEIGHT * 0.4); // Changed from 0.6 to 0.4 to invert the baseline
-    ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT * 0.4); // Changed from 0.6 to 0.4 to invert the baseline
+    ctx.moveTo(0, CANVAS_HEIGHT * 0.6);
+    ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT * 0.6);
     ctx.stroke();
   }, []);
 
@@ -161,8 +160,7 @@ const PPGSignalMeter = ({
     lastValueRef.current = smoothedValue;
 
     const normalizedValue = smoothedValue - (baselineRef.current || 0);
-    // Invert the scaledValue by multiplying by -1 to flip the polarity
-    const scaledValue = normalizedValue * verticalScale * -1; // Multiplied by -1 to invert the signal
+    const scaledValue = normalizedValue * verticalScale * -1;
     
     let isArrhythmia = false;
     if (rawArrhythmiaData && 
@@ -170,6 +168,8 @@ const PPGSignalMeter = ({
         now - rawArrhythmiaData.timestamp < 1000) {
       isArrhythmia = true;
       lastArrhythmiaTime.current = now;
+      
+      arrhythmiaCountRef.current++;
     }
 
     const dataPoint: PPGDataPoint = {
@@ -200,8 +200,6 @@ const PPGSignalMeter = ({
         for (let i = 0; i < visiblePoints.length; i++) {
           const point = visiblePoints[i];
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-          // Change from canvas.height * 0.6 - point.value to canvas.height * 0.4 + point.value
-          // We also changed the sign of point.value above, so the "+ point.value" works with the inverted signal
           const y = canvas.height * 0.4 + point.value;
           
           if (firstPoint) {
@@ -215,17 +213,20 @@ const PPGSignalMeter = ({
             ctx.stroke();
             ctx.beginPath();
             ctx.strokeStyle = '#DC2626';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([3, 2]);
             ctx.moveTo(x, y);
             
             const nextPoint = visiblePoints[i + 1];
             const nextX = canvas.width - ((now - nextPoint.time) * canvas.width / WINDOW_WIDTH_MS);
-            // Update this calculation too for the inverted signal
             const nextY = canvas.height * 0.4 + nextPoint.value;
             ctx.lineTo(nextX, nextY);
             ctx.stroke();
             
             ctx.beginPath();
             ctx.strokeStyle = '#0EA5E9';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([]);
             ctx.moveTo(nextX, nextY);
             firstPoint = false;
           }
@@ -239,34 +240,63 @@ const PPGSignalMeter = ({
         const point = visiblePoints[i];
         const nextPoint = visiblePoints[i + 1];
         
-        // Invert the condition because we inverted the signal
-        // Now we're looking for points where the value is lower (more negative) than its neighbors
         if (point.value < prevPoint.value && point.value < nextPoint.value) {
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-          // Update this calculation for the inverted signal
           const y = canvas.height * 0.4 + point.value;
           
           ctx.beginPath();
-          ctx.arc(x, y, 4, 0, Math.PI * 2);
+          ctx.arc(x, y, point.isArrhythmia ? 5 : 4, 0, Math.PI * 2);
           ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
           ctx.fill();
 
           ctx.font = 'bold 12px Inter';
           ctx.fillStyle = '#666666';
           ctx.textAlign = 'center';
-          // Display the absolute value, no change needed here
           ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 20);
           
           if (point.isArrhythmia) {
             ctx.beginPath();
-            ctx.arc(x, y, 8, 0, Math.PI * 2);
+            ctx.arc(x, y, 9, 0, Math.PI * 2);
             ctx.strokeStyle = '#FFFF00';
-            ctx.lineWidth = 1.5;
+            ctx.lineWidth = 2;
             ctx.stroke();
+            
+            ctx.beginPath();
+            ctx.arc(x, y, 14, 0, Math.PI * 2);
+            ctx.strokeStyle = '#FF6B6B';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([2, 2]);
+            ctx.stroke();
+            ctx.setLineDash([]);
             
             ctx.font = 'bold 10px Inter';
             ctx.fillStyle = '#FF6B6B';
-            ctx.fillText("ARR", x, y - 35);
+            ctx.fillText("LATIDO PREMATURO", x, y - 35);
+            
+            ctx.beginPath();
+            ctx.setLineDash([2, 2]);
+            ctx.strokeStyle = 'rgba(255, 107, 107, 0.6)';
+            ctx.lineWidth = 1;
+            
+            if (i > 0) {
+              const prevX = canvas.width - ((now - visiblePoints[i-1].time) * canvas.width / WINDOW_WIDTH_MS);
+              const prevY = canvas.height * 0.4 + visiblePoints[i-1].value;
+              
+              ctx.moveTo(prevX, prevY - 15);
+              ctx.lineTo(x, y - 15);
+              ctx.stroke();
+            }
+            
+            if (i < visiblePoints.length - 1) {
+              const nextX = canvas.width - ((now - visiblePoints[i+1].time) * canvas.width / WINDOW_WIDTH_MS);
+              const nextY = canvas.height * 0.4 + visiblePoints[i+1].value;
+              
+              ctx.moveTo(x, y - 15);
+              ctx.lineTo(nextX, nextY - 15);
+              ctx.stroke();
+            }
+            
+            ctx.setLineDash([]);
           }
         }
       }
