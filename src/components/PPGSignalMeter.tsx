@@ -1,7 +1,6 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Button } from "@/components/ui/button";
-import { CircularProgress } from "@/components/ui/circular-progress";
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
 
 interface PPGSignalMeterProps {
@@ -239,13 +238,24 @@ const PPGSignalMeter = ({
         </div>
         
         <div className="flex items-center gap-2">
-          <CircularProgress
-            value={quality}
-            max={100}
-            className="w-6 h-6"
-            strokeWidth={3}
-            color={quality > 50 ? "#10B981" : quality > 20 ? "#F59E0B" : "#EF4444"}
-          />
+          <div className="w-6 h-6 relative rounded-full overflow-hidden">
+            <svg viewBox="0 0 100 100" className="w-full h-full rotate-[-90deg]">
+              <circle 
+                cx="50" cy="50" r="45" 
+                stroke="#334155" 
+                strokeWidth="10" 
+                fill="none" 
+              />
+              <circle 
+                cx="50" cy="50" r="45" 
+                stroke={quality > 50 ? "#10B981" : quality > 20 ? "#F59E0B" : "#EF4444"} 
+                strokeWidth="10" 
+                fill="none" 
+                strokeDasharray="282.7"
+                strokeDashoffset={282.7 - (282.7 * quality / 100)}
+              />
+            </svg>
+          </div>
           <span className="text-xs font-medium">
             {quality > 70 ? "Excelente" : quality > 40 ? "Buena" : quality > 20 ? "Regular" : "Baja"}
           </span>
