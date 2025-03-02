@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { PPGSignalProcessor } from '../modules/SignalProcessor';
 import { ProcessedSignal, ProcessingError } from '../types/signal';
@@ -130,6 +131,7 @@ export const useSignalProcessor = () => {
               
               if (processorRef.current) {
                 try {
+                  // Usar .then().catch() en lugar de await
                   processorRef.current.calibrate()
                     .then(() => {
                       console.log("useSignalProcessor: Calibración básica del procesador completada");
@@ -140,6 +142,7 @@ export const useSignalProcessor = () => {
                         noiseThreshold: noiseLevel * 0.5
                       });
                       
+                      // Iniciar una segunda calibración con los parámetros aprendidos
                       processorRef.current?.calibrate();
                     })
                     .catch(error => {
@@ -183,7 +186,7 @@ export const useSignalProcessor = () => {
       setIsCalibrating(false);
       return false;
     }
-  }, [isCalibrating]);
+  }, [isCalibrating]);  // Añadir isCalibrating a la lista de dependencias
 
   const processFrame = useCallback((imageData: ImageData) => {
     if (isProcessing && processorRef.current) {

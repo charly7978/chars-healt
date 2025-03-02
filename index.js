@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -20,9 +21,12 @@ const Index = () => {
   const [arrhythmiaCount, setArrhythmiaCount] = useState("--");
   const [elapsedTime, setElapsedTime] = useState(0);
   const [permissionsGranted, setPermissionsGranted] = useState(false);
+  const [lastArrhythmiaData, setLastArrhythmiaData] = useState(null);
+  const [isCalibrating, setIsCalibrating] = useState(false);
+  const [calibrationProgress, setCalibrationProgress] = useState(0);
   const measurementTimerRef = useRef(null);
   
-  const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
+  const { startProcessing, stopProcessing, lastSignal, processFrame, calibrate } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
@@ -89,6 +93,11 @@ const Index = () => {
     startProcessing();
     setElapsedTime(0);
     
+    // Iniciar calibración
+    setTimeout(() => {
+      calibrate();
+    }, 2000);
+    
     if (measurementTimerRef.current) {
       clearInterval(measurementTimerRef.current);
     }
@@ -118,6 +127,9 @@ const Index = () => {
     });
     setArrhythmiaCount("--");
     setSignalQuality(0);
+    setLastArrhythmiaData(null);
+    setIsCalibrating(false);
+    setCalibrationProgress(0);
     
     if (measurementTimerRef.current) {
       clearInterval(measurementTimerRef.current);
@@ -178,6 +190,17 @@ const Index = () => {
       if (vitals) {
         setVitalSigns(vitals);
         setArrhythmiaCount(vitals.arrhythmiaStatus.split('|')[1] || "--");
+        
+        // Actualizar datos de arritmia y calibración para la visualización
+        if (vitals.lastArrhythmiaData) {
+          console.log("Arritmia detectada:", vitals.lastArrhythmiaData);
+          setLastArrhythmiaData(vitals.lastArrhythmiaData);
+        }
+        
+        if (vitals.isCalibrating !== undefined) {
+          setIsCalibrating(vitals.isCalibrating);
+          setCalibrationProgress(vitals.calibrationProgress || 0);
+        }
       }
       
       setSignalQuality(lastSignal.quality);
@@ -219,6 +242,9 @@ const Index = () => {
               onStartMeasurement={startMonitoring}
               onReset={stopMonitoring}
               arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
+              rawArrhythmiaData={lastArrhythmiaData}
+              isCalibrating={isCalibrating}
+              calibrationProgress={calibrationProgress}
             />
           </div>
 
@@ -241,7 +267,8 @@ const Index = () => {
               />
               <VitalSign 
                 label="ARRITMIAS"
-                value={vitalSigns.arrhythmiaStatus}
+                value={arrhythmiaCount}
+                prefix={vitalSigns.arrhythmiaStatus?.includes("ARRITMIA") ? "⚠️" : ""}
               />
             </div>
           </div>

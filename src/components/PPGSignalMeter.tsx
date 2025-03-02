@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { Fingerprint, ActivitySquare, Zap } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -60,7 +59,6 @@ const PPGSignalMeter = ({
     }
   }, []);
 
-  // Cambiar entre modos de visualización
   const toggleDisplayMode = useCallback(() => {
     setDisplayMode(prev => prev === 'normal' ? 'ecg-like' : 'normal');
   }, []);
@@ -89,15 +87,13 @@ const PPGSignalMeter = ({
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     
-    // Fondo al estilo papel de ECG para el modo ECG
     if (displayMode === 'ecg-like') {
-      ctx.fillStyle = '#F8F4E3'; // Color crema claro similar al papel de ECG
+      ctx.fillStyle = '#F8F4E3';
     } else {
-      ctx.fillStyle = '#f3f3f3'; // Color original
+      ctx.fillStyle = '#f3f3f3';
     }
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    // Estilo de cuadrícula según el modo
     const gridColor = displayMode === 'ecg-like' ? 'rgba(255, 102, 102, 0.15)' : 'rgba(0, 180, 120, 0.15)';
     const boldGridColor = displayMode === 'ecg-like' ? 'rgba(255, 102, 102, 0.3)' : 'rgba(0, 150, 100, 0.25)';
     const textColor = displayMode === 'ecg-like' ? 'rgba(255, 102, 102, 0.9)' : 'rgba(0, 150, 100, 0.9)';
@@ -107,7 +103,6 @@ const PPGSignalMeter = ({
     ctx.strokeStyle = gridColor;
     ctx.lineWidth = 0.5;
 
-    // Dibujar cuadrícula fina
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X) {
       ctx.moveTo(x, 0);
       ctx.lineTo(x, CANVAS_HEIGHT);
@@ -115,8 +110,6 @@ const PPGSignalMeter = ({
         ctx.fillStyle = textColor;
         ctx.font = '10px Inter';
         ctx.textAlign = 'center';
-        
-        // Etiquetas de tiempo para ECG (milisegundos -> segundos)
         if (displayMode === 'ecg-like') {
           const timeInSec = (x / 10) / 100;
           ctx.fillText(`${timeInSec.toFixed(2)}s`, x, CANVAS_HEIGHT - 5);
@@ -139,7 +132,6 @@ const PPGSignalMeter = ({
     }
     ctx.stroke();
 
-    // Dibujar cuadrícula gruesa (cada 4 líneas)
     ctx.beginPath();
     ctx.strokeStyle = boldGridColor;
     ctx.lineWidth = 1;
@@ -155,7 +147,6 @@ const PPGSignalMeter = ({
     }
     ctx.stroke();
 
-    // Línea central
     ctx.beginPath();
     ctx.strokeStyle = centerLineColor;
     ctx.lineWidth = 1.5;
@@ -163,20 +154,18 @@ const PPGSignalMeter = ({
     ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT * 0.6);
     ctx.stroke();
     
-    // Si estamos en modo ECG, dibujar leyenda de papel de ECG
     if (displayMode === 'ecg-like') {
       ctx.fillStyle = 'rgba(255, 102, 102, 0.7)';
       ctx.font = 'bold 10px Inter';
       ctx.textAlign = 'left';
       ctx.fillText('Visualización ECG - 25mm/s', 30, 20);
       
-      // Dibujar regla de calibración estándar ECG (1mV = 10mm)
       ctx.beginPath();
       ctx.strokeStyle = 'rgba(255, 102, 102, 0.9)';
       ctx.lineWidth = 2;
       ctx.moveTo(CANVAS_WIDTH - 50, CANVAS_HEIGHT - 50);
-      ctx.lineTo(CANVAS_WIDTH - 50, CANVAS_HEIGHT - 50 - 10 * 4); // 10mm vertical
-      ctx.lineTo(CANVAS_WIDTH - 50 + 25, CANVAS_HEIGHT - 50 - 10 * 4); // 25mm horizontal (1 segundo)
+      ctx.lineTo(CANVAS_WIDTH - 50, CANVAS_HEIGHT - 50 - 10 * 4);
+      ctx.lineTo(CANVAS_WIDTH - 50 + 25, CANVAS_HEIGHT - 50 - 10 * 4);
       ctx.stroke();
       
       ctx.fillStyle = 'rgba(255, 102, 102, 0.9)';
@@ -186,18 +175,15 @@ const PPGSignalMeter = ({
       ctx.fillText('1s', CANVAS_WIDTH - 37, CANVAS_HEIGHT - 50 - 10 * 4 - 5);
     }
     
-    // Si estamos calibrando, mostrar indicador de progreso
     if (isCalibrating) {
       const progressWidth = (CANVAS_WIDTH - 100) * (calibrationProgress / 100);
       
-      // Barra de progreso
       ctx.fillStyle = 'rgba(100, 100, 255, 0.2)';
       ctx.fillRect(50, CANVAS_HEIGHT * 0.8 - 15, CANVAS_WIDTH - 100, 30);
       
       ctx.fillStyle = 'rgba(0, 100, 255, 0.4)';
       ctx.fillRect(50, CANVAS_HEIGHT * 0.8 - 15, progressWidth, 30);
       
-      // Texto de calibración
       ctx.fillStyle = 'rgba(0, 60, 220, 0.9)';
       ctx.font = 'bold 14px Inter';
       ctx.textAlign = 'center';
@@ -260,15 +246,12 @@ const PPGSignalMeter = ({
     
     dataBufferRef.current.push(dataPoint);
     
-    // Actualizar el buffer para transformación ECG-like
     const bufferPoints = dataBufferRef.current.getPoints();
     if (bufferPoints.length > 20) {
       const rawValues = bufferPoints.map(point => point.value / verticalScale);
       
-      // Transformar a estilo ECG para modo alternativo
       ecgTransformedBufferRef.current = transformPPGtoECGLike(rawValues);
       
-      // Realizar análisis cardíaco si tenemos suficientes datos
       if (bufferPoints.length > 60) {
         cardiacAnalysisRef.current = analyzeCardiacWaveform(rawValues);
       }
@@ -295,7 +278,6 @@ const PPGSignalMeter = ({
           const point = visiblePoints[i];
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
           
-          // Usar valores transformados para modo ECG
           let y;
           if (displayMode === 'ecg-like' && ecgTransformedBufferRef.current.length > 0) {
             const transformedIndex = Math.min(i, ecgTransformedBufferRef.current.length - 1);
@@ -345,7 +327,6 @@ const PPGSignalMeter = ({
         ctx.stroke();
       }
 
-      // Detección de picos y marcado
       const maxPeakIndices: number[] = [];
       
       for (let i = 2; i < visiblePoints.length - 2; i++) {
@@ -355,7 +336,6 @@ const PPGSignalMeter = ({
         const nextPoint1 = visiblePoints[i + 1];
         const nextPoint2 = visiblePoints[i + 2];
         
-        // En modo ECG, usar valores transformados para detectar picos
         let isPeak = false;
         if (displayMode === 'ecg-like' && ecgTransformedBufferRef.current.length > i + 2) {
           const val = ecgTransformedBufferRef.current[i];
@@ -366,7 +346,6 @@ const PPGSignalMeter = ({
           
           isPeak = val > prev1 && val > prev2 && val > next1 && val > next2 && val > 0.4;
         } else {
-          // Modo normal
           isPeak = point.value > prevPoint1.value && 
                   point.value > prevPoint2.value && 
                   point.value > nextPoint1.value && 
@@ -378,7 +357,6 @@ const PPGSignalMeter = ({
             ? Math.abs(ecgTransformedBufferRef.current[i] * 3) 
             : Math.abs(point.value / verticalScale);
           
-          // Umbral ajustado según modo
           const amplitudeThreshold = displayMode === 'ecg-like' ? 0.3 : 7.0;
           
           if (peakAmplitude > amplitudeThreshold) {
@@ -395,7 +373,6 @@ const PPGSignalMeter = ({
         }
       }
       
-      // Dibujar picos detectados
       for (let idx of maxPeakIndices) {
         const point = visiblePoints[idx];
         const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
@@ -407,7 +384,6 @@ const PPGSignalMeter = ({
           y = canvas.height * 0.6 - point.value;
         }
         
-        // Color según modo
         const peakFillColor = displayMode === 'ecg-like' 
           ? (point.isArrhythmia ? '#DC2626' : '#E63946') 
           : (point.isArrhythmia ? '#DC2626' : '#0EA5E9');
@@ -417,7 +393,6 @@ const PPGSignalMeter = ({
         ctx.fillStyle = peakFillColor;
         ctx.fill();
 
-        // Etiquetar amplitud
         const valueToShow = displayMode === 'ecg-like' 
           ? Math.abs(ecgTransformedBufferRef.current[idx]).toFixed(2)
           : Math.abs(point.value / verticalScale).toFixed(2);
@@ -427,7 +402,6 @@ const PPGSignalMeter = ({
         ctx.textAlign = 'center';
         ctx.fillText(valueToShow, x, y - 20);
         
-        // Marcar arritmias de forma distintiva
         if (point.isArrhythmia) {
           ctx.beginPath();
           ctx.arc(x, y, 9, 0, Math.PI * 2);
@@ -478,7 +452,6 @@ const PPGSignalMeter = ({
         }
       }
       
-      // Si estamos en modo ECG-like, mostrar análisis cardíaco
       if (displayMode === 'ecg-like' && cardiacAnalysisRef.current) {
         const analysis = cardiacAnalysisRef.current;
         
@@ -486,18 +459,14 @@ const PPGSignalMeter = ({
         ctx.font = '12px Inter';
         ctx.textAlign = 'left';
         
-        // Mostrar calidad de forma de onda
         const qualityText = `Calidad onda: ${Math.round(analysis.waveQuality * 100)}%`;
         ctx.fillText(qualityText, 30, 40);
         
-        // Mostrar morfología QRS
         ctx.fillText(`QRS: ${analysis.qrs.morphology} (${Math.round(analysis.qrs.duration)}ms)`, 30, 60);
         
-        // Mostrar si hay ondas P y T
         ctx.fillText(`Onda P: ${analysis.pWave.present ? 'presente' : 'no detectada'}`, 30, 80);
         ctx.fillText(`Onda T: ${analysis.tWave.present ? 'presente' : 'no detectada'}`, 30, 100);
         
-        // Mostrar intervalos si son válidos
         if (analysis.segments.qt > 0) {
           ctx.fillText(`QT: ${Math.round(analysis.segments.qt)}ms`, 30, 120);
         }
