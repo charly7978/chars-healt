@@ -41,7 +41,7 @@ const PPGSignalMeter = ({
   const GRID_SIZE_Y = 3;
   const verticalScale = 25.0;
   const SMOOTHING_FACTOR = 0.85;
-  const TARGET_FPS = 15;
+  const TARGET_FPS = 240;
   const FRAME_TIME = 1000 / TARGET_FPS;
   const BUFFER_SIZE = 200;
 
