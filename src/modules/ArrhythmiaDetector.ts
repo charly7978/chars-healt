@@ -13,7 +13,7 @@ export class ArrhythmiaDetector {
   
   // MÁS ESTRICTO: Ajustes extremos para solo detectar latidos prematuros entre normales
   private readonly PREMATURE_BEAT_THRESHOLD = 1.55; // Más estricto para evitar falsos positivos 0.65
-  private readonly AMPLITUDE_RATIO_THRESHOLD = 1.15; // Umbral MUCHO más bajo - solo picos muy pequeños
+  private readonly AMPLITUDE_RATIO_THRESHOLD = 0.15; // Umbral MUCHO más bajo - solo picos muy pequeños
   private readonly NORMAL_PEAK_MIN_THRESHOLD = 1.55; // Umbral para considerar un pico como normal 0.95
   
   // State variables
