@@ -52,6 +52,11 @@ const Index = () => {
   const { processSignal: processHeartBeat, reset: resetHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
+  const QUALITY_THRESHOLD = {
+    EXCELLENT: 85, // Para detección de arritmias
+    ACCEPTABLE: 55, // Mínimo para iniciar medición
+  };
+
   const handlePermissionsGranted = () => {
     console.log("Permisos concedidos correctamente");
     setPermissionsGranted(true);
@@ -137,10 +142,10 @@ const Index = () => {
       return;
     }
     
-    if (!isMonitoring && lastSignal?.quality < 50) {
-      console.log("Señal insuficiente para iniciar medición", lastSignal?.quality);
-      toast.warning("Calidad de señal insuficiente. Posicione bien su dedo en la cámara.", {
-        duration: 3000,
+    if (!isMonitoring && (!lastSignal || lastSignal.quality < QUALITY_THRESHOLD.ACCEPTABLE)) {
+      console.log("Calidad de señal insuficiente para iniciar medición", lastSignal?.quality);
+      toast.warning(`Calidad de señal insuficiente (${lastSignal?.quality || 0}%). Coloque mejor su dedo en la cámara para obtener al menos una señal aceptable.`, {
+        duration: 4000,
       });
       return;
     }
@@ -430,37 +435,48 @@ const Index = () => {
           
           const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
           if (vitals) {
-            if (vitals.spo2 > 0) {
+            if (vitals.arrhythmiaStatus && lastSignal.quality >= QUALITY_THRESHOLD.EXCELLENT) {
               setVitalSigns(current => ({
                 ...current,
-                spo2: vitals.spo2
-              }));
-              allSpo2ValuesRef.current.push(vitals.spo2);
-            }
-            
-            if (vitals.pressure !== "--/--" && vitals.pressure !== "0/0") {
-              setVitalSigns(current => ({
-                ...current,
-                pressure: vitals.pressure
+                arrhythmiaStatus: vitals.arrhythmiaStatus
               }));
               
-              const [systolic, diastolic] = vitals.pressure.split('/').map(Number);
-              if (systolic > 0 && diastolic > 0) {
-                allSystolicValuesRef.current.push(systolic);
-                allDiastolicValuesRef.current.push(diastolic);
+              if (vitals.lastArrhythmiaData) {
+                setLastArrhythmiaData(vitals.lastArrhythmiaData);
+                
+                const [status, count] = vitals.arrhythmiaStatus.split('|');
+                setArrhythmiaCount(count || "0");
               }
+            } else if (vitals.arrhythmiaStatus && lastSignal.quality < QUALITY_THRESHOLD.EXCELLENT) {
+              setVitalSigns(current => ({
+                ...current,
+                arrhythmiaStatus: "NORMAL|0"
+              }));
+              setLastArrhythmiaData(null);
+              setArrhythmiaCount("0");
             }
             
-            setVitalSigns(current => ({
-              ...current,
-              arrhythmiaStatus: vitals.arrhythmiaStatus
-            }));
-            
-            if (vitals.lastArrhythmiaData) {
-              setLastArrhythmiaData(vitals.lastArrhythmiaData);
+            if (lastSignal.quality >= QUALITY_THRESHOLD.ACCEPTABLE) {
+              if (vitals.spo2 > 0) {
+                setVitalSigns(current => ({
+                  ...current,
+                  spo2: vitals.spo2
+                }));
+                allSpo2ValuesRef.current.push(vitals.spo2);
+              }
               
-              const [status, count] = vitals.arrhythmiaStatus.split('|');
-              setArrhythmiaCount(count || "0");
+              if (vitals.pressure !== "--/--" && vitals.pressure !== "0/0") {
+                setVitalSigns(current => ({
+                  ...current,
+                  pressure: vitals.pressure
+                }));
+                
+                const [systolic, diastolic] = vitals.pressure.split('/').map(Number);
+                if (systolic > 0 && diastolic > 0) {
+                  allSystolicValuesRef.current.push(systolic);
+                  allDiastolicValuesRef.current.push(diastolic);
+                }
+              }
             }
           }
         }
@@ -470,7 +486,7 @@ const Index = () => {
         console.error("Error procesando señal:", error);
       }
     }
-  }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns, measurementComplete]);
+  }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns, measurementComplete, QUALITY_THRESHOLD]);
 
   useEffect(() => {
     return () => {
