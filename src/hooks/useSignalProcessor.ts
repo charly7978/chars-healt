@@ -8,15 +8,8 @@ export const useSignalProcessor = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [lastSignal, setLastSignal] = useState<ProcessedSignal | null>(null);
   const [error, setError] = useState<ProcessingError | null>(null);
-  const [isCalibrating, setIsCalibrating] = useState(false);
-  const [calibrationProgress, setCalibrationProgress] = useState(0);
-  const [signalProfile, setSignalProfile] = useState<{
-    baseline: number;
-    amplitude: number;
-    noiseLevel: number;
-    signaturePattern: number[];
-  } | null>(null);
   
+  // Usar inicialización lazy para el procesador
   useEffect(() => {
     console.log("useSignalProcessor: Creando nueva instancia del procesador");
     processorRef.current = new PPGSignalProcessor();
@@ -45,6 +38,7 @@ export const useSignalProcessor = () => {
       console.log("useSignalProcessor: Limpiando y destruyendo procesador");
       if (processorRef.current) {
         processorRef.current.stop();
+        // Liberar referencias explícitamente
         processorRef.current.onSignalReady = null;
         processorRef.current.onError = null;
         processorRef.current = null;
@@ -66,127 +60,25 @@ export const useSignalProcessor = () => {
       processorRef.current.stop();
     }
     setIsProcessing(false);
+    // Liberar memoria explícitamente
     setLastSignal(null);
     setError(null);
   }, []);
 
-  const calibrate = useCallback(() => {
+  const calibrate = useCallback(async () => {
     try {
-      console.log("useSignalProcessor: Iniciando calibración avanzada");
-      setIsCalibrating(true);
-      setCalibrationProgress(0);
-      
+      console.log("useSignalProcessor: Iniciando calibración");
       if (processorRef.current) {
-        const calibrationSteps = 20;
-        const calibrationBufferSize = 120; // 4 segundos a 30Hz
-        const calibrationBuffer: number[] = [];
-        let currentStep = 0;
-        
-        const progressInterval = setInterval(() => {
-          currentStep++;
-          const progress = Math.min(100, Math.round((currentStep / calibrationSteps) * 100));
-          setCalibrationProgress(progress);
-          
-          if (currentStep >= calibrationSteps) {
-            clearInterval(progressInterval);
-            
-            if (calibrationBuffer.length > 0) {
-              const baseline = calibrationBuffer.reduce((sum, val) => sum + val, 0) / calibrationBuffer.length;
-              const max = Math.max(...calibrationBuffer);
-              const min = Math.min(...calibrationBuffer);
-              const amplitude = max - min;
-              
-              const squaredDifferences = calibrationBuffer.map(val => Math.pow(val - baseline, 2));
-              const variance = squaredDifferences.reduce((sum, val) => sum + val, 0) / calibrationBuffer.length;
-              const noiseLevel = Math.sqrt(variance);
-              
-              const patternLength = 30; // ~1 segundo
-              let bestPatternStartIndex = 0;
-              let bestPatternScore = Number.MAX_VALUE;
-              
-              for (let i = 0; i < calibrationBuffer.length - patternLength; i++) {
-                const segment = calibrationBuffer.slice(i, i + patternLength);
-                const segmentAvg = segment.reduce((sum, val) => sum + val, 0) / patternLength;
-                const segmentVariance = segment.reduce((sum, val) => sum + Math.pow(val - segmentAvg, 2), 0) / patternLength;
-                
-                if (segmentVariance < bestPatternScore) {
-                  bestPatternScore = segmentVariance;
-                  bestPatternStartIndex = i;
-                }
-              }
-              
-              const signaturePattern = calibrationBuffer
-                .slice(bestPatternStartIndex, bestPatternStartIndex + patternLength)
-                .map(val => (val - baseline) / (amplitude || 1)); // Normalizar
-              
-              const profile = {
-                baseline,
-                amplitude,
-                noiseLevel,
-                signaturePattern
-              };
-              
-              setSignalProfile(profile);
-              console.log("useSignalProcessor: Perfil de señal calculado:", profile);
-              
-              if (processorRef.current) {
-                try {
-                  // Usar .then().catch() en lugar de await
-                  processorRef.current.calibrate()
-                    .then(() => {
-                      console.log("useSignalProcessor: Calibración básica del procesador completada");
-                      
-                      console.log("useSignalProcessor: Aplicando parámetros de calibración personalizados:", {
-                        baselineOffset: baseline,
-                        amplitudeScale: amplitude > 0 ? 1 / amplitude : 1,
-                        noiseThreshold: noiseLevel * 0.5
-                      });
-                      
-                      // Iniciar una segunda calibración con los parámetros aprendidos
-                      processorRef.current?.calibrate();
-                    })
-                    .catch(error => {
-                      console.error("useSignalProcessor: Error en calibración básica:", error);
-                    });
-                } catch (error) {
-                  console.error("useSignalProcessor: Error en calibración básica:", error);
-                }
-              }
-            }
-            
-            setIsCalibrating(false);
-          }
-        }, 200);
-        
-        const collectCalibrationData = (signal: ProcessedSignal) => {
-          if (calibrationBuffer.length < calibrationBufferSize) {
-            calibrationBuffer.push(signal.filteredValue);
-          }
-        };
-        
-        const originalSignalHandler = processorRef.current.onSignalReady;
-        processorRef.current.onSignalReady = (signal: ProcessedSignal) => {
-          if (originalSignalHandler) originalSignalHandler(signal);
-          if (isCalibrating) collectCalibrationData(signal);
-        };
-        
-        setTimeout(() => {
-          if (processorRef.current) {
-            processorRef.current.onSignalReady = originalSignalHandler;
-          }
-        }, calibrationSteps * 200 + 100);
-        
+        await processorRef.current.calibrate();
+        console.log("useSignalProcessor: Calibración exitosa");
         return true;
       }
-      
-      setIsCalibrating(false);
       return false;
     } catch (error) {
       console.error("useSignalProcessor: Error de calibración:", error);
-      setIsCalibrating(false);
       return false;
     }
-  }, [isCalibrating]);  // Añadir isCalibrating a la lista de dependencias
+  }, []);
 
   const processFrame = useCallback((imageData: ImageData) => {
     if (isProcessing && processorRef.current) {
@@ -197,6 +89,7 @@ export const useSignalProcessor = () => {
     }
   }, [isProcessing]);
 
+  // Función para liberar memoria de forma más agresiva
   const cleanMemory = useCallback(() => {
     console.log("useSignalProcessor: Limpieza agresiva de memoria");
     if (processorRef.current) {
@@ -204,8 +97,8 @@ export const useSignalProcessor = () => {
     }
     setLastSignal(null);
     setError(null);
-    setSignalProfile(null);
     
+    // Forzar limpieza del garbage collector si está disponible
     if (window.gc) {
       try {
         window.gc();
@@ -224,9 +117,6 @@ export const useSignalProcessor = () => {
     stopProcessing,
     calibrate,
     processFrame,
-    cleanMemory,
-    isCalibrating,
-    calibrationProgress,
-    signalProfile
+    cleanMemory
   };
 };

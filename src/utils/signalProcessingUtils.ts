@@ -1,314 +1,190 @@
+
 /**
- * Signal processing utility functions
+ * Utility functions for signal processing
  */
 
 /**
- * Apply Simple Moving Average filter to signal
+ * Calculate Simple Moving Average
  */
-export const applySMAFilter = (
-  values: number[],
-  newValue: number,
-  windowSize: number = 3
-): number => {
-  const window = [...values.slice(-windowSize), newValue];
-  const sum = window.reduce((acc, val) => acc + val, 0);
-  return sum / window.length;
+export const applySMAFilter = (values: number[], newValue: number, windowSize: number): number => {
+  const smaBuffer = values.slice(-windowSize);
+  smaBuffer.push(newValue);
+  return smaBuffer.reduce((a, b) => a + b, 0) / smaBuffer.length;
 };
 
 /**
- * Calculate DC component of a signal (average)
- */
-export const calculateDC = (values: number[]): number => {
-  if (values.length === 0) return 0;
-  return values.reduce((sum, val) => sum + val, 0) / values.length;
-};
-
-/**
- * Calculate AC component of a signal (peak-to-peak amplitude)
+ * Calculate AC component (amplitude) of a signal
  */
 export const calculateAC = (values: number[]): number => {
   if (values.length === 0) return 0;
-  const max = Math.max(...values);
-  const min = Math.min(...values);
-  return max - min;
+  return Math.max(...values) - Math.min(...values);
 };
 
 /**
- * Calculate Standard Deviation of a signal
+ * Calculate DC component (average) of a signal
+ */
+export const calculateDC = (values: number[]): number => {
+  if (values.length === 0) return 0;
+  return values.reduce((a, b) => a + b, 0) / values.length;
+};
+
+/**
+ * Calculate standard deviation of values
  */
 export const calculateStandardDeviation = (values: number[]): number => {
-  if (values.length <= 1) return 0;
-  
-  const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
-  const squaredDifferences = values.map(val => Math.pow(val - mean, 2));
-  const variance = squaredDifferences.reduce((sum, val) => sum + val, 0) / values.length;
-  
-  return Math.sqrt(variance);
+  const n = values.length;
+  if (n === 0) return 0;
+  const mean = values.reduce((a, b) => a + b, 0) / n;
+  const sqDiffs = values.map((v) => Math.pow(v - mean, 2));
+  const avgSqDiff = sqDiffs.reduce((a, b) => a + b, 0) / n;
+  return Math.sqrt(avgSqDiff);
 };
 
 /**
- * Enhanced Peak Detection with signal quality assessment
+ * Find peaks and valleys in a signal
  */
-export const enhancedPeakDetection = (values: number[]): {
-  peakIndices: number[];
+export const findPeaksAndValleys = (values: number[]) => {
+  const peakIndices: number[] = [];
+  const valleyIndices: number[] = [];
+
+  for (let i = 2; i < values.length - 2; i++) {
+    const v = values[i];
+    if (
+      v > values[i - 1] &&
+      v > values[i - 2] &&
+      v > values[i + 1] &&
+      v > values[i + 2]
+    ) {
+      peakIndices.push(i);
+    }
+    if (
+      v < values[i - 1] &&
+      v < values[i - 2] &&
+      v < values[i + 1] &&
+      v < values[i + 2]
+    ) {
+      valleyIndices.push(i);
+    }
+  }
+  return { peakIndices, valleyIndices };
+};
+
+/**
+ * Enhanced peak detection with quality assessment
+ */
+export const enhancedPeakDetection = (values: number[]): { 
+  peakIndices: number[]; 
   valleyIndices: number[];
   signalQuality: number;
 } => {
-  if (values.length < 10) {
-    return {
-      peakIndices: [],
-      valleyIndices: [],
-      signalQuality: 0
-    };
+  const peakIndices: number[] = [];
+  const valleyIndices: number[] = [];
+  const signalStrengths: number[] = [];
+  
+  // 1. Normalize signal for analysis
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min;
+  
+  // Calculate normalized values
+  const normalizedValues = range > 0 ? 
+                        values.map(v => (v - min) / range) : 
+                        values.map(() => 0.5);
+  
+  // 2. Calculate first derivative (slope change)
+  const derivatives: number[] = [];
+  for (let i = 1; i < normalizedValues.length; i++) {
+    derivatives.push(normalizedValues[i] - normalizedValues[i-1]);
+  }
+  derivatives.push(0); // Add 0 at the end to maintain same length
+  
+  // 3. Detect peaks with advanced criteria
+  for (let i = 2; i < normalizedValues.length - 2; i++) {
+    const v = normalizedValues[i];
+    
+    // Peak criteria: higher than adjacent points and slope changes from positive to negative
+    if (v > normalizedValues[i - 1] && 
+        v > normalizedValues[i - 2] && 
+        v > normalizedValues[i + 1] && 
+        v > normalizedValues[i + 2] &&
+        derivatives[i-1] > 0 && derivatives[i] < 0) {
+      
+      peakIndices.push(i);
+      
+      // Calculate peak "strength" for quality evaluation
+      const peakStrength = (v - normalizedValues[i-2]) + (v - normalizedValues[i+2]);
+      signalStrengths.push(peakStrength);
+    }
+    
+    // Valley criteria: lower than adjacent points and slope changes from negative to positive
+    if (v < normalizedValues[i - 1] && 
+        v < normalizedValues[i - 2] && 
+        v < normalizedValues[i + 1] && 
+        v < normalizedValues[i + 2] &&
+        derivatives[i-1] < 0 && derivatives[i] > 0) {
+      
+      valleyIndices.push(i);
+    }
   }
   
-  try {
-    // Signal preprocessing
-    const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
-    
-    // Dynamic threshold based on signal amplitude
-    const max = Math.max(...values);
-    const min = Math.min(...values);
-    const amplitude = max - min;
-    
-    // Use a percentage of amplitude for peak detection
-    const peakThreshold = mean + (amplitude * 0.3);
-    const valleyThreshold = mean - (amplitude * 0.3);
-    
-    const peakIndices: number[] = [];
-    const valleyIndices: number[] = [];
-    
-    // Basic peak detection with minimal separation criteria
-    const minPeakDistance = 4; // Minimum samples between peaks
-    
-    for (let i = 2; i < values.length - 2; i++) {
-      // Check for peaks
-      if (values[i] > peakThreshold && 
-          values[i] > values[i-1] && 
-          values[i] > values[i-2] &&
-          values[i] > values[i+1] &&
-          values[i] > values[i+2]) {
-        
-        // Only add if it's far enough from the previous peak
-        if (peakIndices.length === 0 || i - peakIndices[peakIndices.length - 1] >= minPeakDistance) {
-          peakIndices.push(i);
-        } else {
-          // If we have two close peaks, keep the higher one
-          const prevPeakIdx = peakIndices[peakIndices.length - 1];
-          if (values[i] > values[prevPeakIdx]) {
-            peakIndices[peakIndices.length - 1] = i;
-          }
-        }
-      }
-      
-      // Check for valleys
-      if (values[i] < valleyThreshold && 
-          values[i] < values[i-1] && 
-          values[i] < values[i-2] &&
-          values[i] < values[i+1] &&
-          values[i] < values[i+2]) {
-        
-        // Similar logic for minimum valley distance
-        if (valleyIndices.length === 0 || i - valleyIndices[valleyIndices.length - 1] >= minPeakDistance) {
-          valleyIndices.push(i);
-        } else {
-          // For valleys, keep the lower one
-          const prevValleyIdx = valleyIndices[valleyIndices.length - 1];
-          if (values[i] < values[prevValleyIdx]) {
-            valleyIndices[valleyIndices.length - 1] = i;
-          }
-        }
-      }
-    }
-    
-    // Calculate signal quality metrics
-    
-    // 1. Peak-to-valley amplitude consistency
-    let amplitudeConsistency = 1.0;
-    const peakToValleyAmplitudes: number[] = [];
-    
-    // Map peaks to nearest valleys to measure amplitudes
-    for (const peakIdx of peakIndices) {
-      // Find closest valley before and after this peak
-      const prevValley = valleyIndices.filter(v => v < peakIdx).pop();
-      const nextValley = valleyIndices.find(v => v > peakIdx);
-      
-      if (prevValley !== undefined) {
-        peakToValleyAmplitudes.push(values[peakIdx] - values[prevValley]);
-      }
-      
-      if (nextValley !== undefined) {
-        peakToValleyAmplitudes.push(values[peakIdx] - values[nextValley]);
-      }
-    }
-    
-    if (peakToValleyAmplitudes.length >= 2) {
-      const ampMean = peakToValleyAmplitudes.reduce((sum, val) => sum + val, 0) / peakToValleyAmplitudes.length;
-      const ampStdDev = Math.sqrt(
-        peakToValleyAmplitudes.reduce((sum, val) => sum + Math.pow(val - ampMean, 2), 0) / peakToValleyAmplitudes.length
-      );
-      const ampCV = ampStdDev / (ampMean || 1); // Coefficient of variation (lower is better)
-      amplitudeConsistency = Math.max(0, Math.min(1, 1 - ampCV));
-    }
-    
-    // 2. Periodicity - consistency of peak-to-peak intervals
-    let periodConsistency = 1.0;
-    const intervals: number[] = [];
-    
+  // 4. Signal quality analysis
+  let signalQuality = 0;
+  
+  if (peakIndices.length >= 3) {
+    // Calculate regularity of intervals between peaks
+    const peakIntervals: number[] = [];
     for (let i = 1; i < peakIndices.length; i++) {
-      intervals.push(peakIndices[i] - peakIndices[i-1]);
+      peakIntervals.push(peakIndices[i] - peakIndices[i-1]);
     }
     
-    if (intervals.length >= 2) {
-      const intMean = intervals.reduce((sum, val) => sum + val, 0) / intervals.length;
-      const intStdDev = Math.sqrt(
-        intervals.reduce((sum, val) => sum + Math.pow(val - intMean, 2), 0) / intervals.length
-      );
-      const intCV = intStdDev / (intMean || 1);
-      periodConsistency = Math.max(0, Math.min(1, 1 - intCV));
-    }
+    const intervalMean = peakIntervals.reduce((sum, val) => sum + val, 0) / peakIntervals.length;
+    const intervalVariation = peakIntervals.map(interval => 
+                               Math.abs(interval - intervalMean) / intervalMean);
     
-    // 3. Signal-to-noise ratio estimation
-    let snrEstimate = 0.5; // Default medium quality
+    const meanIntervalVariation = intervalVariation.reduce((sum, val) => sum + val, 0) / 
+                               intervalVariation.length;
     
-    // Calculate noise by looking at small variations between samples
-    const differences: number[] = [];
-    for (let i = 1; i < values.length; i++) {
-      differences.push(Math.abs(values[i] - values[i-1]));
-    }
+    // Calculate consistency of peak amplitudes
+    const peakValues = peakIndices.map(idx => normalizedValues[idx]);
+    const peakValueMean = peakValues.reduce((sum, val) => sum + val, 0) / peakValues.length;
+    const peakValueVariation = peakValues.map(val => 
+                             Math.abs(val - peakValueMean) / peakValueMean);
     
-    if (differences.length > 0 && amplitude > 0) {
-      const avgDiff = differences.reduce((sum, val) => sum + val, 0) / differences.length;
-      // Noise-to-signal ratio (lower is better)
-      const noiseRatio = avgDiff / amplitude;
-      // Convert to SNR (higher is better)
-      snrEstimate = Math.max(0, Math.min(1, 1 - (noiseRatio * 5)));
-    }
+    const meanPeakVariation = peakValueVariation.reduce((sum, val) => sum + val, 0) / 
+                           peakValueVariation.length;
     
-    // Combine metrics for overall quality score (0-1)
-    const signalQuality = (
-      (amplitudeConsistency * 0.4) + 
-      (periodConsistency * 0.4) + 
-      (snrEstimate * 0.2)
-    );
+    // Combine factors for final quality score
+    // 1.0 = perfect, 0.0 = unusable
+    const intervalConsistency = 1 - Math.min(1, meanIntervalVariation * 2);
+    const amplitudeConsistency = 1 - Math.min(1, meanPeakVariation * 2);
+    const peakCount = Math.min(1, peakIndices.length / 8); // 8+ peaks = maximum score
     
-    return {
-      peakIndices,
-      valleyIndices,
-      signalQuality: parseFloat(signalQuality.toFixed(2))
-    };
-    
-  } catch (error) {
-    console.error("Error in enhanced peak detection:", error);
-    return {
-      peakIndices: [],
-      valleyIndices: [],
-      signalQuality: 0
-    };
+    signalQuality = intervalConsistency * 0.5 + amplitudeConsistency * 0.3 + peakCount * 0.2;
   }
+  
+  return { peakIndices, valleyIndices, signalQuality };
 };
 
 /**
- * Analyze cardiac waveform properties
+ * Calculate amplitude from peaks and valleys
  */
-export const analyzeCardiacWaveform = (values: number[]) => {
-  if (values.length < 30) {
-    return {
-      periodicity: 0,
-      amplitude: 0,
-      noiseRatio: 0,
-      regularityScore: 0,
-      waveQuality: 0
-    };
+export const calculateAmplitude = (
+  values: number[],
+  peaks: number[],
+  valleys: number[]
+): number => {
+  if (peaks.length === 0 || valleys.length === 0) return 0;
+
+  const amps: number[] = [];
+  const len = Math.min(peaks.length, valleys.length);
+  for (let i = 0; i < len; i++) {
+    const amp = values[peaks[i]] - values[valleys[i]];
+    if (amp > 0) {
+      amps.push(amp);
+    }
   }
-  
-  try {
-    // Calculate base metrics
-    const max = Math.max(...values);
-    const min = Math.min(...values);
-    const amplitude = max - min;
-    const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
-    
-    // Measure noise through standard deviation of differences
-    const differences = [];
-    for (let i = 1; i < values.length; i++) {
-      differences.push(Math.abs(values[i] - values[i-1]));
-    }
-    
-    const diffMean = differences.reduce((sum, val) => sum + val, 0) / differences.length;
-    const diffVariance = differences.reduce((sum, val) => sum + Math.pow(val - diffMean, 2), 0) / differences.length;
-    const diffStdDev = Math.sqrt(diffVariance);
-    
-    // Calculate noise ratio - higher values mean more noise
-    const noiseRatio = diffStdDev / (amplitude || 1);
-    
-    // Detect peaks for periodicity analysis
-    const peaks = [];
-    const threshold = mean + (amplitude * 0.3);
-    
-    for (let i = 2; i < values.length - 2; i++) {
-      if (values[i] > threshold && 
-          values[i] > values[i-1] && 
-          values[i] > values[i-2] &&
-          values[i] > values[i+1] &&
-          values[i] > values[i+2]) {
-        peaks.push(i);
-      }
-    }
-    
-    // Calculate peak intervals
-    const intervals = [];
-    for (let i = 1; i < peaks.length; i++) {
-      intervals.push(peaks[i] - peaks[i-1]);
-    }
-    
-    // Periodicity score based on consistency of intervals
-    let periodicity = 0;
-    if (intervals.length >= 2) {
-      const intervalMean = intervals.reduce((sum, val) => sum + val, 0) / intervals.length;
-      const intervalVariance = intervals.reduce((sum, val) => sum + Math.pow(val - intervalMean, 2), 0) / intervals.length;
-      const intervalCV = Math.sqrt(intervalVariance) / intervalMean;
-      
-      // Lower coefficient of variation means more consistent intervals
-      periodicity = Math.min(1, Math.max(0, 1 - intervalCV));
-    }
-    
-    // Calculate regularity score based on amplitude consistency
-    const peakValues = peaks.map(idx => values[idx]);
-    let regularityScore = 0;
-    
-    if (peakValues.length >= 2) {
-      const peakMean = peakValues.reduce((sum, val) => sum + val, 0) / peakValues.length;
-      const peakVariance = peakValues.reduce((sum, val) => sum + Math.pow(val - peakMean, 2), 0) / peakValues.length;
-      const peakCV = Math.sqrt(peakVariance) / peakMean;
-      
-      // Lower coefficient of variation means more consistent peak heights
-      regularityScore = Math.min(1, Math.max(0, 1 - peakCV));
-    }
-    
-    // Calculate overall waveform quality
-    const noiseScore = Math.max(0, 1 - (noiseRatio * 5)); // Penalize noise heavily
-    const waveQuality = (
-      (periodicity * 0.4) + 
-      (regularityScore * 0.3) + 
-      (noiseScore * 0.3)
-    );
-    
-    return {
-      periodicity: parseFloat(periodicity.toFixed(2)),
-      amplitude: parseFloat(amplitude.toFixed(2)),
-      noiseRatio: parseFloat(noiseRatio.toFixed(3)),
-      regularityScore: parseFloat(regularityScore.toFixed(2)),
-      waveQuality: parseFloat(waveQuality.toFixed(2))
-    };
-  } catch (error) {
-    console.error('Error analyzing cardiac waveform:', error);
-    return {
-      periodicity: 0,
-      amplitude: 0,
-      noiseRatio: 1,
-      regularityScore: 0,
-      waveQuality: 0
-    };
-  }
+  if (amps.length === 0) return 0;
+
+  const mean = amps.reduce((a, b) => a + b, 0) / amps.length;
+  return mean;
 };

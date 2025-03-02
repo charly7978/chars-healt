@@ -91,22 +91,22 @@ export class HeartBeatProcessor {
         this.audioContext.currentTime
       );
 
-      // Envelope del sonido principal - Ajustado para un inicio más rápido
+      // Envelope del sonido principal
       primaryGain.gain.setValueAtTime(0, this.audioContext.currentTime);
       primaryGain.gain.linearRampToValueAtTime(
         volume,
-        this.audioContext.currentTime + 0.005 // Más rápido (0.01 → 0.005)
+        this.audioContext.currentTime + 0.01
       );
       primaryGain.gain.exponentialRampToValueAtTime(
         0.01,
         this.audioContext.currentTime + this.BEEP_DURATION / 1000
       );
 
-      // Envelope del sonido secundario - También ajustado
+      // Envelope del sonido secundario
       secondaryGain.gain.setValueAtTime(0, this.audioContext.currentTime);
       secondaryGain.gain.linearRampToValueAtTime(
         volume * 0.3,
-        this.audioContext.currentTime + 0.005 // Más rápido (0.01 → 0.005)
+        this.audioContext.currentTime + 0.01
       );
       secondaryGain.gain.exponentialRampToValueAtTime(
         0.01,
@@ -205,12 +205,9 @@ export class HeartBeatProcessor {
     // Mejorado - Mayor precisión en la detección de picos
     const { isPeak, confidence } = this.detectPeak(normalizedValue, smoothDerivative);
     
-    // CORREGIDO: Detector de picos mejorado para que el beep coincida con el pico real
-    // y no con la pendiente descendente
+    // Confirmación de picos más rigurosa
     const isConfirmedPeak = this.confirmPeak(isPeak, normalizedValue, confidence);
 
-    // AJUSTE IMPORTANTE: Solo reproducir beep cuando realmente se confirma un pico válido
-    // y además estamos en la fase adecuada (pendiente ascendente seguida de descenso)
     if (isConfirmedPeak && !this.isInWarmup()) {
       const now = Date.now();
       const timeSinceLastPeak = this.lastPeakTime
@@ -220,9 +217,7 @@ export class HeartBeatProcessor {
       if (timeSinceLastPeak >= this.MIN_PEAK_TIME_MS) {
         this.previousPeakTime = this.lastPeakTime;
         this.lastPeakTime = now;
-        
-        // CORREGIDO: Adelantar el beep ligeramente para que coincida mejor con el pico visual
-        setTimeout(() => this.playBeep(0.12), 10); // Pequeño retraso controlado en vez de async
+        this.playBeep(0.12); // Suena beep cuando se confirma pico
         this.updateBPM();
       }
     }
@@ -271,13 +266,12 @@ export class HeartBeatProcessor {
       return { isPeak: false, confidence: 0 };
     }
 
-    // CORREGIDO: Mejora en la detección de picos para coincidir mejor con el ECG real
-    // Ahora detectamos la fase temprana cuando la derivada comienza a cambiar
+    // Ajuste para mayor robustez en la detección de picos
     const isOverThreshold =
-      derivative < this.DERIVATIVE_THRESHOLD &&  // Pendiente negativa
-      normalizedValue > this.SIGNAL_THRESHOLD && // Valor sobre umbral
-      this.lastValue > this.baseline * 0.98;     // Valor previo también relevante
-    
+      derivative < this.DERIVATIVE_THRESHOLD &&
+      normalizedValue > this.SIGNAL_THRESHOLD &&
+      this.lastValue > this.baseline * 0.98;
+
     // Refinamiento del cálculo de confianza
     const amplitudeConfidence = Math.min(
       Math.max(Math.abs(normalizedValue) / (this.SIGNAL_THRESHOLD * 1.5), 0),
@@ -288,13 +282,12 @@ export class HeartBeatProcessor {
       1
     );
 
-    // Cálculo de confianza mejorado - más peso a la amplitud
-    const confidence = (amplitudeConfidence * 0.7 + derivativeConfidence * 0.3);
+    // Cálculo de confianza mejorado
+    const confidence = (amplitudeConfidence * 0.6 + derivativeConfidence * 0.4);
 
     return { isPeak: isOverThreshold, confidence };
   }
 
-  // CORREGIDO: Confirmación de pico mejorada para mayor precisión
   private confirmPeak(
     isPeak: boolean,
     normalizedValue: number,
@@ -305,17 +298,13 @@ export class HeartBeatProcessor {
       this.peakConfirmationBuffer.shift();
     }
 
-    // Solo si tenemos un pico candidato, no está confirmado aún y con confianza suficiente
     if (isPeak && !this.lastConfirmedPeak && confidence >= this.MIN_CONFIDENCE) {
       if (this.peakConfirmationBuffer.length >= 3) {
         const len = this.peakConfirmationBuffer.length;
-        
-        // CORREGIDO: Ahora confirmamos el pico si estamos realmente bajando después del máximo
-        // Esto asegura que el beep coincida con el pico real
         const goingDown1 =
           this.peakConfirmationBuffer[len - 1] < this.peakConfirmationBuffer[len - 2];
         const goingDown2 =
-          len >= 3 && this.peakConfirmationBuffer[len - 2] < this.peakConfirmationBuffer[len - 3];
+          this.peakConfirmationBuffer[len - 2] < this.peakConfirmationBuffer[len - 3];
 
         if (goingDown1 && goingDown2) {
           this.lastConfirmedPeak = true;
@@ -399,12 +388,11 @@ export class HeartBeatProcessor {
   }
 
   public getRRIntervals(): { intervals: number[]; lastPeakTime: number | null; amplitudes?: number[] } {
-    // Ajuste crítico: Mejorar la información de amplitudes para facilitar la detección de arritmias
+    // Critical fix: Pass amplitude data derived from RR intervals
+    // This ensures arrhythmia detection has amplitude data to work with
     const amplitudes = this.bpmHistory.map(bpm => {
-      // La fórmula ahora es más directa: BPM normales tienen mayor amplitud
-      const normalizedBPM = (bpm - this.MIN_BPM) / (this.MAX_BPM - this.MIN_BPM);
-      // Amplitud base de 100, modulada por la relación con el BPM promedio (normal)
-      return 100 * (0.5 + 0.5 * (1 - Math.abs(normalizedBPM - 0.6)));
+      // Higher BPM (shorter RR) typically means lower amplitude for premature beats
+      return 100 / (bpm || 800) * (this.calculateCurrentBPM() / 100);
     });
     
     return {

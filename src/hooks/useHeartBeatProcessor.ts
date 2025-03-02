@@ -1,4 +1,3 @@
-
 import { useState, useRef, useCallback } from 'react';
 import { HeartBeatProcessor } from '../modules/HeartBeatProcessor';
 
@@ -62,26 +61,6 @@ export const useHeartBeatProcessor = () => {
     return processorRef.current.getFinalBPM();
   }, []);
   
-  const calibrateProcessor = useCallback(() => {
-    console.log('useHeartBeatProcessor: Calibrando procesador');
-    if (!processorRef.current) return false;
-    
-    try {
-      // Reiniciar lógica de detección para una nueva calibración
-      processorRef.current.reset();
-      
-      // Dado que HeartBeatProcessor no tiene un método recalibrateParameters,
-      // usamos la instancia existente después de un reset, que es efectivamente
-      // una forma de "recalibrar" el procesador para nuevas condiciones
-      console.log('useHeartBeatProcessor: Processor reset as calibration');
-      
-      return true;
-    } catch (error) {
-      console.error('Error al calibrar HeartBeatProcessor:', error);
-      return false;
-    }
-  }, []);
-  
   const cleanMemory = useCallback(() => {
     console.log('useHeartBeatProcessor: Performing memory cleanup');
     
@@ -125,7 +104,6 @@ export const useHeartBeatProcessor = () => {
     processSignal,
     reset,
     getFinalBPM,
-    cleanMemory,
-    calibrateProcessor
+    cleanMemory
   };
 };
