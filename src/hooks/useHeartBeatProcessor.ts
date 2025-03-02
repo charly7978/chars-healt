@@ -5,8 +5,6 @@ export const useHeartBeatProcessor = () => {
   const [bpm, setBpm] = useState(0);
   const [confidence, setConfidence] = useState(0);
   const [isPeak, setIsPeak] = useState(false);
-  const [isDicroticPoint, setIsDicroticPoint] = useState(false);
-  const [visualAmplitude, setVisualAmplitude] = useState(0);
   const processorRef = useRef<HeartBeatProcessor | null>(null);
   
   const getProcessor = useCallback(() => {
@@ -28,8 +26,6 @@ export const useHeartBeatProcessor = () => {
       setBpm(result.bpm);
       setConfidence(result.confidence);
       setIsPeak(result.isPeak);
-      setIsDicroticPoint(result.isDicroticPoint);
-      setVisualAmplitude(result.visualAmplitude);
       
       // Get RR intervals for arrhythmia detection, including amplitudes if available
       const rrData = processor.getRRIntervals();
@@ -38,10 +34,7 @@ export const useHeartBeatProcessor = () => {
         bpm: result.bpm,
         confidence: result.confidence,
         isPeak: result.isPeak,
-        isDicroticPoint: result.isDicroticPoint,
-        visualAmplitude: result.visualAmplitude,
-        rrData,
-        arrhythmiaCount: result.arrhythmiaCount
+        rrData
       };
     } catch (error) {
       console.error('Error processing signal:', error);
@@ -49,10 +42,7 @@ export const useHeartBeatProcessor = () => {
         bpm: 0,
         confidence: 0,
         isPeak: false,
-        isDicroticPoint: false,
-        visualAmplitude: 0,
-        rrData: { intervals: [], lastPeakTime: null },
-        arrhythmiaCount: 0
+        rrData: { intervals: [], lastPeakTime: null }
       };
     }
   }, [getProcessor]);
@@ -64,24 +54,11 @@ export const useHeartBeatProcessor = () => {
     setBpm(0);
     setConfidence(0);
     setIsPeak(false);
-    setIsDicroticPoint(false);
-    setVisualAmplitude(0);
   }, []);
   
   const getFinalBPM = useCallback(() => {
     if (!processorRef.current) return 0;
     return processorRef.current.getFinalBPM();
-  }, []);
-  
-  const incrementArrhythmiaCount = useCallback(() => {
-    if (processorRef.current) {
-      processorRef.current.incrementArrhythmiaCount();
-    }
-  }, []);
-  
-  const getArrhythmiaCount = useCallback(() => {
-    if (!processorRef.current) return 0;
-    return processorRef.current.getArrhythmiaCount();
   }, []);
   
   const cleanMemory = useCallback(() => {
@@ -91,8 +68,6 @@ export const useHeartBeatProcessor = () => {
     setBpm(0);
     setConfidence(0);
     setIsPeak(false);
-    setIsDicroticPoint(false);
-    setVisualAmplitude(0);
     
     // Reset and nullify processor
     if (processorRef.current) {
@@ -126,13 +101,9 @@ export const useHeartBeatProcessor = () => {
     bpm,
     confidence,
     isPeak,
-    isDicroticPoint,
-    visualAmplitude,
     processSignal,
     reset,
     getFinalBPM,
-    incrementArrhythmiaCount,
-    getArrhythmiaCount,
     cleanMemory
   };
 };

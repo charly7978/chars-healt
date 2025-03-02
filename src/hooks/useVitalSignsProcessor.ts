@@ -1,3 +1,4 @@
+
 import { useState, useCallback, useRef } from 'react';
 import { VitalSignsProcessor } from '../modules/VitalSignsProcessor';
 import { useArrhythmiaAnalyzer } from './useArrhythmiaAnalyzer';
@@ -16,6 +17,9 @@ export const useVitalSignsProcessor = () => {
   const dataCollector = useRef(createVitalSignsDataCollector());
   const signalHistory = useSignalHistory();
   
+  // Constants
+  const MAX_ARRHYTHMIAS_PER_SESSION = 15; // Máximo razonable para 30 segundos
+  
   /**
    * Lazy initialization of the VitalSignsProcessor
    */
@@ -30,13 +34,7 @@ export const useVitalSignsProcessor = () => {
   /**
    * Process a new signal value and update all vitals
    */
-  const processSignal = useCallback((value: number, rrData?: { 
-    intervals: number[], 
-    lastPeakTime: number | null, 
-    amplitudes?: number[],
-    isDicroticPoint?: boolean,
-    visualAmplitude?: number
-  }) => {
+  const processSignal = useCallback((value: number, rrData?: { intervals: number[], lastPeakTime: number | null, amplitudes?: number[] }) => {
     const processor = getProcessor();
     const currentTime = Date.now();
     
@@ -80,26 +78,23 @@ export const useVitalSignsProcessor = () => {
     }
     
     // Advanced arrhythmia analysis - ensure we're passing peak amplitudes if available
-    if (rrData?.intervals && rrData.intervals.length >= 2) {
-      const arrhythmiaResult = arrhythmiaAnalyzer.processArrhythmia(rrData);
+    if (rrData?.intervals && rrData.intervals.length >= 4) {
+      // Make sure to pass amplitude data to the arrhythmia analyzer if available
+      const arrhythmiaResult = arrhythmiaAnalyzer.processArrhythmia(rrData, MAX_ARRHYTHMIAS_PER_SESSION);
       
       if (arrhythmiaResult.detected) {
         return {
           spo2: result.spo2,
           pressure: stabilizedBP,
           arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus,
-          lastArrhythmiaData: arrhythmiaResult.lastArrhythmiaData,
-          isDicroticPoint: rrData.isDicroticPoint,
-          visualAmplitude: rrData.visualAmplitude
+          lastArrhythmiaData: arrhythmiaResult.lastArrhythmiaData
         };
       }
       
       return {
         spo2: result.spo2,
         pressure: stabilizedBP,
-        arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus,
-        isDicroticPoint: rrData.isDicroticPoint,
-        visualAmplitude: rrData.visualAmplitude
+        arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus
       };
     }
     
@@ -109,9 +104,7 @@ export const useVitalSignsProcessor = () => {
     return {
       spo2: result.spo2,
       pressure: stabilizedBP,
-      arrhythmiaStatus,
-      isDicroticPoint: rrData?.isDicroticPoint,
-      visualAmplitude: rrData?.visualAmplitude
+      arrhythmiaStatus
     };
   }, [getProcessor, arrhythmiaAnalyzer, signalHistory]);
 
