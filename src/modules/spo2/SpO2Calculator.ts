@@ -1,4 +1,3 @@
-
 /**
  * Handles core SpO2 calculation logic
  */
