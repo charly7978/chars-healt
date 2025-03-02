@@ -1,21 +1,22 @@
 
-export interface PPGDataPoint {
+interface PPGDataPoint {
   time: number;
   value: number;
   isArrhythmia: boolean;
 }
 
 export class CircularBuffer {
-  private buffer: PPGDataPoint[] = [];
-  private capacity: number;
+  private buffer: PPGDataPoint[];
+  private maxSize: number;
 
-  constructor(capacity: number) {
-    this.capacity = capacity;
+  constructor(size: number) {
+    this.buffer = [];
+    this.maxSize = size;
   }
 
-  push(data: PPGDataPoint) {
-    this.buffer.push(data);
-    if (this.buffer.length > this.capacity) {
+  push(point: PPGDataPoint): void {
+    this.buffer.push(point);
+    if (this.buffer.length > this.maxSize) {
       this.buffer.shift();
     }
   }
@@ -24,11 +25,9 @@ export class CircularBuffer {
     return [...this.buffer];
   }
 
-  clear() {
+  clear(): void {
     this.buffer = [];
   }
-
-  getBuffer() {
-    return this.buffer;
-  }
 }
+
+export type { PPGDataPoint };
