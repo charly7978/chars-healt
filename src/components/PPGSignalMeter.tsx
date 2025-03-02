@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -163,7 +162,7 @@ const PPGSignalMeter = ({
     lastValueRef.current = smoothedValue;
 
     const normalizedValue = smoothedValue - (baselineRef.current || 0);
-    const scaledValue = normalizedValue * verticalScale * -1;
+    const scaledValue = normalizedValue * verticalScale;
     
     let isArrhythmia = false;
     if (rawArrhythmiaData && 
@@ -203,7 +202,7 @@ const PPGSignalMeter = ({
         for (let i = 0; i < visiblePoints.length; i++) {
           const point = visiblePoints[i];
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-          const y = canvas.height * 0.4 + point.value;
+          const y = canvas.height * 0.6 - point.value;
           
           if (firstPoint) {
             ctx.moveTo(x, y);
@@ -222,7 +221,7 @@ const PPGSignalMeter = ({
             
             const nextPoint = visiblePoints[i + 1];
             const nextX = canvas.width - ((now - nextPoint.time) * canvas.width / WINDOW_WIDTH_MS);
-            const nextY = canvas.height * 0.4 + nextPoint.value;
+            const nextY = canvas.height * 0.6 - nextPoint.value;
             ctx.lineTo(nextX, nextY);
             ctx.stroke();
             
@@ -238,45 +237,51 @@ const PPGSignalMeter = ({
         ctx.stroke();
       }
 
-      // MODIFICACIÓN PRINCIPAL: Solo detecta y dibuja círculos en los picos máximos
-      // Encontrar picos reales (máximos locales)
-      const peakIndices: number[] = [];
+      const maxPeakIndices: number[] = [];
+      
       for (let i = 2; i < visiblePoints.length - 2; i++) {
-        const prevPoint = visiblePoints[i - 1];
         const point = visiblePoints[i];
-        const nextPoint = visiblePoints[i + 1];
+        const prevPoint1 = visiblePoints[i - 1];
+        const prevPoint2 = visiblePoints[i - 2];
+        const nextPoint1 = visiblePoints[i + 1];
+        const nextPoint2 = visiblePoints[i + 2];
         
-        // Un punto es un pico máximo si es menor que los puntos adyacentes
-        // y cumple con ciertos criterios de amplitud
-        if (point.value < prevPoint.value && point.value < nextPoint.value) {
-          // Verificar que sea un pico significativo (no solo ruido)
-          // Comprobación de amplitud mínima para considerar un pico válido
+        if (point.value > prevPoint1.value && 
+            point.value > prevPoint2.value && 
+            point.value > nextPoint1.value && 
+            point.value > nextPoint2.value) {
+          
           const peakAmplitude = Math.abs(point.value);
-          if (peakAmplitude > 3.0) { // Umbral de amplitud para considerar un pico real
-            peakIndices.push(i);
+          
+          if (peakAmplitude > 7.0) {
+            const peakTime = point.time;
+            const hasPeakNearby = maxPeakIndices.some(idx => {
+              const existingPeakTime = visiblePoints[idx].time;
+              return Math.abs(existingPeakTime - peakTime) < 250;
+            });
+            
+            if (!hasPeakNearby) {
+              maxPeakIndices.push(i);
+            }
           }
         }
       }
       
-      // Dibujar solo los picos máximos
-      for (let idx of peakIndices) {
+      for (let idx of maxPeakIndices) {
         const point = visiblePoints[idx];
         const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-        const y = canvas.height * 0.4 + point.value;
+        const y = canvas.height * 0.6 - point.value;
         
-        // Dibujar círculo en el pico
         ctx.beginPath();
         ctx.arc(x, y, point.isArrhythmia ? 5 : 4, 0, Math.PI * 2);
         ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
         ctx.fill();
 
-        // Mostrar valor numérico del pico
         ctx.font = 'bold 12px Inter';
         ctx.fillStyle = '#666666';
         ctx.textAlign = 'center';
         ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 20);
         
-        // Si es una arritmia, agregar elementos visuales adicionales
         if (point.isArrhythmia) {
           ctx.beginPath();
           ctx.arc(x, y, 9, 0, Math.PI * 2);
@@ -296,7 +301,6 @@ const PPGSignalMeter = ({
           ctx.fillStyle = '#FF6B6B';
           ctx.fillText("LATIDO PREMATURO", x, y - 35);
           
-          // Líneas punteadas para destacar la arritmia
           ctx.beginPath();
           ctx.setLineDash([2, 2]);
           ctx.strokeStyle = 'rgba(255, 107, 107, 0.6)';
@@ -304,7 +308,7 @@ const PPGSignalMeter = ({
           
           if (idx > 0) {
             const prevX = canvas.width - ((now - visiblePoints[idx-1].time) * canvas.width / WINDOW_WIDTH_MS);
-            const prevY = canvas.height * 0.4 + visiblePoints[idx-1].value;
+            const prevY = canvas.height * 0.6 - visiblePoints[idx-1].value;
             
             ctx.moveTo(prevX, prevY - 15);
             ctx.lineTo(x, y - 15);
@@ -313,7 +317,7 @@ const PPGSignalMeter = ({
           
           if (idx < visiblePoints.length - 1) {
             const nextX = canvas.width - ((now - visiblePoints[idx+1].time) * canvas.width / WINDOW_WIDTH_MS);
-            const nextY = canvas.height * 0.4 + visiblePoints[idx+1].value;
+            const nextY = canvas.height * 0.6 - visiblePoints[idx+1].value;
             
             ctx.moveTo(x, y - 15);
             ctx.lineTo(nextX, nextY - 15);
