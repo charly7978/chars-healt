@@ -96,6 +96,15 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     return { color: '#000000', label: '' };
   };
   
+  const getArrhythmiaRiskColor = (count: number): string => {
+    // Colors for different risk levels
+    if (count <= 0) return "#000000"; // No risk
+    if (count <= 3) return "#F2FCE2"; // Minimal risk - Soft Green
+    if (count <= 6) return "#FEC6A1"; // Low risk - Soft Orange
+    if (count <= 8) return "#F97316"; // Moderate risk - Bright Orange
+    return "#DC2626";                 // High risk - Red
+  };
+  
   const getArrhythmiaRiskLabel = (count: number): string => {
     // Updated thresholds based on user requirements:
     // - 1-3 arrhythmias: minimal risk
@@ -127,11 +136,12 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     if (status === "ARRITMIA DETECTADA") {
       // Determine risk level based on count
       const riskLabel = getArrhythmiaRiskLabel(count);
+      const riskColor = getArrhythmiaRiskColor(count);
       
       return {
         text: `${count}`,
         title: "ARRITMIA DETECTADA",
-        color: "#DC2626",
+        color: riskColor,
         label: riskLabel
       };
     }
@@ -155,7 +165,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
         <h3 className="text-white text-xs font-medium tracking-wider mb-2">{label}</h3>
         <div className="flex flex-col items-center gap-1">
           {isArrhythmiaDisplay && title && (
-            <span className="text-xs font-medium tracking-wider" style={{ color: color || '#FFFFFF' }}>
+            <span className="text-sm font-semibold tracking-wider" style={{ color: color || '#FFFFFF' }}>
               {title}
             </span>
           )}
