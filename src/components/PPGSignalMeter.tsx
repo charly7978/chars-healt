@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { Fingerprint, ActivitySquare, Zap } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -355,9 +354,10 @@ const PPGSignalMeter = ({
     lastValueRef.current = smoothedValue;
     
     if (dataBufferRef.current) {
-      dataBufferRef.current.addPoint({ 
+      dataBufferRef.current.push({ 
         time: now, 
-        value: smoothedValue 
+        value: smoothedValue,
+        isArrhythmia: false
       });
       
       // Detectar picos con el nuevo valor
