@@ -358,7 +358,7 @@ export class VitalSignsRisk {
       
       if (avgSPO2 > 0) {
         // CLASIFICACIÓN PARA VALORES FINALES:
-        // Implementando las reglas especificadas:
+        // Reglas definidas: 
         // - Menor a 90%: Insuficiencia respiratoria (rojo)
         // - 90-92%: Leve insuficiencia respiratoria (naranja)
         // - 93% o mayor: Normal (azul)
@@ -379,8 +379,13 @@ export class VitalSignsRisk {
     }
     
     // COMPORTAMIENTO EN TIEMPO REAL
-    // Aplicando la misma clasificación para tiempo real
+    // Lógica más simple para evitar conflictos
     let currentSegment: RiskSegment;
+    
+    // Aplicamos las mismas reglas de clasificación para tiempo real:
+    // - Menor a 90%: Insuficiencia respiratoria (rojo)
+    // - 90-92%: Leve insuficiencia respiratoria (naranja)
+    // - 93-100%: Normal (azul)
     
     if (this.isStableValue(this.spo2History, [0, 89])) {
       // SpO2 < 90% = Insuficiencia respiratoria (rojo)

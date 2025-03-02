@@ -159,8 +159,8 @@ const PPGSignalMeter = ({
     const smoothedValue = smoothValue(value, lastValueRef.current);
     lastValueRef.current = smoothedValue;
 
-    const normalizedValue = (smoothedValue - (baselineRef.current || 0));
-    const scaledValue = normalizedValue * verticalScale;
+    const normalizedValue = smoothedValue - (baselineRef.current || 0);
+    const scaledValue = normalizedValue * verticalScale * -1;
     
     let isArrhythmia = false;
     if (rawArrhythmiaData && 

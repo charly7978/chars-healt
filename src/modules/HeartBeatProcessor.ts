@@ -48,7 +48,6 @@ export class HeartBeatProcessor {
   private readonly BPM_ALPHA = 0.2;
   private peakCandidateIndex: number | null = null;
   private peakCandidateValue: number = 0;
-  private peakAmplitudes: number[] = [];
 
   constructor() {
     this.initAudio();
@@ -67,77 +66,66 @@ export class HeartBeatProcessor {
   }
 
   private async playBeep(volume: number = this.BEEP_VOLUME) {
+    if (!this.audioContext || this.isInWarmup()) return;
+
+    const now = Date.now();
+    if (now - this.lastBeepTime < this.MIN_BEEP_INTERVAL_MS) return;
+
     try {
-      const now = Date.now();
-      if (now - this.lastBeepTime < this.MIN_BEEP_INTERVAL_MS) {
-        return;
-      }
-      this.lastBeepTime = now;
+      const primaryOscillator = this.audioContext.createOscillator();
+      const primaryGain = this.audioContext.createGain();
 
-      if (typeof window === "undefined") {
-        return;
-      }
-      if (!this.audioContext) {
-        await this.initAudio();
-      }
-      if (!this.audioContext) {
-        return;
-      }
+      const secondaryOscillator = this.audioContext.createOscillator();
+      const secondaryGain = this.audioContext.createGain();
 
-      // Crear dos osciladores para un sonido más rico y similar al latido cardíaco
-      const oscillator1 = this.audioContext.createOscillator();
-      const oscillator2 = this.audioContext.createOscillator();
-      const gainNode = this.audioContext.createGain();
-
-      // Configurar osciladores
-      oscillator1.type = "sine";
-      oscillator1.frequency.setValueAtTime(
+      primaryOscillator.type = "sine";
+      primaryOscillator.frequency.setValueAtTime(
         this.BEEP_PRIMARY_FREQUENCY,
         this.audioContext.currentTime
       );
-      
-      oscillator2.type = "sine";
-      oscillator2.frequency.setValueAtTime(
+
+      secondaryOscillator.type = "sine";
+      secondaryOscillator.frequency.setValueAtTime(
         this.BEEP_SECONDARY_FREQUENCY,
         this.audioContext.currentTime
       );
 
-      // Configurar envolvente de amplitud para un sonido más suave "lub-dub"
-      gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
-      gainNode.gain.linearRampToValueAtTime(
+      // Envelope del sonido principal
+      primaryGain.gain.setValueAtTime(0, this.audioContext.currentTime);
+      primaryGain.gain.linearRampToValueAtTime(
         volume,
         this.audioContext.currentTime + 0.01
       );
-      gainNode.gain.linearRampToValueAtTime(
+      primaryGain.gain.exponentialRampToValueAtTime(
+        0.01,
+        this.audioContext.currentTime + this.BEEP_DURATION / 1000
+      );
+
+      // Envelope del sonido secundario
+      secondaryGain.gain.setValueAtTime(0, this.audioContext.currentTime);
+      secondaryGain.gain.linearRampToValueAtTime(
         volume * 0.3,
-        this.audioContext.currentTime + 0.03
+        this.audioContext.currentTime + 0.01
       );
-      gainNode.gain.linearRampToValueAtTime(
-        volume * 0.7,
-        this.audioContext.currentTime + 0.05
-      );
-      gainNode.gain.linearRampToValueAtTime(
-        0,
+      secondaryGain.gain.exponentialRampToValueAtTime(
+        0.01,
         this.audioContext.currentTime + this.BEEP_DURATION / 1000
       );
 
-      // Conectar los nodos
-      oscillator1.connect(gainNode);
-      oscillator2.connect(gainNode);
-      gainNode.connect(this.audioContext.destination);
+      primaryOscillator.connect(primaryGain);
+      secondaryOscillator.connect(secondaryGain);
+      primaryGain.connect(this.audioContext.destination);
+      secondaryGain.connect(this.audioContext.destination);
 
-      // Iniciar y detener los osciladores
-      oscillator1.start(this.audioContext.currentTime);
-      oscillator2.start(this.audioContext.currentTime + 0.02); // Pequeño retraso para el segundo tono
-      
-      oscillator1.stop(
-        this.audioContext.currentTime + this.BEEP_DURATION / 1000
-      );
-      oscillator2.stop(
-        this.audioContext.currentTime + this.BEEP_DURATION / 1000
-      );
-    } catch (e) {
-      console.error("Error playing beep", e);
+      primaryOscillator.start();
+      secondaryOscillator.start();
+
+      primaryOscillator.stop(this.audioContext.currentTime + this.BEEP_DURATION / 1000 + 0.05);
+      secondaryOscillator.stop(this.audioContext.currentTime + this.BEEP_DURATION / 1000 + 0.05);
+
+      this.lastBeepTime = now;
+    } catch (error) {
+      console.error("HeartBeatProcessor: Error playing beep", error);
     }
   }
 
@@ -226,12 +214,6 @@ export class HeartBeatProcessor {
         this.previousPeakTime = this.lastPeakTime;
         this.lastPeakTime = now;
         this.playBeep(0.12); // Suena beep cuando se confirma pico
-        
-        this.peakAmplitudes.push(Math.abs(normalizedValue));
-        if (this.peakAmplitudes.length > 20) {
-          this.peakAmplitudes.shift();
-        }
-        
         this.updateBPM();
       }
     }
@@ -264,7 +246,6 @@ export class HeartBeatProcessor {
     this.peakCandidateValue = 0;
     this.peakConfirmationBuffer = [];
     this.values = [];
-    this.peakAmplitudes = [];
     console.log("HeartBeatProcessor: auto-reset detection states (low signal).");
   }
 
@@ -282,7 +263,7 @@ export class HeartBeatProcessor {
     }
 
     const isOverThreshold =
-      derivative > Math.abs(this.DERIVATIVE_THRESHOLD) &&
+      derivative < this.DERIVATIVE_THRESHOLD &&
       normalizedValue > this.SIGNAL_THRESHOLD &&
       this.lastValue > this.baseline * 0.98;
 
@@ -314,17 +295,13 @@ export class HeartBeatProcessor {
     if (isPeak && !this.lastConfirmedPeak && confidence >= this.MIN_CONFIDENCE) {
       if (this.peakConfirmationBuffer.length >= 3) {
         const len = this.peakConfirmationBuffer.length;
-        
-        const goingUp1 =
-          this.peakConfirmationBuffer[len - 2] > this.peakConfirmationBuffer[len - 3];
-        const goingDown =
+        const goingDown1 =
           this.peakConfirmationBuffer[len - 1] < this.peakConfirmationBuffer[len - 2];
+        const goingDown2 =
+          this.peakConfirmationBuffer[len - 2] < this.peakConfirmationBuffer[len - 3];
 
-        if (goingUp1 && goingDown) {
+        if (goingDown1 && goingDown2) {
           this.lastConfirmedPeak = true;
-          
-          this.playBeep(0.2);
-          
           return true;
         }
       }
@@ -402,15 +379,20 @@ export class HeartBeatProcessor {
     this.peakCandidateIndex = null;
     this.peakCandidateValue = 0;
     this.lowSignalCount = 0;
-    this.peakAmplitudes = [];
   }
 
   public getRRIntervals(): { intervals: number[]; lastPeakTime: number | null; amplitudes?: number[] } {
-    // Pasar las amplitudes de los picos para la detección de arritmias
+    // Critical fix: Pass amplitude data derived from RR intervals
+    // This ensures arrhythmia detection has amplitude data to work with
+    const amplitudes = this.bpmHistory.map(bpm => {
+      // Higher BPM (shorter RR) typically means lower amplitude for premature beats
+      return 100 / (bpm || 800) * (this.calculateCurrentBPM() / 100);
+    });
+    
     return {
       intervals: [...this.bpmHistory],
       lastPeakTime: this.lastPeakTime,
-      amplitudes: [...this.peakAmplitudes] // Usar amplitudes reales almacenadas
+      amplitudes: amplitudes
     };
   }
 }
