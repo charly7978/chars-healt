@@ -8,8 +8,8 @@ export class BloodPressureCalculator {
   private readonly BP_AMPLITUDE_COEFFICIENT = 1.20; // Increased for more sensitivity 0.15
   private readonly BP_STIFFNESS_FACTOR = 1.28; // Increased from 0.06 for more variation  0.08
   private readonly BP_SMOOTHING_ALPHA = 1.58; // Reduced for more natural fluctuations 0.18
-  private readonly BP_QUALITY_THRESHOLD = 1.50; // 0.50
-  private readonly BP_CALIBRATION_WINDOW = 6;
+  private readonly BP_QUALITY_THRESHOLD = 0.050; // 0.50
+  private readonly BP_CALIBRATION_WINDOW = 20;
   private readonly BP_BUFFER_SIZE = 8;
 
   // State variables
