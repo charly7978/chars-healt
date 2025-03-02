@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -163,8 +162,7 @@ const PPGSignalMeter = ({
     lastValueRef.current = smoothedValue;
 
     const normalizedValue = smoothedValue - (baselineRef.current || 0);
-    // CAMBIO: Invertimos el signo para invertir la polaridad del gráfico
-    const scaledValue = normalizedValue * verticalScale; // Eliminamos el -1
+    const scaledValue = normalizedValue * verticalScale;
     
     let isArrhythmia = false;
     if (rawArrhythmiaData && 
@@ -204,8 +202,7 @@ const PPGSignalMeter = ({
         for (let i = 0; i < visiblePoints.length; i++) {
           const point = visiblePoints[i];
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-          // CAMBIO: Invertimos la referencia para la coordenada Y
-          const y = canvas.height * 0.6 - point.value; // Cambiado de 0.4 + a 0.6 -
+          const y = canvas.height * 0.6 - point.value;
           
           if (firstPoint) {
             ctx.moveTo(x, y);
@@ -224,7 +221,6 @@ const PPGSignalMeter = ({
             
             const nextPoint = visiblePoints[i + 1];
             const nextX = canvas.width - ((now - nextPoint.time) * canvas.width / WINDOW_WIDTH_MS);
-            // CAMBIO: Invertimos también aquí la coordenada Y
             const nextY = canvas.height * 0.6 - nextPoint.value;
             ctx.lineTo(nextX, nextY);
             ctx.stroke();
@@ -241,11 +237,8 @@ const PPGSignalMeter = ({
         ctx.stroke();
       }
 
-      // ALGORITMO MEJORADO PARA DETECTAR SOLO PICOS MÁXIMOS VERDADEROS
-      // CAMBIO: Ahora detectamos los mínimos en lugar de los máximos debido a la inversión de polaridad
       const maxPeakIndices: number[] = [];
       
-      // Primero encontramos todos los candidatos a picos (ahora son mínimos debido a la inversión)
       for (let i = 2; i < visiblePoints.length - 2; i++) {
         const point = visiblePoints[i];
         const prevPoint1 = visiblePoints[i - 1];
@@ -253,24 +246,18 @@ const PPGSignalMeter = ({
         const nextPoint1 = visiblePoints[i + 1];
         const nextPoint2 = visiblePoints[i + 2];
         
-        // CAMBIO: Invertimos la lógica de comparación debido a la inversión de polaridad
-        // Ahora buscamos puntos menores que sus vecinos (antes eran mayores)
-        if (point.value < prevPoint1.value && 
-            point.value < prevPoint2.value && 
-            point.value < nextPoint1.value && 
-            point.value < nextPoint2.value) {
+        if (point.value > prevPoint1.value && 
+            point.value > prevPoint2.value && 
+            point.value > nextPoint1.value && 
+            point.value > nextPoint2.value) {
           
-          // Verificar amplitud mínima respecto a la línea base (elimina picos pequeños/ruido)
-          // CAMBIO: Ajustamos para la polaridad invertida
           const peakAmplitude = Math.abs(point.value);
           
-          // Solo aceptar picos con amplitud significativa (ajustado para ser más selectivo)
           if (peakAmplitude > 7.0) {
-            // Buscar si ya hay un pico cercano en tiempo (prevenir duplicados)
             const peakTime = point.time;
             const hasPeakNearby = maxPeakIndices.some(idx => {
               const existingPeakTime = visiblePoints[idx].time;
-              return Math.abs(existingPeakTime - peakTime) < 250; // 250ms ventana
+              return Math.abs(existingPeakTime - peakTime) < 250;
             });
             
             if (!hasPeakNearby) {
@@ -280,26 +267,21 @@ const PPGSignalMeter = ({
         }
       }
       
-      // Ahora dibujamos solo los picos verdaderos (mínimos con la polaridad invertida)
       for (let idx of maxPeakIndices) {
         const point = visiblePoints[idx];
         const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-        // CAMBIO: Ajustamos la coordenada Y para la polaridad invertida
         const y = canvas.height * 0.6 - point.value;
         
-        // Dibujar círculo en el pico máximo
         ctx.beginPath();
         ctx.arc(x, y, point.isArrhythmia ? 5 : 4, 0, Math.PI * 2);
         ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
         ctx.fill();
 
-        // Mostrar valor numérico del pico
         ctx.font = 'bold 12px Inter';
         ctx.fillStyle = '#666666';
         ctx.textAlign = 'center';
         ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 20);
         
-        // Si es una arritmia, agregar elementos visuales adicionales
         if (point.isArrhythmia) {
           ctx.beginPath();
           ctx.arc(x, y, 9, 0, Math.PI * 2);
@@ -319,7 +301,6 @@ const PPGSignalMeter = ({
           ctx.fillStyle = '#FF6B6B';
           ctx.fillText("LATIDO PREMATURO", x, y - 35);
           
-          // Líneas punteadas para destacar la arritmia
           ctx.beginPath();
           ctx.setLineDash([2, 2]);
           ctx.strokeStyle = 'rgba(255, 107, 107, 0.6)';
@@ -327,7 +308,6 @@ const PPGSignalMeter = ({
           
           if (idx > 0) {
             const prevX = canvas.width - ((now - visiblePoints[idx-1].time) * canvas.width / WINDOW_WIDTH_MS);
-            // CAMBIO: Ajustamos la coordenada Y para previo punto
             const prevY = canvas.height * 0.6 - visiblePoints[idx-1].value;
             
             ctx.moveTo(prevX, prevY - 15);
@@ -337,7 +317,6 @@ const PPGSignalMeter = ({
           
           if (idx < visiblePoints.length - 1) {
             const nextX = canvas.width - ((now - visiblePoints[idx+1].time) * canvas.width / WINDOW_WIDTH_MS);
-            // CAMBIO: Ajustamos la coordenada Y para siguiente punto
             const nextY = canvas.height * 0.6 - visiblePoints[idx+1].value;
             
             ctx.moveTo(x, y - 15);

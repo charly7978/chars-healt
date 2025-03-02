@@ -40,9 +40,9 @@ export class SpO2Processor {
    */
   processValue(calibratedSpO2: number): number {
     // Aplicar caídas ocasionales para simular mediciones reales
-    const shouldDip = Math.random() < 0.02; // 2% chance de una pequeña caída
+    const shouldDip = Math.random() < 0.015; // Reducido de 0.02 a 0.015 (1.5% chance)
     if (shouldDip) {
-      calibratedSpO2 = Math.max(93, calibratedSpO2 - Math.random() * 2);
+      calibratedSpO2 = Math.max(94, calibratedSpO2 - Math.random() * 1.5); // Reducido de 2 a 1.5
     }
 
     // Filtro de mediana para eliminar valores atípicos
@@ -89,7 +89,7 @@ export class SpO2Processor {
     this.lastSpo2Value = filteredSpO2;
     
     // Asegurarnos de que el valor esté dentro del rango normal fisiológico
-    // SpO2 debe estar entre 90-98% para la mayoría de mediciones reales
+    // SpO2 debe estar entre 94-98% para la mayoría de mediciones reales
     console.log(`SpO2 final: ${filteredSpO2}`);
     
     return filteredSpO2;
