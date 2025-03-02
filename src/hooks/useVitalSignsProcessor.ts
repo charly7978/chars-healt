@@ -35,6 +35,9 @@ export const useVitalSignsProcessor = () => {
     if (!arrhythmiaDetectorRef.current) {
       console.log('useVitalSignsProcessor: Creando nueva instancia de detector de arritmias');
       arrhythmiaDetectorRef.current = new ArrhythmiaDetector();
+      
+      // Adición para debugging - hacerlo globalmente accesible
+      window.arrhythmiaDetector = arrhythmiaDetectorRef.current;
     }
     return arrhythmiaDetectorRef.current;
   }, []);
@@ -75,6 +78,13 @@ export const useVitalSignsProcessor = () => {
           ? rrData.amplitudes[rrData.amplitudes.length - 1] 
           : undefined;
         
+        // Asegurar que se pasan las amplitudes completas para mejor detección
+        console.log('Enviando datos al detector de arritmias:', {
+          intervals: rrData.intervals.length,
+          lastPeakTime: rrData.lastPeakTime,
+          peakAmplitude: peakAmplitude
+        });
+        
         arrhythmiaDetector.updateIntervals(rrData.intervals, rrData.lastPeakTime, peakAmplitude);
       }
     }
@@ -97,6 +107,16 @@ export const useVitalSignsProcessor = () => {
     
     // IMPORTANTE: Usar exclusivamente ArrhythmiaDetector para la detección de arritmias
     const arrhythmiaResult = arrhythmiaDetector.detect();
+    
+    // Log de detección para debugging
+    if (arrhythmiaResult.detected) {
+      console.log('Detección de arritmia en useVitalSignsProcessor:', {
+        detectado: arrhythmiaResult.detected,
+        contador: arrhythmiaResult.count,
+        confianza: arrhythmiaResult.data?.confidence,
+        prematureBeat: arrhythmiaResult.data?.prematureBeat
+      });
+    }
     
     // Actualizar el contador si se detectó una nueva arritmia
     if (arrhythmiaResult.detected && arrhythmiaResult.count !== arrhythmiaCounter) {
