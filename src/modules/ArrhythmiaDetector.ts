@@ -6,6 +6,7 @@
  * que aparecen entre dos latidos normales.
  * 
  * OPTIMIZADO: Ahora solo detecta y muestra el pico principal de cada latido
+ * REFINADO: Mejor detección de arritmias y amplificación visual de latidos
  */
 
 export class ArrhythmiaDetector {
@@ -14,18 +15,22 @@ export class ArrhythmiaDetector {
   private readonly ARRHYTHMIA_LEARNING_PERIOD = 6000; // Período de aprendizaje
   
   // Parámetros críticos para la detección de latidos prematuros - REOPTIMIZADOS
-  private readonly PREMATURE_BEAT_THRESHOLD = 0.82; // Umbral para considerar un latido prematuro (intervalo RR)
-  private readonly AMPLITUDE_DIFF_THRESHOLD = 0.35; // Umbral para diferencias de amplitud entre picos
+  private readonly PREMATURE_BEAT_THRESHOLD = 0.78; // AJUSTADO: Más restrictivo (antes 0.82)
+  private readonly AMPLITUDE_DIFF_THRESHOLD = 0.4; // AJUSTADO: Mayor diferencia requerida (antes 0.35)
   
   // Parámetros para el filtrado de picos y visualización
-  private readonly PEAK_PROMINENCE_THRESHOLD = 0.4; // Solo picos prominentes serán considerados
-  private readonly MIN_PEAK_DISTANCE_MS = 350; // Distancia mínima entre picos en ms (170 BPM máx)
+  private readonly PEAK_PROMINENCE_THRESHOLD = 0.5; // AJUSTADO: Mayor prominencia requerida (antes 0.4)
+  private readonly MIN_PEAK_DISTANCE_MS = 380; // AJUSTADO: Mayor separación mínima (antes 350)
   private readonly MAX_ACCEPTABLE_RR_MS = 1700; // Intervalo RR máximo aceptable (35 BPM mín)
   
   // Parámetros de validación avanzada
   private readonly PATTERN_ANALYSIS_WINDOW = 5; // Analizar los últimos 5 latidos para patrones
-  private readonly MIN_TIME_BETWEEN_ARRHYTHMIAS_MS = 2500; // Tiempo mínimo entre arritmias
+  private readonly MIN_TIME_BETWEEN_ARRHYTHMIAS_MS = 3500; // AJUSTADO: Mayor tiempo entre arritmias (antes 2500)
   private readonly MAX_CONSECUTIVE_PREMATURE = 1; // Máximo de latidos prematuros consecutivos permitidos
+  
+  // NUEVO: Parámetros de amplificación visual
+  private readonly VISUAL_AMPLIFICATION_FACTOR = 1.75; // Factor de amplificación para visualización
+  private readonly MIN_VISUAL_HEIGHT = 0.3; // Altura mínima visual para latidos débiles
 
   // ---- Estado interno ----
   private rrIntervals: number[] = []; // Intervalos entre picos principales
@@ -46,13 +51,18 @@ export class ArrhythmiaDetector {
   // Variables para análisis avanzado
   private consecutivePrematureCount = 0;
   private lastAnalyzedPeakTime: number = 0;
+  private maxAmplitudeObserved: number = 0; // NUEVO: Para normalización
   
   // Estado para visualización - SOLO PICOS PRINCIPALES
   private mainPeaks: Array<{
     time: number;
-    amplitude: number;
+    amplitude: number; // Amplitud original
+    visualAmplitude: number; // NUEVO: Amplitud amplificada para visualización
     isArrhythmia: boolean;
   }> = [];
+  
+  // ELIMINADO: Ya no hay límite en la detección de arritmias
+  // private readonly MAX_ARRHYTHMIAS_PER_SESSION = 15;
   
   // ---- Configuración del modo de depuración ----
   private readonly DEBUG_MODE = true;
@@ -80,6 +90,7 @@ export class ArrhythmiaDetector {
     this.baseRRInterval = 0;
     this.consecutivePrematureCount = 0;
     this.lastAnalyzedPeakTime = 0;
+    this.maxAmplitudeObserved = 0;
     
     if (this.DEBUG_MODE) {
       console.log("ArrhythmiaDetector: Reset complete");
@@ -114,7 +125,8 @@ export class ArrhythmiaDetector {
         if (this.DEBUG_MODE) {
           console.log(`ArrhythmiaDetector: Learning phase complete.
             Base RR: ${this.baseRRInterval.toFixed(0)}ms,
-            Avg Amplitude: ${this.avgNormalAmplitude.toFixed(2)}`);
+            Avg Amplitude: ${this.avgNormalAmplitude.toFixed(2)},
+            Max Amplitude: ${this.maxAmplitudeObserved.toFixed(2)}`);
         }
       } else {
         // Extender la fase de aprendizaje si no hay datos suficientes
@@ -136,11 +148,11 @@ export class ArrhythmiaDetector {
       return;
     }
     
-    // Usar algoritmo de mediana ponderada para mayor robustez
+    // MEJORADO: Algoritmo más robusto de mediana ponderada
     const sortedRR = [...this.rrIntervals].sort((a, b) => a - b);
     
-    // Descartar valores extremos (15% superior e inferior)
-    const trimIndex = Math.floor(sortedRR.length * 0.15);
+    // Descartar valores extremos (20% superior e inferior) - AJUSTADO
+    const trimIndex = Math.floor(sortedRR.length * 0.2);
     const trimmedRR = sortedRR.slice(trimIndex, sortedRR.length - trimIndex);
     
     // Si quedan suficientes valores, calcular mediana
@@ -174,6 +186,12 @@ export class ArrhythmiaDetector {
     
     if (trimmedAmplitudes.length > 0) {
       this.avgNormalAmplitude = trimmedAmplitudes.reduce((sum, val) => sum + val, 0) / trimmedAmplitudes.length;
+      
+      // NUEVO: Actualizar máxima amplitud observada (para normalización)
+      this.maxAmplitudeObserved = Math.max(
+        this.maxAmplitudeObserved,
+        sortedAmplitudes[sortedAmplitudes.length - 1]
+      );
     } else {
       this.avgNormalAmplitude = 1.0;
     }
@@ -188,7 +206,12 @@ export class ArrhythmiaDetector {
     
     const currentTime = Date.now();
     
-    // NUEVO: Verificar si este pico es válido para ser considerado como principal
+    // NUEVO: Actualizar máxima amplitud observada en tiempo real
+    if (peakAmplitude > this.maxAmplitudeObserved) {
+      this.maxAmplitudeObserved = peakAmplitude;
+    }
+    
+    // MEJORADO: Verificación más estricta de picos principales
     if (!this.isValidMainPeak(lastPeakTime, peakAmplitude)) {
       if (this.DEBUG_MODE) {
         console.log(`ArrhythmiaDetector: Pico rechazado - tiempo: ${lastPeakTime}, amplitud: ${peakAmplitude}`);
@@ -226,6 +249,20 @@ export class ArrhythmiaDetector {
     // pero solo si ya no estamos en fase de aprendizaje
     if (!this.isLearningPhase && this.baseRRInterval > 0) {
       this.analyzeMainPeak(latestInterval, peakAmplitude, lastPeakTime);
+    } else {
+      // Durante fase de aprendizaje, registrar pico normal amplificado
+      const visualAmplitude = this.amplifyForVisualization(peakAmplitude);
+      this.mainPeaks.push({
+        time: lastPeakTime,
+        amplitude: peakAmplitude,
+        visualAmplitude: visualAmplitude,
+        isArrhythmia: false
+      });
+      
+      // Mantener solo los últimos 25 picos para visualización
+      if (this.mainPeaks.length > 25) {
+        this.mainPeaks.shift();
+      }
     }
     
     // Actualizar estado de la fase de aprendizaje
@@ -233,7 +270,32 @@ export class ArrhythmiaDetector {
   }
   
   /**
-   * NUEVO: Verifica si un pico debe ser considerado como pico principal (sistólico)
+   * MEJORADO: Amplifica la señal para visualización más potente
+   */
+  private amplifyForVisualization(amplitude: number): number {
+    // Si no tenemos referencia, devolver valor original ligeramente amplificado
+    if (this.maxAmplitudeObserved <= 0) {
+      return amplitude * 1.2;
+    }
+    
+    // Calcular valor normalizado (0-1)
+    const normalizedValue = amplitude / this.maxAmplitudeObserved;
+    
+    // Aplicar "latigazo" usando una función no lineal (potencia)
+    // Esto crea una curva más pronunciada - efecto "pico de rayo"
+    const poweredValue = Math.pow(normalizedValue, 0.7);
+    
+    // Aplicar amplificación y asegurar altura mínima
+    const amplifiedValue = Math.max(
+      this.MIN_VISUAL_HEIGHT,
+      poweredValue * this.VISUAL_AMPLIFICATION_FACTOR
+    );
+    
+    return amplifiedValue;
+  }
+  
+  /**
+   * MEJORADO: Verifica con criterios más estrictos si un pico debe ser considerado como principal
    */
   private isValidMainPeak(peakTime: number, amplitude: number): boolean {
     // Si es el primer pico o ha pasado mucho tiempo desde el último, aceptarlo
@@ -242,12 +304,23 @@ export class ArrhythmiaDetector {
     }
     
     // Rechazar picos demasiado cercanos al último (evitar detecciones múltiples del mismo latido)
+    // AJUSTADO: Distancia mínima entre picos principales incrementada
     if ((peakTime - this.lastPeakTime) < this.MIN_PEAK_DISTANCE_MS) {
       return false;
     }
     
-    // Verificar que el pico es suficientemente prominente
-    if (this.avgNormalAmplitude > 0 && amplitude < this.avgNormalAmplitude * 0.25) {
+    // MEJORADO: Verificar prominencia respecto a la media reciente
+    if (this.peakAmplitudes.length >= 3 && this.avgNormalAmplitude > 0) {
+      const recentAvg = this.peakAmplitudes.slice(-3).reduce((sum, val) => sum + val, 0) / 3;
+      
+      // Rechazar picos débiles comparados con la media reciente
+      if (amplitude < recentAvg * 0.4) {
+        return false;
+      }
+    }
+    
+    // Verificar que el pico es suficientemente prominente en términos absolutos
+    if (this.avgNormalAmplitude > 0 && amplitude < this.avgNormalAmplitude * 0.35) {
       return false;
     }
     
@@ -255,19 +328,36 @@ export class ArrhythmiaDetector {
   }
   
   /**
-   * NUEVO: Analiza un pico principal para determinar si es un latido prematuro o normal
-   * y actualiza el array de picos principales para visualización
+   * MEJORADO: Analiza un pico principal con criterios más estrictos
+   * para determinar si es un latido prematuro o normal
    */
   private analyzeMainPeak(rrInterval: number, amplitude: number, timestamp: number): void {
-    // Criterios para determinar si es un latido prematuro
-    const isShortRR = rrInterval < this.baseRRInterval * this.PREMATURE_BEAT_THRESHOLD;
-    const hasAbnormalAmplitude = Math.abs(amplitude - this.avgNormalAmplitude) / this.avgNormalAmplitude > this.AMPLITUDE_DIFF_THRESHOLD;
+    // REFINADO: Criterios más estrictos para latidos prematuros
+    const rrRatio = rrInterval / this.baseRRInterval;
+    const isShortRR = rrRatio < this.PREMATURE_BEAT_THRESHOLD;
+    
+    // Analizar amplitud con referencia a los últimos latidos, no solo al promedio global
+    let relativeAmplitude = 1.0;
+    if (this.peakAmplitudes.length >= 3) {
+      const recentAmplitudes = this.peakAmplitudes.slice(-3);
+      const recentAvg = recentAmplitudes.reduce((sum, val) => sum + val, 0) / recentAmplitudes.length;
+      relativeAmplitude = amplitude / recentAvg;
+    }
+    
+    // Criterio de amplitud anormal - AJUSTADO
+    const hasAbnormalAmplitude = Math.abs(relativeAmplitude - 1.0) > this.AMPLITUDE_DIFF_THRESHOLD;
+    
+    // NUEVO: Verificar compensación en los intervalos adyacentes
+    const hasCompensatoryPause = this.checkCompensatoryPause();
     
     // Analizar patrón completo de los últimos latidos
     const hasAbnormalPattern = this.analyzeRRPattern();
     
-    // Determinar si es un latido prematuro
-    const isPremature = isShortRR && (hasAbnormalAmplitude || hasAbnormalPattern);
+    // REFINADO: Múltiples criterios para confirmar latido prematuro
+    // Ahora requiere al menos dos criterios o un patrón de compensación clara
+    const isPremature = (isShortRR && hasAbnormalAmplitude) || 
+                        (isShortRR && hasAbnormalPattern) ||
+                        hasCompensatoryPause;
     
     // Control de consecutivos para evitar falsos positivos
     let isArrhythmia = false;
@@ -275,7 +365,7 @@ export class ArrhythmiaDetector {
     if (isPremature) {
       this.consecutivePrematureCount++;
       
-      // Solo contar como arritmia si no excede el límite de consecutivos
+      // AJUSTADO: Solo contar como arritmia si no excede el límite de consecutivos
       // y ha pasado suficiente tiempo desde la última
       if (this.consecutivePrematureCount <= this.MAX_CONSECUTIVE_PREMATURE && 
           timestamp - this.lastArrhythmiaTime >= this.MIN_TIME_BETWEEN_ARRHYTHMIAS_MS) {
@@ -286,15 +376,19 @@ export class ArrhythmiaDetector {
       this.consecutivePrematureCount = 0;
     }
     
+    // NUEVO: Amplificar visualización usando nuestra función de "latigazo"
+    const visualAmplitude = this.amplifyForVisualization(amplitude);
+    
     // Registrar el pico para visualización - SOLO UN CÍRCULO POR LATIDO
     this.mainPeaks.push({
       time: timestamp,
       amplitude: amplitude,
+      visualAmplitude: visualAmplitude,
       isArrhythmia: isArrhythmia
     });
     
-    // Mantener solo los últimos 20 picos para visualización
-    if (this.mainPeaks.length > 20) {
+    // Mantener solo los últimos 25 picos para visualización
+    if (this.mainPeaks.length > 25) {
       this.mainPeaks.shift();
     }
     
@@ -306,29 +400,56 @@ export class ArrhythmiaDetector {
       
       if (this.DEBUG_MODE) {
         console.log(`ArrhythmiaDetector: LATIDO PREMATURO #${this.arrhythmiaCount} detectado. 
-          RR: ${rrInterval}ms vs Base: ${this.baseRRInterval}ms, 
-          Amplitud: ${amplitude.toFixed(2)} vs Avg: ${this.avgNormalAmplitude.toFixed(2)}`);
+          RR: ${rrInterval}ms (${(rrRatio * 100).toFixed(0)}%) vs Base: ${this.baseRRInterval}ms, 
+          Amplitud: ${amplitude.toFixed(2)} (${(relativeAmplitude * 100).toFixed(0)}%)`);
       }
     }
   }
   
   /**
-   * NUEVO: Analiza el patrón de intervalos RR para detectar irregularidades
+   * NUEVO: Verifica si hay pausas compensatorias (característica clave de extrasístoles)
+   */
+  private checkCompensatoryPause(): boolean {
+    if (this.rrIntervals.length < 4 || this.baseRRInterval <= 0) return false;
+    
+    const intervals = this.rrIntervals.slice(-4);
+    
+    // Patrón típico de latido prematuro con pausa compensatoria:
+    // [normal]-[corto]-[largo]-[normal]
+    
+    // Verificar el segundo intervalo (corto)
+    const isSecondShort = intervals[1] < this.baseRRInterval * 0.82;
+    
+    // Verificar el tercer intervalo (largo - pausa compensatoria)
+    const isThirdLong = intervals[2] > this.baseRRInterval * 1.3;
+    
+    // La suma del intervalo corto + largo debería aproximarse a 2 intervalos normales
+    const sumShortLong = intervals[1] + intervals[2];
+    const isCompensated = sumShortLong > this.baseRRInterval * 1.8 && 
+                         sumShortLong < this.baseRRInterval * 2.2;
+    
+    return isSecondShort && isThirdLong && isCompensated;
+  }
+  
+  /**
+   * REFINADO: Analiza el patrón de intervalos RR para detectar irregularidades
    */
   private analyzeRRPattern(): boolean {
-    if (this.rrIntervals.length < 3) return false;
+    if (this.rrIntervals.length < 4) return false;
     
     // Obtener los últimos intervalos RR
-    const recentRR = this.rrIntervals.slice(-3);
+    const recentRR = this.rrIntervals.slice(-4);
     
-    // Un patrón típico de extrasístole: intervalo corto seguido de intervalo compensatorio largo
-    // Verificar si el penúltimo intervalo es significativamente más corto que el promedio
-    const isMiddleShort = recentRR[1] < this.baseRRInterval * 0.85;
+    // Verificar si hay un patrón de aceleración seguido de desaceleración
+    const diffs = [];
+    for (let i = 1; i < recentRR.length; i++) {
+      diffs.push(recentRR[i] - recentRR[i-1]);
+    }
     
-    // Y el último intervalo es más largo (pausa compensatoria)
-    const isLastLong = recentRR[2] > this.baseRRInterval * 1.15;
-    
-    return isMiddleShort && isLastLong;
+    // Un patrón típico sería: [-, +, -] o [-, +, +]
+    // donde - indica acortamiento y + indica alargamiento
+    return (diffs[0] < 0 && diffs[1] > 0) && 
+           (Math.abs(diffs[0]) > this.baseRRInterval * 0.15);
   }
 
   /**
@@ -438,10 +559,15 @@ export class ArrhythmiaDetector {
   
   /**
    * Obtener los picos principales para visualización - SOLO UN CÍRCULO POR LATIDO
-   * NUEVO: Este método permite obtener solo los picos principales para dibujar
+   * ACTUALIZADO: Ahora devuelve la amplitud visual amplificada para un "latigazo" más pronunciado
    */
   getMainPeaks(): Array<{time: number, amplitude: number, isArrhythmia: boolean}> {
-    return this.mainPeaks;
+    // Devolver los picos con la amplitud visual en lugar de la original
+    return this.mainPeaks.map(peak => ({
+      time: peak.time,
+      amplitude: peak.visualAmplitude, // CLAVE: Usar la amplitud amplificada para visualización
+      isArrhythmia: peak.isArrhythmia
+    }));
   }
   
   /**
