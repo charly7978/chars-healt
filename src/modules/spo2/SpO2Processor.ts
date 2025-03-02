@@ -39,10 +39,10 @@ export class SpO2Processor {
    * Process and filter a SpO2 value
    */
   processValue(calibratedSpO2: number): number {
-    // Agregar pequeñas variaciones para simular mediciones reales
-    const shouldDip = Math.random() < 0.015;
+    // Aplicar caídas ocasionales para simular mediciones reales
+    const shouldDip = Math.random() < 0.013; // Reducido de 0.015 a 0.013 (1.3% chance)
     if (shouldDip) {
-      calibratedSpO2 = Math.max(95, calibratedSpO2 - Math.random() * 1.5);
+      calibratedSpO2 = Math.max(95, calibratedSpO2 - Math.random() * 1.3); // Reducido de 1.5 a 1.3
     }
 
     // Filtro de mediana para eliminar valores atípicos

@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -35,24 +34,16 @@ const PPGSignalMeter = ({
   const lastArrhythmiaTime = useRef<number>(0);
   const arrhythmiaCountRef = useRef<number>(0);
   
-  const WINDOW_WIDTH_MS = 3500;
-  const CANVAS_WIDTH = 900;
-  const CANVAS_HEIGHT = 250;
-  const GRID_SIZE_X = 300;
-  const GRID_SIZE_Y = 300;
+  const WINDOW_WIDTH_MS = 4000;
+  const CANVAS_WIDTH = 450;
+  const CANVAS_HEIGHT = 450;
+  const GRID_SIZE_X = 10;
+  const GRID_SIZE_Y = 10;
   const verticalScale = 25.0;
-  const SMOOTHING_FACTOR = 0.49;
+  const SMOOTHING_FACTOR = 0.7;
   const TARGET_FPS = 60;
-  const FRAME_TIME = 100 / TARGET_FPS;
-  const BUFFER_SIZE = 500;
-
-  // Nuevos umbrales más estrictos para la calidad de señal
-  const QUALITY_THRESHOLD = {
-    EXCELLENT: 85, // Aumentado de 75 a 85
-    GOOD: 70,      // Nuevo nivel intermedio
-    ACCEPTABLE: 55, // Aumentado de 50 a 55
-    POOR: 35       // Aumentado de 30 a 35
-  };
+  const FRAME_TIME = 1000 / TARGET_FPS;
+  const BUFFER_SIZE = 200;
 
   useEffect(() => {
     if (!dataBufferRef.current) {
@@ -62,21 +53,19 @@ const PPGSignalMeter = ({
 
   const getQualityColor = useCallback((q: number) => {
     if (!isFingerDetected) return 'from-gray-400 to-gray-500';
-    if (q >= QUALITY_THRESHOLD.EXCELLENT) return 'from-green-500 to-emerald-500';
-    if (q >= QUALITY_THRESHOLD.GOOD) return 'from-green-400 to-green-500';
-    if (q >= QUALITY_THRESHOLD.ACCEPTABLE) return 'from-yellow-500 to-orange-500';
-    if (q >= QUALITY_THRESHOLD.POOR) return 'from-orange-500 to-red-500';
+    if (q > 75) return 'from-green-500 to-emerald-500';
+    if (q > 50) return 'from-yellow-500 to-orange-500';
+    if (q > 30) return 'from-orange-500 to-red-500';
     return 'from-red-500 to-rose-500';
-  }, [isFingerDetected, QUALITY_THRESHOLD]);
+  }, [isFingerDetected]);
 
   const getQualityText = useCallback((q: number) => {
     if (!isFingerDetected) return 'Sin detección';
-    if (q >= QUALITY_THRESHOLD.EXCELLENT) return 'Señal excelente';
-    if (q >= QUALITY_THRESHOLD.GOOD) return 'Señal buena';
-    if (q >= QUALITY_THRESHOLD.ACCEPTABLE) return 'Señal aceptable';
-    if (q >= QUALITY_THRESHOLD.POOR) return 'Señal débil';
+    if (q > 75) return 'Señal óptima';
+    if (q > 50) return 'Señal aceptable';
+    if (q > 30) return 'Señal débil';
     return 'Señal muy débil';
-  }, [isFingerDetected, QUALITY_THRESHOLD]);
+  }, [isFingerDetected]);
 
   const smoothValue = useCallback((currentValue: number, previousValue: number | null): number => {
     if (previousValue === null) return currentValue;
@@ -86,7 +75,7 @@ const PPGSignalMeter = ({
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     
-    ctx.fillStyle = '#000000';
+    ctx.fillStyle = '#f3f3f3';
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
     ctx.beginPath();
@@ -175,12 +164,10 @@ const PPGSignalMeter = ({
     const normalizedValue = smoothedValue - (baselineRef.current || 0);
     const scaledValue = normalizedValue * verticalScale;
     
-    // Lógica mejorada para detección de arritmias - ahora exige calidad excelente
     let isArrhythmia = false;
     if (rawArrhythmiaData && 
         arrhythmiaStatus?.includes("ARRITMIA") && 
-        now - rawArrhythmiaData.timestamp < 1000 &&
-        quality >= QUALITY_THRESHOLD.EXCELLENT) { // Solo detecta arritmias con calidad excelente
+        now - rawArrhythmiaData.timestamp < 1000) {
       isArrhythmia = true;
       lastArrhythmiaTime.current = now;
       
@@ -344,7 +331,7 @@ const PPGSignalMeter = ({
 
     lastRenderTimeRef.current = currentTime;
     animationFrameRef.current = requestAnimationFrame(renderSignal);
-  }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus, drawGrid, smoothValue, QUALITY_THRESHOLD]);
+  }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus, drawGrid, smoothValue]);
 
   useEffect(() => {
     renderSignal();
@@ -368,10 +355,9 @@ const PPGSignalMeter = ({
           </div>
           <span className="text-[9px] text-center mt-0.5 font-medium transition-colors duration-700 block text-white" 
                 style={{ 
-                  color: quality >= QUALITY_THRESHOLD.EXCELLENT ? '#10B981' : 
-                         quality >= QUALITY_THRESHOLD.GOOD ? '#0EA5E9' : 
-                         quality >= QUALITY_THRESHOLD.ACCEPTABLE ? '#F59E0B' : 
-                         quality >= QUALITY_THRESHOLD.POOR ? '#DC2626' : '#FF4136' 
+                  color: quality > 75 ? '#0EA5E9' : 
+                         quality > 50 ? '#F59E0B' : 
+                         quality > 30 ? '#DC2626' : '#FF4136' 
                 }}>
             {getQualityText(quality)}
           </span>
@@ -381,17 +367,16 @@ const PPGSignalMeter = ({
           <Fingerprint
             className={`h-12 w-12 transition-colors duration-300 ${
               !isFingerDetected ? 'text-gray-400' :
-              quality >= QUALITY_THRESHOLD.EXCELLENT ? 'text-emerald-500' :
-              quality >= QUALITY_THRESHOLD.GOOD ? 'text-green-500' :
-              quality >= QUALITY_THRESHOLD.ACCEPTABLE ? 'text-yellow-500' :
-              quality >= QUALITY_THRESHOLD.POOR ? 'text-orange-500' :
+              quality > 75 ? 'text-green-500' :
+              quality > 50 ? 'text-yellow-500' :
+              quality > 30 ? 'text-orange-500' :
               'text-red-500'
             }`}
             strokeWidth={1.5}
           />
           <span className={`text-[9px] text-center mt-0.5 font-medium ${
             !isFingerDetected ? 'text-gray-400' : 
-            quality >= QUALITY_THRESHOLD.ACCEPTABLE ? 'text-green-500' : 'text-red-500'
+            quality > 50 ? 'text-green-500' : 'text-yellow-500'
           }`}>
             {isFingerDetected ? "Dedo detectado" : "Ubique su dedo en la Lente"}
           </span>
