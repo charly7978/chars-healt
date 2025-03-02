@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -238,89 +237,69 @@ const PPGSignalMeter = ({
         ctx.stroke();
       }
 
-      // MODIFICACIÓN PRINCIPAL: Solo detecta y dibuja círculos en los picos máximos
-      // Encontrar picos reales (máximos locales)
-      const peakIndices: number[] = [];
-      for (let i = 2; i < visiblePoints.length - 2; i++) {
+      for (let i = 1; i < visiblePoints.length - 1; i++) {
         const prevPoint = visiblePoints[i - 1];
         const point = visiblePoints[i];
         const nextPoint = visiblePoints[i + 1];
         
-        // Un punto es un pico máximo si es menor que los puntos adyacentes
-        // y cumple con ciertos criterios de amplitud
         if (point.value < prevPoint.value && point.value < nextPoint.value) {
-          // Verificar que sea un pico significativo (no solo ruido)
-          // Comprobación de amplitud mínima para considerar un pico válido
-          const peakAmplitude = Math.abs(point.value);
-          if (peakAmplitude > 3.0) { // Umbral de amplitud para considerar un pico real
-            peakIndices.push(i);
-          }
-        }
-      }
-      
-      // Dibujar solo los picos máximos
-      for (let idx of peakIndices) {
-        const point = visiblePoints[idx];
-        const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-        const y = canvas.height * 0.4 + point.value;
-        
-        // Dibujar círculo en el pico
-        ctx.beginPath();
-        ctx.arc(x, y, point.isArrhythmia ? 5 : 4, 0, Math.PI * 2);
-        ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
-        ctx.fill();
+          const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
+          const y = canvas.height * 0.4 + point.value;
+          
+          ctx.beginPath();
+          ctx.arc(x, y, point.isArrhythmia ? 5 : 4, 0, Math.PI * 2);
+          ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
+          ctx.fill();
 
-        // Mostrar valor numérico del pico
-        ctx.font = 'bold 12px Inter';
-        ctx.fillStyle = '#666666';
-        ctx.textAlign = 'center';
-        ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 20);
-        
-        // Si es una arritmia, agregar elementos visuales adicionales
-        if (point.isArrhythmia) {
-          ctx.beginPath();
-          ctx.arc(x, y, 9, 0, Math.PI * 2);
-          ctx.strokeStyle = '#FFFF00';
-          ctx.lineWidth = 2;
-          ctx.stroke();
+          ctx.font = 'bold 12px Inter';
+          ctx.fillStyle = '#666666';
+          ctx.textAlign = 'center';
+          ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 20);
           
-          ctx.beginPath();
-          ctx.arc(x, y, 14, 0, Math.PI * 2);
-          ctx.strokeStyle = '#FF6B6B';
-          ctx.lineWidth = 1;
-          ctx.setLineDash([2, 2]);
-          ctx.stroke();
-          ctx.setLineDash([]);
-          
-          ctx.font = 'bold 10px Inter';
-          ctx.fillStyle = '#FF6B6B';
-          ctx.fillText("LATIDO PREMATURO", x, y - 35);
-          
-          // Líneas punteadas para destacar la arritmia
-          ctx.beginPath();
-          ctx.setLineDash([2, 2]);
-          ctx.strokeStyle = 'rgba(255, 107, 107, 0.6)';
-          ctx.lineWidth = 1;
-          
-          if (idx > 0) {
-            const prevX = canvas.width - ((now - visiblePoints[idx-1].time) * canvas.width / WINDOW_WIDTH_MS);
-            const prevY = canvas.height * 0.4 + visiblePoints[idx-1].value;
-            
-            ctx.moveTo(prevX, prevY - 15);
-            ctx.lineTo(x, y - 15);
+          if (point.isArrhythmia) {
+            ctx.beginPath();
+            ctx.arc(x, y, 9, 0, Math.PI * 2);
+            ctx.strokeStyle = '#FFFF00';
+            ctx.lineWidth = 2;
             ctx.stroke();
-          }
-          
-          if (idx < visiblePoints.length - 1) {
-            const nextX = canvas.width - ((now - visiblePoints[idx+1].time) * canvas.width / WINDOW_WIDTH_MS);
-            const nextY = canvas.height * 0.4 + visiblePoints[idx+1].value;
             
-            ctx.moveTo(x, y - 15);
-            ctx.lineTo(nextX, nextY - 15);
+            ctx.beginPath();
+            ctx.arc(x, y, 14, 0, Math.PI * 2);
+            ctx.strokeStyle = '#FF6B6B';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([2, 2]);
             ctx.stroke();
+            ctx.setLineDash([]);
+            
+            ctx.font = 'bold 10px Inter';
+            ctx.fillStyle = '#FF6B6B';
+            ctx.fillText("LATIDO PREMATURO", x, y - 35);
+            
+            ctx.beginPath();
+            ctx.setLineDash([2, 2]);
+            ctx.strokeStyle = 'rgba(255, 107, 107, 0.6)';
+            ctx.lineWidth = 1;
+            
+            if (i > 0) {
+              const prevX = canvas.width - ((now - visiblePoints[i-1].time) * canvas.width / WINDOW_WIDTH_MS);
+              const prevY = canvas.height * 0.4 + visiblePoints[i-1].value;
+              
+              ctx.moveTo(prevX, prevY - 15);
+              ctx.lineTo(x, y - 15);
+              ctx.stroke();
+            }
+            
+            if (i < visiblePoints.length - 1) {
+              const nextX = canvas.width - ((now - visiblePoints[i+1].time) * canvas.width / WINDOW_WIDTH_MS);
+              const nextY = canvas.height * 0.4 + visiblePoints[i+1].value;
+              
+              ctx.moveTo(x, y - 15);
+              ctx.lineTo(nextX, nextY - 15);
+              ctx.stroke();
+            }
+            
+            ctx.setLineDash([]);
           }
-          
-          ctx.setLineDash([]);
         }
       }
     }
