@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useCallback } from 'react';
-import { Fingerprint } from 'lucide-react';
+import { Fingerprint, Trash2 } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
 
 interface PPGSignalMeterProps {
@@ -306,6 +306,13 @@ const PPGSignalMeter = ({
     animationFrameRef.current = requestAnimationFrame(renderSignal);
   }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus, drawGrid, smoothValue]);
 
+  const clearHistory = useCallback(() => {
+    if (dataBufferRef.current) {
+      dataBufferRef.current.clear();
+      console.log("PPG history cleared");
+    }
+  }, []);
+
   useEffect(() => {
     renderSignal();
     return () => {
@@ -348,6 +355,16 @@ const PPGSignalMeter = ({
             {isFingerDetected ? "Dedo detectado" : "Ubique su dedo en la Lente"}
           </span>
         </div>
+      </div>
+
+      <div className="absolute top-0 left-1 z-30 p-2" style={{ top: '5px', left: '5px' }}>
+        <button 
+          onClick={clearHistory}
+          className="flex items-center gap-1 bg-gray-800/70 hover:bg-gray-700/90 text-white text-xs font-medium py-1 px-2 rounded-md"
+        >
+          <Trash2 size={14} />
+          <span>Limpiar histórico</span>
+        </button>
       </div>
 
       <div className="absolute inset-0 w-full" style={{ height: '50vh', top: 0 }}>
