@@ -8,9 +8,9 @@ export const useArrhythmiaAnalyzer = () => {
   const [arrhythmiaCounter, setArrhythmiaCounter] = useState(0);
   const detectorRef = useRef<ArrhythmiaDetector | null>(null);
   
-  // Parámetros para mejorar la estabilidad y precisión
-  const STABILIZATION_PERIOD_MS = 4000; // Periodo inicial de estabilización
-  const MIN_CONFIDENCE_THRESHOLD = 0.7; // Umbral mínimo de confianza para considerar arritmias
+  // Parámetros más sensibles para mejorar la detección
+  const STABILIZATION_PERIOD_MS = 3000; // Reducido a 3 segundos
+  const MIN_CONFIDENCE_THRESHOLD = 0.5; // Reducido para ser más permisivo
   
   // Cache para análisis de confianza en detecciones
   const confidenceCache = useRef<{
@@ -29,6 +29,7 @@ export const useArrhythmiaAnalyzer = () => {
   const getDetector = useCallback(() => {
     if (!detectorRef.current) {
       detectorRef.current = new ArrhythmiaDetector();
+      console.log("useArrhythmiaAnalyzer: Detector creado");
     }
     return detectorRef.current;
   }, []);
@@ -57,14 +58,20 @@ export const useArrhythmiaAnalyzer = () => {
       // Obtener resultado inicial de detección
       const result = detector.detect();
       
-      // Análisis avanzado de confianza en la detección
-      if (result.detected && !isStabilizing) {
-        // Verificar tiempo desde última detección para validar consistencia
+      // Análisis simplificado para mayor sensibilidad
+      if (result.detected) {
+        // Verificar tiempo desde última detección
         const timeSinceLastDetection = currentTime - confidenceCache.current.lastDetectionTime;
         
         // Si es una nueva arritmia (no continuación de la anterior)
-        if (timeSinceLastDetection > 1200) { // Más de 1.2 segundos = nuevo evento
+        if (timeSinceLastDetection > 1000) { // Reducido a 1 segundo
           confidenceCache.current.consecutiveDetections = 1;
+          
+          // Solo incrementar si estamos por debajo del máximo
+          if (arrhythmiaCounter < maxArrhythmias) {
+            setArrhythmiaCounter(prev => prev + 1);
+            console.log("useArrhythmiaAnalyzer: Nueva arritmia contabilizada, total:", arrhythmiaCounter + 1);
+          }
         } else {
           confidenceCache.current.consecutiveDetections++;
         }
@@ -72,20 +79,9 @@ export const useArrhythmiaAnalyzer = () => {
         // Registrar tiempo de detección
         confidenceCache.current.lastDetectionTime = currentTime;
         confidenceCache.current.detectionCount++;
-        
-        // Verificar si la detección cumple criterios de confianza
-        const isConfidentDetection = 
-          confidenceCache.current.consecutiveDetections >= 2 || // Al menos 2 detecciones seguidas
-          (result.data?.rmssd || 0) > 50 || // RMSSD elevado (variabilidad alta)
-          (result.data?.rrVariation || 0) > 0.15; // Variación RR significativa
-        
-        if (isConfidentDetection && arrhythmiaCounter < maxArrhythmias) {
-          // Solo incrementar contador si es una detección confiable y estamos dentro del límite
-          setArrhythmiaCounter(prev => prev + 1);
-        }
       } else if (!result.detected) {
-        // Reiniciar contador de detecciones consecutivas
-        if (currentTime - confidenceCache.current.lastDetectionTime > 2000) { // 2 segundos de inactividad
+        // Reiniciar contador de detecciones consecutivas si ha pasado suficiente tiempo
+        if (currentTime - confidenceCache.current.lastDetectionTime > 1500) { // Reducido a 1.5 segundos
           confidenceCache.current.consecutiveDetections = 0;
         }
       }
@@ -118,6 +114,7 @@ export const useArrhythmiaAnalyzer = () => {
       falsePositiveCount: 0,
       consecutiveDetections: 0
     };
+    console.log("useArrhythmiaAnalyzer: Reset completo");
   }, []);
 
   return {
