@@ -97,6 +97,20 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     return { color: '#000000', label: '' };
   };
   
+  const getArrhythmiaRiskLabel = (count: number): string => {
+    // Based on medical literature:
+    // - Less than 5 per hour is generally considered minimal risk
+    // - 5-30 per hour is low risk
+    // - More than 30 per hour is moderate risk
+    // - Very frequent (>60 per hour) is high risk and may indicate significant cardiac issues
+    
+    if (count <= 0) return "";
+    if (count < 5) return "RIESGO MÍNIMO";
+    if (count < 30) return "RIESGO BAJO";
+    if (count < 60) return "RIESGO MODERADO";
+    return "RIESGO ALTO";
+  };
+  
   const getArrhythmiaDisplay = () => {
     if (!isArrhythmiaDisplay) return { text: value, color: "", label: "" };
     
@@ -108,13 +122,17 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
       };
     }
     
-    const [status, count] = String(value).split('|');
+    const [status, countStr] = String(value).split('|');
+    const count = parseInt(countStr || "0", 10);
     
     if (status === "ARRITMIA DETECTADA") {
+      // Determine risk level based on count
+      const riskLabel = getArrhythmiaRiskLabel(count);
+      
       return {
-        text: count ? `ARRITMIAS DETECTADAS: ${count}` : "ARRITMIAS DETECTADAS",
+        text: `ARRITMIAS DETECTADAS: ${count}`,
         color: "#DC2626",
-        label: ""
+        label: riskLabel
       };
     }
     
