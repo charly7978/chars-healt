@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { Fingerprint, ActivitySquare, Zap } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
