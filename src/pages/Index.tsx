@@ -7,6 +7,7 @@ import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import PermissionsHandler from "@/components/PermissionsHandler";
 import { VitalSignsRisk } from '@/utils/vitalSignsRisk';
+import { toast } from "sonner";
 
 interface VitalSigns {
   spo2: number;
@@ -133,6 +134,14 @@ const Index = () => {
   const startMonitoring = () => {
     if (!permissionsGranted) {
       console.log("No se puede iniciar sin permisos");
+      return;
+    }
+    
+    if (!isMonitoring && lastSignal?.quality < 50) {
+      console.log("Señal insuficiente para iniciar medición", lastSignal?.quality);
+      toast.warning("Calidad de señal insuficiente. Posicione bien su dedo en la cámara.", {
+        duration: 3000,
+      });
       return;
     }
     

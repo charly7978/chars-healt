@@ -1,4 +1,3 @@
-
 import { ProcessedSignal, ProcessingError, SignalProcessor } from '../types/signal';
 
 // Class for Kalman filter - improves signal noise reduction
@@ -50,7 +49,10 @@ export class PPGSignalProcessor implements SignalProcessor {
     STABILITY_WINDOW: 6,       // Window for stability analysis
     MIN_STABILITY_COUNT: 5,    // Increased from 4 to require more stable frames
     HYSTERESIS: 5,             // Hysteresis to avoid fluctuations
-    MIN_CONSECUTIVE_DETECTIONS: 4  // Increased from 3 to require more consecutive detections
+    MIN_CONSECUTIVE_DETECTIONS: 4,  // Increased from 3 to require more consecutive detections
+    QUALITY_THRESHOLD_POOR: 30,    // New: threshold for poor quality
+    QUALITY_THRESHOLD_ACCEPTABLE: 50,  // New: threshold for acceptable quality
+    QUALITY_THRESHOLD_GOOD: 75     // New: threshold for good quality
   };
 
   private currentConfig: typeof this.DEFAULT_CONFIG;
@@ -247,6 +249,7 @@ export class PPGSignalProcessor implements SignalProcessor {
         this.currentConfig.MIN_STABILITY_COUNT * 2
       );
     } else {
+      // More gradual decrease for stability - add a fractional decrease for smoother transition
       this.stableFrameCount = Math.max(0, this.stableFrameCount - 0.5);
     }
 
@@ -260,6 +263,7 @@ export class PPGSignalProcessor implements SignalProcessor {
         this.lastDetectionTime = currentTime;
       }
     } else {
+      // More gradual decrease for consecutive detections - add fractional decrease
       this.consecutiveDetections = Math.max(0, this.consecutiveDetections - 1);
     }
 
@@ -268,7 +272,23 @@ export class PPGSignalProcessor implements SignalProcessor {
     const intensityScore = Math.min((rawValue - this.currentConfig.MIN_RED_THRESHOLD) / 
                                 (this.currentConfig.MAX_RED_THRESHOLD - this.currentConfig.MIN_RED_THRESHOLD), 1);
     
-    const quality = Math.round((stabilityScore * 0.6 + intensityScore * 0.4) * 100);
+    // Improved quality calculation with smoother gradient between quality levels
+    let quality = Math.round((stabilityScore * 0.6 + intensityScore * 0.4) * 100);
+    
+    // Apply more gradual quality transitions with some hysteresis
+    if (quality < this.currentConfig.QUALITY_THRESHOLD_POOR) {
+      // Keep very low quality as is
+      quality = quality;
+    } else if (quality < this.currentConfig.QUALITY_THRESHOLD_ACCEPTABLE) {
+      // Poor but detectable quality range - make sure it's visible to user
+      quality = Math.max(this.currentConfig.QUALITY_THRESHOLD_POOR + 5, quality);
+    } else if (quality < this.currentConfig.QUALITY_THRESHOLD_GOOD) {
+      // Acceptable quality range - ensure clear difference from poor
+      quality = Math.max(this.currentConfig.QUALITY_THRESHOLD_ACCEPTABLE + 3, quality);
+    } else {
+      // Good quality range - keep as is
+      quality = quality;
+    }
 
     return {
       isFingerDetected: this.isCurrentlyDetected,

@@ -55,6 +55,7 @@ const PPGSignalMeter = ({
     if (!isFingerDetected) return 'from-gray-400 to-gray-500';
     if (q > 75) return 'from-green-500 to-emerald-500';
     if (q > 50) return 'from-yellow-500 to-orange-500';
+    if (q > 30) return 'from-orange-500 to-red-500';
     return 'from-red-500 to-rose-500';
   }, [isFingerDetected]);
 
@@ -62,7 +63,8 @@ const PPGSignalMeter = ({
     if (!isFingerDetected) return 'Sin detección';
     if (q > 75) return 'Señal óptima';
     if (q > 50) return 'Señal aceptable';
-    return 'Señal débil';
+    if (q > 30) return 'Señal débil';
+    return 'Señal muy débil';
   }, [isFingerDetected]);
 
   const smoothValue = useCallback((currentValue: number, previousValue: number | null): number => {
@@ -327,7 +329,11 @@ const PPGSignalMeter = ({
             />
           </div>
           <span className="text-[9px] text-center mt-0.5 font-medium transition-colors duration-700 block text-white" 
-                style={{ color: quality > 60 ? '#0EA5E9' : '#F59E0B' }}>
+                style={{ 
+                  color: quality > 75 ? '#0EA5E9' : 
+                         quality > 50 ? '#F59E0B' : 
+                         quality > 30 ? '#DC2626' : '#FF4136' 
+                }}>
             {getQualityText(quality)}
           </span>
         </div>
@@ -338,12 +344,14 @@ const PPGSignalMeter = ({
               !isFingerDetected ? 'text-gray-400' :
               quality > 75 ? 'text-green-500' :
               quality > 50 ? 'text-yellow-500' :
+              quality > 30 ? 'text-orange-500' :
               'text-red-500'
             }`}
             strokeWidth={1.5}
           />
           <span className={`text-[9px] text-center mt-0.5 font-medium ${
-            !isFingerDetected ? 'text-gray-400' : 'text-green-500'
+            !isFingerDetected ? 'text-gray-400' : 
+            quality > 50 ? 'text-green-500' : 'text-yellow-500'
           }`}>
             {isFingerDetected ? "Dedo detectado" : "Ubique su dedo en la Lente"}
           </span>
