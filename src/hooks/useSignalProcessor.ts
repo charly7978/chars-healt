@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { PPGSignalProcessor } from '../modules/SignalProcessor';
 import { ProcessedSignal, ProcessingError } from '../types/signal';
@@ -17,7 +16,6 @@ export const useSignalProcessor = () => {
     signaturePattern: number[];
   } | null>(null);
   
-  // Usar inicialización lazy para el procesador
   useEffect(() => {
     console.log("useSignalProcessor: Creando nueva instancia del procesador");
     processorRef.current = new PPGSignalProcessor();
@@ -46,7 +44,6 @@ export const useSignalProcessor = () => {
       console.log("useSignalProcessor: Limpiando y destruyendo procesador");
       if (processorRef.current) {
         processorRef.current.stop();
-        // Liberar referencias explícitamente
         processorRef.current.onSignalReady = null;
         processorRef.current.onError = null;
         processorRef.current = null;
@@ -68,25 +65,22 @@ export const useSignalProcessor = () => {
       processorRef.current.stop();
     }
     setIsProcessing(false);
-    // Liberar memoria explícitamente
     setLastSignal(null);
     setError(null);
   }, []);
 
-  const calibrate = useCallback(async () => {
+  const calibrate = useCallback(() => {
     try {
       console.log("useSignalProcessor: Iniciando calibración avanzada");
       setIsCalibrating(true);
       setCalibrationProgress(0);
       
       if (processorRef.current) {
-        // Implementación de calibración avanzada
         const calibrationSteps = 20;
         const calibrationBufferSize = 120; // 4 segundos a 30Hz
         const calibrationBuffer: number[] = [];
         let currentStep = 0;
         
-        // Configurar un intervalo de actualización del progreso
         const progressInterval = setInterval(() => {
           currentStep++;
           const progress = Math.min(100, Math.round((currentStep / calibrationSteps) * 100));
@@ -95,27 +89,20 @@ export const useSignalProcessor = () => {
           if (currentStep >= calibrationSteps) {
             clearInterval(progressInterval);
             
-            // Análisis de la señal para determinar las características personalizadas
             if (calibrationBuffer.length > 0) {
-              // 1. Baseline - valor promedio
               const baseline = calibrationBuffer.reduce((sum, val) => sum + val, 0) / calibrationBuffer.length;
-              
-              // 2. Amplitud - diferencia entre máximo y mínimo
               const max = Math.max(...calibrationBuffer);
               const min = Math.min(...calibrationBuffer);
               const amplitude = max - min;
               
-              // 3. Nivel de ruido - desviación estándar
               const squaredDifferences = calibrationBuffer.map(val => Math.pow(val - baseline, 2));
               const variance = squaredDifferences.reduce((sum, val) => sum + val, 0) / calibrationBuffer.length;
               const noiseLevel = Math.sqrt(variance);
               
-              // 4. Patrón de firma - subsecuencia normalizada representativa
               const patternLength = 30; // ~1 segundo
               let bestPatternStartIndex = 0;
               let bestPatternScore = Number.MAX_VALUE;
               
-              // Buscar el segmento con menor varianza (más estable)
               for (let i = 0; i < calibrationBuffer.length - patternLength; i++) {
                 const segment = calibrationBuffer.slice(i, i + patternLength);
                 const segmentAvg = segment.reduce((sum, val) => sum + val, 0) / patternLength;
@@ -131,7 +118,6 @@ export const useSignalProcessor = () => {
                 .slice(bestPatternStartIndex, bestPatternStartIndex + patternLength)
                 .map(val => (val - baseline) / (amplitude || 1)); // Normalizar
               
-              // Guardar el perfil de señal
               const profile = {
                 baseline,
                 amplitude,
@@ -142,24 +128,18 @@ export const useSignalProcessor = () => {
               setSignalProfile(profile);
               console.log("useSignalProcessor: Perfil de señal calculado:", profile);
               
-              // Aplicar calibración al procesador
               if (processorRef.current) {
                 try {
-                  // Llamar al método de calibración existente
                   processorRef.current.calibrate()
                     .then(() => {
                       console.log("useSignalProcessor: Calibración básica del procesador completada");
                       
-                      // Ya que setCustomParameters no existe, usamos propiedades y métodos disponibles
-                      // para ajustar la calibración con la información obtenida
                       console.log("useSignalProcessor: Aplicando parámetros de calibración personalizados:", {
                         baselineOffset: baseline,
                         amplitudeScale: amplitude > 0 ? 1 / amplitude : 1,
                         noiseThreshold: noiseLevel * 0.5
                       });
                       
-                      // Como no existe setCustomParameters, ajustamos indirectamente aplicando
-                      // calibración estándar múltiples veces para adaptarse a los nuevos datos
                       processorRef.current?.calibrate();
                     })
                     .catch(error => {
@@ -175,21 +155,18 @@ export const useSignalProcessor = () => {
           }
         }, 200);
         
-        // Recopilar datos durante la calibración
         const collectCalibrationData = (signal: ProcessedSignal) => {
           if (calibrationBuffer.length < calibrationBufferSize) {
             calibrationBuffer.push(signal.filteredValue);
           }
         };
         
-        // Suscribirse temporalmente a los datos de señal
         const originalSignalHandler = processorRef.current.onSignalReady;
         processorRef.current.onSignalReady = (signal: ProcessedSignal) => {
           if (originalSignalHandler) originalSignalHandler(signal);
           if (isCalibrating) collectCalibrationData(signal);
         };
         
-        // Restaurar el handler original después de la calibración
         setTimeout(() => {
           if (processorRef.current) {
             processorRef.current.onSignalReady = originalSignalHandler;
@@ -226,7 +203,6 @@ export const useSignalProcessor = () => {
     setError(null);
     setSignalProfile(null);
     
-    // Forzar limpieza del garbage collector si está disponible
     if (window.gc) {
       try {
         window.gc();
