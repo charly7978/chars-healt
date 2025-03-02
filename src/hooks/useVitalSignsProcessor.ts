@@ -17,8 +17,6 @@ export const useVitalSignsProcessor = () => {
   const dataCollector = useRef(createVitalSignsDataCollector());
   const signalHistory = useSignalHistory();
   
-  // Removed the MAX_ARRHYTHMIAS_PER_SESSION limit
-  
   /**
    * Lazy initialization of the VitalSignsProcessor
    */

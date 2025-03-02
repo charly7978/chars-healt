@@ -1,6 +1,7 @@
 
-import React, { memo, useMemo } from 'react';
+import React, { memo, useMemo, useState } from 'react';
 import { VitalSignsRisk } from '../utils/vitalSignsRisk';
+import VitalSignDetail from './VitalSignDetail';
 
 interface VitalSignProps {
   label: string;
@@ -10,6 +11,7 @@ interface VitalSignProps {
 }
 
 const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReading = false }) => {
+  const [showDetail, setShowDetail] = useState(false);
   const isArrhythmiaDisplay = label === "ARRITMIAS";
   const isBloodPressure = label === "PRESIÓN ARTERIAL";
 
@@ -159,40 +161,91 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     getArrhythmiaDisplay() : 
     { text: processedDisplayValue, title: undefined, ...getRiskInfo() };
 
+  const handleCardClick = () => {
+    // Solo permitir clic si hay una medición válida y es una lectura final
+    if (
+      (value === "--" || value === 0 || value === "--/--" || value === "0/0") ||
+      !isFinalReading
+    ) {
+      return;
+    }
+    
+    setShowDetail(true);
+  };
+
+  // Determinar el tipo de signo vital para la vista detallada
+  const getVitalSignType = () => {
+    if (label === "FRECUENCIA CARDÍACA") return "heartRate";
+    if (label === "SPO2") return "spo2";
+    if (label === "PRESIÓN ARTERIAL") return "bloodPressure";
+    if (label === "ARRITMIAS") return "arrhythmia";
+    return "heartRate"; // Default
+  };
+
   // Simplificar el renderizado para mejorar rendimiento
   return (
-    <div className="relative overflow-hidden rounded-xl bg-black shadow-lg">
-      <div className="relative z-10 p-4">
-        <h3 className="text-white text-xs font-medium tracking-wider mb-2">{label}</h3>
-        <div className="flex flex-col items-center gap-1">
-          {isArrhythmiaDisplay && title && (
-            <span className="text-base font-bold tracking-wider" style={{ color: color || '#FFFFFF' }}>
-              {title}
-            </span>
-          )}
-          <div className="flex items-baseline gap-1 justify-center">
-            <span 
-              className={`${isArrhythmiaDisplay ? 'text-lg' : 'text-xl'} font-bold transition-colors duration-300 text-white`}
-              style={{ color: color || '#000000' }}
-            >
-              {text}
-            </span>
-            {!isArrhythmiaDisplay && unit && (
-              <span className="text-white text-xs">{unit}</span>
+    <>
+      <div 
+        className={`relative overflow-hidden rounded-xl bg-black shadow-lg ${
+          isFinalReading ? 'active:scale-95 transition-transform cursor-pointer' : ''
+        }`}
+        onClick={isFinalReading ? handleCardClick : undefined}
+      >
+        <div className="relative z-10 p-4">
+          <h3 className="text-white text-xs font-medium tracking-wider mb-2">{label}</h3>
+          <div className="flex flex-col items-center gap-1">
+            {isArrhythmiaDisplay && title && (
+              <span className="text-base font-bold tracking-wider" style={{ color: color || '#FFFFFF' }}>
+                {title}
+              </span>
+            )}
+            <div className="flex items-baseline gap-1 justify-center">
+              <span 
+                className={`${isArrhythmiaDisplay ? 'text-lg' : 'text-xl'} font-bold transition-colors duration-300 text-white`}
+                style={{ color: color || '#000000' }}
+              >
+                {text}
+              </span>
+              {!isArrhythmiaDisplay && unit && (
+                <span className="text-white text-xs">{unit}</span>
+              )}
+            </div>
+            {riskLabel && (
+              <span 
+                className="text-[10px] font-semibold tracking-wider mt-1 text-white"
+                style={{ color: color || '#000000' }}
+              >
+                {riskLabel}
+              </span>
             )}
           </div>
-          {riskLabel && (
-            <span 
-              className="text-[10px] font-semibold tracking-wider mt-1 text-white"
-              style={{ color: color || '#000000' }}
-            >
-              {riskLabel}
-            </span>
-          )}
         </div>
+
+        {isFinalReading && (
+          <div className="absolute inset-0 bg-white/5 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="bg-white/10 rounded-full p-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/70">
+                  <path d="M9 18l6-6-6-6"/>
+                </svg>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
-    </div>
+
+      {showDetail && (
+        <VitalSignDetail
+          title={label}
+          value={text as string | number}
+          unit={unit}
+          riskLevel={riskLabel}
+          type={getVitalSignType()}
+          onBack={() => setShowDetail(false)}
+        />
+      )}
+    </>
   );
 };
 
-export default VitalSign;
+export default memo(VitalSign);
