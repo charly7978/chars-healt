@@ -39,6 +39,8 @@ export interface RespirationData {
 export interface GlucoseData {
   value: number;     // Valor de glucosa en mg/dL
   trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
+  confidence: number; // Nivel de confianza de la medición (0-100)
+  timeOffset: number; // Tiempo desde la última calibración (minutos)
 }
 
 export interface HeartBeatResult {
