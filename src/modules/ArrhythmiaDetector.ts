@@ -1,3 +1,4 @@
+
 /**
  * ArrhythmiaDetector.ts - Focused Premature Beat Detector
  * 
@@ -32,6 +33,13 @@ export class ArrhythmiaDetector {
     this.lastPeakTime = null;
     this.baseRRInterval = 0;
     console.log("ArrhythmiaDetector: Reset completo");
+  }
+
+  /**
+   * Check if detector is still in learning phase
+   */
+  isInLearningPhase(): boolean {
+    return this.rrIntervals.length < this.LEARNING_SAMPLES || this.baseRRInterval === 0;
   }
 
   /**
