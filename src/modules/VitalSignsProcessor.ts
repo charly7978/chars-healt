@@ -31,50 +31,60 @@ export class VitalSignsProcessor {
    */
   public processSignal(
     ppgValue: number,
-    rrData?: { intervals: number[]; lastPeakTime: number | null; amplitudes?: number[] }
+    rrData?: { intervals: number[]; lastPeakTime: number | null; amplitude?: number }
   ) {
     const currentTime = Date.now();
 
-    // Procesar arritmias primero, antes de cualquier otro cálculo
-    let arrhythmiaResult = { detected: false, count: 0, status: 'SIN ARRITMIAS|0', data: null };
-    
+    // Update RR intervals if available, passing amplitude data if available
     if (rrData?.intervals && rrData.intervals.length > 0) {
-      // Filtrar solo outliers extremos
+      // Filter outliers from RR data
       const validIntervals = rrData.intervals.filter(interval => {
-        return interval >= 300 && interval <= 1800;
+        return interval >= 380 && interval <= 1700; // Valid for 35-158 BPM
       });
       
       if (validIntervals.length > 0) {
-        const peakAmplitude = rrData.amplitudes?.[rrData.amplitudes.length - 1];
+        // Pass peak amplitude if available to the arrhythmia detector
+        const peakAmplitude = rrData.amplitude;
         
-        // Actualizar intervalos y forzar detección
         this.arrhythmiaDetector.updateIntervals(validIntervals, rrData.lastPeakTime, peakAmplitude);
-        arrhythmiaResult = this.arrhythmiaDetector.detect();
-        
-        if (arrhythmiaResult.detected) {
-          console.log('VitalSignsProcessor: Arritmia detectada:', {
-            status: arrhythmiaResult.status,
-            count: arrhythmiaResult.count,
-            data: arrhythmiaResult.data
-          });
-        }
       }
     }
 
-    // Procesar señal PPG
+    // Process PPG signal
     const filtered = this.applySMAFilter(ppgValue);
     this.ppgValues.push(filtered);
     if (this.ppgValues.length > this.WINDOW_SIZE) {
       this.ppgValues.shift();
     }
 
-    // Calcular otros signos vitales
-    const bp = this.calculateRealBloodPressure(this.ppgValues);
-    const pressure = `${bp.systolic}/${bp.diastolic}`;
+    // Check learning phase
+    const isLearning = this.arrhythmiaDetector.isInLearningPhase();
+    
+    // During learning phase, collect values for SpO2 calibration
+    if (isLearning) {
+      if (this.ppgValues.length >= 60) {
+        const tempSpO2 = this.spO2Calculator.calculateRaw(this.ppgValues.slice(-60));
+        if (tempSpO2 > 0) {
+          this.spO2Calculator.addCalibrationValue(tempSpO2);
+        }
+      }
+    } else {
+      // Auto-calibrate SpO2
+      this.spO2Calculator.calibrate();
+    }
+
+    // Process arrhythmia detection - using ONLY the ArrhythmiaDetector module
+    const arrhythmiaResult = this.arrhythmiaDetector.detect();
+
+    // Calculate vital signs - utilizando datos reales optimizados
     const spo2 = this.spO2Calculator.calculate(this.ppgValues.slice(-60));
     
-    // Preparar datos de arritmia
-    const lastArrhythmiaData = (arrhythmiaResult.detected || arrhythmiaResult.count > 0) ? {
+    // Calcular presión arterial usando valores reales
+    const bp = this.calculateRealBloodPressure(this.ppgValues.slice(-60));
+    const pressure = `${bp.systolic}/${bp.diastolic}`;
+
+    // Prepare arrhythmia data if detected
+    const lastArrhythmiaData = arrhythmiaResult.detected ? {
       timestamp: currentTime,
       rmssd: arrhythmiaResult.data?.rmssd || 0,
       rrVariation: arrhythmiaResult.data?.rrVariation || 0
@@ -180,15 +190,17 @@ export class VitalSignsProcessor {
   /**
    * Reset all processors
    */
-  public reset(): void {
+  public reset() {
     this.ppgValues = [];
     this.lastBPM = 0;
+    this.spO2Calculator.reset();
+    this.bpCalculator.reset();
+    this.arrhythmiaDetector.reset();
+    
+    // Reiniciar mediciones reales
     this.lastSystolic = 120;
     this.lastDiastolic = 80;
     this.measurementCount = 0;
-    this.spO2Calculator.reset();
-    this.bpCalculator.reset();
-    this.arrhythmiaDetector = new ArrhythmiaDetector(); // Reiniciar completamente el detector
   }
 
   /**
