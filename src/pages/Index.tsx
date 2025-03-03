@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
 import { useSignalProcessor } from "@/hooks/useSignalProcessor";
@@ -58,9 +58,14 @@ const Index = () => {
     glucose: number
   } | null>(null);
   const [permissionsGranted, setPermissionsGranted] = useState(false);
+  
+  // Refs for measurement state management
   const measurementTimerRef = useRef<number | null>(null);
   const isStartingRef = useRef(false); // Prevent multiple rapid starts
+  const isStoppingRef = useRef(false); // Prevent multiple rapid stops
+  const lastMonitoringActionTimeRef = useRef(0); // Debounce monitoring state changes
   
+  // Refs for data collection
   const allHeartRateValuesRef = useRef<number[]>([]);
   const allSpo2ValuesRef = useRef<number[]>([]);
   const allSystolicValuesRef = useRef<number[]>([]);
@@ -71,33 +76,55 @@ const Index = () => {
   
   const hasValidValuesRef = useRef(false);
   
-  const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
-  const { processSignal: processHeartBeat, reset: resetHeartBeat } = useHeartBeatProcessor();
-  const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
+  // Hooks
+  const { 
+    startProcessing, 
+    stopProcessing, 
+    lastSignal, 
+    processFrame,
+    isProcessing
+  } = useSignalProcessor();
+  
+  const { 
+    processSignal: processHeartBeat, 
+    reset: resetHeartBeat, 
+    cleanMemory: cleanHeartBeatMemory
+  } = useHeartBeatProcessor();
+  
+  const { 
+    processSignal: processVitalSigns, 
+    reset: resetVitalSigns,
+    cleanMemory: cleanVitalSignsMemory
+  } = useVitalSignsProcessor();
 
-  const handlePermissionsGranted = () => {
-    console.log("Permisos concedidos correctamente");
+  // Permission handlers
+  const handlePermissionsGranted = useCallback(() => {
+    console.log("Permissions granted correctly");
     setPermissionsGranted(true);
-  };
+  }, []);
 
-  const handlePermissionsDenied = () => {
-    console.log("Permisos denegados - funcionalidad limitada");
+  const handlePermissionsDenied = useCallback(() => {
+    console.log("Permissions denied - limited functionality");
     setPermissionsGranted(false);
-  };
+    toast.error("Permisos de cámara denegados. La aplicación no funcionará correctamente.", {
+      duration: 5000,
+    });
+  }, []);
 
-  const calculateFinalValues = () => {
+  // Calculate final values from collected data
+  const calculateFinalValues = useCallback(() => {
     try {
-      console.log("Calculando PROMEDIOS REALES con todos los valores capturados...");
+      console.log("Calculating REAL AVERAGES with all captured values...");
       
-      const validHeartRates = allHeartRateValuesRef.current.filter(v => v > 0);
-      const validSpo2Values = allSpo2ValuesRef.current.filter(v => v > 0);
-      const validSystolicValues = allSystolicValuesRef.current.filter(v => v > 0);
-      const validDiastolicValues = allDiastolicValuesRef.current.filter(v => v > 0);
-      const validRespRates = allRespirationRateValuesRef.current.filter(v => v > 0);
-      const validRespDepths = allRespirationDepthValuesRef.current.filter(v => v > 0);
-      const validGlucoseValues = allGlucoseValuesRef.current.filter(v => v > 0);
+      const validHeartRates = allHeartRateValuesRef.current.filter(v => v > 40 && v < 200);
+      const validSpo2Values = allSpo2ValuesRef.current.filter(v => v >= 80 && v <= 100);
+      const validSystolicValues = allSystolicValuesRef.current.filter(v => v >= 70 && v <= 200);
+      const validDiastolicValues = allDiastolicValuesRef.current.filter(v => v >= 40 && v <= 120);
+      const validRespRates = allRespirationRateValuesRef.current.filter(v => v >= 8 && v <= 30);
+      const validRespDepths = allRespirationDepthValuesRef.current.filter(v => v > 0 && v <= 100);
+      const validGlucoseValues = allGlucoseValuesRef.current.filter(v => v >= 70 && v <= 200);
       
-      console.log("Valores acumulados para promedios:", {
+      console.log("Accumulated values for averages:", {
         heartRateValues: validHeartRates.length,
         spo2Values: validSpo2Values.length,
         systolicValues: validSystolicValues.length,
@@ -118,13 +145,13 @@ const Index = () => {
       if (validHeartRates.length > 0) {
         avgHeartRate = Math.round(validHeartRates.reduce((a, b) => a + b, 0) / validHeartRates.length);
       } else {
-        avgHeartRate = heartRate;
+        avgHeartRate = heartRate > 0 ? heartRate : 0;
       }
       
       if (validSpo2Values.length > 0) {
         avgSpo2 = Math.round(validSpo2Values.reduce((a, b) => a + b, 0) / validSpo2Values.length);
       } else {
-        avgSpo2 = vitalSigns.spo2;
+        avgSpo2 = vitalSigns.spo2 > 0 ? vitalSigns.spo2 : 0;
       }
       
       let finalBPString = vitalSigns.pressure;
@@ -137,22 +164,22 @@ const Index = () => {
       if (validRespRates.length > 0) {
         avgRespRate = Math.round(validRespRates.reduce((a, b) => a + b, 0) / validRespRates.length);
       } else {
-        avgRespRate = vitalSigns.respiration.rate;
+        avgRespRate = vitalSigns.respiration.rate > 0 ? vitalSigns.respiration.rate : 0;
       }
       
       if (validRespDepths.length > 0) {
         avgRespDepth = Math.round(validRespDepths.reduce((a, b) => a + b, 0) / validRespDepths.length);
       } else {
-        avgRespDepth = vitalSigns.respiration.depth;
+        avgRespDepth = vitalSigns.respiration.depth > 0 ? vitalSigns.respiration.depth : 0;
       }
       
       if (validGlucoseValues.length > 0) {
         avgGlucose = Math.round(validGlucoseValues.reduce((a, b) => a + b, 0) / validGlucoseValues.length);
       } else {
-        avgGlucose = vitalSigns.glucose;
+        avgGlucose = vitalSigns.glucose > 0 ? vitalSigns.glucose : 0;
       }
       
-      console.log("PROMEDIOS REALES calculados:", {
+      console.log("REAL AVERAGES calculated:", {
         heartRate: avgHeartRate,
         spo2: avgSpo2,
         pressure: finalBPString,
@@ -161,19 +188,20 @@ const Index = () => {
       });
       
       setFinalValues({
-        heartRate: avgHeartRate > 0 ? avgHeartRate : heartRate,
-        spo2: avgSpo2 > 0 ? avgSpo2 : vitalSigns.spo2,
-        pressure: finalBPString,
+        heartRate: avgHeartRate > 0 ? avgHeartRate : heartRate > 0 ? heartRate : 0,
+        spo2: avgSpo2 > 0 ? avgSpo2 : vitalSigns.spo2 > 0 ? vitalSigns.spo2 : 0,
+        pressure: finalBPString !== "--/--" ? finalBPString : vitalSigns.pressure,
         respiration: {
           rate: avgRespRate > 0 ? avgRespRate : vitalSigns.respiration.rate,
           depth: avgRespDepth > 0 ? avgRespDepth : vitalSigns.respiration.depth,
           regularity: vitalSigns.respiration.regularity
         },
-        glucose: avgGlucose > 0 ? avgGlucose : vitalSigns.glucose
+        glucose: avgGlucose > 0 ? avgGlucose : vitalSigns.glucose > 0 ? vitalSigns.glucose : 0
       });
         
       hasValidValuesRef.current = true;
       
+      // Clear arrays to free memory
       allHeartRateValuesRef.current = [];
       allSpo2ValuesRef.current = [];
       allSystolicValuesRef.current = [];
@@ -182,7 +210,8 @@ const Index = () => {
       allRespirationDepthValuesRef.current = [];
       allGlucoseValuesRef.current = [];
     } catch (error) {
-      console.error("Error en calculateFinalValues:", error);
+      console.error("Error in calculateFinalValues:", error);
+      // Fallback to current values
       setFinalValues({
         heartRate: heartRate,
         spo2: vitalSigns.spo2,
@@ -192,16 +221,40 @@ const Index = () => {
       });
       hasValidValuesRef.current = true;
     }
-  };
+  }, [heartRate, vitalSigns]);
 
-  const startMonitoring = () => {
-    if (isStartingRef.current) {
-      console.log("Already starting measurement, ignoring duplicate call");
+  // Reset processors without affecting the display
+  const prepareProcessorsOnly = useCallback(() => {
+    console.log("Preparing ONLY processors (displays intact)");
+    
+    setElapsedTime(0);
+    
+    resetHeartBeat();
+    resetVitalSigns();
+    VitalSignsRisk.resetHistory();
+  }, [resetHeartBeat, resetVitalSigns]);
+
+  // Start monitoring with debounce protection
+  const startMonitoring = useCallback(() => {
+    const currentTime = Date.now();
+    
+    // Debounce to prevent rapid start/stop cycles
+    if (currentTime - lastMonitoringActionTimeRef.current < 1000) {
+      console.log("Action debounced - too soon after last action");
+      return;
+    }
+    lastMonitoringActionTimeRef.current = currentTime;
+    
+    if (isStartingRef.current || isStoppingRef.current) {
+      console.log("Already starting or stopping measurement, ignoring duplicate call");
       return;
     }
     
     if (!permissionsGranted) {
-      console.log("No se puede iniciar sin permisos");
+      console.log("Cannot start without permissions");
+      toast.error("Se requieren permisos de cámara para iniciar.", {
+        duration: 3000,
+      });
       return;
     }
     
@@ -214,83 +267,94 @@ const Index = () => {
     console.log("Starting new measurement");
     isStartingRef.current = true;
     
-    // Check signal quality only if we have a signal
-    if (lastSignal && lastSignal.quality < 50) {
-      console.log("Señal insuficiente para iniciar medición", lastSignal.quality);
-      toast.warning("Calidad de señal insuficiente. Posicione bien su dedo en la cámara.", {
-        duration: 3000,
-      });
-      isStartingRef.current = false;
+    // Clean memory and prepare processors
+    cleanHeartBeatMemory();
+    cleanVitalSignsMemory();
+    prepareProcessorsOnly();
+    
+    // Reset data arrays
+    allHeartRateValuesRef.current = [];
+    allSpo2ValuesRef.current = [];
+    allSystolicValuesRef.current = [];
+    allDiastolicValuesRef.current = [];
+    allRespirationRateValuesRef.current = [];
+    allRespirationDepthValuesRef.current = [];
+    allGlucoseValuesRef.current = [];
+    
+    // Clear any existing timers
+    if (measurementTimerRef.current) {
+      clearInterval(measurementTimerRef.current);
+      measurementTimerRef.current = null;
+    }
+    
+    // First start the camera
+    setIsCameraOn(true);
+    
+    // Then after a brief delay, start processing and set monitoring state
+    setTimeout(() => {
+      startProcessing();
+      
+      // Wait for processing to initialize
+      setTimeout(() => {
+        setIsMonitoring(true);
+        setElapsedTime(0);
+        setMeasurementComplete(false);
+        
+        measurementTimerRef.current = window.setInterval(() => {
+          setElapsedTime(prev => {
+            if (prev >= 40) {
+              stopMonitoringOnly();
+              return 40;
+            }
+            return prev + 1;
+          });
+        }, 1000);
+        
+        isStartingRef.current = false;
+        
+        console.log("Measurement started successfully");
+        toast.success("Medición iniciada. Mantenga su dedo sobre la cámara.", {
+          duration: 3000,
+        });
+      }, 300);
+    }, 300);
+  }, [cleanHeartBeatMemory, cleanVitalSignsMemory, isMonitoring, permissionsGranted, prepareProcessorsOnly, startProcessing]);
+
+  // Stop monitoring with debounce protection
+  const stopMonitoringOnly = useCallback(() => {
+    const currentTime = Date.now();
+    
+    // Debounce to prevent rapid start/stop cycles
+    if (currentTime - lastMonitoringActionTimeRef.current < 1000) {
+      console.log("Action debounced - too soon after last action");
+      return;
+    }
+    lastMonitoringActionTimeRef.current = currentTime;
+    
+    if (isStoppingRef.current) {
+      console.log("Already stopping measurement, ignoring duplicate call");
       return;
     }
     
-    prepareProcessorsOnly();
-    
-    // First start the camera and processors
-    setIsCameraOn(true);
-    startProcessing();
-    
-    // Then set monitoring state after a brief delay to avoid race conditions
-    setTimeout(() => {
-      setIsMonitoring(true);
-      setElapsedTime(0);
-      setMeasurementComplete(false);
-      
-      allHeartRateValuesRef.current = [];
-      allSpo2ValuesRef.current = [];
-      allSystolicValuesRef.current = [];
-      allDiastolicValuesRef.current = [];
-      allRespirationRateValuesRef.current = [];
-      allRespirationDepthValuesRef.current = [];
-      allGlucoseValuesRef.current = [];
-      
-      if (measurementTimerRef.current) {
-        clearInterval(measurementTimerRef.current);
-        measurementTimerRef.current = null;
-      }
-      
-      measurementTimerRef.current = window.setInterval(() => {
-        setElapsedTime(prev => {
-          if (prev >= 40) {
-            stopMonitoringOnly();
-            return 40;
-          }
-          return prev + 1;
-        });
-      }, 1000);
-      
-      isStartingRef.current = false;
-    }, 200);
-  };
-
-  const prepareProcessorsOnly = () => {
-    console.log("Preparando SOLO procesadores (displays intactos)");
-    
-    setElapsedTime(0);
-    
-    resetHeartBeat();
-    resetVitalSigns();
-    VitalSignsRisk.resetHistory();
-  };
-
-  const stopMonitoringOnly = () => {
     console.log("Stopping monitoring");
+    isStoppingRef.current = true;
     
-    // First set state variables
+    // First set monitoring state to false
     setIsMonitoring(false);
     
-    // Then stop processing with slight delay to avoid race conditions
+    // Then, after a brief delay, stop everything else
     setTimeout(() => {
       setIsCameraOn(false);
       stopProcessing();
       setMeasurementComplete(true);
       
+      // Evaluate risks
       try {
         if (heartRate > 0) {
           VitalSignsRisk.getBPMRisk(heartRate, true);
         }
       } catch (err) {
-        console.error("Error al evaluar riesgo BPM:", err);
+        console.error("Error evaluating BPM risk:", err);
       }
       
       try {
@@ -298,7 +362,7 @@ const Index = () => {
           VitalSignsRisk.getBPRisk(vitalSigns.pressure, true);
         }
       } catch (err) {
-        console.error("Error al evaluar riesgo BP:", err);
+        console.error("Error evaluating BP risk:", err);
       }
       
       try {
@@ -306,7 +370,7 @@ const Index = () => {
           VitalSignsRisk.getSPO2Risk(vitalSigns.spo2, true);
         }
       } catch (err) {
-        console.error("Error al evaluar riesgo SPO2:", err);
+        console.error("Error evaluating SPO2 risk:", err);
       }
       
       calculateFinalValues();
@@ -315,21 +379,44 @@ const Index = () => {
         clearInterval(measurementTimerRef.current);
         measurementTimerRef.current = null;
       }
-    }, 100);
-  };
+      
+      isStoppingRef.current = false;
+      
+      toast.info("Medición completada.", {
+        duration: 3000,
+      });
+    }, 300);
+  }, [calculateFinalValues, heartRate, stopProcessing, vitalSigns.pressure, vitalSigns.spo2]);
 
-  const handleReset = () => {
-    console.log("RESET COMPLETO solicitado");
+  // Complete reset of everything
+  const handleReset = useCallback(() => {
+    console.log("COMPLETE RESET requested");
     
-    setIsMonitoring(false);
-    setIsCameraOn(false);
-    stopProcessing();
+    // Prevent resets during state transitions
+    if (isStartingRef.current || isStoppingRef.current) {
+      console.log("Cannot reset during startup/shutdown");
+      return;
+    }
     
+    const currentTime = Date.now();
+    if (currentTime - lastMonitoringActionTimeRef.current < 500) {
+      console.log("Reset debounced - too soon after last action");
+      return;
+    }
+    lastMonitoringActionTimeRef.current = currentTime;
+    
+    // Clear any existing timers
     if (measurementTimerRef.current) {
       clearInterval(measurementTimerRef.current);
       measurementTimerRef.current = null;
     }
     
+    // Stop all monitoring and processing
+    setIsMonitoring(false);
+    setIsCameraOn(false);
+    stopProcessing();
+    
+    // Reset all state
     setHeartRate(0);
     setVitalSigns({ 
       spo2: 0, 
@@ -345,12 +432,14 @@ const Index = () => {
     setMeasurementComplete(false);
     setFinalValues(null);
     
-    resetHeartBeat();
-    resetVitalSigns();
+    // Reset all processors
+    cleanHeartBeatMemory();
+    cleanVitalSignsMemory();
     VitalSignsRisk.resetHistory();
     
     hasValidValuesRef.current = false;
     
+    // Clear all data arrays
     allHeartRateValuesRef.current = [];
     allSpo2ValuesRef.current = [];
     allSystolicValuesRef.current = [];
@@ -358,9 +447,14 @@ const Index = () => {
     allRespirationRateValuesRef.current = [];
     allRespirationDepthValuesRef.current = [];
     allGlucoseValuesRef.current = [];
-  };
+    
+    toast.info("Reiniciado completo", {
+      duration: 2000,
+    });
+  }, [cleanHeartBeatMemory, cleanVitalSignsMemory, stopProcessing]);
 
-  const handleStreamReady = (stream: MediaStream) => {
+  // Process frames from the camera
+  const handleStreamReady = useCallback((stream: MediaStream) => {
     if (!isMonitoring || !isCameraOn) {
       console.log("Stream ready but not monitoring, ignoring");
       return;
@@ -373,13 +467,13 @@ const Index = () => {
     if (isMonitoring && videoTrack.getCapabilities()?.torch) {
       videoTrack.applyConstraints({
         advanced: [{ torch: true }]
-      }).catch(err => console.error("Error activando linterna:", err));
+      }).catch(err => console.error("Error activating flash:", err));
     }
     
     const tempCanvas = document.createElement('canvas');
     const tempCtx = tempCanvas.getContext('2d');
     if (!tempCtx) {
-      console.error("No se pudo obtener el contexto 2D");
+      console.error("Could not get 2D context");
       return;
     }
     
@@ -398,9 +492,14 @@ const Index = () => {
           requestAnimationFrame(processImage);
         }
       } catch (error) {
-        console.error("Error capturando frame:", error);
+        console.error("Error capturing frame:", error);
         if (isMonitoring && isCameraOn) {
-          requestAnimationFrame(processImage);
+          // Use setTimeout to avoid requesting too many frames on error
+          setTimeout(() => {
+            if (isMonitoring && isCameraOn) {
+              requestAnimationFrame(processImage);
+            }
+          }, 100);
         }
       }
     };
@@ -411,32 +510,34 @@ const Index = () => {
       if (videoTrack.getCapabilities()?.torch) {
         videoTrack.applyConstraints({
           advanced: [{ torch: false }]
-        }).catch(err => console.error("Error desactivando linterna:", err));
+        }).catch(err => console.error("Error deactivating flash:", err));
       }
     };
-  };
+  }, [isMonitoring, isCameraOn, processFrame]);
 
+  // Turn off the flashlight when not monitoring
   useEffect(() => {
     if (!isMonitoring && isCameraOn) {
       try {
-        const tracks = navigator.mediaDevices
+        navigator.mediaDevices
           .getUserMedia({ video: true })
           .then(stream => {
             const videoTrack = stream.getVideoTracks()[0];
             if (videoTrack && videoTrack.getCapabilities()?.torch) {
               videoTrack.applyConstraints({
                 advanced: [{ torch: false }]
-              }).catch(err => console.error("Error desactivando linterna:", err));
+              }).catch(err => console.error("Error deactivating flash:", err));
             }
             stream.getTracks().forEach(track => track.stop());
           })
-          .catch(err => console.error("Error al intentar apagar la linterna:", err));
+          .catch(err => console.error("Error trying to turn off flash:", err));
       } catch (err) {
-        console.error("Error al acceder a la cámara para apagar la linterna:", err);
+        console.error("Error accessing camera to turn off flash:", err);
       }
     }
   }, [isMonitoring, isCameraOn]);
 
+  // Attempts to enter immersive mode for better UX
   useEffect(() => {
     const enterImmersiveMode = async () => {
       try {
@@ -491,10 +592,17 @@ const Index = () => {
 
     enterImmersiveMode();
     
-    const immersiveTimeout = setTimeout(enterImmersiveMode, 1000);
+    // Try again after a delay in case the first attempt fails
+    const immersiveTimeout = setTimeout(() => {
+      if (!document.fullscreenElement) {
+        enterImmersiveMode();
+      }
+    }, 1000);
 
     const handleInteraction = () => {
-      enterImmersiveMode();
+      if (!document.fullscreenElement) {
+        enterImmersiveMode();
+      }
     };
 
     document.addEventListener('touchstart', handleInteraction, { passive: true });
@@ -507,9 +615,12 @@ const Index = () => {
     };
   }, []);
 
+  // Process PPG signal to calculate vital signs
   useEffect(() => {
-    if (lastSignal && lastSignal.fingerDetected && isMonitoring) {
-      try {
+    if (!lastSignal || !isMonitoring) return;
+    
+    try {
+      if (lastSignal.fingerDetected && isMonitoring) {
         const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
         
         if (!measurementComplete) {
@@ -547,7 +658,7 @@ const Index = () => {
             }));
             
             if (vitals.hasRespirationData && vitals.respiration) {
-              console.log("Procesando datos de respiración:", vitals.respiration);
+              console.log("Processing respiration data:", vitals.respiration);
               setVitalSigns(current => ({
                 ...current,
                 respiration: vitals.respiration,
@@ -583,19 +694,21 @@ const Index = () => {
         }
         
         setSignalQuality(lastSignal.quality);
-      } catch (error) {
-        console.error("Error procesando señal:", error);
+      } else if (!lastSignal.fingerDetected && isMonitoring) {
+        // Only update glucose to show it's not available when finger is removed
+        if (!measurementComplete) {
+          setVitalSigns(current => ({
+            ...current,
+            glucose: 0
+          }));
+        }
       }
-    } else if (!lastSignal?.fingerDetected && isMonitoring) {
-      if (!measurementComplete) {
-        setVitalSigns(current => ({
-          ...current,
-          glucose: 0
-        }));
-      }
+    } catch (error) {
+      console.error("Error processing signal:", error);
     }
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns, measurementComplete]);
 
+  // Clean up resources when component unmounts
   useEffect(() => {
     return () => {
       if (measurementTimerRef.current) {
@@ -715,7 +828,7 @@ const Index = () => {
           <button 
             onClick={startMonitoring}
             className="w-full h-full text-xl font-bold text-white transition-colors duration-200"
-            disabled={!permissionsGranted}
+            disabled={!permissionsGranted || isStartingRef.current || isStoppingRef.current}
             style={{ 
               backgroundImage: !permissionsGranted 
                 ? 'linear-gradient(135deg, #64748b, #475569, #334155)'
@@ -723,7 +836,7 @@ const Index = () => {
                   ? 'linear-gradient(135deg, #f87171, #dc2626, #b91c1c)' 
                   : 'linear-gradient(135deg, #3b82f6, #2563eb, #1d4ed8)',
               textShadow: '0px 1px 3px rgba(0, 0, 0, 0.3)',
-              opacity: !permissionsGranted ? 0.7 : 1
+              opacity: (!permissionsGranted || isStartingRef.current || isStoppingRef.current) ? 0.7 : 1
             }}
           >
             {!permissionsGranted ? 'PERMISOS REQUERIDOS' : (isMonitoring ? 'DETENER' : 'INICIAR')}
@@ -731,9 +844,11 @@ const Index = () => {
           <button 
             onClick={handleReset}
             className="w-full h-full text-xl font-bold text-white transition-colors duration-200"
+            disabled={isStartingRef.current || isStoppingRef.current}
             style={{ 
               backgroundImage: 'linear-gradient(135deg, #64748b, #475569, #334155)',
-              textShadow: '0px 1px 3px rgba(0, 0, 0, 0.3)'
+              textShadow: '0px 1px 3px rgba(0, 0, 0, 0.3)',
+              opacity: (isStartingRef.current || isStoppingRef.current) ? 0.7 : 1
             }}
           >
             RESET

@@ -8,10 +8,12 @@ export const useHeartBeatProcessor = () => {
   const [confidence, setConfidence] = useState(0);
   const [isPeak, setIsPeak] = useState(false);
   const processorRef = useRef<HeartBeatProcessor | null>(null);
+  const lastProcessTimeRef = useRef<number>(0);
+  const THROTTLE_INTERVAL = 50; // 50ms throttle
   
   const getProcessor = useCallback(() => {
     if (!processorRef.current) {
-      console.log('useHeartBeatProcessor: Creando nueva instancia de HeartBeatProcessor');
+      console.log('useHeartBeatProcessor: Creating new HeartBeatProcessor instance');
       processorRef.current = new HeartBeatProcessor();
       // Make it globally accessible for debugging
       window.heartBeatProcessor = processorRef.current;
@@ -21,11 +23,38 @@ export const useHeartBeatProcessor = () => {
   
   const processSignal = useCallback((value: number) => {
     try {
+      // Apply throttling to prevent excessive calculations
+      const currentTime = Date.now();
+      if (currentTime - lastProcessTimeRef.current < THROTTLE_INTERVAL) {
+        return {
+          bpm,
+          confidence,
+          isPeak,
+          rrData: { intervals: [], lastPeakTime: null },
+          amplitude: undefined
+        };
+      }
+      lastProcessTimeRef.current = currentTime;
+      
+      // Validate input
+      if (isNaN(value) || !isFinite(value)) {
+        console.error('useHeartBeatProcessor: Invalid input value:', value);
+        return {
+          bpm: 0,
+          confidence: 0,
+          isPeak: false,
+          rrData: { intervals: [], lastPeakTime: null },
+          amplitude: undefined
+        };
+      }
+      
       const processor = getProcessor();
       const result = processor.processSignal(value);
       
       // Update state with the latest results
-      setBpm(result.bpm);
+      if (result.bpm > 0) {
+        setBpm(result.bpm);
+      }
       setConfidence(result.confidence);
       setIsPeak(result.isPeak);
       
@@ -57,15 +86,19 @@ export const useHeartBeatProcessor = () => {
         amplitude: undefined
       };
     }
-  }, [getProcessor]);
+  }, [bpm, confidence, getProcessor, isPeak]);
   
   const reset = useCallback(() => {
+    console.log('useHeartBeatProcessor: Resetting processor');
     if (processorRef.current) {
       processorRef.current.reset();
+    } else {
+      processorRef.current = new HeartBeatProcessor();
     }
     setBpm(0);
     setConfidence(0);
     setIsPeak(false);
+    lastProcessTimeRef.current = 0;
   }, []);
   
   const getFinalBPM = useCallback(() => {
@@ -80,6 +113,7 @@ export const useHeartBeatProcessor = () => {
     setBpm(0);
     setConfidence(0);
     setIsPeak(false);
+    lastProcessTimeRef.current = 0;
     
     // Reset and nullify processor
     if (processorRef.current) {
@@ -98,15 +132,12 @@ export const useHeartBeatProcessor = () => {
     processorRef.current = null;
     
     // Force additional garbage collection through array clearing
-    const clearArrays = () => {
+    setTimeout(() => {
       if (processorRef.current) {
         // Clear any internal arrays/buffers the processor might have
         processorRef.current.reset();
       }
-    };
-    
-    // Execute cleanup with small delay to ensure UI updates first
-    setTimeout(clearArrays, 100);
+    }, 100);
   }, []);
   
   return {
