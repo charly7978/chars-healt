@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { PPGSignalProcessor } from '../modules/SignalProcessor';
 import { ProcessedSignal, ProcessingError } from '../types/signal';
@@ -105,6 +104,46 @@ export const useSignalProcessor = () => {
         console.log("useSignalProcessor: Garbage collection solicitada");
       } catch (e) {
         console.log("useSignalProcessor: Garbage collection no disponible");
+      }
+    }
+  }, []);
+
+  // Mejora relevante para la optimización del renderizado
+  useEffect(() => {
+    if (!rawSignal || rawSignal.length === 0) {
+      setProcessedSignal(null);
+      setSignalQuality('poor');
+      return;
+    }
+    
+    // Crear una copia para evitar modificaciones inesperadas
+    const signalToProcess = [...rawSignal];
+    
+    // Técnica de procesamiento optimizada para flujo en tiempo real
+    // 1. Eliminación de valores extremos (outliers)
+    const filteredOutliers = removeOutliers(signalToProcess);
+    
+    // 2. Filtro de paso banda médico (0.5Hz-8Hz para componentes cardíacos)
+    const filteredSignal = applyBandpassFilter(filteredOutliers);
+    
+    // 3. Normalización para estabilizar la visualización
+    const normalizedSignal = normalizeSignal(filteredSignal);
+    
+    // 4. Evaluación de calidad de la señal
+    const quality = evaluateSignalQuality(normalizedSignal);
+    
+    // Actualizar estado con procesamiento optimizado
+    setProcessedSignal(normalizedSignal);
+    setSignalQuality(quality);
+    
+    // Análisis de frames para optimizar rendimiento
+    if (performance && performance.now) {
+      const currentTime = performance.now();
+      if (lastFrameTimeRef.current) {
+        const frameTime = currentTime - lastFrameTimeRef.current;
+        if (frameTime > 50) {
+          // Rest of the function remains unchanged
+        }
       }
     }
   }, []);
