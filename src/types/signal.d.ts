@@ -61,8 +61,8 @@ export interface ArrhythmiaResult {
   severity: number;  // 0-10 scale
   confidence: number; // 0-1 scale
   type: ArrhythmiaType;
-  rmssd?: number;
-  rrVariation?: number;
+  rmssd?: number;      // Add rmssd property
+  rrVariation?: number; // Add rrVariation property
   timestamp: number;
 }
 

@@ -34,17 +34,14 @@ export const useVitalSignsProcessor = () => {
   }, []);
 
   const processSignal = useCallback((ppgValue: number, rrData?: any) => {
-    // Ensure proper console logging of incoming data
     console.log('useVitalSignsProcessor: Procesando señal con datos:', {
       ppgValue,
       rrIntervals: rrData?.intervals?.length || 0,
       amplitudes: rrData?.amplitudes?.length || 0
     });
     
-    // Process vital signs with PPG signal
     const vitalSignsResult = processor.processSignal(ppgValue, rrData);
     
-    // Process glucose data
     const glucoseResult = glucoseProcessor.processSignal(ppgValue);
     
     const glucoseData = {
@@ -53,17 +50,17 @@ export const useVitalSignsProcessor = () => {
       confidence: glucoseResult.confidence || 0
     };
     
-    // Process arrhythmia detection with RR intervals and amplitudes
     let arrhythmiaResult = {
       detected: false,
       severity: 0,
       confidence: 0,
       type: 'NONE',
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      rmssd: 0,
+      rrVariation: 0
     };
     
     if (rrData && rrData.intervals && rrData.intervals.length > 0) {
-      // Process RR intervals for arrhythmia detection
       console.log('useVitalSignsProcessor: Enviando datos a detector de arritmias:', {
         intervals: rrData.intervals.length,
         amplitudes: (rrData.amplitudes || []).length
@@ -85,17 +82,14 @@ export const useVitalSignsProcessor = () => {
       }
     }
     
-    // Get arrhythmia status text
     const arrhythmiaStatus = arrhythmiaDetector.getStatusText();
     
-    // Combine all results
     const combinedResult: VitalSignsResult = {
       ...vitalSignsResult,
       glucose: glucoseData,
       arrhythmiaStatus: arrhythmiaStatus
     };
     
-    // Add arrhythmia data if available
     const lastArrhythmia = arrhythmiaDetector.getLastArrhythmia();
     if (lastArrhythmia && lastArrhythmia.detected) {
       combinedResult.lastArrhythmiaData = {
@@ -107,7 +101,6 @@ export const useVitalSignsProcessor = () => {
       console.log('useVitalSignsProcessor: Datos de arritmia agregados:', combinedResult.lastArrhythmiaData);
     }
     
-    // Log if arrhythmia is detected
     if (combinedResult.arrhythmiaStatus.includes("ARRITMIA DETECTADA")) {
       console.log('useVitalSignsProcessor: ¡ARRITMIA DETECTADA!', {
         status: combinedResult.arrhythmiaStatus,
