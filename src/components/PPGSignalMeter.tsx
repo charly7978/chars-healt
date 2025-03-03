@@ -45,6 +45,15 @@ const PPGSignalMeter = ({
   const FRAME_TIME = 1000 / TARGET_FPS;
   const BUFFER_SIZE = 200;
 
+  const isArrhythmiaDetected = arrhythmiaStatus?.includes('ARRITMIA DETECTADA') || false;
+
+  useEffect(() => {
+    if (arrhythmiaStatus?.includes('ARRITMIA DETECTADA')) {
+      console.log('PPGSignalMeter: Arritmia detectada:', arrhythmiaStatus);
+      console.log('PPGSignalMeter: Datos detallados:', rawArrhythmiaData);
+    }
+  }, [arrhythmiaStatus, rawArrhythmiaData]);
+
   useEffect(() => {
     if (!dataBufferRef.current) {
       dataBufferRef.current = new CircularBuffer(BUFFER_SIZE);
@@ -341,6 +350,26 @@ const PPGSignalMeter = ({
       }
     };
   }, [renderSignal]);
+
+  useEffect(() => {
+    if (value !== 0) {
+      const now = Date.now();
+      
+      const isCurrentPointArrhythmia = isArrhythmiaDetected && 
+                                     rawArrhythmiaData && 
+                                     Math.abs(now - rawArrhythmiaData.timestamp) < 500;
+      
+      if (isCurrentPointArrhythmia) {
+        console.log('Marcando punto como arritmia en tiempo:', now);
+      }
+      
+      dataBufferRef.current.push({
+        time: now,
+        value: value,
+        isArrhythmia: isCurrentPointArrhythmia
+      });
+    }
+  }, [value, isArrhythmiaDetected, rawArrhythmiaData]);
 
   return (
     <>

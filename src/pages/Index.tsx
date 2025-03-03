@@ -98,6 +98,13 @@ const Index = () => {
   const { processSignal: processHeartBeat, reset: resetHeartBeat } = useHeartBeatProcessor();
   const { vitalSignsData, processSignal, reset, getCurrentRespiratoryData, calibrateGlucose } = useVitalSignsProcessor();
 
+  const [arrhythmiaStatus, setArrhythmiaStatus] = useState<string>('SIN ARRITMIAS|0');
+  const [rawArrhythmiaData, setRawArrhythmiaData] = useState<{
+    timestamp: number;
+    rmssd: number;
+    rrVariation: number;
+  } | null>(null);
+
   const handlePermissionsGranted = () => {
     console.log("Permisos concedidos correctamente");
     setPermissionsGranted(true);
@@ -642,9 +649,20 @@ const Index = () => {
               setArrhythmiaCount(count || "0");
             }
           }
+          
+          if (vitals && vitals.arrhythmiaStatus) {
+            setArrhythmiaStatus(vitals.arrhythmiaStatus);
+            
+            console.log("Estado de arritmia actualizado:", vitals.arrhythmiaStatus);
+            
+            if (vitals.lastArrhythmiaData) {
+              setRawArrhythmiaData(vitals.lastArrhythmiaData);
+              console.log("Datos detallados de arritmia:", vitals.lastArrhythmiaData);
+            }
+          }
+          
+          setSignalQuality(lastSignal.quality);
         }
-        
-        setSignalQuality(lastSignal.quality);
       } catch (error) {
         console.error("Error procesando señal:", error);
       }
@@ -705,8 +723,8 @@ const Index = () => {
           isFingerDetected={isMonitoring ? lastSignal?.fingerDetected || false : false}
           onStartMeasurement={startMonitoring}
           onReset={handleReset}
-          arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
-          rawArrhythmiaData={lastArrhythmiaData}
+          arrhythmiaStatus={arrhythmiaStatus}
+          rawArrhythmiaData={rawArrhythmiaData}
         />
       </div>
       

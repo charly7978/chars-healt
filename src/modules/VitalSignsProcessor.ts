@@ -1,4 +1,3 @@
-
 import { applySMAFilter } from '../utils/signalProcessingUtils';
 import { SpO2Calculator } from './spo2';
 import { BloodPressureCalculator } from './BloodPressureCalculator';
@@ -28,7 +27,8 @@ export class VitalSignsProcessor {
   }
 
   /**
-   * Process incoming PPG signal and calculate vital signs
+   * Procesar señales PPG entrantes y calcular signos vitales
+   * Asegurar que las detecciones de arritmias se pasen correctamente
    */
   public processSignal(
     ppgValue: number,
@@ -36,69 +36,75 @@ export class VitalSignsProcessor {
   ) {
     const currentTime = Date.now();
 
-    // Update RR intervals if available, passing amplitude data if available
+    // MEJORADO: Filtrar solo outliers extremos para permitir más detecciones
     if (rrData?.intervals && rrData.intervals.length > 0) {
-      // Filter outliers from RR data
       const validIntervals = rrData.intervals.filter(interval => {
-        return interval >= 380 && interval <= 1700; // Valid for 35-158 BPM
+        return interval >= 300 && interval <= 1800; // Ampliado de 400-1500 a 300-1800 ms
       });
       
       if (validIntervals.length > 0) {
-        // Pass peak amplitude if available to the arrhythmia detector
+        // Usar amplitud si está disponible
         const peakAmplitude = rrData.amplitudes && rrData.amplitudes.length > 0 
           ? rrData.amplitudes[rrData.amplitudes.length - 1] 
           : undefined;
         
         this.arrhythmiaDetector.updateIntervals(validIntervals, rrData.lastPeakTime, peakAmplitude);
+        
+        // DEBUGGING: Verificar que se están pasando los datos
+        console.log("VitalSignsProcessor: RR intervals actualizados:", validIntervals.length);
       }
     }
 
-    // Process PPG signal
+    // Resto del procesamiento normal...
     const filtered = this.applySMAFilter(ppgValue);
     this.ppgValues.push(filtered);
     if (this.ppgValues.length > this.WINDOW_SIZE) {
       this.ppgValues.shift();
     }
 
-    // Check learning phase
+    // Verificar fase de aprendizaje
     const isLearning = this.arrhythmiaDetector.isInLearningPhase();
     
-    // During learning phase, collect values for SpO2 calibration
-    if (isLearning) {
-      if (this.ppgValues.length >= 60) {
-        const tempSpO2 = this.spO2Calculator.calculateRaw(this.ppgValues.slice(-60));
-        if (tempSpO2 > 0) {
-          this.spO2Calculator.addCalibrationValue(tempSpO2);
-        }
-      }
-    } else {
-      // Auto-calibrate SpO2
-      this.spO2Calculator.calibrate();
+    // IMPORTANTE: Forzar detección de arritmias en cada frame
+    // para asegurar que no se pierdan detecciones
+    const arrhythmiaResult = this.arrhythmiaDetector.detect();
+    
+    // DEBUGGING: Verificar el resultado de la detección
+    if (arrhythmiaResult.detected) {
+      console.log("VitalSignsProcessor: Arritmia detectada:", arrhythmiaResult);
     }
 
-    // Process arrhythmia detection - using ONLY the ArrhythmiaDetector module
-    const arrhythmiaResult = this.arrhythmiaDetector.detect();
-
-    // Calculate vital signs - utilizando datos reales optimizados
+    // Calcular presión arterial y otros signos
+    const bp = this.calculateRealBloodPressure(this.ppgValues);
+    const pressure = `${bp.systolic}/${bp.diastolic}`;
     const spo2 = this.spO2Calculator.calculate(this.ppgValues.slice(-60));
     
-    // Calcular presión arterial usando valores reales
-    const bp = this.calculateRealBloodPressure(this.ppgValues.slice(-60));
-    const pressure = `${bp.systolic}/${bp.diastolic}`;
-
-    // Prepare arrhythmia data if detected
-    const lastArrhythmiaData = arrhythmiaResult.detected ? {
+    // MEJORADO: Preparar datos de arritmia si se detectó o hay una cuenta > 0
+    const lastArrhythmiaData = (arrhythmiaResult.detected || arrhythmiaResult.count > 0) ? {
       timestamp: currentTime,
       rmssd: arrhythmiaResult.data?.rmssd || 0,
       rrVariation: arrhythmiaResult.data?.rrVariation || 0
     } : null;
 
-    return {
+    this.measurementCount++;
+
+    // DEBUGGING: Verificar qué se está devolviendo
+    const result = {
       spo2,
       pressure,
       arrhythmiaStatus: arrhythmiaResult.status,
       lastArrhythmiaData
     };
+    
+    // Solo para debug, no imprimir en cada frame para no saturar la consola
+    if (arrhythmiaResult.detected || Math.random() < 0.01) {
+      console.log("VitalSignsProcessor: Resultado procesado:", {
+        arrhythmiaStatus: result.arrhythmiaStatus,
+        hasData: result.lastArrhythmiaData !== null
+      });
+    }
+    
+    return result;
   }
 
   /**

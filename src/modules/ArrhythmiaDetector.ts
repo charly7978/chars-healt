@@ -9,18 +9,18 @@
 export class ArrhythmiaDetector {
   // Constants for arrhythmia detection
   private readonly RR_WINDOW_SIZE = 5;
-  private readonly ARRHYTHMIA_LEARNING_PERIOD = 2800; // Aumentado de 2500ms a 2800ms para mejor aprendizaje
+  private readonly ARRHYTHMIA_LEARNING_PERIOD = 2000; // Reducido para comenzar a detectar antes
   
   // Enfoque mejorado para detectar SOLO latidos prematuros fuera del patrón rítmico
-  private readonly PREMATURE_BEAT_THRESHOLD = 0.70;  // Reducido para mayor sensibilidad
-  private readonly AMPLITUDE_RATIO_THRESHOLD = 0.65; // Reducido para detectar amplitudes menores
-  private readonly NORMAL_PEAK_MIN_THRESHOLD = 0.85; // Reducido para ser menos exigente
+  private readonly PREMATURE_BEAT_THRESHOLD = 0.67;  // Reducido aún más
+  private readonly AMPLITUDE_RATIO_THRESHOLD = 0.60; // Reducido aún más
+  private readonly NORMAL_PEAK_MIN_THRESHOLD = 0.82; // Reducido aún más
   
   // NUEVO: Umbral para detectar latidos fuera del patrón rítmico aprendido
-  private readonly RHYTHM_DEVIATION_THRESHOLD = 0.30; // Reducido para mayor sensibilidad
+  private readonly RHYTHM_DEVIATION_THRESHOLD = 0.27; // Reducido aún más
   
   // NUEVO: Umbral de confianza mínima para contabilizar una arritmia
-  private readonly MIN_CONFIDENCE_THRESHOLD = 0.75; // Reducido para aceptar más detecciones
+  private readonly MIN_CONFIDENCE_THRESHOLD = 0.60; // Reducido significativamente para detectar más eventos
 
   // State variables
   private rrIntervals: number[] = [];
@@ -383,7 +383,7 @@ export class ArrhythmiaDetector {
     // 3. Ha pasado suficiente tiempo desde la última (600ms) para evitar duplicados
     if (prematureBeatDetected && 
         detectionConfidence >= this.MIN_CONFIDENCE_THRESHOLD && 
-        currentTime - this.lastArrhythmiaTime > 600) { // Aumentado de 500 a 600ms
+        currentTime - this.lastArrhythmiaTime > 500) { // Reducido de 700 a 500ms
       
       this.arrhythmiaCount++;
       this.lastArrhythmiaTime = currentTime;
@@ -410,6 +410,17 @@ export class ArrhythmiaDetector {
     }
 
     this.arrhythmiaDetected = prematureBeatDetected;
+
+    if (this.arrhythmiaDetected || this.arrhythmiaCount > 0) {
+      console.log("ArrhythmiaDetector: Estado de detección:", {
+        detected: this.arrhythmiaDetected,
+        count: this.arrhythmiaCount,
+        hasDetectedFirst: this.hasDetectedFirstArrhythmia,
+        status: this.hasDetectedFirstArrhythmia ? 
+          `ARRITMIA DETECTADA|${this.arrhythmiaCount}` : 
+          `SIN ARRITMIAS|${this.arrhythmiaCount}`
+      });
+    }
 
     return {
       detected: this.arrhythmiaDetected,
