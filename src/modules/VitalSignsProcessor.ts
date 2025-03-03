@@ -1,3 +1,4 @@
+
 import { applySMAFilter } from '../utils/signalProcessingUtils';
 import { SpO2Calculator } from './spo2';
 import { BloodPressureCalculator } from './BloodPressureCalculator';
@@ -19,12 +20,14 @@ export class VitalSignsProcessor {
   private lastSystolic: number = 120;
   private lastDiastolic: number = 80;
   private measurementCount: number = 0;
+  private signalQuality: number = 0;
   
   constructor() {
     this.spO2Calculator = new SpO2Calculator();
     this.bpCalculator = new BloodPressureCalculator();
     this.arrhythmiaDetector = new ArrhythmiaDetector();
     this.glucoseProcessor = new GlucoseProcessor();
+    console.log("VitalSignsProcessor initialized with GlucoseProcessor");
   }
 
   /**
@@ -35,6 +38,7 @@ export class VitalSignsProcessor {
     rrData?: { intervals: number[]; lastPeakTime: number | null; amplitudes?: number[] }
   ) {
     const currentTime = Date.now();
+    this.signalQuality = Math.min(100, Math.max(0, Math.abs(ppgValue) * 20));
 
     if (rrData?.intervals && rrData.intervals.length > 0) {
       const validIntervals = rrData.intervals.filter(interval => {
@@ -76,10 +80,17 @@ export class VitalSignsProcessor {
     const bp = this.calculateRealBloodPressure(this.ppgValues.slice(-60));
     const pressure = `${bp.systolic}/${bp.diastolic}`;
 
+    // Calculate glucose and log results
     const glucose = this.glucoseProcessor.calculateGlucose(
       this.ppgValues, 
-      Math.min(100, Math.max(0, Math.abs(ppgValue) * 20)) // Estimate signal quality
+      this.signalQuality
     );
+    
+    if (glucose) {
+      console.log(`VitalSignsProcessor: Glucose calculated - ${glucose.value} mg/dL (${glucose.trend})`);
+    } else {
+      console.log(`VitalSignsProcessor: No glucose value available yet`);
+    }
 
     const lastArrhythmiaData = arrhythmiaResult.detected ? {
       timestamp: currentTime,
@@ -164,6 +175,7 @@ export class VitalSignsProcessor {
   }
 
   public reset() {
+    console.log("VitalSignsProcessor: Resetting all processors");
     this.ppgValues = [];
     this.lastBPM = 0;
     this.spO2Calculator.reset();
@@ -174,6 +186,7 @@ export class VitalSignsProcessor {
     this.lastSystolic = 120;
     this.lastDiastolic = 80;
     this.measurementCount = 0;
+    this.signalQuality = 0;
   }
 
   private applySMAFilter(value: number): number {

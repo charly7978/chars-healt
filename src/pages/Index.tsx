@@ -550,6 +550,8 @@ const Index = () => {
           
           const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
           if (vitals) {
+            console.log("Raw vital signs data:", JSON.stringify(vitals));
+            
             if (vitals.spo2 > 0) {
               setVitalSigns(current => ({
                 ...current,
@@ -593,8 +595,12 @@ const Index = () => {
               }
             }
             
+            console.log("Glucose data from vitals:", vitals.glucose ? 
+              `${vitals.glucose.value} mg/dL (${vitals.glucose.trend})` : 
+              'No hay datos de glucosa');
+            
             if (vitals.glucose && vitals.glucose.value > 0) {
-              console.log("Procesando datos de glucosa:", vitals.glucose);
+              console.log("Actualizando UI con datos de glucosa:", vitals.glucose);
               setVitalSigns(current => ({
                 ...current,
                 glucose: vitals.glucose
@@ -610,9 +616,9 @@ const Index = () => {
               setArrhythmiaCount(count || "0");
             }
           }
-        }
         
-        setSignalQuality(lastSignal.quality);
+          setSignalQuality(lastSignal.quality);
+        }
       } catch (error) {
         console.error("Error procesando señal:", error);
       }
@@ -723,9 +729,9 @@ const Index = () => {
             />
             <VitalSign 
               label="GLUCOSA"
-              value={finalValues ? finalValues.glucose.value : vitalSigns.glucose.value || "--"}
+              value={finalValues ? finalValues.glucose.value : (vitalSigns.glucose ? vitalSigns.glucose.value : "--")}
               unit="mg/dL"
-              trend={finalValues ? finalValues.glucose.trend : vitalSigns.glucose.trend}
+              trend={finalValues ? finalValues.glucose.trend : (vitalSigns.glucose ? vitalSigns.glucose.trend : "unknown")}
               isFinalReading={measurementComplete}
             />
           </div>
