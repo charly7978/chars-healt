@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { HeartBeatProcessor } from '../modules/HeartBeatProcessor';
 import { HeartBeatResult } from '../types/signal';
 
@@ -7,6 +7,11 @@ export const useHeartBeatProcessor = () => {
   const [confidence, setConfidence] = useState(0);
   const [isPeak, setIsPeak] = useState(false);
   const processorRef = useRef<HeartBeatProcessor | null>(null);
+  const [isAndroid] = useState<boolean>(() => /android/i.test(navigator.userAgent));
+  
+  useEffect(() => {
+    console.log('useHeartBeatProcessor: Inicializado en plataforma:', isAndroid ? 'Android' : 'Otro');
+  }, [isAndroid]);
   
   const getProcessor = useCallback(() => {
     if (!processorRef.current) {
@@ -33,16 +38,59 @@ export const useHeartBeatProcessor = () => {
       const rrData = processor.getRRIntervals();
       const lastPeakTime = result.isPeak ? Date.now() : null;
       
-      // Ensure we have amplitudes for arrhythmia detection
-      const amplitudes = rrData.amplitudes || [];
+      // Enhanced amplitude handling - critical for arrhythmia detection
+      let amplitudes = rrData.amplitudes || [];
       
       // Add current peak amplitude if it's a peak
       if (result.isPeak && result.amplitude !== undefined) {
-        if (!rrData.amplitudes) {
-          rrData.amplitudes = [];
+        if (!amplitudes.length) {
+          amplitudes = [];
         }
-        rrData.amplitudes.push(result.amplitude);
+        amplitudes.push(result.amplitude);
+        
         console.log("HeartBeatProcessor: Peak detected with amplitude:", result.amplitude);
+      }
+      
+      // Ensure amplitudes array always exists, even if empty
+      rrData.amplitudes = amplitudes;
+      
+      // Special handling for Android: ensure consistently structured RR data
+      if (isAndroid && rrData.intervals.length > 0) {
+        // For Android: Create dummy amplitudes if we don't have any
+        if (!rrData.amplitudes || rrData.amplitudes.length === 0) {
+          rrData.amplitudes = Array(rrData.intervals.length).fill(100);
+        }
+        
+        // For Android: Ensure arrays are of same length
+        if (rrData.amplitudes.length !== rrData.intervals.length) {
+          // Normalize lengths by extending the shorter one
+          const targetLength = Math.max(rrData.intervals.length, rrData.amplitudes.length);
+          
+          if (rrData.amplitudes.length < targetLength) {
+            // Fill missing amplitudes with average or default value
+            const avgAmp = rrData.amplitudes.reduce((sum, val) => sum + val, 0) / 
+                          rrData.amplitudes.length || 100;
+            
+            while (rrData.amplitudes.length < targetLength) {
+              rrData.amplitudes.push(avgAmp);
+            }
+          }
+          
+          if (rrData.intervals.length < targetLength) {
+            // Fill missing intervals with average
+            const avgInt = rrData.intervals.reduce((sum, val) => sum + val, 0) / 
+                          rrData.intervals.length || 800;
+            
+            while (rrData.intervals.length < targetLength) {
+              rrData.intervals.push(avgInt);
+            }
+          }
+        }
+        
+        console.log(`useHeartBeatProcessor [ANDROID]: RR data preparado:`, {
+          intervalos: rrData.intervals.length,
+          amplitudes: rrData.amplitudes.length
+        });
       }
       
       console.log("useHeartBeatProcessor: Processed signal", { 
@@ -51,7 +99,8 @@ export const useHeartBeatProcessor = () => {
         isPeak: result.isPeak,
         intervals: rrData.intervals.length,
         amplitudes: amplitudes.length,
-        amplitude: result.amplitude
+        amplitude: result.amplitude,
+        plataforma: isAndroid ? 'Android' : 'Otro'
       });
       
       // Enhanced data structure with all necessary information
@@ -76,7 +125,7 @@ export const useHeartBeatProcessor = () => {
         amplitude: undefined
       };
     }
-  }, [getProcessor]);
+  }, [getProcessor, isAndroid]);
   
   const reset = useCallback(() => {
     if (processorRef.current) {
