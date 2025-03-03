@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -17,7 +16,8 @@ const Index = () => {
     pressure: "--/--",
     arrhythmiaStatus: "--",
     respiration: { rate: 0, depth: 0, regularity: 0 },
-    hasRespirationData: false
+    hasRespirationData: false,
+    glucose: null
   });
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState("--");
@@ -119,7 +119,8 @@ const Index = () => {
       pressure: "--/--",
       arrhythmiaStatus: "--",
       respiration: { rate: 0, depth: 0, regularity: 0 },
-      hasRespirationData: false
+      hasRespirationData: false,
+      glucose: null
     });
     setArrhythmiaCount("--");
     setSignalQuality(0);
@@ -179,12 +180,16 @@ const Index = () => {
       const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
       setHeartRate(heartBeatResult.bpm);
       
-      // Pass the heart beat result to the vital signs processor
       const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
       
       if (vitals) {
-        // Log respiration data to debug
-        console.log("Respiration data:", vitals.respiration, "hasData:", vitals.hasRespirationData);
+        console.log("Vital signs data:", {
+          spo2: vitals.spo2,
+          pressure: vitals.pressure,
+          arrhythmia: vitals.arrhythmiaStatus,
+          respiration: vitals.respiration,
+          glucose: vitals.glucose
+        });
         
         setVitalSigns(vitals);
         setArrhythmiaCount(vitals.arrhythmiaStatus.split('|')[1] || "--");
@@ -233,7 +238,7 @@ const Index = () => {
           </div>
 
           <div className="absolute bottom-[200px] left-0 right-0 px-4 z-30">
-            <div className="grid grid-cols-5 gap-2">
+            <div className="grid grid-cols-6 gap-2">
               <VitalSign 
                 label="FRECUENCIA CARDÍACA"
                 value={heartRate || "--"}
@@ -265,14 +270,23 @@ const Index = () => {
                 secondaryUnit="Prof."
                 isFinalReading={vitalSigns.hasRespirationData && elapsedTime >= 15}
               />
+              <VitalSign 
+                label="GLUCOSA"
+                value={vitalSigns.glucose ? vitalSigns.glucose.value : "--"}
+                unit="mg/dL"
+                trend={vitalSigns.glucose ? vitalSigns.glucose.trend : undefined}
+                isFinalReading={vitalSigns.glucose && vitalSigns.glucose.value > 0 && elapsedTime >= 15}
+              />
             </div>
           </div>
 
-          {/* Debugging Info */}
           {isMonitoring && (
             <div className="absolute bottom-[150px] left-0 right-0 text-center z-30 text-xs text-gray-400">
-              <span>Resp Data: {vitalSigns.hasRespirationData ? 'Disponible' : 'No disponible'} | 
-              Rate: {vitalSigns.respiration.rate} RPM | Depth: {vitalSigns.respiration.depth}</span>
+              <span>
+                Resp Data: {vitalSigns.hasRespirationData ? 'Disponible' : 'No disponible'} | 
+                Rate: {vitalSigns.respiration.rate} RPM | Depth: {vitalSigns.respiration.depth} | 
+                Glucose: {vitalSigns.glucose ? `${vitalSigns.glucose.value} mg/dL (${vitalSigns.glucose.trend || 'unknown'})` : 'No disponible'}
+              </span>
             </div>
           )}
 
