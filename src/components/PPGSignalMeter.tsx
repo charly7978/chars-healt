@@ -14,8 +14,6 @@ interface PPGSignalMeterProps {
     rmssd: number;
     rrVariation: number;
   } | null;
-  respiratoryRate?: number;
-  respiratoryPattern?: string;
 }
 
 const PPGSignalMeter = ({ 
@@ -25,9 +23,7 @@ const PPGSignalMeter = ({
   onStartMeasurement,
   onReset,
   arrhythmiaStatus,
-  rawArrhythmiaData,
-  respiratoryRate = 0,
-  respiratoryPattern = 'unknown'
+  rawArrhythmiaData
 }: PPGSignalMeterProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dataBufferRef = useRef<CircularBuffer | null>(null);
@@ -48,10 +44,6 @@ const PPGSignalMeter = ({
   const TARGET_FPS = 60;
   const FRAME_TIME = 1000 / TARGET_FPS;
   const BUFFER_SIZE = 200;
-
-  const respirationBufferRef = useRef<number[]>([]);
-  const respirationPhaseRef = useRef<number>(0);
-  const respirationCycleTimeRef = useRef<number>(0);
 
   useEffect(() => {
     if (!dataBufferRef.current) {
@@ -136,18 +128,6 @@ const PPGSignalMeter = ({
     ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT * 0.6);
     ctx.stroke();
   }, []);
-
-  const getRespirationColor = (pattern: string): string => {
-    switch (pattern) {
-      case 'normal': return 'rgba(0, 200, 100, 0.5)';
-      case 'deep': return 'rgba(0, 150, 255, 0.5)';
-      case 'shallow': return 'rgba(255, 200, 0, 0.5)';
-      case 'irregular': return 'rgba(255, 100, 100, 0.5)';
-      default: return 'rgba(150, 150, 150, 0.3)';
-    }
-  };
-
-  const isArrhythmiaDetected = arrhythmiaStatus?.includes('ARRITMIA DETECTADA') || false;
 
   const renderSignal = useCallback(() => {
     if (!canvasRef.current || !dataBufferRef.current) {
@@ -349,26 +329,9 @@ const PPGSignalMeter = ({
       }
     }
 
-    if (respiratoryRate > 0) {
-      const respirationCycleTime = (60 / respiratoryRate) * 1000;
-      respirationCycleTimeRef.current = respirationCycleTime;
-      
-      const timeDelta = now - lastRenderTimeRef.current;
-      const phaseIncrement = timeDelta / respirationCycleTime;
-      respirationPhaseRef.current = (respirationPhaseRef.current + phaseIncrement) % 1;
-      
-      const respirationValue = Math.sin(respirationPhaseRef.current * Math.PI * 2);
-      
-      respirationBufferRef.current.push(respirationValue);
-      
-      if (respirationBufferRef.current.length > 120) {
-        respirationBufferRef.current.shift();
-      }
-    }
-
     lastRenderTimeRef.current = currentTime;
     animationFrameRef.current = requestAnimationFrame(renderSignal);
-  }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus, drawGrid, smoothValue, respiratoryRate, respiratoryPattern]);
+  }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus, drawGrid, smoothValue]);
 
   useEffect(() => {
     renderSignal();
@@ -378,26 +341,6 @@ const PPGSignalMeter = ({
       }
     };
   }, [renderSignal]);
-
-  useEffect(() => {
-    if (value !== 0) {
-      const now = Date.now();
-      dataBufferRef.current.push({
-        time: now,
-        value: value,
-        isArrhythmia: isArrhythmiaDetected && 
-                      rawArrhythmiaData && 
-                      Math.abs(now - rawArrhythmiaData.timestamp) < 300
-      });
-    }
-  }, [value, isArrhythmiaDetected, rawArrhythmiaData]);
-
-  useEffect(() => {
-    if (!isFingerDetected) {
-      dataBufferRef.current.clear();
-      respirationBufferRef.current = [];
-    }
-  }, [isFingerDetected]);
 
   return (
     <>

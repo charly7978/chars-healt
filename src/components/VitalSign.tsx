@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { cn } from '../lib/utils';
+
+import React, { memo, useMemo, useState } from 'react';
 import { VitalSignsRisk } from '../utils/vitalSignsRisk';
 import VitalSignDetail from './VitalSignDetail';
 
@@ -14,257 +14,222 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
   const [showDetail, setShowDetail] = useState(false);
   const isArrhythmiaDisplay = label === "ARRITMIAS";
   const isBloodPressure = label === "PRESIÓN ARTERIAL";
-  const [expanded, setExpanded] = useState(false);
-  
-  // Verificar si el valor de presión arterial es no realista
+
+  // Helper function to check if blood pressure value is unrealistic
   const isBloodPressureUnrealistic = (bpString: string): boolean => {
-    if (!bpString.includes('/')) return false;
+    if (!isBloodPressure || bpString === "--/--" || bpString === "0/0") return false;
     
     const [systolic, diastolic] = bpString.split('/').map(Number);
     
-    // Consideramos no realista si:
-    // 1. La sistólica es menor que la diastólica
-    // 2. La sistólica es extremadamente alta o baja
-    // 3. La diastólica es extremadamente alta o baja
-    // 4. La diferencia entre sistólica y diastólica es muy pequeña
+    // Check for extreme values that indicate measurement problems
+    if (isNaN(systolic) || isNaN(diastolic)) return true;
     
-    return (
-      isNaN(systolic) || 
-      isNaN(diastolic) ||
-      systolic <= diastolic || 
-      systolic < 70 || 
-      systolic > 220 ||
-      diastolic < 40 ||
-      diastolic > 120 ||
-      (systolic - diastolic) < 20
-    );
+    // Ranges based on published medical guidelines
+    // American Heart Association and European Society of Hypertension
+    if (systolic > 300 || systolic < 60) return true;
+    if (diastolic > 200 || diastolic < 30) return true;
+    if (systolic <= diastolic) return true;
+    
+    return false;
   };
+
+  // Cache para optimizar procesamiento de valores repetidos
+  const displayValueCache = new Map<string, string | number>();
   
-  // Only apply after a valid reading
-  const isValidValue = value !== '--' && value !== '...' && value !== '--/--';
-  const isNumericValue = typeof value === 'number' || !isNaN(parseFloat(value as string));
-  
-  // Función para obtener información de riesgo basada en el tipo de signo vital
+  // Process blood pressure display for stable, realistic readings
+  const processedDisplayValue = useMemo(() => {
+    const cacheKey = `${label}-${value}`;
+    if (displayValueCache.has(cacheKey)) {
+      return displayValueCache.get(cacheKey);
+    }
+    
+    let result = value;
+    if (isBloodPressure && typeof value === 'string') {
+      // Always show placeholder values unchanged
+      if (value === "--/--" || value === "0/0") {
+        result = value;
+      } else if (isBloodPressureUnrealistic(value)) {
+        result = "--/--";
+      }
+    }
+    
+    displayValueCache.set(cacheKey, result);
+    return result;
+  }, [value, isBloodPressure, label]);
+
   const getRiskInfo = () => {
-    if (!isValidValue) {
-      return { color: 'gray-400', label: 'Sin datos' };
+    if (isArrhythmiaDisplay) {
+      return getArrhythmiaDisplay();
     }
-    
-    // Si es presión arterial (formato "120/80")
-    if (typeof value === 'string' && value.includes('/')) {
-      const isUnrealistic = isBloodPressureUnrealistic(value);
-      if (isUnrealistic) {
-        return { color: 'gray-400', label: 'Datos inconsistentes' };
+
+    // For heart rate, show real value without checking risk if no measurement
+    if (label === "FRECUENCIA CARDÍACA") {
+      if (value === "--" || value === 0) {
+        return { color: '#000000', label: '' };
+      }
+      if (typeof value === 'number') {
+        return VitalSignsRisk.getBPMRisk(value, isFinalReading);
+      }
+    }
+
+    // For SPO2, show real value without checking risk if no measurement
+    if (label === "SPO2") {
+      if (value === "--" || value === 0) {
+        return { color: '#000000', label: '' };
+      }
+      if (typeof value === 'number') {
+        return VitalSignsRisk.getSPO2Risk(value, isFinalReading);
+      }
+    }
+
+    // For blood pressure, show real value without checking risk if no measurement
+    if (label === "PRESIÓN ARTERIAL") {
+      if (value === "--/--" || value === "0/0") {
+        return { color: '#000000', label: '' };
       }
       
-      return VitalSignsRisk.getBPRisk(value, isFinalReading);
+      // Don't try to evaluate risk if measurement is unstable/unrealistic
+      if (typeof value === 'string' && !isBloodPressureUnrealistic(value)) {
+        return VitalSignsRisk.getBPRisk(value, isFinalReading);
+      }
+      
+      return { color: '#000000', label: '' };
     }
-    
-    // Si es oxígeno en sangre (SpO2)
-    if (label.toLowerCase().includes('oxígeno') && isNumericValue) {
-      const numValue = typeof value === 'number' ? value : parseFloat(value as string);
-      return VitalSignsRisk.getSPO2Risk(numValue, isFinalReading);
-    }
-    
-    // Si es frecuencia cardíaca (BPM)
-    if (label.toLowerCase().includes('pulso') && isNumericValue) {
-      const numValue = typeof value === 'number' ? value : parseFloat(value as string);
-      return VitalSignsRisk.getBPMRisk(numValue, isFinalReading);
-    }
-    
-    // NUEVO: Si es respiración (RPM)
-    if (label.toLowerCase().includes('respiración') && isNumericValue) {
-      const numValue = typeof value === 'number' ? value : parseFloat(value as string);
-      return VitalSignsRisk.getRespiratoryRisk(numValue, isFinalReading);
-    }
-    
-    // Valor por defecto
-    return { color: 'gray-400', label: 'Sin datos' };
+
+    return { color: '#000000', label: '' };
   };
   
-  // NUEVO: Obtener el color y etiqueta de riesgo para arritmia 
   const getArrhythmiaRiskColor = (count: number): string => {
-    if (count === 0) return 'green-500';
-    if (count < 3) return 'yellow-500';
-    if (count < 10) return 'orange-500';
-    return 'red-500';
+    // Colors for different risk levels
+    if (count <= 0) return "#000000"; // No risk
+    if (count <= 3) return "#F2FCE2"; // Minimal risk - Soft Green
+    if (count <= 6) return "#FEC6A1"; // Low risk - Soft Orange
+    if (count <= 8) return "#F97316"; // Moderate risk - Bright Orange
+    return "#DC2626";                 // High risk - Red
   };
   
-  // NUEVO: Obtener la etiqueta de riesgo para arritmia
   const getArrhythmiaRiskLabel = (count: number): string => {
-    if (count === 0) return 'Normal';
-    if (count < 3) return 'Leve';
-    if (count < 10) return 'Moderado';
-    return 'Alto';
+    // Updated thresholds based on user requirements:
+    // - 1-3 arrhythmias: minimal risk
+    // - 4-6 arrhythmias: low risk
+    // - 6-8 arrhythmias: moderate risk
+    // - More than 8 arrhythmias: high risk
+    
+    if (count <= 0) return "";
+    if (count <= 3) return "RIESGO MÍNIMO";
+    if (count <= 6) return "RIESGO BAJO";
+    if (count <= 8) return "RIESGO MODERADO";
+    return "RIESGO ALTO";
   };
   
-  // NUEVO: Generar visualización de arritmia si es necesario
   const getArrhythmiaDisplay = () => {
-    if (!label.toLowerCase().includes('pulso') || typeof value !== 'string') return null;
+    if (!isArrhythmiaDisplay) return { text: value, color: "", label: "" };
     
-    // Extraer información de arritmia si está presente
-    if (value.includes('|')) {
-      const parts = value.split('|');
-      const bpm = parseInt(parts[0]);
-      const arrhythmiaCount = parseInt(parts[1]);
-      
-      if (!isNaN(bpm) && !isNaN(arrhythmiaCount)) {
-        const riskColor = getArrhythmiaRiskColor(arrhythmiaCount);
-        const riskLabel = getArrhythmiaRiskLabel(arrhythmiaCount);
-        
-        return (
-          <div className="mt-1 flex items-center text-xs">
-            <span className={`text-${riskColor} font-medium`}>
-              {riskLabel}
-            </span>
-            <span className="text-gray-500 ml-1">
-              ({arrhythmiaCount} eventos)
-            </span>
-          </div>
-        );
-      }
+    if (value === "--") {
+      return { 
+        text: "",  // Removed "ARRITMIA" text display before starting measurements
+        color: "#FFFFFF",
+        label: ""
+      };
     }
     
-    return null;
+    const [status, countStr] = String(value).split('|');
+    const count = parseInt(countStr || "0", 10);
+    
+    if (status === "ARRITMIA DETECTADA") {
+      // Determine risk level based on count
+      const riskLabel = getArrhythmiaRiskLabel(count);
+      const riskColor = getArrhythmiaRiskColor(count);
+      
+      return {
+        text: `${count}`,
+        title: "ARRITMIA DETECTADA",
+        color: riskColor,
+        label: riskLabel
+      };
+    }
+    
+    return {
+      text: "LATIDO NORMAL",
+      color: "#0EA5E9",
+      label: ""
+    };
   };
-  
-  const { color, label: riskLabel } = getRiskInfo();
-  const isLoading = value === '...';
-  
-  // Limpiar el valor de arritmias para mostrar solo BPM si está en formato "BPM|arritmias"
-  let displayValue = value;
-  if (typeof value === 'string' && value.includes('|')) {
-    const parts = value.split('|');
-    displayValue = parts[0];
-  }
-  
+
+  // Get the risk info based on the medically valid display value 
+  const { text, title, color, label: riskLabel } = isArrhythmiaDisplay ? 
+    getArrhythmiaDisplay() : 
+    { text: processedDisplayValue, title: undefined, ...getRiskInfo() };
+
   const handleCardClick = () => {
-    // Solo expandir si hay una lectura válida
-    if (isValidValue && !isLoading) {
-      setExpanded(!expanded);
+    // Solo permitir clic si hay una medición válida y es una lectura final
+    if (
+      (value === "--" || value === 0 || value === "--/--" || value === "0/0") ||
+      !isFinalReading
+    ) {
+      return;
     }
+    
+    setShowDetail(true);
   };
-  
-  // Determinar el tipo de signo vital
+
+  // Determinar el tipo de signo vital para la vista detallada
   const getVitalSignType = () => {
-    if (label.toLowerCase().includes('oxígeno')) return 'SpO2';
-    if (label.toLowerCase().includes('presión')) return 'BP';
-    if (label.toLowerCase().includes('pulso')) return 'HR';
-    if (label.toLowerCase().includes('respiración')) return 'RR'; // NUEVO
-    return '';
+    if (label === "FRECUENCIA CARDÍACA") return "heartRate";
+    if (label === "SPO2") return "spo2";
+    if (label === "PRESIÓN ARTERIAL") return "bloodPressure";
+    if (label === "ARRITMIAS") return "arrhythmia";
+    return "heartRate"; // Default
   };
-  
-  const vitalSignType = getVitalSignType();
-  
-  // Actualizar historial de mediciones
-  useEffect(() => {
-    if (isValidValue && !isLoading && isNumericValue) {
-      const numValue = typeof value === 'number' ? value : parseFloat((value as string).split('|')[0]);
-      
-      if (!isNaN(numValue)) {
-        switch (vitalSignType) {
-          case 'SpO2':
-            VitalSignsRisk.updateSPO2History(numValue);
-            break;
-          case 'HR':
-            VitalSignsRisk.updateBPMHistory(numValue);
-            break;
-          case 'BP':
-            if (typeof value === 'string' && value.includes('/')) {
-              const [systolic, diastolic] = value.split('/').map(Number);
-              if (!isNaN(systolic) && !isNaN(diastolic)) {
-                VitalSignsRisk.updateBPHistory(systolic, diastolic);
-              }
-            }
-            break;
-          case 'RR': // NUEVO: Actualizar historial respiratorio
-            VitalSignsRisk.updateRespiratoryHistory(numValue);
-            break;
-        }
-      }
-    }
-  }, [value, isValidValue, isLoading, vitalSignType]);
-  
+
+  // Simplificar el renderizado para mejorar rendimiento
   return (
     <>
-      <div
-        className={cn(
-          "bg-white dark:bg-slate-800 rounded-lg p-4 shadow transition-all duration-200 overflow-hidden",
-          isValidValue && !isLoading ? "cursor-pointer hover:shadow-md" : "",
-          expanded ? "row-span-2" : ""
-        )}
-        onClick={handleCardClick}
+      <div 
+        className={`relative overflow-hidden rounded-xl bg-black shadow-lg ${
+          isFinalReading ? 'active:scale-95 transition-transform cursor-pointer' : ''
+        }`}
+        onClick={isFinalReading ? handleCardClick : undefined}
       >
-        <div className="flex justify-between items-start mb-2">
-          <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400">
-            {label}
-          </h3>
-          {isValidValue && !isLoading && (
-            <span 
-              className={cn(
-                "text-xs px-2 py-1 rounded-full",
-                `bg-${color}/10 text-${color}`
+        <div className="relative z-10 p-4">
+          <h3 className="text-white text-xs font-medium tracking-wider mb-2">{label}</h3>
+          <div className="flex flex-col items-center gap-1">
+            {isArrhythmiaDisplay && title && (
+              <span className="text-base font-bold tracking-wider" style={{ color: color || '#FFFFFF' }}>
+                {title}
+              </span>
+            )}
+            <div className="flex items-baseline gap-1 justify-center">
+              <span 
+                className={`${isArrhythmiaDisplay ? 'text-lg' : 'text-xl'} font-bold transition-colors duration-300 text-white`}
+                style={{ color: color || '#000000' }}
+              >
+                {text}
+              </span>
+              {!isArrhythmiaDisplay && unit && (
+                <span className="text-white text-xs">{unit}</span>
               )}
-            >
-              {riskLabel}
-            </span>
-          )}
-        </div>
-        
-        <div className="flex items-baseline">
-          <div className={isLoading ? "animate-pulse bg-slate-200 dark:bg-slate-700 h-8 w-16 rounded" : ""}>
-            {!isLoading && (
-              <span className="text-2xl font-bold dark:text-white">
-                {displayValue}
+            </div>
+            {riskLabel && (
+              <span 
+                className="text-[10px] font-semibold tracking-wider mt-1 text-white"
+                style={{ color: color || '#000000' }}
+              >
+                {riskLabel}
               </span>
             )}
           </div>
-          {unit && !isLoading && (
-            <span className="ml-1 text-slate-500 dark:text-slate-400 text-sm">
-              {unit}
-            </span>
-          )}
         </div>
-        
-        {getArrhythmiaDisplay()}
-        
-        {expanded && isValidValue && !isLoading && (
-          <div className="mt-4 text-xs text-slate-500 dark:text-slate-400 space-y-1">
-            {vitalSignType === 'SpO2' && (
-              <>
-                <p>• 95-100%: Normal</p>
-                <p>• 90-94%: Leve hipoxemia</p>
-                <p>• &lt;90%: Hipoxemia severa</p>
-              </>
-            )}
-            
-            {vitalSignType === 'BP' && (
-              <>
-                <p>• &lt;120/80 mmHg: Ideal</p>
-                <p>• 120-129/80 mmHg: Elevada</p>
-                <p>• 130-139/80-89 mmHg: Estadio 1</p>
-                <p>• &gt;140/90 mmHg: Estadio 2</p>
-              </>
-            )}
-            
-            {vitalSignType === 'HR' && (
-              <>
-                <p>• 60-100 bpm: Normal</p>
-                <p>• &lt;60 bpm: Bradicardia</p>
-                <p>• &gt;100 bpm: Taquicardia</p>
-              </>
-            )}
-            
-            {/* NUEVO: Información para tasa respiratoria */}
-            {vitalSignType === 'RR' && (
-              <>
-                <p>• 12-20 rpm: Normal</p>
-                <p>• 8-11 rpm: Respiración lenta</p>
-                <p>• &lt;8 rpm: Respiración muy lenta</p>
-                <p>• 21-25 rpm: Respiración acelerada</p>
-                <p>• &gt;25 rpm: Respiración muy rápida</p>
-              </>
-            )}
+
+        {isFinalReading && (
+          <div className="absolute inset-0 bg-white/5 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="bg-white/10 rounded-full p-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/70">
+                  <path d="M9 18l6-6-6-6"/>
+                </svg>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -272,10 +237,10 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
       {showDetail && (
         <VitalSignDetail
           title={label}
-          value={displayValue as string | number}
+          value={text as string | number}
           unit={unit}
           riskLevel={riskLabel}
-          type={vitalSignType}
+          type={getVitalSignType()}
           onBack={() => setShowDetail(false)}
         />
       )}
@@ -283,4 +248,4 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
   );
 };
 
-export default VitalSign;
+export default memo(VitalSign);

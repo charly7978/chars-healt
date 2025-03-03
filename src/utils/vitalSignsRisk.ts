@@ -50,11 +50,6 @@ export class VitalSignsRisk {
   private static spo2SegmentHistory: RiskSegment[] = [];
   private static bpSegmentHistory: RiskSegment[] = [];
 
-  // Añadir estructura para historial respiratorio
-  private static respiratoryHistory: StabilityCheck[] = [];
-  private static lastRespRate: number | null = null;
-  private static respiratorySegmentHistory: RiskSegment[] = [];
-
   // Método de suavizado
   static smoothValue(newValue: number, lastValue: number | null, alpha: number = this.SMOOTHING_FACTOR): number {
     if (lastValue === null) return newValue;
@@ -506,139 +501,18 @@ export class VitalSignsRisk {
     return currentSegment;
   }
 
-  /**
-   * Actualiza el historial de tasa respiratoria con un nuevo valor
-   */
-  static updateRespiratoryHistory(value: number) {
-    if (value <= 0) return;
-    
-    const now = Date.now();
-    
-    // Aplicar suavizado
-    let smoothedValue = value;
-    if (this.lastRespRate !== null) {
-      smoothedValue = this.smoothValue(value, this.lastRespRate, this.SMOOTHING_FACTOR);
-    }
-    this.lastRespRate = smoothedValue;
-    
-    // Añadir al historial
-    this.respiratoryHistory.push({
-      value: smoothedValue,
-      timestamp: now
-    });
-    
-    // Limitar tamaño del historial
-    const cutoffTime = now - this.MEASUREMENT_WINDOW;
-    this.respiratoryHistory = this.respiratoryHistory.filter(item => item.timestamp >= cutoffTime);
-    
-    // Evaluar riesgo y añadir al historial de segmentos
-    const risk = this.getRespiratoryRisk(smoothedValue);
-    this.respiratorySegmentHistory.push(risk);
-    
-    // Limitar tamaño del historial de segmentos
-    if (this.respiratorySegmentHistory.length > 10) {
-      this.respiratorySegmentHistory.shift();
-    }
-  }
-
-  /**
-   * Obtiene el promedio de tasa respiratoria
-   */
-  static getAverageRespRate(): number {
-    if (this.respiratoryHistory.length === 0) return 0;
-    
-    // Usar solo los últimos 30 segundos para el promedio
-    const now = Date.now();
-    const recentHistory = this.respiratoryHistory.filter(
-      item => item.timestamp >= now - 30000
-    );
-    
-    if (recentHistory.length === 0) return 0;
-    
-    // Calcular promedio
-    const sum = recentHistory.reduce((acc, item) => acc + item.value, 0);
-    let avg = sum / recentHistory.length;
-    
-    // Redondear a 1 decimal
-    avg = Math.round(avg * 10) / 10;
-    
-    return avg;
-  }
-
-  /**
-   * Evalúa el riesgo basado en la tasa respiratoria
-   */
-  static getRespiratoryRisk(respRate: number, isFinalReading: boolean = false): RiskSegment {
-    // Si no hay valor válido, retornar neutro
-    if (respRate <= 0) {
-      return {
-        color: 'gray-400',
-        label: 'Sin datos'
-      };
-    }
-    
-    // Definir segmentos de riesgo
-    let riskSegment: RiskSegment;
-    
-    // Evaluar rangos de respiración (respiraciones por minuto)
-    if (respRate < 8) {
-      // Bradipnea severa (respiración muy lenta)
-      riskSegment = {
-        color: 'red-500',
-        label: 'Respiración muy lenta'
-      };
-    } else if (respRate < 12) {
-      // Bradipnea leve-moderada
-      riskSegment = {
-        color: 'yellow-500',
-        label: 'Respiración lenta'
-      };
-    } else if (respRate <= 20) {
-      // Rango normal
-      riskSegment = {
-        color: 'green-500',
-        label: 'Normal'
-      };
-    } else if (respRate <= 25) {
-      // Taquipnea leve-moderada
-      riskSegment = {
-        color: 'yellow-500',
-        label: 'Respiración acelerada'
-      };
-    } else {
-      // Taquipnea severa (respiración muy rápida)
-      riskSegment = {
-        color: 'red-500',
-        label: 'Respiración muy rápida'
-      };
-    }
-    
-    // Si es lectura final, usar el segmento más frecuente 
-    // para evitar falsos positivos en una sola lectura
-    if (isFinalReading && this.respiratorySegmentHistory.length >= 3) {
-      return this.getMostFrequentSegment(this.respiratorySegmentHistory);
-    }
-    
-    return riskSegment;
-  }
-
   static resetHistory() {
     console.log("VitalSignsRisk - Reseteando todo el historial");
     this.bpmHistory = [];
     this.spo2History = [];
     this.bpHistory = [];
-    this.respiratoryHistory = [];
-    
     this.lastBPM = null;
     this.lastSPO2 = null;
     this.lastSystolic = null;
     this.lastDiastolic = null;
-    this.lastRespRate = null;
-    
     this.bpmSegmentHistory = [];
     this.spo2SegmentHistory = [];
     this.bpSegmentHistory = [];
-    this.respiratorySegmentHistory = [];
     this.recentBpmValues = [];
     this.recentSpo2Values = [];
     this.recentSystolicValues = [];

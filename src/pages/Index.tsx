@@ -13,9 +13,6 @@ interface VitalSigns {
   spo2: number;
   pressure: string;
   arrhythmiaStatus: string;
-  respiratoryRate: number;
-  respiratoryPattern: string;
-  respiratoryConfidence: number;
 }
 
 const Index = () => {
@@ -25,10 +22,7 @@ const Index = () => {
   const [vitalSigns, setVitalSigns] = useState<VitalSigns>({ 
     spo2: 0, 
     pressure: "--/--",
-    arrhythmiaStatus: "--",
-    respiratoryRate: 0,
-    respiratoryPattern: "unknown",
-    respiratoryConfidence: 0
+    arrhythmiaStatus: "--" 
   });
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState<string | number>("--");
@@ -42,10 +36,7 @@ const Index = () => {
   const [finalValues, setFinalValues] = useState<{
     heartRate: number,
     spo2: number,
-    pressure: string,
-    respiratoryRate: number,
-    respiratoryPattern: string,
-    respiratoryConfidence: number
+    pressure: string
   } | null>(null);
   const [permissionsGranted, setPermissionsGranted] = useState(false);
   const measurementTimerRef = useRef<number | null>(null);
@@ -59,7 +50,7 @@ const Index = () => {
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat, reset: resetHeartBeat } = useHeartBeatProcessor();
-  const { vitalSignsData, processSignal, reset, getCurrentRespiratoryData } = useVitalSignsProcessor();
+  const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
   const handlePermissionsGranted = () => {
     console.log("Permisos concedidos correctamente");
@@ -117,25 +108,10 @@ const Index = () => {
         pressure: finalBPString
       });
       
-      const respiratoryRate = getCurrentRespiratoryData?.() 
-        ? getCurrentRespiratoryData().rate || 0
-        : 0;
-      
-      const respiratoryPattern = getCurrentRespiratoryData?.()
-        ? getCurrentRespiratoryData().pattern || 'unknown'
-        : 'unknown';
-        
-      const respiratoryConfidence = getCurrentRespiratoryData?.()
-        ? getCurrentRespiratoryData().confidence || 0
-        : 0;
-
       setFinalValues({
         heartRate: avgHeartRate > 0 ? avgHeartRate : heartRate,
         spo2: avgSpo2 > 0 ? avgSpo2 : vitalSigns.spo2,
-        pressure: finalBPString,
-        respiratoryRate,
-        respiratoryPattern,
-        respiratoryConfidence
+        pressure: finalBPString
       });
         
       hasValidValuesRef.current = true;
@@ -144,17 +120,12 @@ const Index = () => {
       allSpo2ValuesRef.current = [];
       allSystolicValuesRef.current = [];
       allDiastolicValuesRef.current = [];
-
-      setCurrentRespiratoryPattern(respiratoryPattern);
     } catch (error) {
       console.error("Error en calculateFinalValues:", error);
       setFinalValues({
         heartRate: heartRate,
         spo2: vitalSigns.spo2,
-        pressure: vitalSigns.pressure,
-        respiratoryRate: 0,
-        respiratoryPattern: "unknown",
-        respiratoryConfidence: 0
+        pressure: vitalSigns.pressure
       });
       hasValidValuesRef.current = true;
     }
@@ -213,7 +184,7 @@ const Index = () => {
     setElapsedTime(0);
     
     resetHeartBeat();
-    reset();
+    resetVitalSigns();
     VitalSignsRisk.resetHistory();
   };
 
@@ -283,10 +254,7 @@ const Index = () => {
     setVitalSigns({ 
       spo2: 0, 
       pressure: "--/--",
-      arrhythmiaStatus: "--",
-      respiratoryRate: 0,
-      respiratoryPattern: "unknown",
-      respiratoryConfidence: 0
+      arrhythmiaStatus: "--" 
     });
     setArrhythmiaCount("--");
     setLastArrhythmiaData(null);
@@ -295,7 +263,7 @@ const Index = () => {
     setFinalValues(null);
     
     resetHeartBeat();
-    reset();
+    resetVitalSigns();
     VitalSignsRisk.resetHistory();
     
     hasValidValuesRef.current = false;
@@ -460,7 +428,7 @@ const Index = () => {
             allHeartRateValuesRef.current.push(heartBeatResult.bpm);
           }
           
-          const vitals = processSignal(lastSignal.filteredValue, heartBeatResult.rrData);
+          const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
           if (vitals) {
             if (vitals.spo2 > 0) {
               setVitalSigns(current => ({
@@ -502,7 +470,7 @@ const Index = () => {
         console.error("Error procesando señal:", error);
       }
     }
-  }, [lastSignal, isMonitoring, processHeartBeat, processSignal, measurementComplete]);
+  }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns, measurementComplete]);
 
   useEffect(() => {
     return () => {
@@ -512,8 +480,6 @@ const Index = () => {
       }
     };
   }, []);
-
-  const [currentRespiratoryPattern, setCurrentRespiratoryPattern] = useState<string>('normal');
 
   return (
     <div 
@@ -562,8 +528,6 @@ const Index = () => {
           onReset={handleReset}
           arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
           rawArrhythmiaData={lastArrhythmiaData}
-          respiratoryRate={finalValues?.respiratoryRate || vitalSigns.respiratoryRate || 0}
-          respiratoryPattern={finalValues?.respiratoryPattern || vitalSigns.respiratoryPattern || 'unknown'}
         />
       </div>
 
@@ -592,14 +556,6 @@ const Index = () => {
               label="ARRITMIAS"
               value={vitalSigns.arrhythmiaStatus}
               isFinalReading={measurementComplete}
-            />
-            <VitalSign
-              label="Respiración"
-              value={finalValues?.respiratoryRate > 0 
-                ? `${finalValues.respiratoryRate}` 
-                : isMonitoring ? '...' : '--'}
-              unit="rpm"
-              isFinalReading={!measurementComplete && finalValues?.respiratoryRate > 0}
             />
           </div>
         </div>
@@ -650,30 +606,6 @@ const Index = () => {
               Reintentar
             </button>
           </div>
-        </div>
-      )}
-
-      {finalValues?.respiratoryPattern && finalValues.respiratoryPattern !== 'unknown' && finalValues.respiratoryRate > 0 && (
-        <div className="text-sm text-center mb-4 px-4">
-          <span className="font-medium">
-            Patrón respiratorio:
-          </span>{' '}
-          <span className={`${
-            finalValues.respiratoryPattern === 'normal' ? 'text-green-500' :
-            finalValues.respiratoryPattern === 'deep' ? 'text-blue-500' :
-            finalValues.respiratoryPattern === 'shallow' ? 'text-yellow-500' :
-            'text-red-500'
-          }`}>
-            {finalValues.respiratoryPattern === 'normal' ? 'Normal' :
-             finalValues.respiratoryPattern === 'deep' ? 'Profunda' :
-             finalValues.respiratoryPattern === 'shallow' ? 'Superficial' :
-             finalValues.respiratoryPattern === 'irregular' ? 'Irregular' : 'Desconocido'}
-          </span>
-          {finalValues.respiratoryConfidence < 70 && (
-            <span className="text-gray-400 text-xs ml-2">
-              (confianza: {Math.round(finalValues.respiratoryConfidence)}%)
-            </span>
-          )}
         </div>
       )}
     </div>
