@@ -50,6 +50,7 @@ export interface HeartBeatResult {
   filteredValue: number;
   arrhythmiaCount: number;
   amplitude?: number;
+  isLearningPhase?: boolean;
 }
 
 declare global {
