@@ -84,7 +84,7 @@ const Index = () => {
   const { 
     processSignal: processVitalSigns, 
     reset: resetVitalSigns, 
-    glucose,
+    glucose: glucoseProcessor,
     dataCollector 
   } = useVitalSignsProcessor();
 
@@ -749,7 +749,7 @@ const Index = () => {
               unit="mg/dL"
               trend={finalValues ? finalValues.glucose.trend : (vitalSigns.glucose ? vitalSigns.glucose.trend : "unknown")}
               isFinalReading={measurementComplete}
-              glucose={glucose}
+              glucose={null}
             />
           </div>
         </div>
