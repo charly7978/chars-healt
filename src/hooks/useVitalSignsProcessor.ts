@@ -1,4 +1,3 @@
-
 import { useState, useCallback, useRef } from 'react';
 import { VitalSignsProcessor } from '../modules/VitalSignsProcessor';
 import { useArrhythmiaAnalyzer } from './useArrhythmiaAnalyzer';
@@ -22,7 +21,6 @@ export const useVitalSignsProcessor = () => {
   
   // Glucose tracking variables
   const lastGlucoseRef = useRef<GlucoseData>({ value: 0, trend: 'unknown' });
-  const glucoseUpdateCountRef = useRef(0);
   
   /**
    * Lazy initialization of the VitalSignsProcessor
@@ -44,73 +42,6 @@ export const useVitalSignsProcessor = () => {
       respirationProcessorRef.current = new RespirationProcessor();
     }
     return respirationProcessorRef.current;
-  }, []);
-  
-  /**
-   * Simulates glucose measurements based on heart rate and other vital signs
-   */
-  const simulateGlucoseMeasurement = useCallback((heartRateData: any, respirationData: any) => {
-    // Calculate glucose value based on heart rate trends and respiration
-    glucoseUpdateCountRef.current++;
-    
-    // Base glucose level (normal range is around 70-120 mg/dL)
-    let baseGlucose = 85;
-    
-    // Add some variation based on heart rate if available
-    if (heartRateData && heartRateData.intervals && heartRateData.intervals.length > 0) {
-      const avgInterval = heartRateData.intervals.reduce((sum: number, val: number) => sum + val, 0) / heartRateData.intervals.length;
-      const heartRate = Math.round(60000 / avgInterval);
-      
-      // Higher heart rate might suggest higher glucose levels
-      if (heartRate > 80) {
-        baseGlucose += (heartRate - 80) * 0.5;
-      }
-    }
-    
-    // Add variation based on respiration if available
-    if (respirationData && respirationData.rate > 0) {
-      // Higher respiration rate might suggest higher metabolic activity
-      if (respirationData.rate > 15) {
-        baseGlucose += (respirationData.rate - 15) * 1.2;
-      }
-    }
-    
-    // Add some natural variation
-    const randomVariation = Math.sin(glucoseUpdateCountRef.current / 10) * 8;
-    
-    // Calculate final glucose value
-    const glucoseValue = Math.round(baseGlucose + randomVariation);
-    
-    // Determine trend
-    let glucoseTrend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown' = 'unknown';
-    
-    if (lastGlucoseRef.current.value > 0) {
-      const difference = glucoseValue - lastGlucoseRef.current.value;
-      
-      if (Math.abs(difference) < 2) {
-        glucoseTrend = 'stable';
-      } else if (difference > 5) {
-        glucoseTrend = 'rising_rapidly';
-      } else if (difference > 2) {
-        glucoseTrend = 'rising';
-      } else if (difference < -5) {
-        glucoseTrend = 'falling_rapidly';
-      } else if (difference < -2) {
-        glucoseTrend = 'falling';
-      }
-    } else if (glucoseUpdateCountRef.current > 5) {
-      glucoseTrend = 'stable';
-    }
-    
-    // Update last glucose value
-    lastGlucoseRef.current = { value: glucoseValue, trend: glucoseTrend };
-    
-    // Store glucose for averaging
-    if (glucoseValue > 0) {
-      dataCollector.current.addGlucose(glucoseValue);
-    }
-    
-    return lastGlucoseRef.current;
   }, []);
   
   /**
@@ -137,7 +68,7 @@ export const useVitalSignsProcessor = () => {
       // Smoothing BPM here
       if (rrData.intervals && rrData.intervals.length > 0) {
         // Calculate raw BPM from intervals
-        const avgInterval = rrData.intervals.reduce((sum, val) => sum + val, 0) / rrData.intervals.length;
+        const avgInterval = rrData.intervals.reduce((sum: number, val: number) => sum + val, 0) / rrData.intervals.length;
         const rawBPM = Math.round(60000 / avgInterval);
         
         // Apply smoothing through processor
@@ -174,12 +105,19 @@ export const useVitalSignsProcessor = () => {
       dataCollector.current.addRespirationRate(respirationResult.rate);
     }
     
-    // Process glucose measurements
-    const glucoseResult = simulateGlucoseMeasurement(rrData, respirationResult);
+    // Process glucose
+    const glucoseFromCollector = dataCollector.current.getAverageGlucose();
+    const glucoseTrend = dataCollector.current.getGlucoseTrend();
     
-    // Advanced arrhythmia analysis - asegurarse de pasar los datos de amplitud si están disponibles
+    if (glucoseFromCollector > 0) {
+      lastGlucoseRef.current = { 
+        value: glucoseFromCollector, 
+        trend: glucoseTrend 
+      };
+    }
+    
+    // Advanced arrhythmia analysis
     if (rrData?.intervals && rrData.intervals.length >= 4) {
-      // Asegurarse de pasar los datos de amplitud al analizador de arritmias si están disponibles
       const arrhythmiaResult = arrhythmiaAnalyzer.processArrhythmia(rrData);
       
       if (arrhythmiaResult.detected) {
@@ -190,7 +128,7 @@ export const useVitalSignsProcessor = () => {
           lastArrhythmiaData: arrhythmiaResult.lastArrhythmiaData,
           respiration: respirationResult,
           hasRespirationData: respirationProcessor.hasValidData(),
-          glucose: glucoseResult
+          glucose: lastGlucoseRef.current
         };
       }
       
@@ -200,7 +138,7 @@ export const useVitalSignsProcessor = () => {
         arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus,
         respiration: respirationResult,
         hasRespirationData: respirationProcessor.hasValidData(),
-        glucose: glucoseResult
+        glucose: lastGlucoseRef.current
       };
     }
     
@@ -213,10 +151,10 @@ export const useVitalSignsProcessor = () => {
       arrhythmiaStatus,
       respiration: respirationResult,
       hasRespirationData: respirationProcessor.hasValidData(),
-      glucose: glucoseResult
+      glucose: lastGlucoseRef.current
     };
-  }, [getProcessor, getRespirationProcessor, arrhythmiaAnalyzer, signalHistory, simulateGlucoseMeasurement]);
-
+  }, [getProcessor, getRespirationProcessor, arrhythmiaAnalyzer, signalHistory]);
+  
   /**
    * Reset all processors
    */
@@ -237,7 +175,6 @@ export const useVitalSignsProcessor = () => {
     
     // Reset glucose tracking
     lastGlucoseRef.current = { value: 0, trend: 'unknown' };
-    glucoseUpdateCountRef.current = 0;
     
     VitalSignsRisk.resetHistory();
     
@@ -269,7 +206,6 @@ export const useVitalSignsProcessor = () => {
     
     // Reset glucose tracking
     lastGlucoseRef.current = { value: 0, trend: 'unknown' };
-    glucoseUpdateCountRef.current = 0;
     
     VitalSignsRisk.resetHistory();
     
@@ -282,11 +218,27 @@ export const useVitalSignsProcessor = () => {
       }
     }
   }, [arrhythmiaAnalyzer, signalHistory]);
+  
+  /**
+   * Add glucose manual reading
+   */
+  const addGlucoseReading = useCallback((value: number) => {
+    if (value > 0) {
+      dataCollector.current.addGlucose(value);
+      lastGlucoseRef.current = { 
+        value, 
+        trend: dataCollector.current.getGlucoseTrend() 
+      };
+      return true;
+    }
+    return false;
+  }, []);
 
   return {
     processSignal,
     reset,
     cleanMemory,
+    addGlucoseReading,
     arrhythmiaCounter: arrhythmiaAnalyzer.arrhythmiaCounter,
     dataCollector: dataCollector.current
   };

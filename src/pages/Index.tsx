@@ -8,6 +8,7 @@ import PPGSignalMeter from "@/components/PPGSignalMeter";
 import PermissionsHandler from "@/components/PermissionsHandler";
 import { VitalSignsRisk } from '@/utils/vitalSignsRisk';
 import { toast } from "sonner";
+import GlucoseInput from "@/components/GlucoseInput";
 
 interface VitalSigns {
   spo2: number;
@@ -75,7 +76,7 @@ const Index = () => {
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat, reset: resetHeartBeat } = useHeartBeatProcessor();
-  const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
+  const { processSignal: processVitalSigns, reset: resetVitalSigns, addGlucoseReading } = useVitalSignsProcessor();
 
   const handlePermissionsGranted = () => {
     console.log("Permisos concedidos correctamente");
@@ -643,7 +644,7 @@ const Index = () => {
         />
       </div>
 
-      <div className="absolute inset-0 z-10">
+      <div className="absolute z-10">
         <PPGSignalMeter 
           value={isMonitoring ? lastSignal?.filteredValue || 0 : 0}
           quality={isMonitoring ? lastSignal?.quality || 0 : 0}
@@ -655,6 +656,10 @@ const Index = () => {
         />
       </div>
       
+      <div className="absolute z-30" style={{ bottom: '130px', left: '10px', width: 'calc(33.33% - 20px)' }}>
+        <GlucoseInput onAddReading={addGlucoseReading} />
+      </div>
+
       {isMonitoring && (
         <div className="absolute z-30 text-sm bg-black/50 backdrop-blur-sm px-3 py-1 rounded-lg" 
           style={{ top: '35%', left: '50%', transform: 'translateX(-50%)', textAlign: 'center' }}>
