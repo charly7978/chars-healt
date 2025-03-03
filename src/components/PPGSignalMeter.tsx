@@ -47,8 +47,8 @@ const PPGSignalMeter = ({
   const TARGET_FPS = 120; // Higher target FPS for smoother rendering
   const FRAME_TIME = 900 / TARGET_FPS;
   const BUFFER_SIZE = 300;
-  const INVERT_SIGNAL = true;
-  const TEXT_STABILITY_FRAMES = 5; // Only update text when value is stable for X frames
+  const INVERT_SIGNAL = false;
+  const TEXT_STABILITY_FRAMES = 100; // Only update text when value is stable for X frames
   
   // Pre-render the grid to an offscreen canvas
   useEffect(() => {
