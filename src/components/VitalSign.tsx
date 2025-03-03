@@ -1,4 +1,3 @@
-
 import React, { memo, useMemo, useState } from 'react';
 import { VitalSignsRisk } from '../utils/vitalSignsRisk';
 import VitalSignDetail from './VitalSignDetail';
@@ -11,6 +10,7 @@ interface VitalSignProps {
   secondaryValue?: string | number;
   secondaryUnit?: string;
   trend?: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
+  glucose?: number | null;
 }
 
 const VitalSign: React.FC<VitalSignProps> = ({ 
@@ -20,7 +20,8 @@ const VitalSign: React.FC<VitalSignProps> = ({
   isFinalReading = false,
   secondaryValue,
   secondaryUnit,
-  trend
+  trend,
+  glucose
 }) => {
   const [showDetail, setShowDetail] = useState(false);
   const isArrhythmiaDisplay = label === "ARRITMIAS";
