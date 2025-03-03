@@ -503,79 +503,87 @@ export const useVitalSignsProcessor = () => {
     const stabilizedBP = bloodPressureStabilizer.current.stabilizeBloodPressure(result.pressure, signalQuality);
     
     // Process glucose data using the dedicated processor
-    // Fix: Get recent signals using the correct method and ensure proper error handling
+    let glucoseData = null;
     try {
-      const recentSignals = signalHistory.getRecentSignals(60); // Get last 60 samples
-      const glucoseData = glucoseProcessor.calculateGlucose(
-        recentSignals, 
-        signalQuality
-      );
+      // Get all available PPG signals for glucose calculation
+      const availableSignals = signalHistory.getRawSignals();
       
-      console.log('Glucose data from processor:', glucoseData ? 
-        `${glucoseData.value} mg/dL (${glucoseData.trend})` : 'No data available');
-
-      // Collect data for final averages
-      if (result.spo2 > 0) {
-        dataCollector.current.addSpO2(result.spo2);
+      // Pass signal quality directly to the processor
+      glucoseData = glucoseProcessor.calculateGlucose(availableSignals, signalQuality);
+      
+      if (glucoseData) {
+        console.log(`VitalSignsProcessor: Glucose calculated - ${glucoseData.value} mg/dL (${glucoseData.trend})`);
+      } else {
+        console.log("Glucose data from processor: No data available");
       }
+    } catch (error) {
+      console.error("Error processing glucose:", error);
+    }
+    
+    // Collect data for final averages
+    if (result.spo2 > 0) {
+      dataCollector.current.addSpO2(result.spo2);
+    }
+    
+    if (stabilizedBP !== "--/--" && stabilizedBP !== "0/0") {
+      dataCollector.current.addBloodPressure(stabilizedBP);
+    }
+    
+    if (respirationResult.rate > 0) {
+      dataCollector.current.addRespirationRate(respirationResult.rate);
+    }
+    
+    // Advanced arrhythmia analysis - ensure amplitude data is passed if available
+    if (rrData?.intervals && rrData.intervals.length >= 4) {
+      // Ensure amplitude data is passed to the arrhythmia analyzer if available
+      const arrhythmiaResult = arrhythmiaAnalyzer.processArrhythmia(rrData);
       
-      if (stabilizedBP !== "--/--" && stabilizedBP !== "0/0") {
-        dataCollector.current.addBloodPressure(stabilizedBP);
-      }
-      
-      if (respirationResult.rate > 0) {
-        dataCollector.current.addRespirationRate(respirationResult.rate);
-      }
-      
-      // Advanced arrhythmia analysis - ensure amplitude data is passed if available
-      if (rrData?.intervals && rrData.intervals.length >= 4) {
-        // Ensure amplitude data is passed to the arrhythmia analyzer if available
-        const arrhythmiaResult = arrhythmiaAnalyzer.processArrhythmia(rrData);
-        
-        if (arrhythmiaResult.detected) {
-          return {
-            spo2: result.spo2,
-            pressure: stabilizedBP,
-            arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus,
-            lastArrhythmiaData: arrhythmiaResult.lastArrhythmiaData,
-            respiration: respirationResult,
-            hasRespirationData: respirationProcessor.hasValidData(),
-            glucose: glucoseData
-          };
-        }
-        
-        return {
-          spo2: result.spo2,
-          pressure: stabilizedBP,
-          arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus,
-          respiration: respirationResult,
-          hasRespirationData: respirationProcessor.hasValidData(),
-          glucose: glucoseData
-        };
-      }
-      
-      // If we already analyzed arrhythmias before, use the last state
-      const arrhythmiaStatus = `SIN ARRITMIAS|${arrhythmiaAnalyzer.arrhythmiaCounter}`;
-      
-      return {
+      const vitalsData = {
         spo2: result.spo2,
         pressure: stabilizedBP,
-        arrhythmiaStatus,
+        arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus,
         respiration: respirationResult,
         hasRespirationData: respirationProcessor.hasValidData(),
         glucose: glucoseData
       };
-    } catch (error) {
-      console.error("Error processing glucose signal:", error);
-      return {
-        spo2: result.spo2,
-        pressure: stabilizedBP,
-        arrhythmiaStatus: `SIN ARRITMIAS|${arrhythmiaAnalyzer.arrhythmiaCounter}`,
-        respiration: respirationResult,
-        hasRespirationData: respirationProcessor.hasValidData(),
-        glucose: null
-      };
+      
+      // Log the full vitals data for debugging
+      console.log("Raw vital signs data:", JSON.stringify(vitalsData));
+      
+      if (vitalsData.glucose === null) {
+        console.log("Glucose data from vitals: No hay datos de glucosa");
+      }
+      
+      if (arrhythmiaResult.detected) {
+        return {
+          ...vitalsData,
+          lastArrhythmiaData: arrhythmiaResult.lastArrhythmiaData
+        };
+      }
+      
+      return vitalsData;
     }
+    
+    // If we already analyzed arrhythmias before, use the last state
+    const arrhythmiaStatus = `SIN ARRITMIAS|${arrhythmiaAnalyzer.arrhythmiaCounter}`;
+    
+    const vitalsData = {
+      spo2: result.spo2,
+      pressure: stabilizedBP,
+      arrhythmiaStatus,
+      respiration: respirationResult,
+      hasRespirationData: respirationProcessor.hasValidData(),
+      glucose: glucoseData
+    };
+    
+    // Log the full vitals data for debugging
+    console.log("Raw vital signs data:", JSON.stringify(vitalsData));
+    
+    if (vitalsData.glucose === null) {
+      console.log("Glucose data from vitals: No hay datos de glucosa");
+    }
+    
+    return vitalsData;
   }, [getProcessor, getRespirationProcessor, getGlucoseProcessor, arrhythmiaAnalyzer, signalHistory]);
 
   /**

@@ -1,8 +1,9 @@
+
 import { createVitalSignsDataCollector } from "../utils/vitalSignsDataCollector";
 
 export class GlucoseProcessor {
-  private readonly MIN_SIGNAL_QUALITY = 50; // Lowered from 60 to be more permissive
-  private readonly CALCULATION_INTERVAL = 1000; // Reduced from 2000ms to calculate more frequently
+  private readonly MIN_SIGNAL_QUALITY = 25; // Lowered from 50 to be much more permissive
+  private readonly CALCULATION_INTERVAL = 500; // Further reduced from 1000ms to 500ms to calculate more frequently
   private lastCalculationTime = 0;
   private dataCollector = createVitalSignsDataCollector();
   private signalQualityBuffer: number[] = [];
@@ -25,6 +26,9 @@ export class GlucoseProcessor {
     trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
   } | null {
     try {
+      // Always log the attempt for debugging
+      console.log(`Glucose processing attempt - signal quality: ${signalQuality.toFixed(1)}%, samples: ${ppgValues.length}`);
+      
       // Track signal quality for reliability assessment
       this.signalQualityBuffer.push(signalQuality);
       if (this.signalQualityBuffer.length > 5) {
@@ -33,28 +37,31 @@ export class GlucoseProcessor {
       
       // Check if we have enough signal quality and time since last calculation
       const avgSignalQuality = this.signalQualityBuffer.reduce((sum, val) => sum + val, 0) / 
-        this.signalQualityBuffer.length;
+        this.signalQualityBuffer.length || 0;
       const currentTime = Date.now();
 
       // Always log quality for debugging
       console.log(`Glucose processing - signal quality: ${avgSignalQuality.toFixed(1)}%, samples: ${ppgValues.length}, timeSinceLastCalc: ${currentTime - this.lastCalculationTime}ms`);
       
-      // Exit early if conditions aren't met - but make this more permissive
-      if (avgSignalQuality < this.MIN_SIGNAL_QUALITY / 2 || // Reduced quality threshold by half 
-          ppgValues.length < 20) { // Further reduced from 30 to 20 samples
-        if (this.lastGlucoseValue > 0) {
-          console.log(`Using previous glucose value: ${this.lastGlucoseValue} mg/dL`);
+      // If we have a previous value, always return it while calculating new one
+      const havePreviousValue = this.lastGlucoseValue > 0;
+      
+      // Check if we have at least some data to work with
+      if (ppgValues.length < 10) { // Reduced from 20 to 10 samples
+        if (havePreviousValue) {
+          console.log(`Not enough samples, using previous glucose value: ${this.lastGlucoseValue} mg/dL`);
           return {
             value: this.lastGlucoseValue,
             trend: 'unknown'
           };
         }
+        console.log("Insufficient samples for glucose calculation");
         return null;
       }
       
       // Only update calculation time if we proceed with calculation
       if (currentTime - this.lastCalculationTime < this.CALCULATION_INTERVAL) {
-        if (this.lastGlucoseValue > 0) {
+        if (havePreviousValue) {
           console.log(`Too soon for new calculation. Using last glucose: ${this.lastGlucoseValue} mg/dL`);
           return {
             value: this.lastGlucoseValue,
@@ -68,7 +75,7 @@ export class GlucoseProcessor {
       console.log(`Calculating new glucose value with signal quality ${avgSignalQuality.toFixed(1)}%`);
       
       // Extract features from the PPG signal
-      const recentValues = ppgValues.slice(-60); // Use last second of data (at 60Hz)
+      const recentValues = ppgValues.slice(-Math.min(60, ppgValues.length)); // Use last second of data (at 60Hz)
       
       // Calculate amplitude
       const peakToPeak = Math.max(...recentValues) - Math.min(...recentValues);
@@ -77,8 +84,8 @@ export class GlucoseProcessor {
       const variance = this.calculateVariance(recentValues);
       const signalPower = this.calculateSignalPower(recentValues);
       
-      // Apply correction based on signal quality
-      const qualityFactor = Math.min(100, avgSignalQuality) / 100;
+      // Apply correction based on signal quality - use at least 10% quality to avoid zero
+      const qualityFactor = Math.max(0.1, Math.min(100, avgSignalQuality) / 100);
       
       // Apply baseline model for glucose estimation
       // This is a simplified approximation based on PPG signal characteristics
@@ -93,7 +100,7 @@ export class GlucoseProcessor {
           glucoseEstimate = this.MIN_VALID_GLUCOSE;
         } else if (glucoseEstimate > this.MAX_VALID_GLUCOSE && glucoseEstimate < this.MAX_VALID_GLUCOSE + 20) {
           glucoseEstimate = this.MAX_VALID_GLUCOSE;
-        } else if (this.lastGlucoseValue > 0) {
+        } else if (havePreviousValue) {
           // Use last value with slight drift
           const drift = Math.random() * 4 - 2; // -2 to +2 mg/dL drift
           glucoseEstimate = this.lastGlucoseValue + drift;
@@ -112,7 +119,7 @@ export class GlucoseProcessor {
       this.dataCollector.addGlucose(roundedGlucose);
       
       // Check if reading is consistent with previous
-      if (this.lastGlucoseValue > 0) {
+      if (havePreviousValue) {
         const percentChange = Math.abs(roundedGlucose - this.lastGlucoseValue) / this.lastGlucoseValue * 100;
         if (percentChange < 5) {
           this.consistentReadingCount++;
@@ -127,15 +134,15 @@ export class GlucoseProcessor {
       // Increment valid measurement count
       this.validMeasurementCount++;
       
-      // Changed: return a result much sooner - after just 1 valid measurement
       // Get the trend based on recent values
       const trend = this.dataCollector.getGlucoseTrend();
       
       // Use average from collector for more stability if available
       const averageGlucose = this.dataCollector.getAverageGlucose();
+      const finalValue = averageGlucose > 0 ? averageGlucose : roundedGlucose;
       
       const result = {
-        value: averageGlucose > 0 ? averageGlucose : roundedGlucose,
+        value: finalValue,
         trend: trend
       };
       
@@ -145,6 +152,7 @@ export class GlucoseProcessor {
     } catch (error) {
       console.error("Error calculating glucose:", error);
       if (this.lastGlucoseValue > 0) {
+        // Always return last value on error
         return {
           value: this.lastGlucoseValue,
           trend: 'unknown'
