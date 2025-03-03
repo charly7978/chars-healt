@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -48,7 +49,7 @@ const PPGSignalMeter = ({
   const FRAME_TIME = 900 / TARGET_FPS;
   const BUFFER_SIZE = 300;
   const INVERT_SIGNAL = false;
-  const TEXT_STABILITY_FRAMES = 100; // Only update text when value is stable for X frames
+  const TEXT_STABILITY_FRAMES = 10; // Only update text when value is stable for X frames
   
   // Pre-render the grid to an offscreen canvas
   useEffect(() => {
@@ -577,7 +578,7 @@ const PPGSignalMeter = ({
             left: 0, 
             right: 0, 
             zIndex: 10,
-            imageRendering: "crisp-edges"
+            imageRendering: 'high-quality' // Better image rendering quality
           }}
         />
       </div>
