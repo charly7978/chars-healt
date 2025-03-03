@@ -233,9 +233,6 @@ const Index = () => {
     
     if (!isMonitoring && lastSignal?.quality < 50) {
       console.log("Señal insuficiente para iniciar medición", lastSignal?.quality);
-      toast.warning("Calidad de señal insuficiente. Posicione bien su dedo en la cámara.", {
-        duration: 3000,
-      });
       return;
     }
     
