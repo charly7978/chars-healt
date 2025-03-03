@@ -38,6 +38,8 @@ export const useVitalSignsProcessor = () => {
     const intervals = rrData?.intervals || [];
     const amplitudes = rrData?.amplitudes || [];
     
+    console.log('useVitalSignsProcessor: Procesando señal con intervalos:', intervals.length);
+    
     // Process vital signs with PPG signal
     const vitalSignsResult = processor.processSignal(ppgValue, {
       intervals: intervals,
@@ -57,7 +59,12 @@ export const useVitalSignsProcessor = () => {
     // Process arrhythmia detection with RR intervals and amplitudes
     let arrhythmiaResult = null;
     if (intervals.length > 0) {
-      // Usar el método processRRIntervals que acabamos de agregar
+      // Asegurarse de que las amplitudes estén disponibles para el detector de arritmias
+      console.log('useVitalSignsProcessor: Enviando datos a detector de arritmias:', {
+        intervals: intervals.length,
+        amplitudes: amplitudes.length
+      });
+      
       arrhythmiaResult = arrhythmiaDetector.processRRIntervals(intervals, amplitudes);
       
       if (arrhythmiaResult.detected) {
@@ -87,10 +94,12 @@ export const useVitalSignsProcessor = () => {
         rmssd: lastArrhythmia.rmssd || 0,
         rrVariation: lastArrhythmia.rrVariation || 0
       };
+      
+      console.log('useVitalSignsProcessor: Datos de arritmia agregados:', combinedResult.lastArrhythmiaData);
     }
     
     // Log if arrhythmia is detected
-    if (combinedResult.arrhythmiaStatus.includes('ARRITMIA DETECTADA')) {
+    if (combinedResult.arrhythmiaStatus.includes("ARRITMIA DETECTADA")) {
       console.log('useVitalSignsProcessor: ¡ARRITMIA DETECTADA!', {
         status: combinedResult.arrhythmiaStatus,
         data: combinedResult.lastArrhythmiaData,

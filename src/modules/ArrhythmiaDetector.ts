@@ -7,11 +7,11 @@ export class ArrhythmiaDetector {
   private lastPeakTimes: number[] = [];
   private learningPhase: boolean = true;
   private learningPhaseCount: number = 0;
-  private readonly LEARNING_PHASE_THRESHOLD = 20;
+  private readonly LEARNING_PHASE_THRESHOLD = 10; // Reduced from 20 for faster learning
   private readonly MAX_INTERVALS = 50;
   private lastAnalysisTime: number = 0;
   private lastPeakTime: number | null = null;
-  private readonly ANALYSIS_COOLDOWN_MS = 1000; // Prevent overanalyzing
+  private readonly ANALYSIS_COOLDOWN_MS = 500; // Reduced from 1000 for more frequent analysis
   private lastArrhythmiaResult: ArrhythmiaResult | null = null;
   private statusText: string = "LATIDO NORMAL|0";
   
@@ -20,8 +20,9 @@ export class ArrhythmiaDetector {
   }
   
   public addRRInterval(interval: number, amplitude?: number): void {
-    if (interval < 300 || interval > 2000) {
-      // Filtrar intervalos no fisiológicos
+    // Ampliar el rango de intervalos fisiológicos para mayor sensibilidad
+    if (interval < 200 || interval > 2500) {
+      // Filtrar intervalos extremadamente no fisiológicos
       return;
     }
     
@@ -45,7 +46,9 @@ export class ArrhythmiaDetector {
   }
 
   public processRRIntervals(intervals: number[], amplitudes?: number[]): ArrhythmiaResult {
-    // Procesar múltiples intervalos RR a la vez
+    // Procesamiento más eficiente de múltiples intervalos RR
+    console.log("ArrhythmiaDetector: Procesando intervalos RR:", intervals.length, "intervalos");
+    
     if (intervals && intervals.length > 0) {
       for (let i = 0; i < intervals.length; i++) {
         const amplitude = amplitudes && amplitudes[i] ? amplitudes[i] : undefined;
@@ -84,6 +87,11 @@ export class ArrhythmiaDetector {
     
     // Evitar análisis demasiado frecuentes
     if (currentTime - this.lastAnalysisTime < this.ANALYSIS_COOLDOWN_MS) {
+      // Si hay un resultado previo, devuelve ese para mantener consistencia
+      if (this.lastArrhythmiaResult) {
+        return this.lastArrhythmiaResult;
+      }
+      
       return {
         detected: false,
         severity: 0,
@@ -96,7 +104,7 @@ export class ArrhythmiaDetector {
     this.lastAnalysisTime = currentTime;
     
     // Si estamos en fase de aprendizaje o no tenemos suficientes datos
-    if (this.learningPhase || this.rrIntervals.length < 8) {
+    if (this.learningPhase || this.rrIntervals.length < 5) { // Reducido de 8 a 5 para mayor sensibilidad
       return {
         detected: false,
         severity: 0,
@@ -113,13 +121,13 @@ export class ArrhythmiaDetector {
       
       console.log(`ArrhythmiaDetector: RMSSD = ${rmssd.toFixed(2)}, RRVariation = ${rrVariation.toFixed(2)}`);
       
-      // Detección de PAC (contracciones auriculares prematuras)
+      // Detección de PAC (contracciones auriculares prematuras) - Más sensible
       const hasPAC = this.detectPAC();
       
-      // Detección de PVC (contracciones ventriculares prematuras)
+      // Detección de PVC (contracciones ventriculares prematuras) - Más sensible
       const hasPVC = this.detectPVC();
       
-      // Detección de AF (fibrilación auricular)
+      // Detección de AF (fibrilación auricular) - Más sensible
       const hasAF = this.detectAF(rmssd, rrVariation);
       
       // Determinar tipo de arritmia detectada
@@ -129,16 +137,16 @@ export class ArrhythmiaDetector {
       
       if (hasAF) {
         arrhythmiaType = 'AF';
-        severity = Math.min(10, 5 + Math.floor(rmssd / 50));
-        confidence = Math.min(1, rrVariation / 0.2);
+        severity = Math.min(10, 5 + Math.floor(rmssd / 40)); // Más sensible
+        confidence = Math.min(1, rrVariation / 0.15); // Más sensible
       } else if (hasPVC) {
         arrhythmiaType = 'PVC';
         severity = 7;
-        confidence = 0.8;
+        confidence = 0.9; // Aumentada
       } else if (hasPAC) {
         arrhythmiaType = 'PAC';
-        severity = 5;
-        confidence = 0.7;
+        severity = 6; // Aumentada
+        confidence = 0.8; // Aumentada
       }
       
       const detected = arrhythmiaType !== 'NONE';
@@ -206,14 +214,14 @@ export class ArrhythmiaDetector {
   private detectPAC(): boolean {
     if (this.rrIntervals.length < 4) return false;
     
-    // Buscar un patrón corto-largo-normal (característico de PAC)
+    // Buscar un patrón corto-largo-normal (característico de PAC) - Más sensible
     for (let i = 2; i < this.rrIntervals.length; i++) {
       const prev2 = this.rrIntervals[i - 2];
       const prev1 = this.rrIntervals[i - 1];
       const current = this.rrIntervals[i];
       
-      // Si hay un intervalo corto seguido de uno largo
-      if (prev2 > 600 && prev1 < 0.8 * prev2 && current > 1.1 * prev1) {
+      // Parámetros más sensibles para detectar PAC
+      if (prev2 > 500 && prev1 < 0.85 * prev2 && current > 1.05 * prev1) {
         return true;
       }
     }
@@ -229,6 +237,7 @@ export class ArrhythmiaDetector {
     // 2. Una pausa compensatoria después (intervalo RR largo)
     // 3. Mayor amplitud en la onda R
     
+    // Parámetros más sensibles para detectar PVC
     for (let i = 2; i < this.rrIntervals.length - 1; i++) {
       const prev = this.rrIntervals[i - 1];
       const current = this.rrIntervals[i];
@@ -237,11 +246,10 @@ export class ArrhythmiaDetector {
       const avgNormal = (this.rrIntervals.reduce((sum, val) => sum + val, 0) - current) / 
                           (this.rrIntervals.length - 1);
       
-      // Si hay un intervalo corto seguido de uno largo (pausa compensatoria)
-      // Y la amplitud es significativamente mayor
-      if (current < 0.8 * avgNormal && 
-          next > 1.2 * avgNormal &&
-          this.amplitudes[i] > 1.3 * (this.getAvgAmplitude())) {
+      // Criterios más sensibles
+      if (current < 0.85 * avgNormal && 
+          next > 1.15 * avgNormal &&
+          this.amplitudes[i] > 1.2 * (this.getAvgAmplitude())) {
         return true;
       }
     }
@@ -253,20 +261,20 @@ export class ArrhythmiaDetector {
     // AF se caracteriza por alta variabilidad en los intervalos RR
     // y ausencia de un patrón regular
     
-    // Criterios basados en estudios clínicos
-    const highRMSSD = rmssd > 100; // Alta variabilidad instantánea
-    const highVariation = rrVariation > 0.1; // Alta variabilidad general
+    // Criterios más sensibles basados en estudios clínicos
+    const highRMSSD = rmssd > 80; // Reducido de 100 para mayor sensibilidad
+    const highVariation = rrVariation > 0.08; // Reducido de 0.1 para mayor sensibilidad
     
     // Verificar patrones irregulares consecutivos
     let irregularCount = 0;
     for (let i = 1; i < this.rrIntervals.length; i++) {
       const diff = Math.abs(this.rrIntervals[i] - this.rrIntervals[i - 1]);
-      if (diff > 100) {
+      if (diff > 80) { // Reducido de 100 para mayor sensibilidad
         irregularCount++;
       }
     }
     
-    const highIrregularity = irregularCount >= this.rrIntervals.length * 0.7;
+    const highIrregularity = irregularCount >= this.rrIntervals.length * 0.6; // Reducido de 0.7 para mayor sensibilidad
     
     return highRMSSD && highVariation && highIrregularity;
   }

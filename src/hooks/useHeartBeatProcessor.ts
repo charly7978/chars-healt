@@ -35,18 +35,38 @@ export const useHeartBeatProcessor = () => {
       const lastPeakTime = result.isPeak ? Date.now() : null;
       
       // Create array of amplitudes for arrhythmia detection
-      // This is critical for the new arrhythmia detection algorithm
-      const amplitudes: number[] = [];
+      // This is critical for the arrhythmia detection algorithm
+      let amplitudes: number[] = [];
       
-      // Add peak amplitude for arrhythmia detection
+      // Get amplitudes from processor if available
+      const processorAmplitudes = processor.getRRIntervals().amplitudes || [];
+      if (processorAmplitudes && processorAmplitudes.length > 0) {
+        amplitudes = [...processorAmplitudes];
+      }
+      
+      // Add current peak amplitude if it's a peak
       if (result.isPeak && result.amplitude !== undefined) {
         amplitudes.push(result.amplitude);
         console.log("HeartBeatProcessor: Peak detected with amplitude:", result.amplitude);
-      } else if (rrIntervals.length > 0 && amplitudes.length === 0) {
-        // Fallback amplitude estimation if we have RR intervals but no amplitude
-        const estimatedAmplitude = 100 * (confidence / 100);
-        amplitudes.push(estimatedAmplitude);
       }
+      
+      // Ensure we have at least one amplitude value for each RR interval
+      if (rrIntervals.length > amplitudes.length) {
+        // Fill missing amplitudes with estimated values
+        const missingCount = rrIntervals.length - amplitudes.length;
+        const estimatedAmplitude = 100 * (confidence / 100);
+        for (let i = 0; i < missingCount; i++) {
+          amplitudes.push(estimatedAmplitude);
+        }
+      }
+      
+      console.log("useHeartBeatProcessor: Processed signal", { 
+        bpm: result.bpm, 
+        confidence: result.confidence, 
+        isPeak: result.isPeak,
+        intervals: rrIntervals.length,
+        amplitudes: amplitudes.length
+      });
       
       // Enhanced data structure with all necessary information
       const rrData = {
