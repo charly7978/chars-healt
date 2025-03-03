@@ -1,7 +1,9 @@
+
 import { useState, useCallback, useEffect } from 'react';
 import { VitalSignsProcessor } from '../modules/VitalSignsProcessor';
 import { GlucoseProcessor } from '../modules/GlucoseProcessor';
 import { ArrhythmiaDetector } from '../modules/ArrhythmiaDetector';
+import { ArrhythmiaResult } from '../types/signal';
 
 type VitalSignsResult = {
   spo2: number;
@@ -50,7 +52,8 @@ export const useVitalSignsProcessor = () => {
       confidence: glucoseResult.confidence || 0
     };
     
-    let arrhythmiaResult = {
+    // Define arrhythmiaResult with default values explicitly typed as ArrhythmiaResult
+    const defaultArrhythmiaResult: ArrhythmiaResult = {
       detected: false,
       severity: 0,
       confidence: 0,
@@ -59,6 +62,8 @@ export const useVitalSignsProcessor = () => {
       rmssd: 0,
       rrVariation: 0
     };
+    
+    let arrhythmiaResult: ArrhythmiaResult = defaultArrhythmiaResult;
     
     if (rrData && rrData.intervals && rrData.intervals.length > 0) {
       console.log('useVitalSignsProcessor: Enviando datos a detector de arritmias:', {
@@ -92,6 +97,7 @@ export const useVitalSignsProcessor = () => {
     
     const lastArrhythmia = arrhythmiaDetector.getLastArrhythmia();
     if (lastArrhythmia && lastArrhythmia.detected) {
+      // Ensure we always have values for rmssd and rrVariation
       combinedResult.lastArrhythmiaData = {
         timestamp: lastArrhythmia.timestamp,
         rmssd: lastArrhythmia.rmssd || 0,
