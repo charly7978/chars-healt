@@ -8,9 +8,6 @@ import PPGSignalMeter from "@/components/PPGSignalMeter";
 import PermissionsHandler from "@/components/PermissionsHandler";
 import { VitalSignsRisk } from '@/utils/vitalSignsRisk';
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import MonitorButton from "@/components/MonitorButton";
-import CalibrationDialog from "@/components/CalibrationDialog";
 
 interface VitalSigns {
   spo2: number;
@@ -85,10 +82,6 @@ const Index = () => {
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat, reset: resetHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
-
-  const [isCalibrationDialogOpen, setIsCalibrationDialogOpen] = useState(false);
-  const [isCalibrating, setIsCalibrating] = useState(false);
-  const [calibrationStatus, setCalibrationStatus] = useState<'pending' | 'in_progress' | 'completed' | 'failed'>('pending');
 
   const handlePermissionsGranted = () => {
     console.log("Permisos concedidos correctamente");
@@ -652,86 +645,23 @@ const Index = () => {
     };
   }, []);
 
-  /**
-   * Maneja el inicio del proceso de calibración
-   */
-  const handleCalibrationStart = async () => {
-    try {
-      setIsCalibrating(true);
-      setCalibrationStatus('in_progress');
-      
-      // Si no está la cámara encendida, necesitamos inicializarla para la calibración
-      if (!isCameraOn) {
-        await prepareProcessorsOnly();
-      }
-      
-      // Automáticamente iniciamos un breve período de monitoreo para ajustar parámetros
-      if (!isMonitoring) {
-        startMonitoring();
-      }
-      
-      // Resetear el procesador para comenzar con una calibración limpia
-      resetHeartBeat();
-      
-      console.log('Iniciando proceso de calibración...');
-    } catch (error) {
-      console.error('Error al iniciar la calibración:', error);
-      setCalibrationStatus('failed');
-    }
-  };
-
-  /**
-   * Maneja el fin del proceso de calibración
-   */
-  const handleCalibrationEnd = () => {
-    try {
-      // Obtenemos los parámetros de calibración desde localStorage
-      const savedSettings = localStorage.getItem('calibrationSettings');
-      if (savedSettings) {
-        const settings = JSON.parse(savedSettings);
-        
-        // Como no tenemos acceso directo a calibrateHeartBeat, usamos el objeto global si está disponible
-        if (window.heartBeatProcessor && typeof window.heartBeatProcessor.calibrate === 'function') {
-          window.heartBeatProcessor.calibrate(
-            settings.perfusionIndex,
-            settings.qualityThreshold
-          );
-          
-          console.log('Calibración aplicada con éxito:', settings);
-          setCalibrationStatus('completed');
-        } else {
-          console.warn('No se pudo acceder al método de calibración del procesador');
-          setCalibrationStatus('failed');
-        }
-      } else {
-        // Si no hay configuración guardada, intentamos una auto-calibración
-        if (window.heartBeatProcessor && typeof window.heartBeatProcessor.autoCalibrate === 'function') {
-          window.heartBeatProcessor.autoCalibrate();
-          console.log('Auto-calibración aplicada');
-          setCalibrationStatus('completed');
-        } else {
-          console.warn('No se pudo acceder al método de auto-calibración');
-          setCalibrationStatus('failed');
-        }
-      }
-    } catch (error) {
-      console.error('Error al finalizar la calibración:', error);
-      setCalibrationStatus('failed');
-    } finally {
-      setIsCalibrating(false);
-    }
-  };
-  
-  const openCalibrationDialog = () => {
-    setIsCalibrationDialogOpen(true);
-  };
-  
-  const closeCalibrationDialog = () => {
-    setIsCalibrationDialogOpen(false);
-  };
-
   return (
-    <div className="flex flex-col min-h-screen overflow-hidden">
+    <div 
+      className="fixed inset-0 flex flex-col bg-black" 
+      style={{ 
+        height: '100%',
+        maxHeight: '100dvh',
+        minHeight: '100vh',
+        touchAction: 'none',
+        overscrollBehavior: 'none',
+        WebkitOverflowScrolling: 'touch',
+        overflow: 'hidden',
+        paddingTop: 'var(--sat)',
+        paddingRight: 'var(--sar)',
+        paddingBottom: 'var(--sab)',
+        paddingLeft: 'var(--sal)',
+      }}
+    >
       <PermissionsHandler 
         onPermissionsGranted={handlePermissionsGranted}
         onPermissionsDenied={handlePermissionsDenied}
@@ -754,16 +684,14 @@ const Index = () => {
       </div>
 
       <div className="absolute inset-0 z-10">
-        <PPGSignalMeter
-          value={lastSignal?.filteredValue || 0}
-          quality={signalQuality}
-          isFingerDetected={lastSignal?.fingerDetected || false}
+        <PPGSignalMeter 
+          value={isMonitoring ? lastSignal?.filteredValue || 0 : 0}
+          quality={isMonitoring ? lastSignal?.quality || 0 : 0}
+          isFingerDetected={isMonitoring ? lastSignal?.fingerDetected || false : false}
           onStartMeasurement={startMonitoring}
           onReset={handleReset}
           arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
-          rawArrhythmiaData={vitalSigns.lastArrhythmiaData}
-          isCalibrating={isCalibrating}
-          calibrationStatus={calibrationStatus}
+          rawArrhythmiaData={lastArrhythmiaData}
         />
       </div>
       
@@ -868,29 +796,6 @@ const Index = () => {
           </div>
         </div>
       )}
-
-      <div className="fixed bottom-4 right-4 flex flex-col gap-2">
-        <Button 
-          variant="outline" 
-          size="sm"
-          className="text-xs"
-          onClick={openCalibrationDialog}
-        >
-          Calibrar
-        </Button>
-        
-        <MonitorButton 
-          isMonitoring={isMonitoring} 
-          onClick={isMonitoring ? stopMonitoringOnly : startMonitoring} 
-        />
-      </div>
-      
-      <CalibrationDialog 
-        isOpen={isCalibrationDialogOpen}
-        onClose={closeCalibrationDialog}
-        onCalibrationStart={handleCalibrationStart}
-        onCalibrationEnd={handleCalibrationEnd}
-      />
     </div>
   );
 };

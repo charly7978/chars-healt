@@ -32,21 +32,6 @@ class KalmanFilter {
   }
 }
 
-// Definir una interfaz de error compatible
-export interface ProcessingError extends Error {
-  code: string;
-  message: string;
-}
-
-export interface Signal {
-  raw: number;
-  filteredValue: number;
-  quality: number;
-  fingerDetected: boolean;
-  timestamp: number;
-  processingTime: number;
-}
-
 /**
  * PPG Signal Processor implementation
  * Processes camera frames to extract and analyze PPG signals
@@ -55,18 +40,6 @@ export class PPGSignalProcessor implements SignalProcessor {
   private isProcessing: boolean = false;
   private kalmanFilter: KalmanFilter;
   private lastValues: number[] = [];
-  private onError?: (error: Error) => void;
-  private isInitialized: boolean = false;
-  private canvas: HTMLCanvasElement;
-  private ctx: CanvasRenderingContext2D | null = null;
-  private signalBuffer: number[] = [];
-  private medianValues: number[] = [];
-  private movingAvgValues: number[] = [];
-  private emaValue: number | null = null;
-  private lastQuality: number | null = null;
-  private lastFilteredValue: number = 0;
-  private lastFilterUpdate: number = 0;
-  private lastSignal: Signal | null = null;
   
   // Configuration settings
   private readonly DEFAULT_CONFIG = {
@@ -95,13 +68,10 @@ export class PPGSignalProcessor implements SignalProcessor {
    */
   constructor(
     public onSignalReady?: (signal: ProcessedSignal) => void,
-    errorHandler?: (error: Error) => void
+    public onError?: (error: ProcessingError) => void
   ) {
     this.kalmanFilter = new KalmanFilter();
     this.currentConfig = { ...this.DEFAULT_CONFIG };
-    this.onError = errorHandler;
-    this.canvas = document.createElement('canvas');
-    this.ctx = this.canvas.getContext('2d');
     console.log("PPGSignalProcessor: Instance created");
   }
 
@@ -117,16 +87,7 @@ export class PPGSignalProcessor implements SignalProcessor {
       this.isCurrentlyDetected = false;
       this.lastDetectionTime = 0;
       this.kalmanFilter.reset();
-      this.signalBuffer = [];
-      this.medianValues = [];
-      this.movingAvgValues = [];
-      this.emaValue = null;
-      this.lastQuality = null;
-      this.lastFilteredValue = 0;
-      this.lastFilterUpdate = 0;
-      this.lastSignal = null;
       console.log("PPGSignalProcessor: Initialized");
-      this.isInitialized = true;
     } catch (error) {
       console.error("PPGSignalProcessor: Initialization error", error);
       this.handleError("INIT_ERROR", "Error initializing processor");
@@ -154,14 +115,6 @@ export class PPGSignalProcessor implements SignalProcessor {
     this.consecutiveDetections = 0;
     this.isCurrentlyDetected = false;
     this.kalmanFilter.reset();
-    this.signalBuffer = [];
-    this.medianValues = [];
-    this.movingAvgValues = [];
-    this.emaValue = null;
-    this.lastQuality = null;
-    this.lastFilteredValue = 0;
-    this.lastFilterUpdate = 0;
-    this.lastSignal = null;
     console.log("PPGSignalProcessor: Stopped");
   }
 
@@ -382,246 +335,5 @@ export class PPGSignalProcessor implements SignalProcessor {
       timestamp: Date.now()
     };
     this.onError?.(error);
-  }
-
-  /**
-   * Optimización del procesador de frames para mejor rendimiento
-   */
-  async processVideoFrame(videoElement: HTMLVideoElement): Promise<Signal | null> {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
-
-    // Si no hay un contexto de lienzo, no podemos procesar
-    if (!this.ctx) {
-      return null;
-    }
-
-    try {
-      const startTime = performance.now();
-      
-      // Verificar si el frame es válido para evitar errores
-      if (videoElement.videoWidth === 0 || videoElement.videoHeight === 0) {
-        return null;
-      }
-
-      // Dibujamos el frame en el canvas con tamaño reducido para mejor rendimiento
-      const ROI_SIZE = Math.min(100, Math.min(videoElement.videoWidth, videoElement.videoHeight) / 4);
-      
-      // Centrar la región de interés
-      const sourceX = Math.floor((videoElement.videoWidth - ROI_SIZE) / 2);
-      const sourceY = Math.floor((videoElement.videoHeight - ROI_SIZE) / 2);
-      
-      // Usar un canvas más pequeño para el procesamiento
-      this.canvas.width = ROI_SIZE;
-      this.canvas.height = ROI_SIZE;
-      
-      // Dibujar sólo la región central para procesamiento más rápido
-      this.ctx.drawImage(
-        videoElement,
-        sourceX, sourceY, ROI_SIZE, ROI_SIZE,
-        0, 0, ROI_SIZE, ROI_SIZE
-      );
-
-      // Obtener los datos de la imagen para análisis
-      const imageData = this.ctx.getImageData(0, 0, ROI_SIZE, ROI_SIZE);
-      const data = imageData.data;
-      
-      // Optimización: procesar muestreando los píxeles (cada N píxeles) para mejorar rendimiento
-      const SAMPLING_RATE = 4; // Procesar 1 de cada 4 píxeles
-      const pixelCount = Math.floor((data.length / 4) / SAMPLING_RATE);
-      
-      let redTotal = 0;
-      let greenTotal = 0;
-      let blueTotal = 0;
-      let validPixels = 0;
-      
-      // Usar acceso directo al array para mejor rendimiento
-      for (let i = 0; i < data.length; i += 4 * SAMPLING_RATE) {
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
-        
-        // Detectar si el pixel es de piel (mejora en la detección)
-        if (this.isSkinPixel(r, g, b)) {
-          redTotal += r;
-          greenTotal += g;
-          blueTotal += b;
-          validPixels++;
-        }
-      }
-
-      // Si no hay píxeles válidos, posiblemente no hay un dedo en la cámara
-      const fingerDetected = validPixels > (pixelCount * 0.1);
-      
-      // Calcular el valor promedio de cada canal si hay un dedo detectado
-      const redAvg = fingerDetected ? redTotal / validPixels : 0;
-      const greenAvg = fingerDetected ? greenTotal / validPixels : 0;
-      const blueAvg = fingerDetected ? blueTotal / validPixels : 0;
-      
-      // Aplicar normalización y filtrado para obtener la señal PPG
-      // La señal PPG se encuentra principalmente en el canal rojo
-      const rawValue = redAvg / 255;
-      
-      // Aplicar buffer circular para procesamiento más estable
-      this.addToBuffer(rawValue);
-      
-      // Calcular la calidad de la señal basada en la variación y estabilidad
-      const signalQuality = this.calculateSignalQuality(fingerDetected);
-      
-      // Optimización temporal: limitar la frecuencia de cálculos intensivos
-      const now = Date.now();
-      const shouldUpdateFilteredValue = (now - this.lastFilterUpdate) > 16; // ~60 FPS
-      
-      let filteredValue = this.lastFilteredValue;
-      if (shouldUpdateFilteredValue) {
-        // Aplicar filtrado avanzado en períodos específicos para ahorrar CPU
-        filteredValue = this.applySignalFilters(rawValue);
-        this.lastFilteredValue = filteredValue;
-        this.lastFilterUpdate = now;
-      }
-
-      const signal: Signal = {
-        raw: rawValue,
-        filteredValue: filteredValue,
-        quality: signalQuality,
-        fingerDetected: fingerDetected,
-        timestamp: now,
-        processingTime: performance.now() - startTime
-      };
-
-      this.lastSignal = signal;
-      return signal;
-    } catch (error) {
-      console.error("Error procesando frame:", error);
-      this.handleError("PROCESSING_ERROR", "Error procesando el frame del video");
-      return null;
-    }
-  }
-
-  /**
-   * Optimización de la detección de piel para mejor precisión
-   */
-  private isSkinPixel(r: number, g: number, b: number): boolean {
-    // Condiciones optimizadas para detección de piel en entornos con luz variable
-    const sum = r + g + b;
-    
-    // Evitar división por cero
-    if (sum === 0) return false;
-    
-    // Normalizar valores
-    const rNorm = r / sum;
-    const gNorm = g / sum;
-    
-    // Reglas para detectar color de piel (adaptivas a diferentes tonos)
-    return (
-      r > 60 && // Suficiente componente rojo
-      r > g && // Rojo mayor que verde
-      r > b && // Rojo mayor que azul
-      rNorm > 0.35 && // Proporción de rojo significativa
-      gNorm < 0.4 && // No demasiado verde
-      Math.abs(r - g) > 15 // Diferencia entre rojo y verde
-    );
-  }
-
-  /**
-   * Optimización de filtros para mejor señal y rendimiento
-   */
-  private applySignalFilters(value: number): number {
-    // Filtro de mediana para eliminar valores atípicos
-    this.medianValues.push(value);
-    if (this.medianValues.length > 5) {
-      this.medianValues.shift();
-    }
-    
-    // Clonar para no modificar el original durante la ordenación
-    const sortedValues = [...this.medianValues].sort((a, b) => a - b);
-    const medianValue = sortedValues[Math.floor(sortedValues.length / 2)];
-    
-    // Filtro de media móvil para suavizado inicial
-    this.movingAvgValues.push(medianValue);
-    if (this.movingAvgValues.length > 10) {
-      this.movingAvgValues.shift();
-    }
-    
-    const avgValue = this.movingAvgValues.reduce((sum, val) => sum + val, 0) / 
-                     this.movingAvgValues.length;
-    
-    // EMA (Promedio Móvil Exponencial) para seguimiento adaptativo
-    if (this.emaValue === null) {
-      this.emaValue = avgValue;
-    } else {
-      // Factor alfa optimizado para mayor estabilidad
-      const alpha = 0.2;
-      this.emaValue = alpha * avgValue + (1 - alpha) * this.emaValue;
-    }
-    
-    return this.emaValue;
-  }
-
-  /**
-   * Cálculo optimizado de la calidad de la señal
-   */
-  private calculateSignalQuality(fingerDetected: boolean): number {
-    if (!fingerDetected) return 0;
-    
-    // Si el buffer no tiene suficientes muestras, la calidad es baja
-    if (this.signalBuffer.length < 20) return 0.2;
-    
-    // Obtener las últimas N muestras para análisis
-    const recentValues = this.signalBuffer.slice(-30);
-    
-    // 1. Calcular varianza (para medir ruido)
-    const mean = recentValues.reduce((sum, val) => sum + val, 0) / recentValues.length;
-    const variance = recentValues.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / recentValues.length;
-    
-    // 2. Calcular la diferencia entre máximo y mínimo (amplitud de la señal)
-    const min = Math.min(...recentValues);
-    const max = Math.max(...recentValues);
-    const amplitude = max - min;
-    
-    // 3. Calcular la estabilidad de la línea base
-    const baselineStability = 1 - Math.min(1, variance * 20);
-    
-    // 4. Calcular la fuerza de la señal basada en la amplitud
-    const signalStrength = Math.min(1, amplitude * 10);
-    
-    // 5. Evaluar cambios bruscos (indicativos de movimiento)
-    let suddenChanges = 0;
-    for (let i = 1; i < recentValues.length; i++) {
-      const change = Math.abs(recentValues[i] - recentValues[i - 1]);
-      if (change > 0.05) {
-        suddenChanges++;
-      }
-    }
-    const stability = 1 - Math.min(1, (suddenChanges / recentValues.length) * 2);
-    
-    // Calcular puntuación compuesta de calidad
-    let quality = (
-      baselineStability * 0.4 +
-      signalStrength * 0.4 +
-      stability * 0.2
-    );
-    
-    // Limitar los valores entre 0 y 1
-    quality = Math.max(0, Math.min(1, quality));
-    
-    // Aplicar EMA para suavizar los cambios en la calidad reportada
-    if (this.lastQuality === null) {
-      this.lastQuality = quality;
-    } else {
-      this.lastQuality = 0.7 * this.lastQuality + 0.3 * quality;
-    }
-    
-    return this.lastQuality;
-  }
-
-  // Método para agregar un valor al buffer
-  private addToBuffer(value: number): void {
-    this.signalBuffer.push(value);
-    // Mantener un tamaño de buffer manejable
-    if (this.signalBuffer.length > 100) {
-      this.signalBuffer.shift();
-    }
   }
 }
