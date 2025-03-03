@@ -1,3 +1,4 @@
+
 /**
  * Handles core SpO2 calculation logic
  */
@@ -9,10 +10,6 @@ import { SpO2Processor } from './SpO2Processor';
 export class SpO2Calculator {
   private calibration: SpO2Calibration;
   private processor: SpO2Processor;
-  
-  // State variables not related to calibration or processing
-  private cyclePosition: number = 0;
-  private breathingPhase: number = Math.random() * Math.PI * 2;
 
   constructor() {
     this.calibration = new SpO2Calibration();
@@ -25,8 +22,6 @@ export class SpO2Calculator {
   reset(): void {
     this.calibration.reset();
     this.processor.reset();
-    this.cyclePosition = 0;
-    this.breathingPhase = Math.random() * Math.PI * 2;
   }
 
   /**
@@ -43,32 +38,20 @@ export class SpO2Calculator {
       const ac = calculateAC(values);
       if (ac < SPO2_CONSTANTS.MIN_AC_VALUE) return 0;
 
-      // Perfusion index (PI = AC/DC ratio) - indicador clave en oximetría real
+      // Perfusion index (PI = AC/DC ratio)
       const perfusionIndex = ac / dc;
       
-      // Cálculo basado en la relación de absorción (R) - siguiendo principios reales de oximetría de pulso
-      // En un oxímetro real, esto se hace con dos longitudes de onda (rojo e infrarrojo)
+      // Cálculo basado en la relación de absorción (R)
       const R = (perfusionIndex * 1.8) / SPO2_CONSTANTS.CALIBRATION_FACTOR;
 
       // Aplicación de la ecuación de calibración basada en curva de Beer-Lambert
-      // SpO2 = 110 - 25 × (R) [aproximación empírica]
       let rawSpO2 = SPO2_CONSTANTS.R_RATIO_A - (SPO2_CONSTANTS.R_RATIO_B * R);
       
-      // Incrementar ciclo de fluctuación natural
-      this.cyclePosition = (this.cyclePosition + 0.008) % 1.0;
-      this.breathingPhase = (this.breathingPhase + 0.005) % (Math.PI * 2);
-      
-      // Fluctuación basada en ciclo respiratorio (aprox. ±1%)
-      const primaryFluctuation = Math.sin(this.cyclePosition * Math.PI * 2) * 0.8;
-      const breathingFluctuation = Math.sin(this.breathingPhase) * 0.6;
-      const combinedFluctuation = primaryFluctuation + breathingFluctuation;
-      
       // IMPORTANTE: Garantizar que el rango se mantenga realista
-      // SpO2 debe estar entre 93-98% para personas sanas, o menos para casos anormales
-      // Nunca debe exceder 98% en la práctica real
-      rawSpO2 = Math.min(rawSpO2, 98);
+      rawSpO2 = Math.min(rawSpO2, 100);
+      rawSpO2 = Math.max(rawSpO2, 90);
       
-      return Math.round(rawSpO2 + combinedFluctuation);
+      return Math.round(rawSpO2);
     } catch (err) {
       console.error("Error in SpO2 calculation:", err);
       return 0;
@@ -116,15 +99,15 @@ export class SpO2Calculator {
       // Save raw value for analysis
       this.processor.addRawValue(rawSpO2);
 
-      // Apply calibration if available - crítico para lecturas coherentes
+      // Apply calibration if available
       let calibratedSpO2 = rawSpO2;
       if (this.calibration.isCalibrated()) {
         calibratedSpO2 = rawSpO2 + this.calibration.getOffset();
       }
       
-      // IMPORTANTE: Garantizar un máximo fisiológico realista
-      // SpO2 nunca debe exceder 98% para mantener realismo clínico
-      calibratedSpO2 = Math.min(calibratedSpO2, 98);
+      // Garantizar un rango fisiológico realista
+      calibratedSpO2 = Math.min(calibratedSpO2, 100);
+      calibratedSpO2 = Math.max(calibratedSpO2, 90);
       
       // Log para depuración del cálculo
       console.log(`SpO2: raw=${rawSpO2}, calibrated=${calibratedSpO2}`);

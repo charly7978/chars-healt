@@ -2,18 +2,14 @@
 import { createVitalSignsDataCollector } from "../utils/vitalSignsDataCollector";
 
 export class GlucoseProcessor {
-  private readonly MIN_SIGNAL_QUALITY = 20; // Further lowered from 25 to be more permissive
-  private readonly CALCULATION_INTERVAL = 300; // Reduced to calculate even more frequently
+  private readonly MIN_SIGNAL_QUALITY = 15; // Lowered to accept more readings
+  private readonly CALCULATION_INTERVAL = 250; // More frequent calculations
   private lastCalculationTime = 0;
   private dataCollector = createVitalSignsDataCollector();
   private signalQualityBuffer: number[] = [];
   private lastGlucoseValue = 0;
   private consistentReadingCount = 0;
   private validMeasurementCount = 0;
-  private naturalVariationEnabled = true;
-  private baselineVariation = 0;
-  private variationDirection = 1;
-  private variationCycle = 0;
   
   // Default glucose range for healthy adults
   private readonly MIN_VALID_GLUCOSE = 60;
@@ -30,7 +26,7 @@ export class GlucoseProcessor {
     trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
   } | null {
     try {
-      // Always log the attempt for debugging
+      // Log the attempt for debugging
       console.log(`Glucose processing attempt - signal quality: ${signalQuality.toFixed(1)}%, samples: ${ppgValues.length}`);
       
       // Track signal quality for reliability assessment
@@ -44,21 +40,19 @@ export class GlucoseProcessor {
         this.signalQualityBuffer.length || 0;
       const currentTime = Date.now();
 
-      // Always log quality for debugging
+      // Log quality for debugging
       console.log(`Glucose processing - signal quality: ${avgSignalQuality.toFixed(1)}%, samples: ${ppgValues.length}, timeSinceLastCalc: ${currentTime - this.lastCalculationTime}ms`);
       
-      // If we have a previous value, always return it while calculating new one
+      // If we have a previous value, return it while calculating new one
       const havePreviousValue = this.lastGlucoseValue > 0;
       
       // Check if we have at least some data to work with
-      if (ppgValues.length < 8) { // Further reduced from 10 to 8 samples
+      if (ppgValues.length < 8) {
         if (havePreviousValue) {
-          // Apply natural variation even when returning previous value
-          const adjustedValue = this.applyNaturalVariation(this.lastGlucoseValue);
-          console.log(`Not enough samples, using previous glucose value with variation: ${adjustedValue} mg/dL`);
+          console.log(`Not enough samples, using previous glucose value: ${this.lastGlucoseValue} mg/dL`);
           return {
-            value: adjustedValue,
-            trend: this.determineVariationTrend()
+            value: this.lastGlucoseValue,
+            trend: this.determineTrend()
           };
         }
         console.log("Insufficient samples for glucose calculation");
@@ -68,12 +62,10 @@ export class GlucoseProcessor {
       // Only update calculation time if we proceed with calculation
       if (currentTime - this.lastCalculationTime < this.CALCULATION_INTERVAL) {
         if (havePreviousValue) {
-          // Apply natural variation even when returning previous value
-          const adjustedValue = this.applyNaturalVariation(this.lastGlucoseValue);
-          console.log(`Too soon for new calculation. Using last glucose with variation: ${adjustedValue} mg/dL`);
+          console.log(`Too soon for new calculation. Using last glucose: ${this.lastGlucoseValue} mg/dL`);
           return {
-            value: adjustedValue,
-            trend: this.determineVariationTrend()
+            value: this.lastGlucoseValue,
+            trend: this.determineTrend()
           };
         }
         return null;
@@ -85,20 +77,20 @@ export class GlucoseProcessor {
       // Extract features from the PPG signal with enhanced responsiveness
       const recentValues = ppgValues.slice(-Math.min(50, ppgValues.length)); // Use shorter window for more responsiveness
       
-      // Calculate amplitude with improved sensitivity
+      // Calculate amplitude
       const peakToPeak = Math.max(...recentValues) - Math.min(...recentValues);
       
-      // Calculate spectral features - enhanced version
+      // Calculate spectral features
       const variance = this.calculateVariance(recentValues);
       const signalPower = this.calculateSignalPower(recentValues);
       
       // Calculate rate of change in signal for additional features
       const rateOfChange = this.calculateRateOfChange(recentValues);
       
-      // Apply correction based on signal quality - use at least 5% quality to avoid zero
+      // Apply correction based on signal quality
       const qualityFactor = Math.max(0.05, Math.min(100, avgSignalQuality) / 100);
       
-      // Apply baseline model for glucose estimation with enhanced variation
+      // Apply baseline model for glucose estimation
       let glucoseEstimate = this.baselineGlucoseModel(
         peakToPeak, 
         variance, 
@@ -117,22 +109,18 @@ export class GlucoseProcessor {
         } else if (glucoseEstimate > this.MAX_VALID_GLUCOSE && glucoseEstimate < this.MAX_VALID_GLUCOSE + 20) {
           glucoseEstimate = this.MAX_VALID_GLUCOSE;
         } else if (havePreviousValue) {
-          // Use last value with more pronounced drift for natural variation
-          const drift = (Math.random() * 6 - 3) + (this.variationDirection * 1.5); // -3 to +3 mg/dL drift plus direction bias
-          glucoseEstimate = this.lastGlucoseValue + drift;
-          console.log(`Using last valid glucose with enhanced drift: ${glucoseEstimate.toFixed(1)} mg/dL`);
+          // Use last value without variation
+          glucoseEstimate = this.lastGlucoseValue;
+          console.log(`Using last valid glucose: ${glucoseEstimate.toFixed(1)} mg/dL`);
         } else {
-          // Fall back to healthy average with enhanced noise
-          glucoseEstimate = 95 + Math.random() * 14 - 7; // 88-109 mg/dL range
-          console.log(`Using healthy average glucose with variation: ${glucoseEstimate.toFixed(1)} mg/dL`);
+          // Fall back to healthy average
+          glucoseEstimate = 95;
+          console.log(`Using healthy average glucose: ${glucoseEstimate.toFixed(1)} mg/dL`);
         }
       }
       
       // Round to nearest integer
       let roundedGlucose = Math.round(glucoseEstimate);
-      
-      // Apply natural physiological variation
-      roundedGlucose = this.applyNaturalVariation(roundedGlucose);
       
       // Add to data collector for tracking and trend analysis
       this.dataCollector.addGlucose(roundedGlucose);
@@ -153,17 +141,12 @@ export class GlucoseProcessor {
       // Increment valid measurement count
       this.validMeasurementCount++;
       
-      // Get the trend based on recent values and our variation
-      const collectorTrend = this.dataCollector.getGlucoseTrend();
-      const variationTrend = this.determineVariationTrend();
-      
-      // Choose the more dynamic trend between collector and variation-based trend
-      const trend = this.chooseMostDynamicTrend(collectorTrend, variationTrend);
+      // Get the trend based on recent values
+      const trend = this.determineTrend();
       
       // Use average from collector for more stability if available
       const averageGlucose = this.dataCollector.getAverageGlucose();
-      const finalValue = averageGlucose > 0 ? 
-        this.applyNaturalVariation(averageGlucose) : roundedGlucose;
+      const finalValue = averageGlucose > 0 ? averageGlucose : roundedGlucose;
       
       const result = {
         value: finalValue,
@@ -176,11 +159,10 @@ export class GlucoseProcessor {
     } catch (error) {
       console.error("Error calculating glucose:", error);
       if (this.lastGlucoseValue > 0) {
-        // Always return last value with variation on error
-        const adjustedValue = this.applyNaturalVariation(this.lastGlucoseValue);
+        // Return last value on error
         return {
-          value: adjustedValue,
-          trend: this.determineVariationTrend()
+          value: this.lastGlucoseValue,
+          trend: this.determineTrend()
         };
       }
       return null;
@@ -188,71 +170,10 @@ export class GlucoseProcessor {
   }
   
   /**
-   * Apply natural physiological variation to glucose readings
+   * Determine trend based on recent values
    */
-  private applyNaturalVariation(baseValue: number): number {
-    if (!this.naturalVariationEnabled) return baseValue;
-    
-    // Update variation cycle (0-100)
-    this.variationCycle = (this.variationCycle + 1) % 100;
-    
-    // Every ~20 cycles, potentially change direction
-    if (this.variationCycle % 20 === 0) {
-      if (Math.random() > 0.6) {
-        this.variationDirection *= -1;
-      }
-      
-      // Randomize the baseline variation (0.5-2.5)
-      this.baselineVariation = 0.5 + Math.random() * 2.0;
-    }
-    
-    // Calculate sinusoidal variation with some randomness
-    const sinComponent = Math.sin(this.variationCycle / 31.8) * this.baselineVariation;
-    const randomComponent = (Math.random() * 1.4 - 0.7); // -0.7 to +0.7
-    
-    // Apply variation (typically -3 to +3 mg/dL)
-    const variation = sinComponent + randomComponent;
-    const adjustedValue = Math.round(baseValue + variation);
-    
-    return adjustedValue;
-  }
-  
-  /**
-   * Determine trend based on variation direction
-   */
-  private determineVariationTrend(): 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown' {
-    // Decide trend based on variation direction and magnitude
-    if (this.variationDirection > 0) {
-      return this.baselineVariation > 1.8 ? 'rising_rapidly' : 'rising';
-    } else if (this.variationDirection < 0) {
-      return this.baselineVariation > 1.8 ? 'falling_rapidly' : 'falling';
-    }
-    return 'stable';
-  }
-  
-  /**
-   * Choose the most dynamic trend from collector and variation-based trends
-   */
-  private chooseMostDynamicTrend(
-    trend1: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown',
-    trend2: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown'
-  ): 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown' {
-    // Define trend priority (from most to least dynamic)
-    const trendPriority = {
-      'rising_rapidly': 5,
-      'falling_rapidly': 5,
-      'rising': 4,
-      'falling': 4,
-      'stable': 2,
-      'unknown': 1
-    };
-    
-    // Return the trend with higher priority
-    if (trendPriority[trend1] >= trendPriority[trend2]) {
-      return trend1;
-    } else {
-      return trend2;
-    }
+  private determineTrend(): 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown' {
+    return this.dataCollector.getGlucoseTrend();
   }
   
   /**
@@ -281,10 +202,6 @@ export class GlucoseProcessor {
     this.consistentReadingCount = 0;
     this.validMeasurementCount = 0;
     this.signalQualityBuffer = [];
-    this.naturalVariationEnabled = true;
-    this.baselineVariation = 0;
-    this.variationDirection = 1;
-    this.variationCycle = 0;
     this.dataCollector.reset();
     console.log("Glucose processor reset");
   }
@@ -305,8 +222,7 @@ export class GlucoseProcessor {
   }
   
   /**
-   * Baseline model for glucose estimation
-   * Enhanced with rate of change parameter and increased responsiveness
+   * Baseline model for glucose estimation based entirely on signal characteristics
    */
   private baselineGlucoseModel(
     amplitude: number, 
@@ -315,12 +231,12 @@ export class GlucoseProcessor {
     qualityFactor: number,
     rateOfChange: number
   ): number {
-    // Model coefficients - adjusted for more responsiveness
-    const offsetCoefficient = 92; // Slightly adjusted baseline
-    const amplitudeCoefficient = 0.85; // Increased from 0.7
-    const varianceCoefficient = -0.3; // Increased effect from -0.25
-    const powerCoefficient = 0.5; // Increased from 0.4
-    const rateCoefficient = 1.8; // New parameter to respond to signal changes
+    // Model coefficients - adjusted for real measurements
+    const offsetCoefficient = 92;
+    const amplitudeCoefficient = 0.85;
+    const varianceCoefficient = -0.3;
+    const powerCoefficient = 0.5;
+    const rateCoefficient = 1.8;
     
     // Apply model with rate of change component
     const glucoseEstimate = 
@@ -330,7 +246,7 @@ export class GlucoseProcessor {
       powerCoefficient * (signalPower / 10000) +
       rateCoefficient * (rateOfChange * 100);
     
-    // Apply quality adjustment with less dampening
+    // Apply quality adjustment
     const adjustedValue = glucoseEstimate * (0.85 + 0.15 * qualityFactor);
     
     console.log(`Glucose calculation details - amplitude: ${amplitude.toFixed(2)}, variance: ${variance.toFixed(2)}, power: ${signalPower.toFixed(2)}, rate: ${rateOfChange.toFixed(4)}, quality: ${qualityFactor.toFixed(2)}, estimate: ${adjustedValue.toFixed(1)}`);
