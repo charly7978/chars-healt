@@ -35,16 +35,16 @@ const PPGSignalMeter = ({
   const lastArrhythmiaTime = useRef<number>(0);
   const arrhythmiaCountRef = useRef<number>(0);
   
-  // Optimized constants with SIGNIFICANTLY INCREASED dimensions for better visibility
-  const WINDOW_WIDTH_MS = 5000; // Visualization time window
-  const CANVAS_WIDTH = 700; // Increased from 700px to 1000px for much better readability
-  const CANVAS_HEIGHT = 900; // Increased from 900px to 1100px for much better vertical detail
-  const GRID_SIZE_X = 100; // Grid cell width
-  const GRID_SIZE_Y = 25; // Grid cell height
+  // Optimized constants based on clinical waveform visualization standards
+  const WINDOW_WIDTH_MS = 5000; // 5-second visualization window (standard for ECG/PPG)
+  const CANVAS_WIDTH = 800; // Standard width for clinical visualization
+  const CANVAS_HEIGHT = 400; // Optimized height for waveform clarity
+  const GRID_SIZE_X = 50; // Grid matches standard clinical 1mm (50ms) grid
+  const GRID_SIZE_Y = 20; // Grid optimized for amplitude clarity
   const VERTICAL_SCALE = 42.0; // Signal amplification factor
   const SMOOTHING_FACTOR = 1.8; // Wave smoothing factor
   const TARGET_FPS = 60;
-  const FRAME_TIME = 1000 / TARGET_FPS; // Optimized frame time calculation
+  const FRAME_TIME = 1000 / TARGET_FPS;
   const BUFFER_SIZE = 650; // Signal history buffer size
   const INVERT_SIGNAL = false;
   const PEAK_MIN_VALUE = 8.0; // Minimum threshold for peak detection
@@ -77,95 +77,112 @@ const PPGSignalMeter = ({
     return previousValue + SMOOTHING_FACTOR * (currentValue - previousValue);
   }, []);
 
-  // Enhanced grid drawing with improved readability and denser grid
+  // Enhanced grid drawing with clinical-standard grid
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
-    // Use clearRect for better performance than fillRect+fill
+    // Clear canvas with optimized method
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     
-    // Use a higher quality background with subtle gradient
-    const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
-    gradient.addColorStop(0, '#f8f9fa');
-    gradient.addColorStop(1, '#f1f3f5');
-    ctx.fillStyle = gradient;
+    // Use a clean white background (clinical standard)
+    ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    // Draw the main horizontal axis line (zero line)
-    const zeroY = CANVAS_HEIGHT * 0.6;
+    const zeroY = CANVAS_HEIGHT * 0.5; // Center baseline
+    
+    // Draw minor gridlines first (lighter)
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(0, 150, 100, 0.85)'; // Increased opacity from 0.8 to 0.85
-    ctx.lineWidth = 2.0; // Increased from 1.8 to 2.0
-    ctx.moveTo(0, zeroY);
-    ctx.lineTo(CANVAS_WIDTH, zeroY);
-    ctx.stroke();
-
-    // Draw minor grid lines with significantly increased visibility
-    ctx.beginPath();
-    ctx.strokeStyle = 'rgba(0, 180, 120, 0.2)'; // Increased opacity from 0.15 to 0.2
-    ctx.lineWidth = 0.7; // Increased from 0.6 to 0.7 for better visibility
-
-    // Even denser vertical grid lines (time axis)
-    for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X / 4) {
+    ctx.strokeStyle = 'rgba(200, 220, 220, 0.5)'; // Light cyan-gray for minor gridlines
+    ctx.lineWidth = 0.5;
+    
+    // Minor vertical gridlines (time) - 50ms spacing (clinical standard)
+    for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X / 5) {
       ctx.moveTo(x, 0);
       ctx.lineTo(x, CANVAS_HEIGHT);
     }
-
-    // Even denser horizontal grid lines (amplitude axis)
-    for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y / 4) {
+    
+    // Minor horizontal gridlines (amplitude)
+    for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y / 5) {
       ctx.moveTo(0, y);
       ctx.lineTo(CANVAS_WIDTH, y);
     }
     ctx.stroke();
-
-    // Draw major grid lines with increased visibility
+    
+    // Draw medium gridlines
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(0, 150, 100, 0.4)'; // Increased opacity from 0.3 to 0.4
-    ctx.lineWidth = 1.5; // Increased from 1.2 to 1.5
-
-    // Major vertical grid lines
+    ctx.strokeStyle = 'rgba(180, 200, 200, 0.8)'; // Medium cyan-gray
+    ctx.lineWidth = 0.8;
+    
+    // Medium gridlines - 200ms standard
+    for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X) {
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, CANVAS_HEIGHT);
+    }
+    
+    // Medium horizontal gridlines
+    for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y) {
+      ctx.moveTo(0, y);
+      ctx.lineTo(CANVAS_WIDTH, y);
+    }
+    ctx.stroke();
+    
+    // Draw major gridlines (1 second / major amplitude)
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(150, 180, 180, 1.0)'; // Darker cyan-gray
+    ctx.lineWidth = 1.0;
+    
+    // Major vertical gridlines - 1000ms (1 second) standard
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X * 4) {
       ctx.moveTo(x, 0);
       ctx.lineTo(x, CANVAS_HEIGHT);
       
-      // Add time labels with better formatting and increased font size
+      // Add time labels
       if (x >= 0) {
         const timeMs = (x / CANVAS_WIDTH) * WINDOW_WIDTH_MS;
-        ctx.fillStyle = 'rgba(0, 120, 80, 1.0)'; // Increased opacity to full
-        ctx.font = '16px "Inter", sans-serif'; // Increased from 13px to 16px
+        ctx.fillStyle = 'rgba(60, 90, 100, 1.0)';
+        ctx.font = '12px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(`${Math.round(timeMs)}ms`, x, CANVAS_HEIGHT - 10);
+        ctx.fillText(`${Math.round(timeMs/1000)}s`, x, CANVAS_HEIGHT - 5);
       }
     }
-
-    // Major horizontal grid lines
-    for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y * 4) {
+    
+    // Major horizontal gridlines
+    for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y * 5) {
       ctx.moveTo(0, y);
       ctx.lineTo(CANVAS_WIDTH, y);
       
-      // Add amplitude labels with better formatting and increased font size
-      if (y % (GRID_SIZE_Y * 4) === 0) {
+      // Add amplitude labels
+      if (y % (GRID_SIZE_Y * 5) === 0) {
         const amplitude = ((zeroY - y) / VERTICAL_SCALE).toFixed(1);
-        ctx.fillStyle = 'rgba(0, 120, 80, 1.0)'; // Increased opacity to full
-        ctx.font = '16px "Inter", sans-serif'; // Increased from 13px to 16px
+        ctx.fillStyle = 'rgba(60, 90, 100, 1.0)';
+        ctx.font = '12px sans-serif';
         ctx.textAlign = 'right';
-        ctx.fillText(amplitude, 32, y + 6); // Moved slightly right from 28 to 32
+        ctx.fillText(amplitude, 25, y + 4);
       }
     }
     ctx.stroke();
-
-    // Draw axis labels with increased font size
-    ctx.fillStyle = 'rgba(0, 120, 80, 1.0)'; // Increased opacity to full
-    ctx.font = 'bold 18px "Inter", sans-serif'; // Increased from 14px to 18px
+    
+    // Draw the baseline (zero line)
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(0, 120, 120, 1.0)';
+    ctx.lineWidth = 1.5;
+    ctx.moveTo(0, zeroY);
+    ctx.lineTo(CANVAS_WIDTH, zeroY);
+    ctx.stroke();
+    
+    // Draw axis labels
+    ctx.fillStyle = 'rgba(0, 100, 100, 1.0)';
+    ctx.font = 'bold 14px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('Tiempo (ms)', CANVAS_WIDTH / 2, CANVAS_HEIGHT - 30);
+    ctx.fillText('Tiempo (s)', CANVAS_WIDTH / 2, CANVAS_HEIGHT - 20);
     
     ctx.save();
-    ctx.translate(24, CANVAS_HEIGHT / 2);
+    ctx.translate(12, CANVAS_HEIGHT / 2);
     ctx.rotate(-Math.PI / 2);
+    ctx.textAlign = 'center';
     ctx.fillText('Amplitud', 0, 0);
     ctx.restore();
   }, []);
 
-  // Optimized signal rendering with improved performance
+  // Optimized signal rendering with clinical visualization standards
   const renderSignal = useCallback(() => {
     if (!canvasRef.current || !dataBufferRef.current) {
       animationFrameRef.current = requestAnimationFrame(renderSignal);
@@ -182,10 +199,9 @@ const PPGSignalMeter = ({
     }
 
     const canvas = canvasRef.current;
-    // Use desynchronized: true for better performance with high frame rates
     const ctx = canvas.getContext('2d', { 
-      alpha: false, // Disable alpha for performance
-      desynchronized: true // Enable desynchronized mode for better performance
+      alpha: false,
+      desynchronized: true
     });
     
     if (!ctx) {
@@ -243,8 +259,8 @@ const PPGSignalMeter = ({
       if (visiblePoints.length > 1) {
         // Draw the main PPG signal with optimized rendering
         ctx.beginPath();
-        ctx.strokeStyle = '#0EA5E9';
-        ctx.lineWidth = 2.8; // Increased from 2.5 to 2.8 for better visibility
+        ctx.strokeStyle = '#0080FF'; // Clinical blue for waveform
+        ctx.lineWidth = 2.0;
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
         
@@ -255,7 +271,7 @@ const PPGSignalMeter = ({
           const point = visiblePoints[i];
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
           // More accurate positioning relative to zero line
-          const y = canvas.height * 0.6 - point.value;
+          const y = canvas.height * 0.5 - point.value;
           
           if (firstPoint) {
             ctx.moveTo(x, y);
@@ -268,21 +284,21 @@ const PPGSignalMeter = ({
           if (point.isArrhythmia && i < visiblePoints.length - 1) {
             ctx.stroke();
             ctx.beginPath();
-            ctx.strokeStyle = '#DC2626';
-            ctx.lineWidth = 3.2; // Increased from 3 to 3.2
+            ctx.strokeStyle = '#FF0000'; // Red for arrhythmia
+            ctx.lineWidth = 2.5;
             ctx.setLineDash([3, 2]);
             ctx.moveTo(x, y);
             
             const nextPoint = visiblePoints[i + 1];
             const nextX = canvas.width - ((now - nextPoint.time) * canvas.width / WINDOW_WIDTH_MS);
-            const nextY = canvas.height * 0.6 - nextPoint.value;
+            const nextY = canvas.height * 0.5 - nextPoint.value;
             ctx.lineTo(nextX, nextY);
             ctx.stroke();
             
             // Reset for continuing normal signal
             ctx.beginPath();
-            ctx.strokeStyle = '#0EA5E9';
-            ctx.lineWidth = 2.8; // Increased from 2.5 to 2.8
+            ctx.strokeStyle = '#0080FF';
+            ctx.lineWidth = 2.0;
             ctx.setLineDash([]);
             ctx.moveTo(nextX, nextY);
             firstPoint = false;
@@ -292,7 +308,7 @@ const PPGSignalMeter = ({
         ctx.stroke();
       }
 
-      // Improved peak detection with more precise algorithm
+      // Clinical standard peak detection and marking
       const maxPeakIndices: number[] = [];
       
       for (let i = 2; i < visiblePoints.length - 2; i++) {
@@ -327,98 +343,50 @@ const PPGSignalMeter = ({
         }
       }
       
-      // Draw peaks with enhanced visualization
+      // Draw peaks with clinical standard markers
       for (const idx of maxPeakIndices) {
         const point = visiblePoints[idx];
         const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-        const y = canvas.height * 0.6 - point.value;
+        const y = canvas.height * 0.5 - point.value;
         
-        // Draw peak markers with improved visual cues
+        // Draw peak markers with clinical significance
         ctx.beginPath();
         
-        // Draw peak point with glow effect
         const isArrhythmiaPeak = point.isArrhythmia;
-        const peakColor = isArrhythmiaPeak ? '#DC2626' : '#0EA5E9';
-        const glowColor = isArrhythmiaPeak ? 'rgba(220, 38, 38, 0.3)' : 'rgba(14, 165, 233, 0.3)';
+        const peakColor = isArrhythmiaPeak ? '#FF0000' : '#0080FF';
         
-        // Add glow effect
-        const gradient = ctx.createRadialGradient(x, y, 2, x, y, 10);
-        gradient.addColorStop(0, peakColor);
-        gradient.addColorStop(1, glowColor);
-        
-        ctx.fillStyle = gradient;
-        ctx.arc(x, y, isArrhythmiaPeak ? 6.5 : 5.5, 0, Math.PI * 2); // Increased radius
+        // Draw peak marker
+        ctx.fillStyle = peakColor;
+        ctx.beginPath();
+        ctx.arc(x, y, 4, 0, Math.PI * 2);
         ctx.fill();
         
         // Add stroke for better definition
-        ctx.strokeStyle = isArrhythmiaPeak ? '#FF4D4D' : '#38BDF8';
-        ctx.lineWidth = 1.8; // Increased from 1.5 to 1.8
+        ctx.strokeStyle = isArrhythmiaPeak ? '#FF0000' : '#0080FF';
+        ctx.lineWidth = 1.5;
         ctx.stroke();
 
-        // Draw peak value with improved styling
-        ctx.font = 'bold 13px "Inter", sans-serif'; // Increased from 12px to 13px
-        ctx.fillStyle = isArrhythmiaPeak ? '#B91C1C' : '#0369A1';
+        // Draw peak value
+        ctx.font = '11px sans-serif';
+        ctx.fillStyle = isArrhythmiaPeak ? '#FF0000' : '#0066CC';
         ctx.textAlign = 'center';
-        ctx.fillText(Math.abs(point.value / VERTICAL_SCALE).toFixed(2), x, y - 22); // Moved up from -20 to -22
+        ctx.fillText(Math.abs(point.value / VERTICAL_SCALE).toFixed(1), x, y - 15);
         
         // Enhanced arrhythmia visualization
         if (isArrhythmiaPeak) {
-          // Outer highlight ring
-          ctx.beginPath();
-          ctx.arc(x, y, 13, 0, Math.PI * 2); // Increased from 12 to 13
-          ctx.strokeStyle = 'rgba(239, 68, 68, 0.85)'; // Increased opacity
-          ctx.lineWidth = 2.2; // Increased from 2 to 2.2
-          ctx.stroke();
-          
           // Warning indicator
           ctx.beginPath();
-          ctx.arc(x, y, 20, 0, Math.PI * 2); // Increased from 18 to 20
-          ctx.strokeStyle = 'rgba(248, 113, 113, 0.7)'; // Increased opacity
-          ctx.lineWidth = 1.2; // Increased from 1 to 1.2
-          ctx.setLineDash([3, 3]);
+          ctx.arc(x, y, 15, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(255, 0, 0, 0.7)';
+          ctx.lineWidth = 1.0;
+          ctx.setLineDash([2, 2]);
           ctx.stroke();
           ctx.setLineDash([]);
           
           // Warning label
-          ctx.font = 'bold 12px "Inter", sans-serif'; // Increased from 11px to 12px
-          ctx.fillStyle = '#EF4444';
-          ctx.fillText("LATIDO PREMATURO", x, y - 36); // Moved up
-          
-          // Connect with previous and next peaks for better visualization
-          ctx.beginPath();
-          ctx.setLineDash([2, 2]);
-          ctx.strokeStyle = 'rgba(239, 68, 68, 0.5)';
-          ctx.lineWidth = 1.2; // Increased from 1 to 1.2
-          
-          if (idx > 0) {
-            const prevIdx = maxPeakIndices.findIndex(i => i < idx);
-            if (prevIdx !== -1) {
-              const prevPeakIdx = maxPeakIndices[prevIdx];
-              const prevPoint = visiblePoints[prevPeakIdx];
-              const prevX = canvas.width - ((now - prevPoint.time) * canvas.width / WINDOW_WIDTH_MS);
-              const prevY = canvas.height * 0.6 - prevPoint.value;
-              
-              ctx.moveTo(prevX, prevY - 15);
-              ctx.lineTo(x, y - 15);
-              ctx.stroke();
-            }
-          }
-          
-          if (idx < visiblePoints.length - 1) {
-            const nextIdx = maxPeakIndices.findIndex(i => i > idx);
-            if (nextIdx !== -1) {
-              const nextPeakIdx = maxPeakIndices[nextIdx];
-              const nextPoint = visiblePoints[nextPeakIdx];
-              const nextX = canvas.width - ((now - nextPoint.time) * canvas.width / WINDOW_WIDTH_MS);
-              const nextY = canvas.height * 0.6 - nextPoint.value;
-              
-              ctx.moveTo(x, y - 15);
-              ctx.lineTo(nextX, nextY - 15);
-              ctx.stroke();
-            }
-          }
-          
-          ctx.setLineDash([]);
+          ctx.font = 'bold 11px sans-serif';
+          ctx.fillStyle = '#FF0000';
+          ctx.fillText("LATIDO PREMATURO", x, y - 30);
         }
       }
     }
@@ -478,25 +446,22 @@ const PPGSignalMeter = ({
         </div>
       </div>
 
-      <div className="absolute inset-0 w-full" style={{ height: '65vh', top: 0 }}>
-        <canvas
-          ref={canvasRef}
-          width={CANVAS_WIDTH}
-          height={CANVAS_HEIGHT}
-          className="w-full h-full"
-          style={{ 
-            position: 'absolute', 
-            top: 0, 
-            left: 0, 
-            right: 0, 
-            zIndex: 10,
-            imageRendering: 'crisp-edges', // Optimize rendering quality
-            transform: 'translateZ(0)', // Hardware acceleration
-          }}
-        />
+      <div className="absolute inset-0 flex items-center justify-center" style={{ height: '60vh' }}>
+        <div className="w-full h-full relative flex items-center justify-center">
+          <canvas
+            ref={canvasRef}
+            width={CANVAS_WIDTH}
+            height={CANVAS_HEIGHT}
+            className="w-full h-full max-w-4xl"
+            style={{ 
+              imageRendering: 'crisp-edges',
+              transform: 'translateZ(0)',
+            }}
+          />
+        </div>
       </div>
       
-      <div className="absolute" style={{ top: 'calc(65vh + 5px)', left: 0, right: 0, textAlign: 'center', zIndex: 30 }}>
+      <div className="absolute" style={{ top: 'calc(60vh + 5px)', left: 0, right: 0, textAlign: 'center', zIndex: 30 }}>
         <h1 className="text-xl font-bold">
           <span className="text-white">Chars</span>
           <span className="text-[#ea384c]">Healt</span>
