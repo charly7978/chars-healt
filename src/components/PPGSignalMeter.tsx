@@ -44,6 +44,7 @@ const PPGSignalMeter = ({
   const TARGET_FPS = 90;
   const FRAME_TIME = 900 / TARGET_FPS;
   const BUFFER_SIZE = 300;
+  const INVERT_SIGNAL = false;
 
   useEffect(() => {
     if (!dataBufferRef.current) {
@@ -251,7 +252,7 @@ const PPGSignalMeter = ({
             point.value > nextPoint1.value && 
             point.value > nextPoint2.value) {
           
-          const peakAmplitude = Math.abs(point.value);
+          const peakAmplitude = point.value;
           
           if (peakAmplitude > 7.0) {
             const peakTime = point.time;
