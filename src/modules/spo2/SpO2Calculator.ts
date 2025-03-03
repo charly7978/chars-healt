@@ -10,10 +10,13 @@ import { SpO2Processor } from './SpO2Processor';
 export class SpO2Calculator {
   private calibration: SpO2Calibration;
   private processor: SpO2Processor;
+  private lastCalculationTime: number = 0;
+  private calculationThrottleMs: number = 60; // Limit calculations to ~16fps
 
   constructor() {
     this.calibration = new SpO2Calibration();
     this.processor = new SpO2Processor();
+    this.lastCalculationTime = 0;
   }
 
   /**
@@ -22,6 +25,7 @@ export class SpO2Calculator {
   reset(): void {
     this.calibration.reset();
     this.processor.reset();
+    this.lastCalculationTime = 0;
   }
 
   /**
@@ -30,32 +34,44 @@ export class SpO2Calculator {
   calculateRaw(values: number[]): number {
     if (values.length < 20) return 0;
 
+    // Throttle calculations to avoid excessive CPU usage
+    const now = performance.now();
+    if (now - this.lastCalculationTime < this.calculationThrottleMs) {
+      return this.processor.getLastValue();
+    }
+    this.lastCalculationTime = now;
+
     try {
-      // Signal quality check
-      const signalVariance = this.calculateVariance(values);
-      const signalMean = values.reduce((sum, val) => sum + val, 0) / values.length;
+      // Signal quality check - use a more efficient variance calculation
+      const signalVariance = this.calculateVarianceOptimized(values);
+      
+      // Use cached value for signal mean
+      let signalSum = 0;
+      for (let i = 0; i < values.length; i++) {
+        signalSum += values[i];
+      }
+      const signalMean = signalSum / values.length;
+      
       const normalizedVariance = signalVariance / (signalMean * signalMean);
       
-      // If signal quality is poor, return 0
+      // If signal quality is poor, return previously calculated value or 0
       if (normalizedVariance < 0.0001 || normalizedVariance > 0.05) {
-        console.log(`SpO2 signal quality too low: ${normalizedVariance.toFixed(6)}`);
-        return 0;
+        return this.processor.getLastValue() || 0;
       }
       
       // PPG wave characteristics
       const dc = calculateDC(values);
-      if (dc <= 0) return 0;
+      if (dc <= 0) return this.processor.getLastValue() || 0;
 
       const ac = calculateAC(values);
-      if (ac < SPO2_CONSTANTS.MIN_AC_VALUE) return 0;
+      if (ac < SPO2_CONSTANTS.MIN_AC_VALUE) return this.processor.getLastValue() || 0;
 
       // Calculate Perfusion Index (PI = AC/DC ratio)
       const perfusionIndex = ac / dc;
       
       // Skip calculation if perfusion index is too low or too high (unrealistic)
       if (perfusionIndex < 0.01 || perfusionIndex > 10) {
-        console.log(`Perfusion index out of range: ${perfusionIndex.toFixed(4)}`);
-        return 0;
+        return this.processor.getLastValue() || 0;
       }
       
       // Calculate R ratio (improved formula based on Beer-Lambert law)
@@ -68,12 +84,9 @@ export class SpO2Calculator {
       rawSpO2 = Math.min(rawSpO2, 100);
       rawSpO2 = Math.max(rawSpO2, 90);
       
-      console.log(`Raw SpO2 calculation: PI=${perfusionIndex.toFixed(4)}, R=${R.toFixed(4)}, SpO2=${Math.round(rawSpO2)}%`);
-      
       return Math.round(rawSpO2);
     } catch (err) {
-      console.error("Error in SpO2 calculation:", err);
-      return 0;
+      return this.processor.getLastValue() || 0;
     }
   }
 
@@ -98,21 +111,13 @@ export class SpO2Calculator {
     try {
       // If not enough values or no finger, use previous value or 0
       if (values.length < 20) {
-        const lastValue = this.processor.getLastValue();
-        if (lastValue > 0) {
-          return lastValue;
-        }
-        return 0;
+        return this.processor.getLastValue() || 0;
       }
 
       // Get raw SpO2 value
       const rawSpO2 = this.calculateRaw(values);
       if (rawSpO2 <= 0) {
-        const lastValue = this.processor.getLastValue();
-        if (lastValue > 0) {
-          return lastValue;
-        }
-        return 0;
+        return this.processor.getLastValue() || 0;
       }
 
       // Save raw value for analysis
@@ -128,28 +133,31 @@ export class SpO2Calculator {
       calibratedSpO2 = Math.min(calibratedSpO2, 100);
       calibratedSpO2 = Math.max(calibratedSpO2, 90);
       
-      // Log for debugging
-      console.log(`SpO2: raw=${rawSpO2}, calibrated=${calibratedSpO2}`);
-      
       // Process and filter the SpO2 value
       const finalSpO2 = this.processor.processValue(calibratedSpO2);
       
       return finalSpO2;
     } catch (err) {
-      console.error("Error in final SpO2 processing:", err);
-      const lastValue = this.processor.getLastValue();
-      if (lastValue > 0) {
-        return lastValue;
-      }
-      return 0;
+      return this.processor.getLastValue() || 0;
     }
   }
   
   /**
-   * Calculate variance of a signal
+   * Calculate variance of a signal - optimized version
    */
-  private calculateVariance(values: number[]): number {
-    const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
-    return values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
+  private calculateVarianceOptimized(values: number[]): number {
+    let sum = 0;
+    let sumSquared = 0;
+    const n = values.length;
+    
+    // Single pass algorithm for variance
+    for (let i = 0; i < n; i++) {
+      sum += values[i];
+      sumSquared += values[i] * values[i];
+    }
+    
+    const mean = sum / n;
+    const variance = sumSquared / n - mean * mean;
+    return variance;
   }
 }

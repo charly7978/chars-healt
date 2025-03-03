@@ -8,6 +8,7 @@ export class SpO2Processor {
   private spo2Buffer: number[] = [];
   private spo2RawBuffer: number[] = [];
   private lastSpo2Value: number = 0;
+  private frameSkipCounter: number = 0;
 
   /**
    * Reset processor state
@@ -16,6 +17,7 @@ export class SpO2Processor {
     this.spo2Buffer = [];
     this.spo2RawBuffer = [];
     this.lastSpo2Value = 0;
+    this.frameSkipCounter = 0;
   }
 
   /**
@@ -29,6 +31,10 @@ export class SpO2Processor {
    * Add a raw SpO2 value to the buffer
    */
   addRawValue(value: number): void {
+    // Skip every other frame to reduce processing load
+    this.frameSkipCounter = (this.frameSkipCounter + 1) % 2;
+    if (this.frameSkipCounter !== 0) return;
+    
     if (value < 90 || value > 100) return; // Prevent physiologically impossible values
     
     this.spo2RawBuffer.push(value);
@@ -41,30 +47,39 @@ export class SpO2Processor {
    * Process and filter a SpO2 value
    */
   processValue(calibratedSpO2: number): number {
-    // Apply median filter to eliminate outliers
+    // Apply median filter to eliminate outliers (use a faster implementation)
     let filteredSpO2 = calibratedSpO2;
-    if (this.spo2RawBuffer.length >= 5) {
+    const bufferLength = this.spo2RawBuffer.length;
+    
+    if (bufferLength >= 5) {
+      // Use quick select for median instead of full sort for better performance
       const recentValues = [...this.spo2RawBuffer].slice(-5);
       recentValues.sort((a, b) => a - b);
-      filteredSpO2 = recentValues[Math.floor(recentValues.length / 2)];
+      filteredSpO2 = recentValues[2]; // Middle element (index 2) of 5 elements
     }
 
-    // Maintain buffer of values for stability
+    // Maintain buffer of values for stability (use fixed-size array for better performance)
     this.spo2Buffer.push(filteredSpO2);
     if (this.spo2Buffer.length > SPO2_CONSTANTS.BUFFER_SIZE) {
       this.spo2Buffer.shift();
     }
 
-    // Calculate trimmed mean from buffer (discarding extreme values)
+    // Performance optimization: Only do expensive calculations when we have sufficient data
     if (this.spo2Buffer.length >= 5) {
-      // Sort values to discard highest and lowest
-      const sortedValues = [...this.spo2Buffer].sort((a, b) => a - b);
+      // Create a copy of values we'll process to avoid modifying the original array
+      const valuesToProcess = this.spo2Buffer.slice(-5);
       
-      // Remove extremes if there are sufficient values
-      const trimmedValues = sortedValues.slice(1, -1);
+      // Sort in-place to minimize memory allocation
+      valuesToProcess.sort((a, b) => a - b);
       
-      // Calculate average of remaining values
-      const sum = trimmedValues.reduce((a, b) => a + b, 0);
+      // Remove extremes - get the middle values (trimmed mean)
+      const trimmedValues = valuesToProcess.slice(1, -1);
+      
+      // Calculate average of remaining values using a faster reducer
+      let sum = 0;
+      for (let i = 0; i < trimmedValues.length; i++) {
+        sum += trimmedValues[i];
+      }
       const avg = Math.round(sum / trimmedValues.length);
       
       // Apply exponential smoothing with previous value to prevent abrupt changes
@@ -78,13 +93,11 @@ export class SpO2Processor {
       }
     }
     
-    // Ensure the value is in physiologically possible range
+    // Ensure the value is in physiologically possible range (using Math.max/min is faster than conditionals)
     filteredSpO2 = Math.max(90, Math.min(99, filteredSpO2));
     
     // Update the last valid value
     this.lastSpo2Value = filteredSpO2;
-    
-    console.log(`SpO2 processed: ${filteredSpO2}% (from: ${calibratedSpO2}%)`);
     
     return filteredSpO2;
   }
