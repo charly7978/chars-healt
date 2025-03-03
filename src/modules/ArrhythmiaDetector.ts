@@ -3,6 +3,7 @@
  * ArrhythmiaDetector.ts - Focused Premature Beat Detector
  * 
  * Simplified detector that focuses exclusively on premature beat detection
+ * with ULTRA HIGH SENSITIVITY for testing purposes
  */
 
 export class ArrhythmiaDetector {
@@ -13,9 +14,9 @@ export class ArrhythmiaDetector {
   private peakAmplitudes: number[] = [];
   private lastPeakTime: number | null = null;
   private baseRRInterval: number = 0;
-  private readonly LEARNING_SAMPLES = 12;
-  private readonly PREMATURE_BEAT_THRESHOLD = 0.75; // Factor para detectar latidos prematuros
-  private readonly MIN_DETECTION_CONFIDENCE = 0.65; // Confianza mínima para detección
+  private readonly LEARNING_SAMPLES = 6; // Reduced from 12 to be more responsive
+  private readonly PREMATURE_BEAT_THRESHOLD = 0.9; // Increased from 0.75 to be ultra-sensitive
+  private readonly MIN_DETECTION_CONFIDENCE = 0.3; // Lowered from 0.65 to be ultra-sensitive
 
   constructor() {
     this.reset();
@@ -48,7 +49,7 @@ export class ArrhythmiaDetector {
   updateIntervals(intervals: number[], lastPeakTime: number | null, peakAmplitude?: number): void {
     // Update RR intervals
     if (intervals && intervals.length > 0) {
-      this.rrIntervals = intervals.slice(-30); // Keep only the last 30 intervals
+      this.rrIntervals = intervals.slice(-20); // Keep only the last 20 intervals (reduced from 30)
     }
     
     this.lastPeakTime = lastPeakTime;
@@ -66,6 +67,9 @@ export class ArrhythmiaDetector {
     // Calculate baseline RR interval after collecting enough samples
     if (this.rrIntervals.length >= this.LEARNING_SAMPLES && this.baseRRInterval === 0) {
       this.calculateBaseRRInterval();
+    } else if (this.rrIntervals.length >= this.LEARNING_SAMPLES) {
+      // Continuously update baseline for better reactivity (new ultra-sensitive feature)
+      this.updateBaseRRInterval();
     }
   }
 
@@ -75,21 +79,39 @@ export class ArrhythmiaDetector {
   private calculateBaseRRInterval(): void {
     if (this.rrIntervals.length < this.LEARNING_SAMPLES) return;
     
-    // Sort intervals and remove outliers (10% from each end)
-    const sorted = [...this.rrIntervals].sort((a, b) => a - b);
-    const cutSize = Math.max(1, Math.floor(sorted.length * 0.1));
-    const filtered = sorted.slice(cutSize, sorted.length - cutSize);
-    
-    // Use median as baseline
-    const medianIndex = Math.floor(filtered.length / 2);
-    this.baseRRInterval = filtered[medianIndex];
+    // Use simple average for initial calculation to be more responsive
+    const sum = this.rrIntervals.reduce((a, b) => a + b, 0);
+    this.baseRRInterval = sum / this.rrIntervals.length;
     
     console.log(`ArrhythmiaDetector: Baseline RR interval calculated: ${this.baseRRInterval}ms`);
   }
 
   /**
-   * Advanced premature beat detection algorithm
-   * Focused exclusively on identifying premature heartbeats
+   * Update baseline RR interval continuously for better adaptivity
+   * New ultra-sensitive feature
+   */
+  private updateBaseRRInterval(): void {
+    // Get more recent intervals
+    const recentIntervals = this.rrIntervals.slice(-5);
+    
+    // Filter out potential premature beats (much shorter intervals)
+    const normalIntervals = recentIntervals.filter(interval => 
+      interval > (this.baseRRInterval * 0.7)
+    );
+    
+    if (normalIntervals.length >= 3) {
+      // Update baseline with a weighted average
+      const sum = normalIntervals.reduce((a, b) => a + b, 0);
+      const newBaseRR = sum / normalIntervals.length;
+      
+      // Weighted update (80% old value, 20% new value) to prevent too rapid changes
+      this.baseRRInterval = (this.baseRRInterval * 0.8) + (newBaseRR * 0.2);
+    }
+  }
+
+  /**
+   * Ultra-sensitive premature beat detection algorithm
+   * Deliberately over-sensitive for testing purposes
    */
   detect(): {
     detected: boolean;
@@ -97,8 +119,8 @@ export class ArrhythmiaDetector {
     status: string;
     data: { rmssd: number; rrVariation: number; prematureBeat: boolean; confidence?: number } | null;
   } {
-    // Skip detection if not enough data or no baseline established
-    if (this.rrIntervals.length < 3 || this.baseRRInterval <= 0) {
+    // Skip detection if not enough data
+    if (this.rrIntervals.length < 2) {
       return {
         detected: false,
         count: this.arrhythmiaCount,
@@ -109,8 +131,8 @@ export class ArrhythmiaDetector {
       };
     }
 
-    // Get last few intervals for analysis
-    const recentIntervals = this.rrIntervals.slice(-3);
+    // Get last intervals for analysis - using just the last 2 for ultra-quick response
+    const recentIntervals = this.rrIntervals.slice(-2);
     const lastRR = recentIntervals[recentIntervals.length - 1];
     
     // Calculate RMSSD (Root Mean Square of Successive Differences)
@@ -119,36 +141,65 @@ export class ArrhythmiaDetector {
       const diff = recentIntervals[i] - recentIntervals[i-1];
       sumSquaredDiff += diff * diff;
     }
-    const rmssd = Math.sqrt(sumSquaredDiff / (recentIntervals.length - 1));
+    const rmssd = Math.sqrt(sumSquaredDiff / Math.max(1, recentIntervals.length - 1));
     
     // Calculate RR variation for analysis
     const rrVariation = (this.baseRRInterval > 0) ? 
       Math.abs(lastRR - this.baseRRInterval) / this.baseRRInterval : 
       0;
     
-    // Specialized premature beat detection algorithm
+    // Ultra-sensitive premature beat detection
     let prematureBeat = false;
     let confidenceScore = 0;
     let detectedArrhythmia = false;
     
-    // Core premature beat detection logic:
-    // 1. Significantly shorter RR interval than baseline
-    if (lastRR < this.baseRRInterval * this.PREMATURE_BEAT_THRESHOLD) {
+    // ULTRA-SENSITIVE DETECTION LOGIC:
+    // Consider ANY interval significantly different from baseline as suspicious
+    
+    // 1. Check for premature beats - any shorter interval triggers detection
+    if (this.baseRRInterval > 0 && lastRR < this.baseRRInterval * this.PREMATURE_BEAT_THRESHOLD) {
       // Calculate confidence based on how much shorter the interval is
       const shortness = (this.baseRRInterval - lastRR) / this.baseRRInterval;
-      confidenceScore = Math.min(shortness * 1.2, 0.95);
+      
+      // Ultra-sensitive confidence calculation - multiplied by 2 and capped
+      confidenceScore = Math.min(shortness * 2, 0.99);
       
       if (confidenceScore > this.MIN_DETECTION_CONFIDENCE) {
         prematureBeat = true;
         detectedArrhythmia = true;
+        console.log("ULTRA-SENSITIVE ARRITMIA DETECTADA:", { 
+          lastRR, 
+          baseRR: this.baseRRInterval, 
+          confidence: confidenceScore 
+        });
+      }
+    }
+    
+    // 2. Also check for sudden RR variations (new ultra-sensitive feature)
+    if (!detectedArrhythmia && recentIntervals.length >= 2) {
+      const prevRR = recentIntervals[recentIntervals.length - 2];
+      const rrChange = Math.abs(lastRR - prevRR) / prevRR;
+      
+      if (rrChange > 0.15) { // 15% change between consecutive beats
+        confidenceScore = Math.min(rrChange * 1.5, 0.99);
+        if (confidenceScore > this.MIN_DETECTION_CONFIDENCE) {
+          prematureBeat = true;
+          detectedArrhythmia = true;
+          console.log("ULTRA-SENSITIVE VARIACIÓN RR DETECTADA:", {
+            lastRR,
+            prevRR,
+            change: rrChange,
+            confidence: confidenceScore
+          });
+        }
       }
     }
     
     // Update detection status
     if (detectedArrhythmia) {
       const now = Date.now();
-      // Prevent multiple counts in short time
-      if (now - this.lastArrhythmiaTime > 1000) {
+      // Reduced time between arrhythmia counts for ultra-sensitivity
+      if (now - this.lastArrhythmiaTime > 500) { // Reduced from 1000ms to 500ms
         this.arrhythmiaCount++;
         this.lastArrhythmiaTime = now;
       }
