@@ -49,9 +49,26 @@ export class HeartBeatProcessor {
   private peakCandidateIndex: number | null = null;
   private peakCandidateValue: number = 0;
 
+  // Parámetros calibrables
+  private signalThreshold: number;
+  private minConfidence: number;
+  private derivativeThreshold: number;
+  private perfusionIndex: number;
+  private qualityThreshold: number;
+
   constructor() {
     this.initAudio();
-    this.startTime = Date.now();
+    this.reset();
+    
+    // Inicializar con valores predeterminados
+    this.signalThreshold = this.SIGNAL_THRESHOLD;
+    this.minConfidence = this.MIN_CONFIDENCE;
+    this.derivativeThreshold = this.DERIVATIVE_THRESHOLD;
+    this.perfusionIndex = 0.5;
+    this.qualityThreshold = 0.65;
+    
+    // Cargar configuraciones de calibración si existen
+    this.loadCalibrationSettings();
   }
 
   private async initAudio() {
@@ -165,70 +182,96 @@ export class HeartBeatProcessor {
     arrhythmiaCount: number;
     amplitude?: number;
   } {
-    // Filtros sucesivos para mejorar la señal
-    const medVal = this.medianFilter(value);
-    const movAvgVal = this.calculateMovingAverage(medVal);
-    const smoothed = this.calculateEMA(movAvgVal);
-
-    this.signalBuffer.push(smoothed);
+    // Guardar tiempo de inicio si es el primer valor
+    if (this.values.length === 0) {
+      this.startTime = Date.now();
+    }
+    
+    // Agregar el valor a la lista
+    this.values.push(value);
+    
+    // Aplicar filtros para eliminar ruido
+    const median = this.medianFilter(value);
+    const movingAvg = this.calculateMovingAverage(median);
+    const filtered = this.calculateEMA(movingAvg);
+    
+    // Almacenar el valor filtrado en el buffer
+    this.signalBuffer.push(filtered);
     if (this.signalBuffer.length > this.WINDOW_SIZE) {
       this.signalBuffer.shift();
     }
-
-    if (this.signalBuffer.length < 30) {
-      return {
-        bpm: 0,
-        confidence: 0,
-        isPeak: false,
-        filteredValue: smoothed,
-        arrhythmiaCount: 0
-      };
-    }
-
-    this.baseline =
-      this.baseline * this.BASELINE_FACTOR + smoothed * (1 - this.BASELINE_FACTOR);
-
-    const normalizedValue = smoothed - this.baseline;
-    this.autoResetIfSignalIsLow(Math.abs(normalizedValue));
-
-    this.values.push(smoothed);
-    if (this.values.length > 3) {
-      this.values.shift();
-    }
-
-    let smoothDerivative = smoothed - this.lastValue;
-    if (this.values.length === 3) {
-      smoothDerivative = (this.values[2] - this.values[0]) / 2;
-    }
-    this.lastValue = smoothed;
-
-    // Mejorado - Mayor precisión en la detección de picos
-    const { isPeak, confidence } = this.detectPeak(normalizedValue, smoothDerivative);
     
-    // Confirmación de picos más rigurosa
-    const isConfirmedPeak = this.confirmPeak(isPeak, normalizedValue, confidence);
-
-    if (isConfirmedPeak && !this.isInWarmup()) {
+    // Calcular la línea de base si hay suficientes datos
+    if (this.signalBuffer.length >= 10) {
+      const min = Math.min(...this.signalBuffer);
+      const max = Math.max(...this.signalBuffer);
+      this.baseline = min + (max - min) * this.BASELINE_FACTOR * 0.25;
+    }
+    
+    // Normalizar el valor filtrado respecto a la línea de base
+    const normalizedValue = filtered - this.baseline;
+    
+    // Calcular la derivada del valor (pendiente)
+    const derivative = filtered - this.lastValue;
+    this.lastValue = filtered;
+    
+    // Calcular la amplitud de la señal para evaluar calidad
+    const amplitude = Math.max(...this.signalBuffer) - Math.min(...this.signalBuffer);
+    
+    // Detectar si hay señal muy baja
+    this.autoResetIfSignalIsLow(amplitude);
+    
+    // Comprobar si es un pico utilizando la configuración calibrada
+    const { isPeak, confidence } = this.detectPeak(normalizedValue, derivative);
+    
+    // Confirmar el pico para reducir falsos positivos
+    const confirmedPeak = this.confirmPeak(isPeak, normalizedValue, confidence);
+    
+    // Si se detecta un pico, actualizar el tiempo y recalcular BPM
+    if (confirmedPeak) {
       const now = Date.now();
-      const timeSinceLastPeak = this.lastPeakTime
-        ? now - this.lastPeakTime
-        : Number.MAX_VALUE;
-
-      if (timeSinceLastPeak >= this.MIN_PEAK_TIME_MS) {
-        this.previousPeakTime = this.lastPeakTime;
-        this.lastPeakTime = now;
-        this.playBeep(0.12); // Suena beep cuando se confirma pico
-        this.updateBPM();
+      
+      // Si ya teníamos un pico anterior, calcular el intervalo
+      if (this.lastPeakTime !== null) {
+        const interval = now - this.lastPeakTime;
+        
+        // Convertir el intervalo a BPM y agregarlo al historial
+        const instantBPM = 60000 / interval;
+        
+        // Solo registrar BPM que estén dentro de rango fisiológico
+        if (instantBPM >= this.MIN_BPM && instantBPM <= this.MAX_BPM) {
+          this.bpmHistory.push(instantBPM);
+          // Limitar el historial a los últimos 10 valores
+          if (this.bpmHistory.length > 10) {
+            this.bpmHistory.shift();
+          }
+        }
+      }
+      
+      // Actualizar tiempos de pico
+      this.previousPeakTime = this.lastPeakTime;
+      this.lastPeakTime = now;
+      
+      // Reproducir un beep si ha pasado suficiente tiempo
+      if (now - this.lastBeepTime > this.MIN_BEEP_INTERVAL_MS) {
+        this.playBeep();
+        this.lastBeepTime = now;
       }
     }
-
+    
+    // Actualizar BPM suavizado
+    this.updateBPM();
+    
+    // Determinar arrhythmiaCount (este valor vendría de otro módulo, lo simulamos para este ejemplo)
+    const arrhythmiaCount = 0;
+    
     return {
-      bpm: Math.round(this.getSmoothBPM()),
-      confidence,
-      isPeak: isConfirmedPeak && !this.isInWarmup(),
-      filteredValue: smoothed,
-      arrhythmiaCount: 0,
-      amplitude: Math.abs(normalizedValue) // Adding amplitude for respiration monitoring
+      bpm: this.getSmoothBPM(),
+      confidence: confidence,
+      isPeak: confirmedPeak,
+      filteredValue: filtered,
+      arrhythmiaCount: arrhythmiaCount,
+      amplitude: amplitude
     };
   }
 
@@ -258,35 +301,23 @@ export class HeartBeatProcessor {
     isPeak: boolean;
     confidence: number;
   } {
-    const now = Date.now();
-    const timeSinceLastPeak = this.lastPeakTime
-      ? now - this.lastPeakTime
-      : Number.MAX_VALUE;
-
-    if (timeSinceLastPeak < this.MIN_PEAK_TIME_MS) {
-      return { isPeak: false, confidence: 0 };
+    // Usar parámetros calibrados en lugar de constantes fijas
+    const isPeak = 
+      normalizedValue > this.signalThreshold && 
+      derivative < this.derivativeThreshold;
+    
+    let confidence = 0;
+    
+    if (isPeak) {
+      // Calcular confianza basada en qué tan fuerte es la señal
+      confidence = Math.min(
+        1.0, 
+        (normalizedValue / this.signalThreshold) * 
+        Math.abs(derivative / this.derivativeThreshold)
+      );
     }
-
-    // Ajuste para mayor robustez en la detección de picos
-    const isOverThreshold =
-      derivative < this.DERIVATIVE_THRESHOLD &&
-      normalizedValue > this.SIGNAL_THRESHOLD &&
-      this.lastValue > this.baseline * 0.98;
-
-    // Refinamiento del cálculo de confianza
-    const amplitudeConfidence = Math.min(
-      Math.max(Math.abs(normalizedValue) / (this.SIGNAL_THRESHOLD * 1.5), 0),
-      1
-    );
-    const derivativeConfidence = Math.min(
-      Math.max(Math.abs(derivative) / Math.abs(this.DERIVATIVE_THRESHOLD * 0.9), 0),
-      1
-    );
-
-    // Cálculo de confianza mejorado
-    const confidence = (amplitudeConfidence * 0.6 + derivativeConfidence * 0.4);
-
-    return { isPeak: isOverThreshold, confidence };
+    
+    return { isPeak, confidence };
   }
 
   private confirmPeak(
@@ -299,7 +330,7 @@ export class HeartBeatProcessor {
       this.peakConfirmationBuffer.shift();
     }
 
-    if (isPeak && !this.lastConfirmedPeak && confidence >= this.MIN_CONFIDENCE) {
+    if (isPeak && !this.lastConfirmedPeak && confidence >= this.minConfidence) {
       if (this.peakConfirmationBuffer.length >= 3) {
         const len = this.peakConfirmationBuffer.length;
         const goingDown1 =
@@ -400,6 +431,104 @@ export class HeartBeatProcessor {
       intervals: [...this.bpmHistory],
       lastPeakTime: this.lastPeakTime,
       amplitudes: amplitudes
+    };
+  }
+
+  /**
+   * Carga las configuraciones de calibración desde localStorage
+   */
+  private loadCalibrationSettings() {
+    try {
+      const savedSettings = localStorage.getItem('calibrationSettings');
+      if (savedSettings) {
+        const settings = JSON.parse(savedSettings);
+        
+        // Actualizar parámetros si existen en la configuración
+        if (settings.perfusionIndex !== undefined) {
+          this.perfusionIndex = settings.perfusionIndex;
+          // Ajustar el umbral de señal basado en el índice de perfusión
+          this.signalThreshold = this.SIGNAL_THRESHOLD * (1 + (this.perfusionIndex - 0.5) * 0.3);
+        }
+        
+        if (settings.qualityThreshold !== undefined) {
+          this.qualityThreshold = settings.qualityThreshold;
+          // Ajustar confianza mínima basada en umbral de calidad
+          this.minConfidence = Math.max(0.6, this.qualityThreshold);
+        }
+        
+        console.log('Configuración de calibración cargada:', {
+          perfusionIndex: this.perfusionIndex,
+          qualityThreshold: this.qualityThreshold,
+          adjustedSignalThreshold: this.signalThreshold,
+          adjustedMinConfidence: this.minConfidence
+        });
+      }
+    } catch (error) {
+      console.error('Error cargando configuración de calibración:', error);
+    }
+  }
+  
+  /**
+   * Calibra el procesador con nuevos parámetros
+   */
+  public calibrate(perfusionIndex?: number, qualityThreshold?: number): void {
+    if (perfusionIndex !== undefined) {
+      this.perfusionIndex = perfusionIndex;
+      // Ajusta el umbral de señal basado en el índice de perfusión
+      this.signalThreshold = this.SIGNAL_THRESHOLD * (1 + (this.perfusionIndex - 0.5) * 0.3);
+    }
+    
+    if (qualityThreshold !== undefined) {
+      this.qualityThreshold = qualityThreshold;
+      // Ajusta confianza mínima basada en umbral de calidad
+      this.minConfidence = Math.max(0.6, this.qualityThreshold);
+    }
+    
+    // Resetea los buffers y estados para empezar limpio
+    this.resetDetectionStates();
+    
+    console.log('HeartBeatProcessor calibrado con nuevos parámetros:', {
+      perfusionIndex: this.perfusionIndex,
+      qualityThreshold: this.qualityThreshold,
+      signalThreshold: this.signalThreshold,
+      minConfidence: this.minConfidence
+    });
+  }
+  
+  /**
+   * Forzar una actualización de calibración basada en las últimas mediciones
+   */
+  public autoCalibrate(): void {
+    // Si tenemos suficientes datos, ajustamos automáticamente los parámetros
+    if (this.values.length > 30) {
+      const recentValues = this.values.slice(-30);
+      const avgValue = recentValues.reduce((sum, val) => sum + val, 0) / recentValues.length;
+      const maxValue = Math.max(...recentValues);
+      
+      // Calcular un índice de perfusión basado en la señal actual
+      const estimatedPerfusion = Math.min(1.0, Math.max(0.1, avgValue / (maxValue || 1) * 2));
+      
+      // Aplicar calibración con el valor estimado
+      this.calibrate(estimatedPerfusion);
+      
+      console.log('Auto-calibración aplicada con índice de perfusión estimado:', estimatedPerfusion);
+    }
+  }
+
+  /**
+   * Obtiene los parámetros de calibración actuales
+   */
+  public getCalibrationParams(): {
+    perfusionIndex: number;
+    qualityThreshold: number;
+    signalThreshold: number;
+    minConfidence: number;
+  } {
+    return {
+      perfusionIndex: this.perfusionIndex,
+      qualityThreshold: this.qualityThreshold,
+      signalThreshold: this.signalThreshold,
+      minConfidence: this.minConfidence
     };
   }
 }

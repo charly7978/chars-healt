@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useCallback } from 'react';
-import { Fingerprint } from 'lucide-react';
+import React, { useEffect, useRef, useCallback, useState } from 'react';
+import { Fingerprint, Heart, Activity } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface PPGSignalMeterProps {
   value: number;
@@ -14,6 +15,8 @@ interface PPGSignalMeterProps {
     rmssd: number;
     rrVariation: number;
   } | null;
+  isCalibrating?: boolean;
+  calibrationStatus?: 'pending' | 'in_progress' | 'completed' | 'failed';
 }
 
 const PPGSignalMeter = ({ 
@@ -23,7 +26,9 @@ const PPGSignalMeter = ({
   onStartMeasurement,
   onReset,
   arrhythmiaStatus,
-  rawArrhythmiaData
+  rawArrhythmiaData,
+  isCalibrating = false,
+  calibrationStatus = 'pending'
 }: PPGSignalMeterProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dataBufferRef = useRef<CircularBuffer | null>(null);
@@ -46,11 +51,64 @@ const PPGSignalMeter = ({
   const BUFFER_SIZE = 300;
   const INVERT_SIGNAL = false;
 
+  const [pulseAnimation, setPulseAnimation] = useState(false);
+  const [calibrationProgress, setCalibrationProgress] = useState(0);
+  
+  const [calibrationSettings, setCalibrationSettings] = useState<{
+    perfusionIndex: number;
+    qualityThreshold: number;
+    lastCalibration: string | null;
+  } | null>(null);
+  
   useEffect(() => {
     if (!dataBufferRef.current) {
       dataBufferRef.current = new CircularBuffer(BUFFER_SIZE);
     }
   }, []);
+
+  useEffect(() => {
+    // Animación de pulso cuando hay un pico
+    if (value > 0.4) {
+      setPulseAnimation(true);
+      setTimeout(() => setPulseAnimation(false), 150);
+    }
+    
+    // Si estamos en calibración, incrementar progresivamente el progreso
+    if (isCalibrating && calibrationStatus === 'in_progress') {
+      const interval = setInterval(() => {
+        setCalibrationProgress(prev => {
+          if (prev >= 99) {
+            clearInterval(interval);
+            return 100;
+          }
+          return prev + 1;
+        });
+      }, 100);
+      
+      return () => clearInterval(interval);
+    } else if (calibrationStatus === 'completed') {
+      setCalibrationProgress(100);
+    } else if (calibrationStatus !== 'in_progress') {
+      setCalibrationProgress(0);
+    }
+  }, [value, isCalibrating, calibrationStatus]);
+  
+  useEffect(() => {
+    // Cargar configuraciones de calibración
+    try {
+      const savedSettings = localStorage.getItem('calibrationSettings');
+      if (savedSettings) {
+        const settings = JSON.parse(savedSettings);
+        setCalibrationSettings({
+          perfusionIndex: settings.perfusionIndex,
+          qualityThreshold: settings.qualityThreshold,
+          lastCalibration: settings.lastCalibration
+        });
+      }
+    } catch (error) {
+      console.error('Error al cargar configuración de calibración:', error);
+    }
+  }, [calibrationStatus]);
 
   const getQualityColor = useCallback((q: number) => {
     if (!isFingerDetected) return 'from-gray-400 to-gray-500';
@@ -342,6 +400,87 @@ const PPGSignalMeter = ({
       }
     };
   }, [renderSignal]);
+
+  const getQualityWidth = () => {
+    return `${Math.max(5, Math.min(100, quality * 100))}%`;
+  };
+
+  const renderDetectionStatus = () => {
+    if (isCalibrating) {
+      return (
+        <div className="text-xs font-medium mt-1">
+          <div className="flex items-center gap-2">
+            <div className="w-full bg-gray-700 h-1 rounded-full">
+              <div 
+                className="bg-blue-500 h-1 rounded-full transition-all duration-300"
+                style={{ width: `${calibrationProgress}%` }}
+              />
+            </div>
+            <span className="w-10 text-right">{calibrationProgress}%</span>
+          </div>
+          <div className="text-center mt-1">
+            {calibrationStatus === 'pending' && 'Listo para calibrar'}
+            {calibrationStatus === 'in_progress' && 'Calibrando...'}
+            {calibrationStatus === 'completed' && 'Calibración completada'}
+            {calibrationStatus === 'failed' && 'Error de calibración'}
+          </div>
+        </div>
+      );
+    }
+    
+    if (!isFingerDetected) {
+      return (
+        <div className="text-red-500 text-xs font-medium mt-1">
+          Coloque su dedo en la cámara
+        </div>
+      );
+    }
+
+    if (quality < 0.4) {
+      return (
+        <div className="text-red-500 text-xs font-medium mt-1">
+          Señal débil - Ajuste su dedo
+        </div>
+      );
+    }
+
+    if (quality < 0.7) {
+      return (
+        <div className="text-yellow-500 text-xs font-medium mt-1">
+          Señal aceptable - Mantenga estable
+        </div>
+      );
+    }
+
+    return (
+      <div className="text-emerald-500 text-xs font-medium mt-1">
+        Buena señal - No mueva su dedo
+      </div>
+    );
+  };
+
+  const renderCalibrationInfo = () => {
+    if (!calibrationSettings) return null;
+    
+    const lastCalibrationDate = calibrationSettings.lastCalibration 
+      ? new Date(calibrationSettings.lastCalibration).toLocaleString()
+      : 'Nunca';
+    
+    return (
+      <div className="text-xs text-gray-400 mt-2">
+        <div className="grid grid-cols-2 gap-1">
+          <div>Índice Perfusión:</div>
+          <div className="text-right">{calibrationSettings.perfusionIndex.toFixed(2)}</div>
+          
+          <div>Umbral Calidad:</div>
+          <div className="text-right">{calibrationSettings.qualityThreshold.toFixed(2)}</div>
+          
+          <div>Última Calibración:</div>
+          <div className="text-right">{lastCalibrationDate}</div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <>
