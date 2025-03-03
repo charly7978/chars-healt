@@ -41,15 +41,26 @@ export const useVitalSignsProcessor = () => {
   }, []);
   
   const processSignal = useCallback((ppgValue: number, rrData?: any) => {
-    console.log('useVitalSignsProcessor: Procesando señal', { rrData: !!rrData });
+    // Procesamiento normal de signos vitales
+    console.log('useVitalSignsProcessor: Procesando señal con datos:', {
+      ppgValue,
+      rrIntervals: rrData?.intervals?.length || 0,
+      amplitudes: rrData?.amplitudes?.length || 0
+    });
     
-    // PASO 1: Procesar la señal PPG para obtener signos vitales básicos
     const vitalSignsResult = processor.processSignal(ppgValue, rrData);
     
-    // PASO 2: Procesar glucosa
+    console.log('Estado de arritmia del procesador:', vitalSignsResult.arrhythmiaStatus);
+    
     const glucoseResult = glucoseProcessor.processSignal(ppgValue);
     
-    // PASO 3: Detección especial de arritmias usando intervalos RR
+    const glucoseData = {
+      value: glucoseResult.value || 0,
+      trend: glucoseResult.trend || 'unknown',
+      confidence: glucoseResult.confidence || 0
+    };
+    
+    // Procesar arritmias si tenemos datos RR
     let arrhythmiaResult: ArrhythmiaResult = {
       detected: false,
       severity: 0,
@@ -58,17 +69,20 @@ export const useVitalSignsProcessor = () => {
       timestamp: Date.now()
     };
     
-    // Verificar si tenemos datos RR válidos para análisis
     if (rrData && Array.isArray(rrData.intervals) && rrData.intervals.length > 0) {
-      const minIntervalsRequired = 2; // Mínimo necesario para latidos prematuros
+      // Sólo necesitamos 2 intervalos para la detección de latidos prematuros
+      const minIntervalsRequired = 2;
       
-      console.log('useVitalSignsProcessor: Analizando RR para latidos prematuros:', {
-        intervals: rrData.intervals.length
+      console.log('useVitalSignsProcessor: Analizando intervalos RR para latidos prematuros:', {
+        intervals: rrData.intervals.length,
+        intervalsData: rrData.intervals,
+        amplitudes: Array.isArray(rrData.amplitudes) ? rrData.amplitudes.length : 0
       });
       
       try {
-        // Procesar amplitudes si están disponibles
+        // Intentamos usar amplitudes si existen
         let amplitudesToUse = Array(rrData.intervals.length).fill(100);
+        
         if (Array.isArray(rrData.amplitudes) && rrData.amplitudes.length > 0) {
           if (rrData.amplitudes.length === rrData.intervals.length) {
             amplitudesToUse = rrData.amplitudes;
@@ -79,50 +93,59 @@ export const useVitalSignsProcessor = () => {
           }
         }
         
-        // Filtrar intervalos para usar sólo los que estén en rango fisiológico
+        // MEJORA: Utilizamos todos los intervalos disponibles, sólo validando que sean números
         const validIntervals = rrData.intervals.filter(i => 
-          typeof i === 'number' && !isNaN(i) && i > 200 && i < 2000
+          typeof i === 'number' && !isNaN(i) && i > 200 && i < 2000 // Rango más amplio
         );
         
-        // Sólo procesar si tenemos suficientes intervalos válidos
         if (validIntervals.length >= minIntervalsRequired) {
-          // Actualizar tiempo de pico si está disponible
+          // Forzar actualización del detector si hay tiempo de pico
           if (rrData.lastPeakTime !== null) {
             arrhythmiaDetector.setLastPeakTime(rrData.lastPeakTime);
           }
           
-          // Detectar latidos prematuros con el detector especializado
+          // Procesar los intervalos para detección de latidos prematuros
           arrhythmiaResult = arrhythmiaDetector.processRRIntervals(
             validIntervals,
             amplitudesToUse
           );
           
-          // Máximo detalle cuando se detecta un latido prematuro
+          // Log detallado del resultado para depuración
+          console.log('useVitalSignsProcessor: Resultado análisis latidos prematuros:', {
+            detected: arrhythmiaResult.detected,
+            type: arrhythmiaResult.type,
+            severity: arrhythmiaResult.severity,
+            confidence: arrhythmiaResult.confidence
+          });
+          
           if (arrhythmiaResult.detected) {
-            console.log('useVitalSignsProcessor: ¡LATIDO PREMATURO DETECTADO!', {
+            console.log('useVitalSignsProcessor: ¡¡LATIDO PREMATURO DETECTADO!!', {
               type: arrhythmiaResult.type,
               severity: arrhythmiaResult.severity,
-              confidence: arrhythmiaResult.confidence
+              confidence: arrhythmiaResult.confidence,
+              timestamp: arrhythmiaResult.timestamp
             });
           }
         } else {
-          console.log(`useVitalSignsProcessor: Intervalos insuficientes: ${validIntervals.length}/${minIntervalsRequired}`);
+          console.log(`useVitalSignsProcessor: Intervalos válidos insuficientes (${validIntervals.length}/${minIntervalsRequired})`);
         }
       } catch (error) {
-        console.error('useVitalSignsProcessor: Error procesando arritmias:', error);
+        console.error('useVitalSignsProcessor: Error al procesar arritmias:', error);
       }
+    } else {
+      console.log('useVitalSignsProcessor: No hay intervalos RR para procesar');
     }
     
-    // PASO 4: Construir el resultado final integrando todos los datos
+    // Construir el resultado final con los datos de latido prematuro
     const result: VitalSignsResult = {
       spo2: vitalSignsResult.spo2,
       pressure: vitalSignsResult.pressure,
-      arrhythmiaStatus: arrhythmiaDetector.getStatusText(), // Obtener estado directamente del detector
+      arrhythmiaStatus: vitalSignsResult.arrhythmiaStatus, // Este incluye el contador de latidos prematuros
       lastArrhythmiaData: arrhythmiaResult.detected ? {
         timestamp: arrhythmiaResult.timestamp,
-        rmssd: 0,
-        rrVariation: 0,
-        prematureBeat: true, // Siempre true porque solo detectamos latidos prematuros
+        rmssd: 0, // Ya no usamos RMSSD para latidos prematuros
+        rrVariation: 0, // Ya no usamos variación RR para latidos prematuros
+        prematureBeat: true, // Marcamos explícitamente como latido prematuro
         confidence: arrhythmiaResult.confidence
       } : null,
       respiratoryRate: vitalSignsResult.respiratoryRate,
@@ -130,8 +153,9 @@ export const useVitalSignsProcessor = () => {
       respiratoryConfidence: vitalSignsResult.respiratoryConfidence
     };
     
-    // Actualizar estado y devolver resultado
+    // Actualizar el estado con los nuevos datos
     setVitalSignsData(result);
+    
     return result;
   }, [processor, glucoseProcessor, arrhythmiaDetector]);
 
