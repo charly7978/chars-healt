@@ -35,10 +35,10 @@ const PPGSignalMeter = ({
   const lastArrhythmiaTime = useRef<number>(0);
   const arrhythmiaCountRef = useRef<number>(0);
   
-  // Optimized constants for better visualization - slightly increased canvas dimensions
+  // Optimized constants with INCREASED dimensions for better visibility
   const WINDOW_WIDTH_MS = 5000; // Visualization time window
-  const CANVAS_WIDTH = 640; // Increased from 600px to 640px for better readability
-  const CANVAS_HEIGHT = 820; // Increased from 800px to 820px for better vertical detail
+  const CANVAS_WIDTH = 700; // Increased from 640px to 700px for better readability
+  const CANVAS_HEIGHT = 900; // Increased from 820px to 900px for better vertical detail
   const GRID_SIZE_X = 100; // Grid cell width
   const GRID_SIZE_Y = 25; // Grid cell height
   const VERTICAL_SCALE = 42.0; // Signal amplification factor
@@ -77,7 +77,7 @@ const PPGSignalMeter = ({
     return previousValue + SMOOTHING_FACTOR * (currentValue - previousValue);
   }, []);
 
-  // Enhanced grid drawing with improved readability
+  // Enhanced grid drawing with improved readability and denser grid
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
     // Use clearRect for better performance than fillRect+fill
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
@@ -92,25 +92,25 @@ const PPGSignalMeter = ({
     // Draw the main horizontal axis line (zero line)
     const zeroY = CANVAS_HEIGHT * 0.6;
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(0, 150, 100, 0.7)'; // Increased opacity from 0.6 to 0.7
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = 'rgba(0, 150, 100, 0.8)'; // Increased opacity from 0.7 to 0.8
+    ctx.lineWidth = 1.8; // Increased from 1.5 to 1.8
     ctx.moveTo(0, zeroY);
     ctx.lineTo(CANVAS_WIDTH, zeroY);
     ctx.stroke();
 
     // Draw minor grid lines with slightly increased visibility
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(0, 180, 120, 0.12)'; // Increased opacity from 0.08 to 0.12
-    ctx.lineWidth = 0.5;
+    ctx.strokeStyle = 'rgba(0, 180, 120, 0.15)'; // Increased opacity from 0.12 to 0.15
+    ctx.lineWidth = 0.6; // Increased from 0.5 to 0.6 for better visibility
 
-    // Vertical grid lines (time axis)
-    for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X) {
+    // Denser vertical grid lines (time axis)
+    for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X / 2) {
       ctx.moveTo(x, 0);
       ctx.lineTo(x, CANVAS_HEIGHT);
     }
 
-    // Horizontal grid lines (amplitude axis)
-    for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y) {
+    // Denser horizontal grid lines (amplitude axis)
+    for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y / 2) {
       ctx.moveTo(0, y);
       ctx.lineTo(CANVAS_WIDTH, y);
     }
@@ -118,8 +118,8 @@ const PPGSignalMeter = ({
 
     // Draw major grid lines with increased visibility
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(0, 150, 100, 0.25)'; // Increased opacity from 0.2 to 0.25
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(0, 150, 100, 0.3)'; // Increased opacity from 0.25 to 0.3
+    ctx.lineWidth = 1.2; // Increased from 1 to 1.2
 
     // Major vertical grid lines
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X * 4) {
@@ -129,10 +129,10 @@ const PPGSignalMeter = ({
       // Add time labels with better formatting and increased font size
       if (x >= 0) {
         const timeMs = (x / CANVAS_WIDTH) * WINDOW_WIDTH_MS;
-        ctx.fillStyle = 'rgba(0, 120, 80, 0.9)';
-        ctx.font = '11px "Inter", sans-serif'; // Increased from 10px to 11px
+        ctx.fillStyle = 'rgba(0, 120, 80, 0.95)'; // Increased opacity
+        ctx.font = '13px "Inter", sans-serif'; // Increased from 11px to 13px
         ctx.textAlign = 'center';
-        ctx.fillText(`${Math.round(timeMs)}ms`, x, CANVAS_HEIGHT - 5);
+        ctx.fillText(`${Math.round(timeMs)}ms`, x, CANVAS_HEIGHT - 6);
       }
     }
 
@@ -144,22 +144,22 @@ const PPGSignalMeter = ({
       // Add amplitude labels with better formatting and increased font size
       if (y % (GRID_SIZE_Y * 4) === 0) {
         const amplitude = ((zeroY - y) / VERTICAL_SCALE).toFixed(1);
-        ctx.fillStyle = 'rgba(0, 120, 80, 0.9)';
-        ctx.font = '11px "Inter", sans-serif'; // Increased from 10px to 11px
+        ctx.fillStyle = 'rgba(0, 120, 80, 0.95)'; // Increased opacity
+        ctx.font = '13px "Inter", sans-serif'; // Increased from 11px to 13px
         ctx.textAlign = 'right';
-        ctx.fillText(amplitude, 25, y + 4);
+        ctx.fillText(amplitude, 28, y + 4); // Moved slightly right from 25 to 28
       }
     }
     ctx.stroke();
 
     // Draw axis labels with increased font size
-    ctx.fillStyle = 'rgba(0, 120, 80, 0.9)';
-    ctx.font = 'bold 13px "Inter", sans-serif'; // Increased from 12px to 13px
+    ctx.fillStyle = 'rgba(0, 120, 80, 0.95)'; // Increased opacity
+    ctx.font = 'bold 14px "Inter", sans-serif'; // Increased from 13px to 14px
     ctx.textAlign = 'center';
     ctx.fillText('Tiempo (ms)', CANVAS_WIDTH / 2, CANVAS_HEIGHT - 20);
     
     ctx.save();
-    ctx.translate(10, CANVAS_HEIGHT / 2);
+    ctx.translate(12, CANVAS_HEIGHT / 2);
     ctx.rotate(-Math.PI / 2);
     ctx.fillText('Amplitud', 0, 0);
     ctx.restore();
@@ -244,7 +244,7 @@ const PPGSignalMeter = ({
         // Draw the main PPG signal with optimized rendering
         ctx.beginPath();
         ctx.strokeStyle = '#0EA5E9';
-        ctx.lineWidth = 2.5; // Increased line width for better visibility
+        ctx.lineWidth = 2.8; // Increased from 2.5 to 2.8 for better visibility
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
         
@@ -269,7 +269,7 @@ const PPGSignalMeter = ({
             ctx.stroke();
             ctx.beginPath();
             ctx.strokeStyle = '#DC2626';
-            ctx.lineWidth = 3;
+            ctx.lineWidth = 3.2; // Increased from 3 to 3.2
             ctx.setLineDash([3, 2]);
             ctx.moveTo(x, y);
             
@@ -282,7 +282,7 @@ const PPGSignalMeter = ({
             // Reset for continuing normal signal
             ctx.beginPath();
             ctx.strokeStyle = '#0EA5E9';
-            ctx.lineWidth = 2.5;
+            ctx.lineWidth = 2.8; // Increased from 2.5 to 2.8
             ctx.setLineDash([]);
             ctx.moveTo(nextX, nextY);
             firstPoint = false;
@@ -347,48 +347,48 @@ const PPGSignalMeter = ({
         gradient.addColorStop(1, glowColor);
         
         ctx.fillStyle = gradient;
-        ctx.arc(x, y, isArrhythmiaPeak ? 6 : 5, 0, Math.PI * 2);
+        ctx.arc(x, y, isArrhythmiaPeak ? 6.5 : 5.5, 0, Math.PI * 2); // Increased radius
         ctx.fill();
         
         // Add stroke for better definition
         ctx.strokeStyle = isArrhythmiaPeak ? '#FF4D4D' : '#38BDF8';
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = 1.8; // Increased from 1.5 to 1.8
         ctx.stroke();
 
         // Draw peak value with improved styling
-        ctx.font = 'bold 12px "Inter", sans-serif';
+        ctx.font = 'bold 13px "Inter", sans-serif'; // Increased from 12px to 13px
         ctx.fillStyle = isArrhythmiaPeak ? '#B91C1C' : '#0369A1';
         ctx.textAlign = 'center';
-        ctx.fillText(Math.abs(point.value / VERTICAL_SCALE).toFixed(2), x, y - 20);
+        ctx.fillText(Math.abs(point.value / VERTICAL_SCALE).toFixed(2), x, y - 22); // Moved up from -20 to -22
         
         // Enhanced arrhythmia visualization
         if (isArrhythmiaPeak) {
           // Outer highlight ring
           ctx.beginPath();
-          ctx.arc(x, y, 12, 0, Math.PI * 2);
-          ctx.strokeStyle = 'rgba(239, 68, 68, 0.8)';
-          ctx.lineWidth = 2;
+          ctx.arc(x, y, 13, 0, Math.PI * 2); // Increased from 12 to 13
+          ctx.strokeStyle = 'rgba(239, 68, 68, 0.85)'; // Increased opacity
+          ctx.lineWidth = 2.2; // Increased from 2 to 2.2
           ctx.stroke();
           
           // Warning indicator
           ctx.beginPath();
-          ctx.arc(x, y, 18, 0, Math.PI * 2);
-          ctx.strokeStyle = 'rgba(248, 113, 113, 0.6)';
-          ctx.lineWidth = 1;
+          ctx.arc(x, y, 20, 0, Math.PI * 2); // Increased from 18 to 20
+          ctx.strokeStyle = 'rgba(248, 113, 113, 0.7)'; // Increased opacity
+          ctx.lineWidth = 1.2; // Increased from 1 to 1.2
           ctx.setLineDash([3, 3]);
           ctx.stroke();
           ctx.setLineDash([]);
           
           // Warning label
-          ctx.font = 'bold 11px "Inter", sans-serif';
+          ctx.font = 'bold 12px "Inter", sans-serif'; // Increased from 11px to 12px
           ctx.fillStyle = '#EF4444';
-          ctx.fillText("LATIDO PREMATURO", x, y - 35);
+          ctx.fillText("LATIDO PREMATURO", x, y - 36); // Moved up
           
           // Connect with previous and next peaks for better visualization
           ctx.beginPath();
           ctx.setLineDash([2, 2]);
           ctx.strokeStyle = 'rgba(239, 68, 68, 0.5)';
-          ctx.lineWidth = 1;
+          ctx.lineWidth = 1.2; // Increased from 1 to 1.2
           
           if (idx > 0) {
             const prevIdx = maxPeakIndices.findIndex(i => i < idx);
@@ -423,7 +423,7 @@ const PPGSignalMeter = ({
       }
     }
 
-    lastRenderTimeRef.current = currentTime;
+    lastRenderTimeRef.current = performance.now();
     animationFrameRef.current = requestAnimationFrame(renderSignal);
   }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus, drawGrid, smoothValue]);
 
@@ -478,7 +478,7 @@ const PPGSignalMeter = ({
         </div>
       </div>
 
-      <div className="absolute inset-0 w-full" style={{ height: '50vh', top: 0 }}>
+      <div className="absolute inset-0 w-full" style={{ height: '55vh', top: 0 }}>
         <canvas
           ref={canvasRef}
           width={CANVAS_WIDTH}
@@ -496,7 +496,7 @@ const PPGSignalMeter = ({
         />
       </div>
       
-      <div className="absolute" style={{ top: 'calc(50vh + 5px)', left: 0, right: 0, textAlign: 'center', zIndex: 30 }}>
+      <div className="absolute" style={{ top: 'calc(55vh + 5px)', left: 0, right: 0, textAlign: 'center', zIndex: 30 }}>
         <h1 className="text-xl font-bold">
           <span className="text-white">Chars</span>
           <span className="text-[#ea384c]">Healt</span>

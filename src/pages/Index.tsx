@@ -7,7 +7,6 @@ import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import PermissionsHandler from "@/components/PermissionsHandler";
 import { VitalSignsRisk } from '@/utils/vitalSignsRisk';
-import { toast } from "sonner";
 
 interface VitalSigns {
   spo2: number;
@@ -692,8 +691,8 @@ const Index = () => {
         />
       </div>
       
-      <div className="absolute z-20" style={{ bottom: '60px', left: 0, right: 0, padding: '0 10px' }}>
-        <div className="p-1.5 rounded-lg">
+      <div className="absolute z-20" style={{ bottom: '55px', left: 0, right: 0, padding: '0 8px' }}>
+        <div className="p-1 rounded-lg">
           <div className="grid grid-cols-3 gap-1 sm:grid-cols-6">
             <VitalSign 
               label="FRECUENCIA CARDÍACA"
@@ -737,7 +736,7 @@ const Index = () => {
         </div>
       </div>
 
-      <div className="absolute z-50" style={{ bottom: 0, left: 0, right: 0, height: '50px' }}>
+      <div className="absolute z-50" style={{ bottom: 0, left: 0, right: 0, height: '45px' }}>
         <div className="grid grid-cols-2 gap-px w-full h-full">
           <button 
             onClick={startMonitoring}
