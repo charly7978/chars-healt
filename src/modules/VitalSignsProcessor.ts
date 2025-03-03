@@ -5,22 +5,40 @@ import { BloodGlucoseData } from '../types/signal';
 export class VitalSignsProcessor {
   private bpmHistory: number[] = [];
   private spo2History: number[] = [];
-  private glucoseEstimator: GlucoseEstimator;
+  private glucoseEstimator: GlucoseEstimator | null = null;
   private isFingerDetected = false;
   private lastProcessTime = 0;
-  private processingInterval = 100; // Increased from 50ms to 100ms to avoid excessive calculations
+  private processingInterval = 150; // Aumentado a 150ms para reducir carga de procesamiento
   private processingCount = 0;
   private initialized = false;
   private errorCount = 0;
+  private initializing = false;
 
   constructor() {
     try {
-      this.glucoseEstimator = new GlucoseEstimator();
-      this.initialized = true;
+      this.initializeEstimator();
       console.log("VitalSignsProcessor: constructor initialized");
     } catch (error) {
       console.error("VitalSignsProcessor: constructor initialization failed", error);
       this.initialized = false;
+    }
+  }
+
+  private async initializeEstimator() {
+    if (this.initializing) return;
+    this.initializing = true;
+    
+    try {
+      this.glucoseEstimator = new GlucoseEstimator();
+      this.initialized = true;
+      this.errorCount = 0;
+    } catch (error) {
+      console.error("VitalSignsProcessor: Failed to initialize GlucoseEstimator:", error);
+      this.glucoseEstimator = null;
+      this.initialized = false;
+      this.errorCount++;
+    } finally {
+      this.initializing = false;
     }
   }
 
@@ -48,17 +66,33 @@ export class VitalSignsProcessor {
     }
   ) {
     try {
+      // Verificar valor de entrada para prevenir procesamiento de datos inválidos
+      if (!Number.isFinite(value)) {
+        console.warn("VitalSignsProcessor: Received invalid signal value:", value);
+        return {
+          spo2: 0,
+          pressure: "--/--",
+          glucose: null
+        };
+      }
+      
       if (!this.initialized) {
-        this.errorCount++;
-        if (this.errorCount > 3) {
-          console.log("VitalSignsProcessor: Attempting re-initialization");
-          this.glucoseEstimator = new GlucoseEstimator();
-          this.initialized = true;
-          this.errorCount = 0;
-        } else {
-          console.error("VitalSignsProcessor: not initialized properly");
-          return null;
+        // Intentar reinicializar si no está inicializado
+        if (!this.initializing) {
+          this.initializeEstimator();
         }
+        
+        this.errorCount++;
+        if (this.errorCount > 5) {
+          console.log("VitalSignsProcessor: Too many errors, resetting");
+          this.reset();
+        }
+        
+        return {
+          spo2: 0,
+          pressure: "--/--",
+          glucose: null
+        };
       }
       
       // Throttle processing to avoid excessive calculations
@@ -75,7 +109,7 @@ export class VitalSignsProcessor {
       
       // Calculate if finger is detected - more reliable check
       // Only consider finger detected if signal value is significant
-      this.isFingerDetected = Math.abs(value) > 1.0;
+      this.isFingerDetected = Math.abs(value) > 0.8; // Reducido el umbral para mejorar la detección
       
       // Only process when finger is detected to avoid false readings
       if (!this.isFingerDetected) {
@@ -90,41 +124,44 @@ export class VitalSignsProcessor {
       }
       
       // Process blood glucose estimation directly from PPG signal
-      try {
-        this.glucoseEstimator.processPpg(value, this.isFingerDetected);
-      } catch (error) {
-        console.error("VitalSignsProcessor: Error processing glucose:", error);
-      }
-      
-      if (rrData?.intervals && rrData.intervals.length > 0) {
-        // Calculate heart rate from RR intervals
-        const validIntervals = rrData.intervals.filter(interval => interval > 0 && interval < 2000);
-        if (validIntervals.length > 0) {
-          const avgInterval = validIntervals.reduce((sum, val) => sum + val, 0) / validIntervals.length;
-          const bpm = Math.round(60000 / avgInterval);
-          if (bpm > 40 && bpm < 200) { // Validate the BPM is in physiological range
-            try {
-              this.glucoseEstimator.updateHeartRate(bpm);
-            } catch (error) {
-              console.error("VitalSignsProcessor: Error updating heart rate:", error);
-            }
-          }
+      if (this.glucoseEstimator) {
+        try {
+          this.glucoseEstimator.processPpg(value, this.isFingerDetected);
+        } catch (error) {
+          console.error("VitalSignsProcessor: Error processing glucose:", error);
+          // No reinicializar aquí para evitar errores en cascada
         }
         
-        // If we have RR intervals, we can calculate HRV
-        if (rrData.intervals.length >= 3) {
-          try {
-            const rmssd = this.calculateRMSSD(rrData.intervals);
-            this.glucoseEstimator.updateHrv(rmssd);
-          } catch (error) {
-            console.error("VitalSignsProcessor: Error calculating/updating HRV:", error);
+        if (rrData?.intervals && rrData.intervals.length > 0) {
+          // Calculate heart rate from RR intervals
+          const validIntervals = rrData.intervals.filter(interval => interval > 0 && interval < 2000);
+          if (validIntervals.length > 0) {
+            const avgInterval = validIntervals.reduce((sum, val) => sum + val, 0) / validIntervals.length;
+            const bpm = Math.round(60000 / avgInterval);
+            if (bpm > 40 && bpm < 200) { // Validate the BPM is in physiological range
+              try {
+                this.glucoseEstimator.updateHeartRate(bpm);
+              } catch (error) {
+                console.error("VitalSignsProcessor: Error updating heart rate:", error);
+              }
+            }
+          }
+          
+          // If we have RR intervals, we can calculate HRV
+          if (rrData.intervals.length >= 3) {
+            try {
+              const rmssd = this.calculateRMSSD(rrData.intervals);
+              this.glucoseEstimator.updateHrv(rmssd);
+            } catch (error) {
+              console.error("VitalSignsProcessor: Error calculating/updating HRV:", error);
+            }
           }
         }
       }
       
       // Simplified SpO2 calculation
       let spo2 = 0;
-      if (this.isFingerDetected && Math.abs(value) > 1.0) {
+      if (this.isFingerDetected && Math.abs(value) > 0.8) {
         spo2 = 95 + Math.min(4, Math.max(-4, value / 5));
         spo2 = Math.min(100, Math.max(80, Math.round(spo2)));
         
@@ -134,26 +171,31 @@ export class VitalSignsProcessor {
         }
         
         spo2 = Math.round(this.spo2History.reduce((a, b) => a + b, 0) / this.spo2History.length);
-        try {
-          this.glucoseEstimator.updateSpo2(spo2);
-        } catch (error) {
-          console.error("VitalSignsProcessor: Error updating SpO2:", error);
+        
+        if (this.glucoseEstimator) {
+          try {
+            this.glucoseEstimator.updateSpo2(spo2);
+          } catch (error) {
+            console.error("VitalSignsProcessor: Error updating SpO2:", error);
+          }
         }
       }
       
       // Get blood glucose estimate if enough data is available
       let glucose: BloodGlucoseData | null = null;
-      try {
-        if (this.glucoseEstimator.hasValidGlucoseData()) {
-          glucose = this.glucoseEstimator.estimateGlucose();
-          if (this.processingCount % 20 === 0) {
-            console.log("VitalSignsProcessor: estimated glucose:", glucose);
+      if (this.glucoseEstimator) {
+        try {
+          if (this.glucoseEstimator.hasValidGlucoseData()) {
+            glucose = this.glucoseEstimator.estimateGlucose();
+            if (this.processingCount % 20 === 0) {
+              console.log("VitalSignsProcessor: estimated glucose:", glucose);
+            }
+          } else if (this.processingCount % 20 === 0) {
+            console.log("VitalSignsProcessor: not enough data for glucose estimation");
           }
-        } else if (this.processingCount % 20 === 0) {
-          console.log("VitalSignsProcessor: not enough data for glucose estimation");
+        } catch (error) {
+          console.error("VitalSignsProcessor: Error estimating glucose:", error);
         }
-      } catch (error) {
-        console.error("VitalSignsProcessor: Error estimating glucose:", error);
       }
       
       // Simplified blood pressure calculation based on heart rate and signal strength
@@ -224,19 +266,21 @@ export class VitalSignsProcessor {
     try {
       this.bpmHistory = [];
       this.spo2History = [];
-      if (this.glucoseEstimator) {
-        this.glucoseEstimator.reset();
-      } else {
-        this.glucoseEstimator = new GlucoseEstimator();
-      }
+      
+      // Creamos un nuevo estimador para evitar problemas de estado inconsistente
+      this.glucoseEstimator = null;
+      setTimeout(() => {
+        if (!this.initializing) {
+          this.initializeEstimator();
+        }
+      }, 100);
+      
       this.isFingerDetected = false;
       this.lastProcessTime = 0;
       this.processingCount = 0;
       this.errorCount = 0;
-      this.initialized = true;
     } catch (error) {
       console.error("VitalSignsProcessor: Error during reset:", error);
-      this.initialized = false;
       this.errorCount++;
     }
   }

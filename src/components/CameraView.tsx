@@ -22,6 +22,7 @@ const CameraView: React.FC<CameraViewProps> = ({
   const torchEnabledRef = useRef(false);
   const mountedRef = useRef(true);
   const attemptCountRef = useRef(0);
+  const frameProcessingRef = useRef<boolean>(false);
 
   // Detect if we're on Android
   useEffect(() => {
@@ -50,6 +51,9 @@ const CameraView: React.FC<CameraViewProps> = ({
         console.error("Error disabling torch during cleanup:", err);
       }
     }
+    
+    // Stop frame processing
+    frameProcessingRef.current = false;
     
     // Stop all tracks from the stream
     if (streamRef.current) {
@@ -107,7 +111,7 @@ const CameraView: React.FC<CameraViewProps> = ({
       stopCamera();
       
       // Wait to ensure resources are released properly
-      await new Promise(resolve => setTimeout(resolve, isAndroid ? 600 : 300));
+      await new Promise(resolve => setTimeout(resolve, isAndroid ? 1000 : 500));
       
       // Verify component is still mounted and monitoring is still active
       if (!mountedRef.current || !isMonitoring || currentAttempt !== attemptCountRef.current) {
@@ -196,6 +200,9 @@ const CameraView: React.FC<CameraViewProps> = ({
                   console.error("CameraView: Error enabling torch:", e);
                 }
                 
+                // Mark that frame processing can begin and notify stream is ready
+                frameProcessingRef.current = true;
+                
                 // Notify that stream is ready after a short delay
                 setTimeout(() => {
                   if (streamRef.current && mountedRef.current && isMonitoring && 
@@ -203,8 +210,8 @@ const CameraView: React.FC<CameraViewProps> = ({
                     console.log("CameraView: Notifying stream is ready");
                     onStreamReady(streamRef.current);
                   }
-                }, 300);
-              }, isAndroid ? 500 : 200);
+                }, 500);
+              }, isAndroid ? 800 : 500);
             }
           } catch (e) {
             console.error("CameraView: Error playing video:", e);
@@ -237,7 +244,7 @@ const CameraView: React.FC<CameraViewProps> = ({
             initializingRef.current = false;
             startCamera();
           }
-        }, 2000);
+        }, 3000); // Increased delay before retry
       }
     } finally {
       // Set initializing to false only if this is still the current attempt
@@ -255,10 +262,11 @@ const CameraView: React.FC<CameraViewProps> = ({
       // Delay starting camera slightly to avoid race conditions
       const timeoutId = setTimeout(() => {
         startCamera();
-      }, isAndroid ? 500 : 300);
+      }, isAndroid ? 1000 : 500); // Increased delays
       return () => clearTimeout(timeoutId);
     } else {
       // Stop camera immediately when monitoring is disabled
+      frameProcessingRef.current = false;
       stopCamera();
     }
   }, [isMonitoring, startCamera, stopCamera, isAndroid]);
@@ -288,9 +296,16 @@ const CameraView: React.FC<CameraViewProps> = ({
     return () => {
       console.log("CameraView: Component unmounting");
       mountedRef.current = false;
+      frameProcessingRef.current = false;
       stopCamera();
     };
   }, [stopCamera]);
+
+  // Expose frameProcessingRef to parent via a custom property
+  if (videoRef.current) {
+    // @ts-ignore - Using a custom property to pass state to parent
+    videoRef.current.frameProcessingAllowed = frameProcessingRef.current;
+  }
 
   return (
     <>

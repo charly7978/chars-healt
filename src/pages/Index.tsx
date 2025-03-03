@@ -461,7 +461,21 @@ const Index = () => {
     }
     
     console.log("Stream ready, starting frame processing");
+    
+    // Verificar que el stream tenga pistas de video
+    if (!stream || stream.getVideoTracks().length === 0) {
+      console.error("Stream ready called with invalid stream or no video tracks");
+      return;
+    }
+    
     const videoTrack = stream.getVideoTracks()[0];
+    
+    // Verificar que la pista de video esté activa
+    if (videoTrack.readyState !== 'live') {
+      console.error("Video track is not in 'live' state:", videoTrack.readyState);
+      return;
+    }
+    
     const imageCapture = new ImageCapture(videoTrack);
     
     if (isMonitoring && videoTrack.getCapabilities()?.torch) {
@@ -471,16 +485,32 @@ const Index = () => {
     }
     
     const tempCanvas = document.createElement('canvas');
-    const tempCtx = tempCanvas.getContext('2d');
+    const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
     if (!tempCtx) {
       console.error("Could not get 2D context");
       return;
     }
     
+    // Flag para controlar si el procesamiento está activo
+    let isProcessingActive = true;
+    
     const processImage = async () => {
-      if (!isMonitoring || !isCameraOn) return;
+      if (!isMonitoring || !isCameraOn || !isProcessingActive) {
+        console.log("Processing stopped due to monitoring or camera state");
+        return;
+      }
       
       try {
+        // Verificar si el video track sigue activo
+        if (videoTrack.readyState !== 'live') {
+          console.warn("Video track is no longer active, stopping processing");
+          isProcessingActive = false;
+          return;
+        }
+        
+        // Usar un timeout para limitar la frecuencia de capturas
+        await new Promise(resolve => setTimeout(resolve, 50));
+        
         const frame = await imageCapture.grabFrame();
         tempCanvas.width = frame.width;
         tempCanvas.height = frame.height;
@@ -488,25 +518,44 @@ const Index = () => {
         const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
         processFrame(imageData);
         
-        if (isMonitoring && isCameraOn) {
+        if (isMonitoring && isCameraOn && isProcessingActive) {
           requestAnimationFrame(processImage);
         }
       } catch (error) {
         console.error("Error capturing frame:", error);
-        if (isMonitoring && isCameraOn) {
+        
+        // Si hay un error con "InvalidStateError", no intentamos recuperar
+        // porque generalmente indica que la cámara ha sido detenida o desconectada
+        if (error instanceof Error && error.name === "InvalidStateError") {
+          console.warn("InvalidStateError detected, stopping frame processing");
+          isProcessingActive = false;
+          return;
+        }
+        
+        if (isMonitoring && isCameraOn && isProcessingActive) {
           // Use setTimeout to avoid requesting too many frames on error
           setTimeout(() => {
-            if (isMonitoring && isCameraOn) {
+            if (isMonitoring && isCameraOn && isProcessingActive) {
               requestAnimationFrame(processImage);
             }
-          }, 100);
+          }, 500); // Mayor tiempo de espera para errores
         }
       }
     };
 
-    processImage();
+    // Comenzar captura después de un breve retraso para asegurar que todo esté inicializado
+    setTimeout(() => {
+      if (isMonitoring && isCameraOn) {
+        console.log("Starting frame processing loop");
+        processImage();
+      }
+    }, 500);
     
+    // Limpiar recursos cuando se detenga el procesamiento
     return () => {
+      console.log("Cleanup: stopping frame processing");
+      isProcessingActive = false;
+      
       if (videoTrack.getCapabilities()?.torch) {
         videoTrack.applyConstraints({
           advanced: [{ torch: false }]
