@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -172,45 +171,75 @@ const Index = () => {
   const handleStreamReady = (stream) => {
     if (!isMonitoring) return;
     
-    const videoTrack = stream.getVideoTracks()[0];
-    const imageCapture = new ImageCapture(videoTrack);
-    
-    if (videoTrack.getCapabilities()?.torch) {
-      videoTrack.applyConstraints({
-        advanced: [{ torch: true }]
-      }).catch(err => console.error("Error activando linterna:", err));
-    }
-    
-    const tempCanvas = document.createElement('canvas');
-    const tempCtx = tempCanvas.getContext('2d');
-    if (!tempCtx) {
-      console.error("No se pudo obtener el contexto 2D");
-      return;
-    }
-    
-    const processImage = async () => {
-      if (!isMonitoring) return;
+    let videoTrack;
+    try {
+      videoTrack = stream.getVideoTracks()[0];
+      if (!videoTrack) {
+        console.error("No video tracks found in stream");
+        return;
+      }
       
-      try {
-        const frame = await imageCapture.grabFrame();
-        tempCanvas.width = frame.width;
-        tempCanvas.height = frame.height;
-        tempCtx.drawImage(frame, 0, 0);
-        const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
-        processFrame(imageData);
+      const imageCapture = new ImageCapture(videoTrack);
+      
+      if (videoTrack.getCapabilities()?.torch) {
+        videoTrack.applyConstraints({
+          advanced: [{ torch: true }]
+        }).catch(err => console.error("Error activando linterna:", err));
+      }
+      
+      const tempCanvas = document.createElement('canvas');
+      const tempCtx = tempCanvas.getContext('2d');
+      if (!tempCtx) {
+        console.error("No se pudo obtener el contexto 2D");
+        return;
+      }
+      
+      const checkTrackAndProcess = async () => {
+        if (!isMonitoring) return;
         
-        if (isMonitoring) {
-          requestAnimationFrame(processImage);
+        try {
+          if (!videoTrack || videoTrack.readyState !== 'live') {
+            console.log("Video track not ready or no longer active");
+            if (isMonitoring) {
+              setTimeout(() => requestAnimationFrame(checkTrackAndProcess), 500);
+            }
+            return;
+          }
+          
+          const frame = await imageCapture.grabFrame();
+          tempCanvas.width = frame.width;
+          tempCanvas.height = frame.height;
+          tempCtx.drawImage(frame, 0, 0);
+          const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
+          processFrame(imageData);
+          
+          if (isMonitoring) {
+            requestAnimationFrame(checkTrackAndProcess);
+          }
+        } catch (error) {
+          console.error("Error processing frame:", error);
+          if (isMonitoring) {
+            setTimeout(() => requestAnimationFrame(checkTrackAndProcess), 500);
+          }
         }
-      } catch (error) {
-        console.error("Error capturando frame:", error);
-        if (isMonitoring) {
-          setTimeout(() => requestAnimationFrame(processImage), 100); // Con un pequeño retardo para recuperarse
+      };
+
+      checkTrackAndProcess();
+    } catch (error) {
+      console.error("Error setting up image capture:", error);
+    }
+    
+    return () => {
+      try {
+        if (videoTrack && videoTrack.getCapabilities()?.torch) {
+          videoTrack.applyConstraints({
+            advanced: [{ torch: false }]
+          }).catch(err => console.error("Error desactivando linterna:", err));
         }
+      } catch (e) {
+        console.error("Error in cleanup:", e);
       }
     };
-
-    processImage();
   };
 
   useEffect(() => {
@@ -218,11 +247,9 @@ const Index = () => {
       const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
       setHeartRate(heartBeatResult.bpm);
       
-      // Pass the heart beat result to the vital signs processor
       const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
       
       if (vitals) {
-        // Log respiration and glucose data for debugging
         console.log("Respiration data:", vitals.respiration, "hasData:", vitals.hasRespirationData);
         console.log("Glucose data:", vitals.glucose);
         
@@ -328,7 +355,6 @@ const Index = () => {
             </div>
           </div>
 
-          {/* Debugging Info */}
           {isMonitoring && (
             <div className="absolute bottom-[150px] left-0 right-0 text-center z-30 text-xs text-gray-400">
               <span>Resp Data: {vitalSigns.hasRespirationData ? 'Disponible' : 'No disponible'} | 
@@ -375,7 +401,6 @@ const Index = () => {
         </div>
       </div>
 
-      {/* Diálogo de calibración de glucosa */}
       <Dialog open={isCalibrationOpen} onOpenChange={setIsCalibrationOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
