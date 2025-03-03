@@ -1,3 +1,4 @@
+
 /**
  * ArrhythmiaDetector.ts
  * 
@@ -19,6 +20,9 @@ export class ArrhythmiaDetector {
   private lastPeakTime: number | null = null;
   private baseRRInterval: number = 0;
   private avgNormalAmplitude: number = 0;
+  private readonly PREMATURE_BEAT_THRESHOLD = 0.7; // Factor para detectar latidos prematuros
+  private readonly ARRHYTHMIA_RR_THRESHOLD = 0.3; // Variación de RR para detectar arritmias
+  private readonly MIN_DETECTION_CONFIDENCE = 0.65; // Confianza mínima para una detección
   
   /**
    * Reset all state variables
@@ -113,8 +117,7 @@ export class ArrhythmiaDetector {
   }
 
   /**
-   * Versión simplificada del detector de arritmias 
-   * que mantiene la misma interfaz y formato de salida
+   * Detector de arritmias mejorado que busca latidos prematuros
    */
   detect(): {
     detected: boolean;
@@ -134,7 +137,7 @@ export class ArrhythmiaDetector {
       };
     }
 
-    // Calculate RMSSD for reference
+    // Calcular RMSSD (Root Mean Square of Successive Differences)
     let sumSquaredDiff = 0;
     for (let i = 1; i < this.rrIntervals.length; i++) {
       const diff = this.rrIntervals[i] - this.rrIntervals[i-1];
@@ -144,13 +147,62 @@ export class ArrhythmiaDetector {
     this.lastRMSSD = rmssd;
     
     // Calcular variación RR para información adicional
-    const rrVariation = (this.rrIntervals.length > 1) ? 
-      Math.abs(this.rrIntervals[this.rrIntervals.length - 1] - this.baseRRInterval) / this.baseRRInterval : 
+    const lastInterval = this.rrIntervals[this.rrIntervals.length - 1];
+    const rrVariation = (this.baseRRInterval > 0) ? 
+      Math.abs(lastInterval - this.baseRRInterval) / this.baseRRInterval : 
       0;
     this.lastRRVariation = rrVariation;
     
+    // Detección de latidos prematuros
+    let prematureBeat = false;
+    let confidenceScore = 0;
+    let detectedArrhythmia = false;
+    
+    if (this.rrIntervals.length >= 3 && this.baseRRInterval > 0) {
+      // Verificar la secuencia de los últimos intervalos
+      const lastRR = this.rrIntervals[this.rrIntervals.length - 1];
+      const previousRR = this.rrIntervals[this.rrIntervals.length - 2];
+      
+      // Patrón de latido prematuro: un intervalo significativamente más corto
+      // seguido por un intervalo compensatorio más largo
+      if (lastRR < this.baseRRInterval * this.PREMATURE_BEAT_THRESHOLD) {
+        prematureBeat = true;
+        confidenceScore = 0.85;
+        detectedArrhythmia = true;
+      }
+      // También verificar variabilidad excesiva
+      else if (rrVariation > this.ARRHYTHMIA_RR_THRESHOLD) {
+        confidenceScore = Math.min(rrVariation * 2, 0.95);
+        detectedArrhythmia = confidenceScore > this.MIN_DETECTION_CONFIDENCE;
+      }
+    }
+    
+    // Verificar también patrones en amplitudes si están disponibles
+    if (this.amplitudes.length >= 3 && this.avgNormalAmplitude > 0) {
+      const lastAmp = this.amplitudes[this.amplitudes.length - 1];
+      const ampVariation = Math.abs(lastAmp - this.avgNormalAmplitude) / this.avgNormalAmplitude;
+      
+      // Las arritmias a menudo tienen amplitudes anormales
+      if (ampVariation > 0.4) {
+        confidenceScore = Math.max(confidenceScore, ampVariation * 0.8);
+        if (confidenceScore > this.MIN_DETECTION_CONFIDENCE) {
+          detectedArrhythmia = true;
+        }
+      }
+    }
+    
+    // Actualizar estado de detección
+    if (detectedArrhythmia) {
+      const now = Date.now();
+      if (now - this.lastArrhythmiaTime > 1000) { // Evitar múltiples conteos en poco tiempo
+        this.arrhythmiaCount++;
+        this.lastArrhythmiaTime = now;
+      }
+      this.hasDetectedArrhythmia = true;
+    }
+    
     return {
-      detected: false,
+      detected: detectedArrhythmia,
       count: this.arrhythmiaCount,
       status: this.hasDetectedArrhythmia ? 
         `ARRITMIA DETECTADA|${this.arrhythmiaCount}` : 
@@ -158,8 +210,8 @@ export class ArrhythmiaDetector {
       data: { 
         rmssd, 
         rrVariation, 
-        prematureBeat: false,
-        confidence: 0
+        prematureBeat,
+        confidence: confidenceScore
       }
     };
   }
