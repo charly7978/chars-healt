@@ -7,7 +7,6 @@ import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import PermissionsHandler from "@/components/PermissionsHandler";
 import { VitalSignsRisk } from '@/utils/vitalSignsRisk';
-import { toast } from "sonner";
 
 interface VitalSigns {
   spo2: number;
@@ -23,6 +22,11 @@ interface VitalSigns {
     value: number;
     trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
   };
+  lastArrhythmiaData: {
+    timestamp: number;
+    rmssd: number;
+    rrVariation: number;
+  } | null;
 }
 
 const Index = () => {
@@ -35,7 +39,8 @@ const Index = () => {
     arrhythmiaStatus: "--",
     respiration: { rate: 0, depth: 0, regularity: 0 },
     hasRespirationData: false,
-    glucose: { value: 0, trend: 'unknown' }
+    glucose: { value: 0, trend: 'unknown' },
+    lastArrhythmiaData: null
   });
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState<string | number>("--");
@@ -227,9 +232,6 @@ const Index = () => {
     
     if (!isMonitoring && lastSignal?.quality < 50) {
       console.log("Señal insuficiente para iniciar medición", lastSignal?.quality);
-      toast.warning("Calidad de señal insuficiente. Posicione bien su dedo en la cámara.", {
-        duration: 3000,
-      });
       return;
     }
     
@@ -348,7 +350,8 @@ const Index = () => {
       arrhythmiaStatus: "--",
       respiration: { rate: 0, depth: 0, regularity: 0 },
       hasRespirationData: false,
-      glucose: { value: 0, trend: 'unknown' }
+      glucose: { value: 0, trend: 'unknown' },
+      lastArrhythmiaData: null
     });
     setArrhythmiaCount("--");
     setLastArrhythmiaData(null);
@@ -611,6 +614,10 @@ const Index = () => {
             
             if (vitals.lastArrhythmiaData) {
               setLastArrhythmiaData(vitals.lastArrhythmiaData);
+              setVitalSigns(current => ({
+                ...current,
+                lastArrhythmiaData: vitals.lastArrhythmiaData
+              }));
               
               const [status, count] = vitals.arrhythmiaStatus.split('|');
               setArrhythmiaCount(count || "0");
@@ -684,17 +691,8 @@ const Index = () => {
         />
       </div>
       
-      {isMonitoring && (
-        <div className="absolute z-30 text-sm bg-black/50 backdrop-blur-sm px-3 py-1 rounded-lg" 
-          style={{ top: '35%', left: '50%', transform: 'translateX(-50%)', textAlign: 'center' }}>
-          <span className="text-cyan-400 font-medium">Respiración: {vitalSigns.hasRespirationData ? 
-            `${vitalSigns.respiration.rate} RPM, Profundidad: ${vitalSigns.respiration.depth}%` : 
-            'Calibrando...'}</span>
-        </div>
-      )}
-
-      <div className="absolute z-20" style={{ bottom: '65px', left: 0, right: 0, padding: '0 12px' }}>
-        <div className="p-2 rounded-lg">
+      <div className="absolute z-20" style={{ bottom: '55px', left: 0, right: 0, padding: '0 8px' }}>
+        <div className="p-1 rounded-lg">
           <div className="grid grid-cols-3 gap-1 sm:grid-cols-6">
             <VitalSign 
               label="FRECUENCIA CARDÍACA"
@@ -738,7 +736,7 @@ const Index = () => {
         </div>
       </div>
 
-      <div className="absolute z-50" style={{ bottom: 0, left: 0, right: 0, height: '55px' }}>
+      <div className="absolute z-50" style={{ bottom: 0, left: 0, right: 0, height: '45px' }}>
         <div className="grid grid-cols-2 gap-px w-full h-full">
           <button 
             onClick={startMonitoring}
