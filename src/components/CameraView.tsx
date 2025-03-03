@@ -8,60 +8,63 @@ interface CameraViewProps {
   signalQuality?: number;
 }
 
-const CameraView = ({
+const CameraView: React.FC<CameraViewProps> = ({
   onStreamReady,
   isMonitoring,
   isFingerDetected = false,
   signalQuality = 0,
-}: CameraViewProps) => {
+}) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const mountedRef = useRef(true);
-  const initializingRef = useRef(false);
-  const lastMonitoringStateRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [isAndroid, setIsAndroid] = useState(false);
+  const initializingRef = useRef(false);
+  const torchEnabledRef = useRef(false);
+  const mountedRef = useRef(true);
+  const attemptCountRef = useRef(0);
 
   // Detect if we're on Android
   useEffect(() => {
     const userAgent = navigator.userAgent.toLowerCase();
-    setIsAndroid(/android/i.test(userAgent));
-    console.log("CameraView: Device detection - Android:", /android/i.test(userAgent));
+    const isAndroidDevice = /android/i.test(userAgent);
+    setIsAndroid(isAndroidDevice);
+    console.log("CameraView: Device detection - Android:", isAndroidDevice);
   }, []);
 
   // Function to stop the camera and release resources
   const stopCamera = useCallback(() => {
     console.log("CameraView: Stopping camera");
     
-    if (streamRef.current) {
-      const tracks = streamRef.current.getTracks();
-      tracks.forEach(track => {
-        // First disable the torch if available
-        if (track.getCapabilities()?.torch) {
-          try {
-            console.log("CameraView: Disabling torch");
-            track.applyConstraints({
-              advanced: [{ torch: false }]
-            }).catch(err => console.error("Error disabling torch:", err));
-          } catch (err) {
-            console.error("Error disabling torch:", err);
-          }
+    // First disable torch if it was enabled
+    if (torchEnabledRef.current && streamRef.current) {
+      try {
+        const videoTrack = streamRef.current.getVideoTracks()[0];
+        if (videoTrack && videoTrack.getCapabilities()?.torch) {
+          console.log("CameraView: Disabling torch before stopping camera");
+          videoTrack.applyConstraints({
+            advanced: [{ torch: false }]
+          }).catch(err => console.error("Error disabling torch:", err));
+          torchEnabledRef.current = false;
         }
-        
-        // Wait a moment before stopping the track (helps with Android)
-        setTimeout(() => {
-          try {
-            if (track.readyState === 'live') {
-              console.log("CameraView: Stopping video track");
-              track.stop();
-            }
-          } catch (err) {
-            console.error("Error stopping track:", err);
+      } catch (err) {
+        console.error("Error disabling torch during cleanup:", err);
+      }
+    }
+    
+    // Stop all tracks from the stream
+    if (streamRef.current) {
+      try {
+        const tracks = streamRef.current.getTracks();
+        tracks.forEach(track => {
+          if (track.readyState === 'live') {
+            console.log(`CameraView: Stopping ${track.kind} track`);
+            track.stop();
           }
-        }, 100); // Increased timeout for more reliable cleanup
-      });
-
-      streamRef.current = null;
+        });
+        streamRef.current = null;
+      } catch (err) {
+        console.error("Error stopping media tracks:", err);
+      }
     }
 
     // Clean up the video element
@@ -73,102 +76,80 @@ const CameraView = ({
         console.error("Error cleaning video element:", err);
       }
     }
+    
+    // Reset state
+    torchEnabledRef.current = false;
+    initializingRef.current = false;
   }, []);
 
   // Function to start the camera
   const startCamera = useCallback(async () => {
-    if (!mountedRef.current || initializingRef.current) return;
+    if (!mountedRef.current) return;
+    if (initializingRef.current) {
+      console.log("CameraView: Already initializing camera, ignoring duplicate call");
+      return;
+    }
+    
     if (!isMonitoring) {
       console.log("CameraView: Not starting camera because isMonitoring is false");
       return;
     }
     
-    // Update last monitoring state
-    lastMonitoringStateRef.current = isMonitoring;
-    
     initializingRef.current = true;
-    console.log("CameraView: Starting camera, isMonitoring:", isMonitoring);
+    attemptCountRef.current++;
+    const currentAttempt = attemptCountRef.current;
+    
+    console.log(`CameraView: Starting camera (attempt ${currentAttempt}), isMonitoring:`, isMonitoring);
     setError(null);
     
     try {
-      // Ensure any previous stream is stopped
+      // Ensure any previous stream is properly stopped
       stopCamera();
       
-      // Wait a moment for resources to be released (especially on Android)
-      await new Promise(resolve => setTimeout(resolve, isAndroid ? 500 : 100)); // Increased for more reliable initialization
-
-      if (!mountedRef.current || !isMonitoring) {
-        console.log("CameraView: Component unmounted or isMonitoring changed during initialization");
+      // Wait to ensure resources are released properly
+      await new Promise(resolve => setTimeout(resolve, isAndroid ? 600 : 300));
+      
+      // Verify component is still mounted and monitoring is still active
+      if (!mountedRef.current || !isMonitoring || currentAttempt !== attemptCountRef.current) {
+        console.log("CameraView: State changed during initialization, aborting");
         initializingRef.current = false;
         return;
       }
 
       if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error('getUserMedia API is not available');
+        throw new Error('Camera API not available in this browser');
       }
 
       // Camera configuration optimized for each platform
       const constraints: MediaStreamConstraints = {
         video: {
           facingMode: 'environment',
-          width: isAndroid ? { ideal: 1280 } : { ideal: 640 },
-          height: isAndroid ? { ideal: 720 } : { ideal: 480 },
+          width: { ideal: isAndroid ? 1280 : 640 },
+          height: { ideal: isAndroid ? 720 : 480 },
           frameRate: { ideal: isAndroid ? 24 : 30 }
         },
         audio: false
       };
 
-      // Try to get camera access
-      console.log("CameraView: Requesting camera access with constraints:", constraints);
+      console.log("CameraView: Requesting camera access with constraints:", JSON.stringify(constraints));
       const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-      console.log("CameraView: Camera access granted, tracks:", mediaStream.getTracks().length);
       
-      if (!mountedRef.current || !isMonitoring) {
-        console.log("CameraView: Component unmounted or not monitoring, releasing stream");
+      // Verify component is still mounted and we're still monitoring
+      if (!mountedRef.current || !isMonitoring || currentAttempt !== attemptCountRef.current) {
+        console.log("CameraView: State changed during camera access, cleaning up and aborting");
         mediaStream.getTracks().forEach(track => track.stop());
         initializingRef.current = false;
         return;
       }
 
+      console.log("CameraView: Camera access granted, tracks:", mediaStream.getTracks().length);
       streamRef.current = mediaStream;
 
-      // Configure specific optimizations for Android
-      if (isAndroid) {
-        console.log("CameraView: Applying optimizations for Android");
-        const videoTrack = mediaStream.getVideoTracks()[0];
-        if (videoTrack) {
-          try {
-            // Android optimizations
-            const capabilities = videoTrack.getCapabilities();
-            const settings: MediaTrackConstraints = {};
-            
-            if (capabilities.exposureMode && capabilities.exposureMode.includes('continuous')) {
-              settings.exposureMode = 'continuous';
-            }
-            
-            if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
-              settings.focusMode = 'continuous';
-            }
-            
-            if (capabilities.whiteBalanceMode && capabilities.whiteBalanceMode.includes('continuous')) {
-              settings.whiteBalanceMode = 'continuous';
-            }
-            
-            if (Object.keys(settings).length > 0) {
-              await videoTrack.applyConstraints(settings);
-              console.log("CameraView: Android optimizations applied", settings);
-            }
-          } catch (err) {
-            console.error("Error applying Android optimizations:", err);
-          }
-        }
-      }
-
-      // Configure the video element
+      // Configure video element
       if (videoRef.current) {
-        console.log("CameraView: Assigning stream to video element");
+        console.log("CameraView: Configuring video element");
         
-        // Specific optimizations for video element on Android
+        // Apply platform-specific optimizations
         if (isAndroid) {
           videoRef.current.style.willChange = 'transform';
           videoRef.current.style.transform = 'translateZ(0)';
@@ -177,99 +158,126 @@ const CameraView = ({
         
         videoRef.current.srcObject = mediaStream;
         
-        // On Android, wait for optimizations to apply before playing
-        await new Promise(resolve => setTimeout(resolve, isAndroid ? 200 : 50));
+        // Wait for video to be ready to play
+        videoRef.current.onloadedmetadata = async () => {
+          if (!videoRef.current || !mountedRef.current || !isMonitoring || currentAttempt !== attemptCountRef.current) {
+            console.log("CameraView: State changed after video loaded, aborting");
+            stopCamera();
+            return;
+          }
+          
+          try {
+            console.log("CameraView: Video metadata loaded, playing...");
+            await videoRef.current.play();
+            console.log("CameraView: Video playing successfully");
+            
+            // If we're still monitoring, try to enable torch and notify stream is ready
+            if (isMonitoring && mountedRef.current && currentAttempt === attemptCountRef.current) {
+              // Wait a little before trying to enable torch
+              setTimeout(async () => {
+                if (!mountedRef.current || !isMonitoring || currentAttempt !== attemptCountRef.current) return;
+                
+                try {
+                  // Try to activate torch if available
+                  if (streamRef.current) {
+                    const videoTrack = streamRef.current.getVideoTracks()[0];
+                    if (videoTrack && videoTrack.getCapabilities()?.torch) {
+                      console.log("CameraView: Enabling torch");
+                      await videoTrack.applyConstraints({
+                        advanced: [{ torch: true }]
+                      });
+                      torchEnabledRef.current = true;
+                      console.log("CameraView: Torch enabled successfully");
+                    } else {
+                      console.log("CameraView: Torch not available on this device");
+                    }
+                  }
+                } catch (e) {
+                  console.error("CameraView: Error enabling torch:", e);
+                }
+                
+                // Notify that stream is ready after a short delay
+                setTimeout(() => {
+                  if (streamRef.current && mountedRef.current && isMonitoring && 
+                      onStreamReady && currentAttempt === attemptCountRef.current) {
+                    console.log("CameraView: Notifying stream is ready");
+                    onStreamReady(streamRef.current);
+                  }
+                }, 300);
+              }, isAndroid ? 500 : 200);
+            }
+          } catch (e) {
+            console.error("CameraView: Error playing video:", e);
+            setError(`Error playing video: ${e instanceof Error ? e.message : String(e)}`);
+            stopCamera();
+          }
+        };
         
-        await videoRef.current.play().catch(e => {
-          console.error("Error playing video:", e);
-          throw e;
-        });
-        console.log("CameraView: Video playing correctly");
+        // Handle video errors
+        videoRef.current.onerror = (e) => {
+          console.error("CameraView: Video element error:", e);
+          setError(`Video error: ${e instanceof Error ? e.message : 'Unknown error'}`);
+          stopCamera();
+        };
       } else {
-        console.error("CameraView: Video element is not available");
+        console.error("CameraView: Video element is null");
         throw new Error("Video element not available");
       }
-
-      // Wait a moment before activating the torch on Android
-      await new Promise(resolve => setTimeout(resolve, isAndroid ? 300 : 100));
-
-      // Try to activate the torch if we're monitoring
-      if (isMonitoring) {
-        const videoTrack = mediaStream.getVideoTracks()[0];
-        if (videoTrack && videoTrack.getCapabilities()?.torch) {
-          try {
-            console.log("CameraView: Trying to activate torch");
-            await videoTrack.applyConstraints({
-              advanced: [{ torch: true }]
-            });
-            console.log("CameraView: Torch activated");
-          } catch (e) {
-            console.error("Error configuring torch:", e);
-          }
-        } else {
-          console.log("CameraView: Torch not available");
-        }
-      }
-
-      // Notify that the stream is ready
-      if (onStreamReady && isMonitoring && mountedRef.current) {
-        console.log("CameraView: Notifying stream ready");
-        // Small delay to ensure everything is initialized properly
-        setTimeout(() => {
-          if (mountedRef.current && isMonitoring && mediaStream.active) {
-            onStreamReady(mediaStream);
-          }
-        }, 100);
-      }
     } catch (error) {
-      console.error('Error starting camera:', error);
-      setError(`Error starting camera: ${error instanceof Error ? error.message : String(error)}`);
+      console.error('CameraView: Error starting camera:', error);
+      setError(`Camera error: ${error instanceof Error ? error.message : String(error)}`);
       stopCamera();
+      
+      // Retry camera initialization after a delay if we're still monitoring
+      if (mountedRef.current && isMonitoring && currentAttempt === attemptCountRef.current) {
+        console.log("CameraView: Will retry camera initialization after delay");
+        setTimeout(() => {
+          if (mountedRef.current && isMonitoring && currentAttempt === attemptCountRef.current) {
+            console.log("CameraView: Retrying camera initialization");
+            initializingRef.current = false;
+            startCamera();
+          }
+        }, 2000);
+      }
     } finally {
-      if (mountedRef.current) {
+      // Set initializing to false only if this is still the current attempt
+      if (mountedRef.current && currentAttempt === attemptCountRef.current) {
         initializingRef.current = false;
       }
     }
   }, [isMonitoring, onStreamReady, stopCamera, isAndroid]);
 
-  // Effect to start/stop the camera when isMonitoring changes
+  // Effect to handle monitoring state changes
   useEffect(() => {
-    console.log("CameraView: isMonitoring changed to:", isMonitoring, "lastState:", lastMonitoringStateRef.current);
-    
-    // Avoid redundant changes
-    if (isMonitoring === lastMonitoringStateRef.current && !isMonitoring) {
-      console.log("CameraView: Monitoring state didn't really change, ignoring");
-      return;
-    }
-    
-    lastMonitoringStateRef.current = isMonitoring;
+    console.log("CameraView: isMonitoring changed to:", isMonitoring);
     
     if (isMonitoring) {
-      // Use a longer timeout for Android
+      // Delay starting camera slightly to avoid race conditions
       const timeoutId = setTimeout(() => {
         startCamera();
-      }, isAndroid ? 800 : 200); // Increased timeouts for more reliable startup
+      }, isAndroid ? 500 : 300);
       return () => clearTimeout(timeoutId);
     } else {
+      // Stop camera immediately when monitoring is disabled
       stopCamera();
     }
   }, [isMonitoring, startCamera, stopCamera, isAndroid]);
 
-  // Cleanup effect when mounting/unmounting the component
+  // Cleanup effect on mount/unmount
   useEffect(() => {
     mountedRef.current = true;
     console.log("CameraView: Component mounted");
-
-    // Ensure camera permissions are available
+    
+    // Check for camera permissions
     if (navigator.mediaDevices?.getUserMedia) {
       navigator.mediaDevices.getUserMedia({ video: true, audio: false })
         .then(stream => {
-          // We just check permissions, stop the stream immediately
+          // Just checking permissions, stop the stream immediately
           stream.getTracks().forEach(track => track.stop());
           console.log("CameraView: Camera permissions verified");
         })
         .catch(err => {
-          console.error("CameraView: Error verifying camera permissions:", err);
+          console.error("CameraView: Camera permission error:", err);
           setError(`Permission error: ${err instanceof Error ? err.message : String(err)}`);
         });
     } else {
@@ -293,7 +301,7 @@ const CameraView = ({
         muted
         className={`absolute top-0 left-0 min-w-full min-h-full w-auto h-auto z-0 object-cover ${!isMonitoring ? 'hidden' : ''}`}
         style={{
-          transform: 'translateZ(0)', // Hardware acceleration
+          transform: 'translateZ(0)',
           WebkitBackfaceVisibility: 'hidden',
           backfaceVisibility: 'hidden',
           willChange: isAndroid ? 'transform' : 'auto',
@@ -302,6 +310,12 @@ const CameraView = ({
       {error && (
         <div className="absolute top-0 left-0 z-50 bg-red-500/80 text-white p-2 text-sm font-medium rounded m-2">
           {error}
+        </div>
+      )}
+      
+      {isMonitoring && isFingerDetected && (
+        <div className="absolute bottom-4 right-4 z-40 bg-green-500/80 text-white text-xs py-1 px-2 rounded-full">
+          {signalQuality > 0 ? `Signal: ${Math.round(signalQuality)}%` : 'Detecting...'}
         </div>
       )}
     </>
