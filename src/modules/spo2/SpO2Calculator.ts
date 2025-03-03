@@ -11,7 +11,10 @@ export class SpO2Calculator {
   private calibration: SpO2Calibration;
   private processor: SpO2Processor;
   private lastCalculationTime: number = 0;
-  private calculationThrottleMs: number = 60; // Limit calculations to ~16fps
+  private calculationThrottleMs: number = 100; // Increased throttle to further reduce CPU usage
+  private signalCache: number[] = [];
+  private cacheMean: number = 0;
+  private bufferFull: boolean = false;
 
   constructor() {
     this.calibration = new SpO2Calibration();
@@ -26,6 +29,9 @@ export class SpO2Calculator {
     this.calibration.reset();
     this.processor.reset();
     this.lastCalculationTime = 0;
+    this.signalCache = [];
+    this.cacheMean = 0;
+    this.bufferFull = false;
   }
 
   /**
@@ -34,7 +40,7 @@ export class SpO2Calculator {
   calculateRaw(values: number[]): number {
     if (values.length < 20) return 0;
 
-    // Throttle calculations to avoid excessive CPU usage
+    // More aggressive throttling to avoid excessive CPU usage
     const now = performance.now();
     if (now - this.lastCalculationTime < this.calculationThrottleMs) {
       return this.processor.getLastValue();
@@ -42,15 +48,23 @@ export class SpO2Calculator {
     this.lastCalculationTime = now;
 
     try {
-      // Signal quality check - use a more efficient variance calculation
-      const signalVariance = this.calculateVarianceOptimized(values);
+      // Only recalculate signal variance periodically to improve performance
+      const cacheUpdateNeeded = this.signalCache.length === 0 || 
+                               (now % 500 < this.calculationThrottleMs);
       
-      // Use cached value for signal mean
-      let signalSum = 0;
-      for (let i = 0; i < values.length; i++) {
-        signalSum += values[i];
+      let signalVariance: number;
+      let signalMean: number;
+      
+      if (cacheUpdateNeeded) {
+        // Signal quality check - use a more efficient variance calculation
+        [signalVariance, signalMean] = this.calculateVarianceOptimized(values);
+        this.signalCache = values.slice();
+        this.cacheMean = signalMean;
+      } else {
+        // Use cached value for signal mean and variance
+        signalVariance = this.calculateVarianceOptimized(this.signalCache)[0];
+        signalMean = this.cacheMean;
       }
-      const signalMean = signalSum / values.length;
       
       const normalizedVariance = signalVariance / (signalMean * signalMean);
       
@@ -59,7 +73,7 @@ export class SpO2Calculator {
         return this.processor.getLastValue() || 0;
       }
       
-      // PPG wave characteristics
+      // PPG wave characteristics - use cached calculations when possible
       const dc = calculateDC(values);
       if (dc <= 0) return this.processor.getLastValue() || 0;
 
@@ -143,21 +157,35 @@ export class SpO2Calculator {
   }
   
   /**
-   * Calculate variance of a signal - optimized version
+   * Calculate variance of a signal - optimized version that returns [variance, mean]
+   * Using a single-pass algorithm for better performance
    */
-  private calculateVarianceOptimized(values: number[]): number {
+  private calculateVarianceOptimized(values: number[]): [number, number] {
     let sum = 0;
     let sumSquared = 0;
     const n = values.length;
     
-    // Single pass algorithm for variance
-    for (let i = 0; i < n; i++) {
+    // Use loop unrolling for better performance with larger arrays
+    const remainder = n % 4;
+    let i = 0;
+    
+    // Process remaining elements (that don't fit in groups of 4)
+    for (; i < remainder; i++) {
       sum += values[i];
       sumSquared += values[i] * values[i];
     }
     
+    // Process elements in groups of 4 for better performance through loop unrolling
+    for (; i < n; i += 4) {
+      sum += values[i] + values[i+1] + values[i+2] + values[i+3];
+      sumSquared += values[i] * values[i] + 
+                    values[i+1] * values[i+1] + 
+                    values[i+2] * values[i+2] + 
+                    values[i+3] * values[i+3];
+    }
+    
     const mean = sum / n;
     const variance = sumSquared / n - mean * mean;
-    return variance;
+    return [variance, mean];
   }
 }
