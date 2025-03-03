@@ -8,6 +8,8 @@ import PPGSignalMeter from "@/components/PPGSignalMeter";
 import PermissionsHandler from "@/components/PermissionsHandler";
 import { VitalSignsRisk } from '@/utils/vitalSignsRisk';
 import { toast } from "sonner";
+import { useRespiratoryMonitor } from '../hooks/useRespiratoryMonitor';
+import RespiratoryMonitor from '../components/RespiratoryMonitor';
 
 interface VitalSigns {
   spo2: number;
@@ -51,6 +53,8 @@ const Index = () => {
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat, reset: resetHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
+
+  const respiratoryMonitor = useRespiratoryMonitor();
 
   const handlePermissionsGranted = () => {
     console.log("Permisos concedidos correctamente");

@@ -1,7 +1,7 @@
 
 import { useState, useCallback, useRef } from 'react';
 import { VitalSignsProcessor } from '../modules/VitalSignsProcessor';
-import { useArrhythmiaAnalyzer } from './useArrhythmiaAnalyzer';
+import { ArrhythmiaDetector } from '../modules/ArrhythmiaDetector';
 import { createBloodPressureStabilizer } from '../utils/bloodPressureStabilizer';
 import { createVitalSignsDataCollector } from '../utils/vitalSignsDataCollector';
 import { useSignalHistory } from './useSignalHistory';
@@ -11,21 +11,36 @@ export const useVitalSignsProcessor = () => {
   // Core processor
   const processorRef = useRef<VitalSignsProcessor | null>(null);
   
-  // Specialized modules
-  const arrhythmiaAnalyzer = useArrhythmiaAnalyzer();
+  // Specialized modules - IMPORTANTE: Ahora usamos directamente ArrhythmiaDetector
+  const arrhythmiaDetectorRef = useRef<ArrhythmiaDetector | null>(null);
   const bloodPressureStabilizer = useRef(createBloodPressureStabilizer());
   const dataCollector = useRef(createVitalSignsDataCollector());
   const signalHistory = useSignalHistory();
   
+  // Estado para el contador de arritmias
+  const [arrhythmiaCounter, setArrhythmiaCounter] = useState(0);
+  
   /**
-   * Lazy initialization of the VitalSignsProcessor
+   * Lazy initialization of the VitalSignsProcessor and ArrhythmiaDetector
    */
   const getProcessor = useCallback(() => {
     if (!processorRef.current) {
-      console.log('useVitalSignsProcessor: Creando nueva instancia');
+      console.log('useVitalSignsProcessor: Creando nueva instancia de procesador');
       processorRef.current = new VitalSignsProcessor();
     }
     return processorRef.current;
+  }, []);
+  
+  const getArrhythmiaDetector = useCallback(() => {
+    if (!arrhythmiaDetectorRef.current) {
+      console.log('useVitalSignsProcessor: Creando nueva instancia de detector de arritmias');
+      arrhythmiaDetectorRef.current = new ArrhythmiaDetector();
+      
+      // Fix for TypeScript error - use type assertion to avoid the error
+      // This safely tells TypeScript that we know what we're doing
+      (window as any).arrhythmiaDetector = arrhythmiaDetectorRef.current;
+    }
+    return arrhythmiaDetectorRef.current;
   }, []);
   
   /**
@@ -33,6 +48,7 @@ export const useVitalSignsProcessor = () => {
    */
   const processSignal = useCallback((value: number, rrData?: { intervals: number[], lastPeakTime: number | null, amplitudes?: number[] }) => {
     const processor = getProcessor();
+    const arrhythmiaDetector = getArrhythmiaDetector();
     const currentTime = Date.now();
     
     // Store data for analysis
@@ -56,6 +72,22 @@ export const useVitalSignsProcessor = () => {
           rrData.intervals[0] = newInterval;
         }
       }
+      
+      // IMPORTANTE: Actualizar los intervalos en el detector de arritmias
+      if (rrData.intervals && rrData.intervals.length > 0) {
+        const peakAmplitude = rrData.amplitudes && rrData.amplitudes.length > 0 
+          ? rrData.amplitudes[rrData.amplitudes.length - 1] 
+          : undefined;
+        
+        // Asegurar que se pasan las amplitudes completas para mejor detección
+        console.log('Enviando datos al detector de arritmias:', {
+          intervals: rrData.intervals.length,
+          lastPeakTime: rrData.lastPeakTime,
+          peakAmplitude: peakAmplitude
+        });
+        
+        arrhythmiaDetector.updateIntervals(rrData.intervals, rrData.lastPeakTime, peakAmplitude);
+      }
     }
     
     // Get base results from the core processor
@@ -74,36 +106,37 @@ export const useVitalSignsProcessor = () => {
       dataCollector.current.addBloodPressure(stabilizedBP);
     }
     
-    // Advanced arrhythmia analysis - asegurarse de pasar los datos de amplitud si están disponibles
-    if (rrData?.intervals && rrData.intervals.length >= 4) {
-      // Asegurarse de pasar los datos de amplitud al analizador de arritmias si están disponibles
-      const arrhythmiaResult = arrhythmiaAnalyzer.processArrhythmia(rrData);
-      
-      if (arrhythmiaResult.detected) {
-        return {
-          spo2: result.spo2,
-          pressure: stabilizedBP,
-          arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus,
-          lastArrhythmiaData: arrhythmiaResult.lastArrhythmiaData
-        };
-      }
-      
-      return {
-        spo2: result.spo2,
-        pressure: stabilizedBP,
-        arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus
-      };
+    // IMPORTANTE: Usar exclusivamente ArrhythmiaDetector para la detección de arritmias
+    const arrhythmiaResult = arrhythmiaDetector.detect();
+    
+    // Log de detección para debugging
+    if (arrhythmiaResult.detected) {
+      console.log('Detección de arritmia en useVitalSignsProcessor:', {
+        detectado: arrhythmiaResult.detected,
+        contador: arrhythmiaResult.count,
+        confianza: arrhythmiaResult.data?.confidence,
+        prematureBeat: arrhythmiaResult.data?.prematureBeat
+      });
     }
     
-    // Si ya analizamos arritmias antes, usar el último estado
-    const arrhythmiaStatus = `SIN ARRITMIAS|${arrhythmiaAnalyzer.arrhythmiaCounter}`;
+    // Actualizar el contador si se detectó una nueva arritmia
+    if (arrhythmiaResult.detected && arrhythmiaResult.count !== arrhythmiaCounter) {
+      setArrhythmiaCounter(arrhythmiaResult.count);
+    }
     
     return {
       spo2: result.spo2,
       pressure: stabilizedBP,
-      arrhythmiaStatus
+      arrhythmiaStatus: arrhythmiaResult.status,
+      lastArrhythmiaData: arrhythmiaResult.detected ? {
+        timestamp: currentTime,
+        rmssd: arrhythmiaResult.data?.rmssd || 0,
+        rrVariation: arrhythmiaResult.data?.rrVariation || 0,
+        isPrematureBeat: arrhythmiaResult.data?.prematureBeat || false,
+        confidence: arrhythmiaResult.data?.confidence || 0
+      } : null
     };
-  }, [getProcessor, arrhythmiaAnalyzer, signalHistory]);
+  }, [getProcessor, getArrhythmiaDetector, arrhythmiaCounter, signalHistory]);
 
   /**
    * Reset all processors and data
@@ -114,14 +147,18 @@ export const useVitalSignsProcessor = () => {
     }
     
     // Reset all specialized modules
-    arrhythmiaAnalyzer.reset();
+    if (arrhythmiaDetectorRef.current) {
+      arrhythmiaDetectorRef.current.reset();
+    }
+    
+    setArrhythmiaCounter(0);
     bloodPressureStabilizer.current.reset();
     dataCollector.current.reset();
     signalHistory.reset();
     VitalSignsRisk.resetHistory();
     
     console.log("Reseteo de detección de arritmias y presión arterial");
-  }, [arrhythmiaAnalyzer, signalHistory]);
+  }, [signalHistory]);
   
   /**
    * Aggressive memory cleanup
@@ -135,8 +172,13 @@ export const useVitalSignsProcessor = () => {
       processorRef.current = new VitalSignsProcessor();
     }
     
-    // Reset all specialized modules
-    arrhythmiaAnalyzer.reset();
+    // Reset arrhythmia detector
+    if (arrhythmiaDetectorRef.current) {
+      arrhythmiaDetectorRef.current.cleanMemory();
+      arrhythmiaDetectorRef.current = new ArrhythmiaDetector();
+    }
+    
+    setArrhythmiaCounter(0);
     bloodPressureStabilizer.current.reset();
     dataCollector.current.reset();
     signalHistory.reset();
@@ -150,13 +192,13 @@ export const useVitalSignsProcessor = () => {
         console.log("GC no disponible en este entorno");
       }
     }
-  }, [arrhythmiaAnalyzer, signalHistory]);
+  }, [signalHistory]);
 
   return {
     processSignal,
     reset,
     cleanMemory,
-    arrhythmiaCounter: arrhythmiaAnalyzer.arrhythmiaCounter,
+    arrhythmiaCounter,
     dataCollector: dataCollector.current
   };
 };
