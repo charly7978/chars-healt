@@ -57,6 +57,7 @@ export const useVitalSignsProcessor = () => {
     // Process arrhythmia detection with RR intervals and amplitudes
     let arrhythmiaResult = null;
     if (intervals.length > 0) {
+      // Usar el método processRRIntervals que acabamos de agregar
       arrhythmiaResult = arrhythmiaDetector.processRRIntervals(intervals, amplitudes);
       
       if (arrhythmiaResult.detected) {

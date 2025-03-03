@@ -12,6 +12,8 @@ export class ArrhythmiaDetector {
   private lastAnalysisTime: number = 0;
   private lastPeakTime: number | null = null;
   private readonly ANALYSIS_COOLDOWN_MS = 1000; // Prevent overanalyzing
+  private lastArrhythmiaResult: ArrhythmiaResult | null = null;
+  private statusText: string = "LATIDO NORMAL|0";
   
   constructor() {
     console.log("ArrhythmiaDetector: Inicializado");
@@ -41,6 +43,19 @@ export class ArrhythmiaDetector {
       }
     }
   }
+
+  public processRRIntervals(intervals: number[], amplitudes?: number[]): ArrhythmiaResult {
+    // Procesar múltiples intervalos RR a la vez
+    if (intervals && intervals.length > 0) {
+      for (let i = 0; i < intervals.length; i++) {
+        const amplitude = amplitudes && amplitudes[i] ? amplitudes[i] : undefined;
+        this.addRRInterval(intervals[i], amplitude);
+      }
+    }
+
+    // Analizar ritmo con los datos acumulados
+    return this.analyzeRhythm();
+  }
   
   public setLastPeakTime(timestamp: number): void {
     this.lastPeakTime = timestamp;
@@ -54,6 +69,14 @@ export class ArrhythmiaDetector {
   
   public isInLearningPhase(): boolean {
     return this.learningPhase;
+  }
+
+  public getStatusText(): string {
+    return this.statusText;
+  }
+
+  public getLastArrhythmia(): ArrhythmiaResult | null {
+    return this.lastArrhythmiaResult;
   }
   
   public analyzeRhythm(): ArrhythmiaResult {
@@ -120,11 +143,7 @@ export class ArrhythmiaDetector {
       
       const detected = arrhythmiaType !== 'NONE';
       
-      if (detected) {
-        console.log(`ArrhythmiaDetector: Arritmia tipo ${arrhythmiaType} detectada con severidad ${severity} y confianza ${confidence.toFixed(2)}`);
-      }
-      
-      return {
+      const result: ArrhythmiaResult = {
         detected,
         severity,
         confidence,
@@ -133,6 +152,18 @@ export class ArrhythmiaDetector {
         rmssd,
         rrVariation
       };
+      
+      // Actualizar estado y último resultado
+      this.lastArrhythmiaResult = result;
+      this.statusText = detected ? 
+        `ARRITMIA DETECTADA|${Math.round(severity)}` : 
+        "LATIDO NORMAL|0";
+      
+      if (detected) {
+        console.log(`ArrhythmiaDetector: Arritmia tipo ${arrhythmiaType} detectada con severidad ${severity} y confianza ${confidence.toFixed(2)}`);
+      }
+      
+      return result;
     } catch (error) {
       console.error("Error en análisis de arritmias:", error);
       return {
@@ -258,6 +289,8 @@ export class ArrhythmiaDetector {
     this.learningPhaseCount = 0;
     this.lastAnalysisTime = 0;
     this.lastPeakTime = null;
+    this.lastArrhythmiaResult = null;
+    this.statusText = "LATIDO NORMAL|0";
     
     console.log("ArrhythmiaDetector: Reset completo");
   }
