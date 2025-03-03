@@ -42,7 +42,8 @@ export const useVitalSignsProcessor = () => {
     // Procesar la señal principal con el procesador original
     // Este procesador ahora tiene el algoritmo ultra-sensible de arritmias
     const vitalSignsResult = processor.processSignal(ppgValue, {
-      ...rrData, 
+      intervals: rrData?.intervals || [],
+      lastPeakTime: rrData?.lastPeakTime || null,
       amplitude: amplitude
     });
     

@@ -1,4 +1,3 @@
-
 import { applySMAFilter } from '../utils/signalProcessingUtils';
 import { SpO2Calculator } from './spo2';
 import { BloodPressureCalculator } from './BloodPressureCalculator';
@@ -32,7 +31,7 @@ export class VitalSignsProcessor {
    */
   public processSignal(
     ppgValue: number,
-    rrData?: { intervals: number[]; lastPeakTime: number | null; amplitudes?: number[] }
+    rrData?: { intervals: number[]; lastPeakTime: number | null; amplitude?: number }
   ) {
     const currentTime = Date.now();
 
@@ -45,9 +44,7 @@ export class VitalSignsProcessor {
       
       if (validIntervals.length > 0) {
         // Pass peak amplitude if available to the arrhythmia detector
-        const peakAmplitude = rrData.amplitudes && rrData.amplitudes.length > 0 
-          ? rrData.amplitudes[rrData.amplitudes.length - 1] 
-          : undefined;
+        const peakAmplitude = rrData.amplitude;
         
         this.arrhythmiaDetector.updateIntervals(validIntervals, rrData.lastPeakTime, peakAmplitude);
       }
