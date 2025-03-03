@@ -13,21 +13,15 @@ export class ArrhythmiaDetector {
   private readonly ANALYSIS_COOLDOWN_MS = 500; // Increase cooldown to reduce false positives
   private lastArrhythmiaResult: ArrhythmiaResult | null = null;
   private statusText: string = "LATIDO NORMAL|0";
-  private isAndroid: boolean = false;
-  private lastForcedArrhythmiaTime: number = 0;
-  private androidArrhythmiaCounter: number = 0;
+  private prematureBeatsCount: number = 0;
   
   // Baseline RR intervals for rhythm comparison
   private baselineRRIntervals: number[] = [];
   private baselineRRMean: number = 0;
   private baselineRRStdDev: number = 0;
-  private prematureBeatsCount: number = 0;
   
   constructor() {
     console.log("ArrhythmiaDetector: Inicializado");
-    // Detect Android platform
-    this.isAndroid = /android/i.test(navigator.userAgent);
-    console.log(`ArrhythmiaDetector: Plataforma detectada: ${this.isAndroid ? 'Android' : 'Otro'}`);
   }
   
   public addRRInterval(interval: number, amplitude?: number): void {
@@ -105,59 +99,8 @@ export class ArrhythmiaDetector {
       }
     }
 
-    // Only in Android, force arrhythmia detection periodically for testing
-    if (this.isAndroid && this.shouldForceAndroidArrhythmia()) {
-      return this.createForcedArrhythmiaResult();
-    }
-
     // Analyze rhythm with accumulated data
     return this.analyzeRhythm();
-  }
-  
-  private shouldForceAndroidArrhythmia(): boolean {
-    const now = Date.now();
-    
-    // Only force an arrhythmia if we haven't detected one in the last 7 seconds
-    // and we haven't forced one in the last 15 seconds (increasing to reduce frequency)
-    if ((!this.lastArrhythmiaResult || (now - this.lastArrhythmiaResult.timestamp > 7000)) && 
-        (now - this.lastForcedArrhythmiaTime > 15000)) {
-      
-      this.androidArrhythmiaCounter++;
-      
-      // Force an arrhythmia detection less frequently (every 4th attempt)
-      if (this.androidArrhythmiaCounter >= 4) {
-        return true;
-      }
-    }
-    
-    return false;
-  }
-  
-  private createForcedArrhythmiaResult(): ArrhythmiaResult {
-    const now = Date.now();
-    console.log(`ArrhythmiaDetector [ANDROID-FIX]: Forzando detección de arritmia para pruebas`);
-    
-    // Create a forced arrhythmia result - only premature beats with moderate severity
-    const forcedResult: ArrhythmiaResult = {
-      detected: true,
-      severity: 5 + Math.floor(Math.random() * 3), // 5-7 (more moderate severity)
-      confidence: 0.7 + (Math.random() * 0.2),  // 0.7-0.9
-      type: 'PAC', // Only using PAC type for premature atrial contractions
-      timestamp: now,
-      rmssd: 20 + Math.random() * 20,
-      rrVariation: 0.12 + Math.random() * 0.1
-    };
-    
-    this.lastArrhythmiaResult = forcedResult;
-    this.lastForcedArrhythmiaTime = now;
-    this.androidArrhythmiaCounter = 0;
-    this.prematureBeatsCount++;
-    
-    this.statusText = `ARRITMIA DETECTADA|${this.prematureBeatsCount}`;
-    
-    console.log(`ArrhythmiaDetector [ANDROID-FIX]: Latido prematuro forzado con severidad ${forcedResult.severity}`);
-    
-    return forcedResult;
   }
   
   public setLastPeakTime(timestamp: number): void {
@@ -379,8 +322,6 @@ export class ArrhythmiaDetector {
     this.lastPeakTime = null;
     this.lastArrhythmiaResult = null;
     this.statusText = "LATIDO NORMAL|0";
-    this.lastForcedArrhythmiaTime = 0;
-    this.androidArrhythmiaCounter = 0;
     this.baselineRRIntervals = [];
     this.baselineRRMean = 0;
     this.baselineRRStdDev = 0;
