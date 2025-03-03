@@ -1,3 +1,4 @@
+
 import React, { memo, useMemo, useState } from 'react';
 import { VitalSignsRisk } from '../utils/vitalSignsRisk';
 import VitalSignDetail from './VitalSignDetail';
@@ -280,13 +281,13 @@ const VitalSign: React.FC<VitalSignProps> = ({
           <h3 className="text-white text-xs font-medium tracking-wider mb-2">{label}</h3>
           <div className="flex flex-col items-center gap-1">
             {isArrhythmiaDisplay && title && (
-              <span className="text-base font-bold tracking-wider" style={{ color: color || '#FFFFFF' }}>
+              <span className="text-sm font-bold tracking-wider" style={{ color: color || '#FFFFFF' }}>
                 {title}
               </span>
             )}
             <div className="flex items-baseline gap-1 justify-center">
               <span 
-                className={`${isArrhythmiaDisplay ? 'text-lg' : 'text-xl'} font-bold transition-colors duration-300 text-white`}
+                className={`${isArrhythmiaDisplay ? 'text-base' : 'text-xl'} font-bold transition-colors duration-300 text-white`}
                 style={{ color: color || '#000000' }}
               >
                 {text}
