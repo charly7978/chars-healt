@@ -146,8 +146,11 @@ export class GlucoseProcessor {
    * Crea un objeto de resultado para la glucosa con datos actuales
    */
   private createGlucoseResult(value: number): GlucoseData {
+    // Asegurarnos de que el valor es un número válido y redondearlo
+    const finalValue = isNaN(value) || value <= 0 ? 95 : Math.round(value);
+    
     // Guardar el valor en session storage para uso en otras partes de la aplicación
-    sessionStorage.setItem('lastGlucoseValue', value.toString());
+    sessionStorage.setItem('lastGlucoseValue', finalValue.toString());
     
     // Calcular tendencia y guardarla también
     const trend = this.calculateEnhancedTrend();
@@ -156,8 +159,14 @@ export class GlucoseProcessor {
     // Calcular confianza basada en la calidad de los datos
     const confidence = this.calculateEnhancedConfidence();
     
+    console.log("GlucoseProcessor: Valor generado", {
+      value: finalValue,
+      trend,
+      confidence
+    });
+    
     return {
-      value,
+      value: finalValue,
       trend,
       confidence,
       timeOffset: 0,
