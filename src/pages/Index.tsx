@@ -565,6 +565,11 @@ const Index = () => {
 
   const handleVitalsUpdate = (vitals: ProcessedVitalSignsData) => {
     if (vitals) {
+      console.log("Index: Actualización de signos vitales recibida:", {
+        arrhythmiaStatus: vitals.arrhythmiaStatus,
+        lastArrhythmiaData: vitals.lastArrhythmiaData || "No hay datos de arritmia"
+      });
+      
       setVitalSigns(current => ({
         ...current,
         spo2: vitals.spo2,
@@ -617,10 +622,21 @@ const Index = () => {
       }
       
       if (vitals.lastArrhythmiaData) {
+        console.log("Index: Datos de arritmia recibidos:", vitals.lastArrhythmiaData);
+        
         setLastArrhythmiaData(vitals.lastArrhythmiaData);
         
         const [status, count] = vitals.arrhythmiaStatus.split('|');
         setArrhythmiaCount(count || "0");
+        
+        if (vitals.lastArrhythmiaData.confidence && 
+            vitals.lastArrhythmiaData.confidence > 80 && 
+            status.includes("ARRITMIA")) {
+          toast.warning(`Arritmia detectada: ${status.replace("ARRITMIA DETECTADA: ", "")}`, {
+            position: "top-center",
+            duration: 3000
+          });
+        }
       }
     }
   };

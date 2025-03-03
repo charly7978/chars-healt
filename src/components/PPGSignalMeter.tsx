@@ -50,11 +50,27 @@ const PPGSignalMeter = ({
       dataBufferRef.current = new CircularBuffer(BUFFER_SIZE);
     }
     
-    if (arrhythmiaStatus && arrhythmiaStatus.includes("ARRITMIA")) {
-      console.log("PPGSignalMeter: Arrhythmia status received:", arrhythmiaStatus);
+    if (arrhythmiaStatus) {
+      console.log("PPGSignalMeter: Estado de arritmia recibido:", arrhythmiaStatus);
       
-      if (rawArrhythmiaData) {
-        console.log("PPGSignalMeter: Raw arrhythmia data:", rawArrhythmiaData);
+      const isArrhythmiaState = 
+        arrhythmiaStatus.includes("ARRITMIA") || 
+        arrhythmiaStatus.includes("FIBRILACIÓN") ||
+        arrhythmiaStatus.includes("PREMATURA") || 
+        arrhythmiaStatus.includes("BLOQUEO") ||
+        arrhythmiaStatus.includes("TAQUICARDIA") ||
+        arrhythmiaStatus.includes("BRADICARDIA") ||
+        !arrhythmiaStatus.includes("NORMAL");
+      
+      if (isArrhythmiaState && rawArrhythmiaData) {
+        console.log("PPGSignalMeter: ¡Datos de arritmia detectados!", {
+          status: arrhythmiaStatus,
+          data: rawArrhythmiaData
+        });
+        
+        arrhythmiaCountRef.current += 1;
+        
+        lastArrhythmiaTime.current = Date.now();
       }
     }
   }, [arrhythmiaStatus, rawArrhythmiaData]);
@@ -173,18 +189,20 @@ const PPGSignalMeter = ({
     const scaledValue = normalizedValue * verticalScale;
     
     let isArrhythmia = false;
-    if (rawArrhythmiaData && 
-        arrhythmiaStatus?.includes("ARRITMIA") && 
-        now - rawArrhythmiaData.timestamp < 1000) {
+    if (
+      (arrhythmiaStatus && (
+        arrhythmiaStatus.includes("ARRITMIA") || 
+        arrhythmiaStatus.includes("FIBRILACIÓN") ||
+        arrhythmiaStatus.includes("PREMATURA") || 
+        arrhythmiaStatus.includes("BLOQUEO") ||
+        arrhythmiaStatus.includes("TAQUICARDIA") ||
+        arrhythmiaStatus.includes("BRADICARDIA") ||
+        !arrhythmiaStatus.includes("NORMAL")
+      )) || 
+      (now - lastArrhythmiaTime.current < 2000)
+    ) {
       isArrhythmia = true;
-      lastArrhythmiaTime.current = now;
-      
-      arrhythmiaCountRef.current++;
-      console.log("PPGSignalMeter: Arrhythmia detected and visualized", { 
-        count: arrhythmiaCountRef.current,
-        timestamp: now,
-        rawData: rawArrhythmiaData
-      });
+      console.log("PPGSignalMeter: Mostrando arritmia en gráfico:", { time: now });
     }
 
     const dataPoint: PPGDataPoint = {

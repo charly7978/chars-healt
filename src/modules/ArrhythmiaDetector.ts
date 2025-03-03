@@ -76,10 +76,14 @@ export class ArrhythmiaDetector {
   }
 
   public processRRIntervals(intervals: number[], amplitudes?: number[]): ArrhythmiaResult {
-    // Si estamos en fase de aprendizaje, actualizar línea base
+    // Añadimos más logs para depuración
+    console.log("ArrhythmiaDetector: Procesando intervalos RR:", intervals);
+    
+    // Si estamos en fase de aprendizaje, acelerar la finalización
     if (this.learningPhase) {
       if (intervals.length > 0) {
-        this.learningPhaseCount++;
+        // Incrementar más rápido para salir antes de la fase de aprendizaje
+        this.learningPhaseCount += 2;
         
         // Agregar a la línea base
         this.baselineRRIntervals = this.baselineRRIntervals.concat(intervals);
@@ -91,16 +95,20 @@ export class ArrhythmiaDetector {
             mean: this.baselineRRMean,
             stdDev: this.baselineRRStdDev
           });
+        } else {
+          console.log(`ArrhythmiaDetector: En fase de aprendizaje (${this.learningPhaseCount}/${this.LEARNING_PHASE_THRESHOLD})`);
         }
       }
       
-      // Durante fase de aprendizaje, no detectamos arritmias
+      // Durante fase de aprendizaje, no detectamos arritmias pero mantenemos estado
       return {
         detected: false,
         severity: 0,
         confidence: 0,
         type: "NONE" as ArrhythmiaType,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        rmssd: 0,
+        rrVariation: 0
       };
     }
     
@@ -125,42 +133,63 @@ export class ArrhythmiaDetector {
       this.amplitudes = this.amplitudes.slice(-this.MAX_INTERVALS);
     }
     
-    // Analizar ritmo con los datos acumulados
-    // MEJORA: Reducimos el tiempo mínimo entre análisis para aumentar sensibilidad
+    // MEJORA: Reducimos aún más el tiempo entre análisis
     const currentTime = Date.now();
-    if (currentTime - this.lastAnalysisTime >= this.ANALYSIS_COOLDOWN_MS / 2) {
+    if (currentTime - this.lastAnalysisTime >= this.ANALYSIS_COOLDOWN_MS / 4) {
       this.lastAnalysisTime = currentTime;
       
-      // Analizar con datos acumulados
-      const result = this.analyzeRhythm();
-      
-      if (result.detected) {
-        this.lastArrhythmiaResult = result;
-        this.prematureBeatsCount += result.type.includes("PREMATURA") ? 1 : 0;
+      // Forzar análisis incluso con pocos datos (3 intervalos mínimo)
+      if (this.rrIntervals.length >= 3) {
+        console.log(`ArrhythmiaDetector: Analizando ritmo con ${this.rrIntervals.length} intervalos`);
         
-        // MEJORA: Log para depuración
-        console.log("ArrhythmiaDetector: ¡ARRITMIA DETECTADA!", {
+        // Analizar con datos acumulados
+        const result = this.analyzeRhythm();
+        
+        // Log del resultado para depuración
+        console.log("ArrhythmiaDetector: Resultado del análisis:", {
+          detected: result.detected,
           type: result.type,
           severity: result.severity,
-          confidence: result.confidence,
-          rmssd: result.rmssd,
-          rrVariation: result.rrVariation
+          confidence: result.confidence
         });
         
-        // MEJORA: Actualizar status inmediatamente para mejor visualización
-        this.statusText = `ARRITMIA DETECTADA: ${result.type}|${this.prematureBeatsCount}`;
+        if (result.detected) {
+          this.lastArrhythmiaResult = result;
+          this.prematureBeatsCount += result.type.includes("PREMATURA") ? 1 : 0;
+          
+          // MEJORA: Log para depuración
+          console.log("ArrhythmiaDetector: ¡ARRITMIA DETECTADA!", {
+            type: result.type,
+            severity: result.severity,
+            confidence: result.confidence,
+            rmssd: result.rmssd,
+            rrVariation: result.rrVariation
+          });
+          
+          // MEJORA: Actualizar status inmediatamente para mejor visualización
+          this.statusText = `ARRITMIA DETECTADA: ${result.type}|${this.prematureBeatsCount}`;
+        }
+        
+        return result;
+      } else {
+        console.log("ArrhythmiaDetector: Datos insuficientes para análisis");
       }
-      
-      return result;
     }
     
     // Si no es tiempo de analizar, devolver último resultado o normal
-    return this.lastArrhythmiaResult || {
+    if (this.lastArrhythmiaResult && (currentTime - this.lastArrhythmiaResult.timestamp) < 3000) {
+      // Mantener resultado de arritmia reciente para asegurar visualización
+      return this.lastArrhythmiaResult;
+    }
+    
+    return {
       detected: false,
       severity: 0,
       confidence: 0,
       type: "NONE" as ArrhythmiaType,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      rmssd: 0,
+      rrVariation: 0
     };
   }
   
@@ -214,9 +243,10 @@ export class ArrhythmiaDetector {
     let type: string = "NORMAL";
     
     // Detectar Fibrilación Auricular basada en alta variabilidad RR sin patrón
-    if (rmssd > 30 && rrVariation > 0.18) { // Umbrales reducidos
+    // MEJORA: Umbrales significativamente reducidos
+    if (rmssd > 25 && rrVariation > 0.15) {
       detected = true;
-      severity = Math.min(10, Math.max(1, Math.round(rmssd / 12)));
+      severity = Math.min(10, Math.max(1, Math.round(rmssd / 10)));
       confidence = Math.min(95, Math.max(70, 70 + (rrVariation * 100)));
       type = "FIBRILACIÓN AURICULAR";
     }
@@ -225,17 +255,18 @@ export class ArrhythmiaDetector {
       const avg = this.rrIntervals.reduce((a, b) => a + b, 0) / this.rrIntervals.length;
       const bpm = 60000 / avg;
       
-      if (bpm < 55) { // Umbral aumentado de 50 a 55
+      // MEJORA: Umbral elevado aún más
+      if (bpm < 60) {
         detected = true;
-        severity = Math.min(10, Math.max(1, Math.round((55 - bpm) / 3)));
-        confidence = Math.min(95, Math.max(70, 70 + ((55 - bpm) * 3)));
+        severity = Math.min(10, Math.max(1, Math.round((60 - bpm) / 3)));
+        confidence = Math.min(95, Math.max(70, 70 + ((60 - bpm) * 3)));
         type = "BRADICARDIA";
       }
-      // Detectar Taquicardia significativa
-      else if (bpm > 100) { // Umbral reducido de 110 a 100
+      // Detectar Taquicardia significativa - umbral reducido más
+      else if (bpm > 95) {
         detected = true;
-        severity = Math.min(10, Math.max(1, Math.round((bpm - 100) / 5)));
-        confidence = Math.min(95, Math.max(70, 70 + ((bpm - 100) / 2)));
+        severity = Math.min(10, Math.max(1, Math.round((bpm - 95) / 5)));
+        confidence = Math.min(95, Math.max(70, 70 + ((bpm - 95) / 2)));
         type = "TAQUICARDIA";
       }
     }
@@ -248,52 +279,14 @@ export class ArrhythmiaDetector {
       type = "CONTRACCIÓN PREMATURA";
     }
     
-    // Realizar análisis más detallado si tenemos al menos 8 intervalos
-    if (this.rrIntervals.length >= 8) {
-      // Calcular métricas adicionales para análisis avanzado
-      
-      // Analizar patrones para arritmia sinusal respiratoria (normal)
-      const patternLength = Math.min(8, this.rrIntervals.length);
-      const recentIntervals = this.rrIntervals.slice(-patternLength);
-      
-      // Detectar patrón cíclico (podría ser arritmia sinusal respiratoria - normal)
-      let increasing = 0;
-      let decreasing = 0;
-      
-      for (let i = 1; i < recentIntervals.length; i++) {
-        if (recentIntervals[i] > recentIntervals[i-1]) increasing++;
-        else if (recentIntervals[i] < recentIntervals[i-1]) decreasing++;
-      }
-      
-      // Si hay un patrón claro de aumento y disminución, podría ser arritmia sinusal
-      const hasCyclicPattern = increasing >= 2 && decreasing >= 2;
-      
-      // MEJORA: Si detectamos un patrón cíclico, solo reportamos arritmia si es significativa
-      if (hasCyclicPattern && detected && type !== "CONTRACCIÓN PREMATURA") {
-        if (severity < 3 || confidence < 80) {
-          detected = false;
-          type = "VARIABILIDAD SINUSAL";
-        }
-      }
-      
-      // MEJORA: Detectar bloqueo AV basado en intervalos extendidos periódicos
-      const avgInterval = recentIntervals.reduce((a, b) => a + b, 0) / recentIntervals.length;
-      let extendedIntervals = 0;
-      
-      for (let i = 0; i < recentIntervals.length; i++) {
-        if (recentIntervals[i] > avgInterval * 1.5) {
-          extendedIntervals++;
-        }
-      }
-      
-      // Si hay múltiples intervalos extendidos y no son cíclicos, podría ser bloqueo AV
-      if (extendedIntervals >= 2 && !hasCyclicPattern) {
-        detected = true;
-        severity = Math.min(8, Math.max(3, extendedIntervals));
-        confidence = Math.min(90, Math.max(70, 70 + (extendedIntervals * 5)));
-        type = "POSIBLE BLOQUEO AV";
-      }
-    }
+    // MEJORA: Log para depuración
+    console.log("ArrhythmiaDetector.analyzeRhythm: Análisis completo:", {
+      rmssd,
+      rrVariation,
+      prematureBeat: prematureBeatResult.detected,
+      detected,
+      type
+    });
     
     // Actualizar el estado del detector
     const currentTime = Date.now();
@@ -351,59 +344,55 @@ export class ArrhythmiaDetector {
   }
   
   private detectPrematureBeat(): { detected: boolean; severity: number; confidence: number } {
-    // Significantly enhanced sensitivity - can work with just 1 interval if baseline is established
-    if (this.rrIntervals.length < 1 || this.baselineRRMean === 0) {
+    if (this.rrIntervals.length < 3) {
       return { detected: false, severity: 0, confidence: 0 };
     }
     
-    // Get the most recent RR interval for analysis
-    const latestInterval = this.rrIntervals[this.rrIntervals.length - 1];
+    // Tomar últimos 4 intervalos (o los que haya)
+    const numIntervals = Math.min(4, this.rrIntervals.length);
+    const recentIntervals = this.rrIntervals.slice(-numIntervals);
     
-    // Check if the latest interval is significantly shorter than baseline
-    // Much more sensitive threshold - reduced from 0.8 to 0.5 standard deviations
-    const prematureThreshold = this.baselineRRMean - (0.5 * this.baselineRRStdDev);
+    // MEJORA: Umbral aún más bajo para detección de intervalo prematuro
+    const threshold = 0.6; // Reducido para mayor sensibilidad
     
-    // A premature beat is followed by a compensatory pause (longer interval)
-    const isPremature = latestInterval < prematureThreshold;
-    
-    if (!isPremature) {
-      return { detected: false, severity: 0, confidence: 0 };
+    for (let i = 1; i < recentIntervals.length; i++) {
+      const currentInterval = recentIntervals[i];
+      const previousInterval = recentIntervals[i-1];
+      
+      // RR significativamente más corto que el anterior es prematura
+      if (currentInterval < previousInterval * threshold) {
+        // Solo si no es el último
+        if (i < recentIntervals.length - 1) {
+          const followingInterval = recentIntervals[i+1];
+          
+          // Intervalo compensatorio (ligeramente más largo que el normal)
+          if (followingInterval > previousInterval * 1.05) {
+            // MEJORA: Log para depuración del patrón detectado
+            console.log("ArrhythmiaDetector: Patrón de latido prematuro detectado:", {
+              prevInterval: previousInterval,
+              prematureInterval: currentInterval,
+              compensatoryInterval: followingInterval,
+              ratio: currentInterval / previousInterval
+            });
+            
+            // Calcular severidad basada en lo corto del intervalo prematuro
+            const ratio = currentInterval / previousInterval;
+            const severity = Math.min(10, Math.max(1, Math.round((1 - ratio) * 10)));
+            
+            // Más corto = más confianza en ser prematuro
+            const confidence = Math.min(95, Math.max(70, 70 + (1 - ratio) * 100));
+            
+            return { 
+              detected: true, 
+              severity, 
+              confidence 
+            };
+          }
+        }
+      }
     }
     
-    // Calculate deviation from baseline as percentage
-    const deviationPercent = (this.baselineRRMean - latestInterval) / this.baselineRRMean * 100;
-    
-    // Calculate severity based on how premature the beat is
-    // Much more sensitive thresholds for detection
-    let severity = 0;
-    let confidence = 0;
-    
-    // Dramatically lower thresholds for detection to maximize sensitivity
-    if (deviationPercent > 15) { // Lowered from 20%
-      // Very premature
-      severity = 9;
-      confidence = 0.95;
-    } else if (deviationPercent > 8) { // Lowered from 10%
-      // Moderately premature
-      severity = 7;
-      confidence = 0.85;
-    } else if (deviationPercent > 4) { // Lowered from 5%
-      // Mildly premature
-      severity = 6;
-      confidence = 0.75;
-    } else {
-      // Small deviation but still report as premature
-      severity = 4;
-      confidence = 0.65;
-    }
-    
-    console.log(`ArrhythmiaDetector: Latido prematuro detectado - Intervalo: ${latestInterval}ms vs Línea base: ${this.baselineRRMean.toFixed(0)}ms, Desviación: ${deviationPercent.toFixed(1)}%`);
-
-    return {
-      detected: true, 
-      severity, 
-      confidence 
-    };
+    return { detected: false, severity: 0, confidence: 0 };
   }
   
   private getAvgAmplitude(): number {

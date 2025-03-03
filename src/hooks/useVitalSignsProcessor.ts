@@ -49,6 +49,9 @@ export const useVitalSignsProcessor = () => {
     
     const vitalSignsResult = processor.processSignal(ppgValue, rrData);
     
+    // ⭐ Verificamos y mostramos el estado de arritmia del procesador
+    console.log('Estado de arritmia del procesador:', vitalSignsResult.arrhythmiaStatus);
+    
     const glucoseResult = glucoseProcessor.processSignal(ppgValue);
     
     const glucoseData = {
@@ -67,10 +70,11 @@ export const useVitalSignsProcessor = () => {
     };
     
     if (rrData && Array.isArray(rrData.intervals) && rrData.intervals.length > 0) {
-      const minIntervalsRequired = 4; // Mínimo para detección básica
+      const minIntervalsRequired = 3; // ⭐ Reducido de 4 a 3 para aumentar sensibilidad
       
       console.log('useVitalSignsProcessor: Procesando arritmias con datos:', {
         intervals: rrData.intervals.length,
+        intervalsData: rrData.intervals,
         amplitudes: Array.isArray(rrData.amplitudes) ? rrData.amplitudes.length : 0
       });
       
@@ -91,13 +95,28 @@ export const useVitalSignsProcessor = () => {
         }
         
         // Validación adicional de intervalos
-        const validIntervals = rrData.intervals.filter(i => typeof i === 'number' && !isNaN(i));
+        const validIntervals = rrData.intervals.filter(i => 
+          typeof i === 'number' && !isNaN(i) && i > 300 && i < 1500 // ⭐ Añadido rango fisiológico
+        );
         
         if (validIntervals.length >= minIntervalsRequired) {
+          // ⭐ Forzar actualización del detector antes de procesar
+          if (rrData.lastPeakTime !== null) {
+            arrhythmiaDetector.setLastPeakTime(rrData.lastPeakTime);
+          }
+          
           arrhythmiaResult = arrhythmiaDetector.processRRIntervals(
             validIntervals,
             amplitudesToUse
           );
+          
+          // ⭐ Log adicional para diagnóstico
+          console.log('useVitalSignsProcessor: Resultado de análisis de arritmias:', {
+            detected: arrhythmiaResult.detected,
+            type: arrhythmiaResult.type,
+            severity: arrhythmiaResult.severity,
+            confidence: arrhythmiaResult.confidence
+          });
           
           if (arrhythmiaResult.detected) {
             console.log('useVitalSignsProcessor: ¡¡ARRITMIA DETECTADA!!', {
