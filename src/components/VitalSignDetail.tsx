@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 
@@ -7,8 +6,10 @@ interface VitalSignDetailProps {
   value: string | number;
   unit?: string;
   riskLevel?: string;
-  type: 'heartRate' | 'spo2' | 'bloodPressure' | 'arrhythmia';
+  type: 'heartRate' | 'spo2' | 'bloodPressure' | 'arrhythmia' | 'respiration';
   onBack: () => void;
+  secondaryValue?: string | number;
+  secondaryUnit?: string;
 }
 
 const VitalSignDetail: React.FC<VitalSignDetailProps> = ({
@@ -17,7 +18,9 @@ const VitalSignDetail: React.FC<VitalSignDetailProps> = ({
   unit,
   riskLevel,
   type,
-  onBack
+  onBack,
+  secondaryValue,
+  secondaryUnit
 }) => {
   const [info, setInfo] = useState<{
     description: string;
@@ -53,6 +56,12 @@ const VitalSignDetail: React.FC<VitalSignDetailProps> = ({
               {value}
               {unit && <span className="text-xl ml-1">{unit}</span>}
             </div>
+            {secondaryValue !== undefined && secondaryUnit && (
+              <div className="text-lg font-medium mb-2">
+                {secondaryValue}
+                <span className="text-sm ml-1">{secondaryUnit}</span>
+              </div>
+            )}
             {riskLevel && (
               <div 
                 className={`text-sm font-medium px-3 py-1 rounded-full ${getRiskBadgeColor(riskLevel)}`}
@@ -102,18 +111,16 @@ const getRiskBadgeColor = (riskLevel: string): string => {
 };
 
 const getVitalSignInfo = (
-  type: 'heartRate' | 'spo2' | 'bloodPressure' | 'arrhythmia',
+  type: 'heartRate' | 'spo2' | 'bloodPressure' | 'arrhythmia' | 'respiration',
   value: string | number,
   riskLevel?: string
 ) => {
-  // Default values
   let info = {
     description: '',
     interpretation: '',
     recommendation: ''
   };
 
-  // Heart Rate information
   if (type === 'heartRate') {
     const bpm = typeof value === 'number' ? value : parseInt(value as string, 10);
     
@@ -134,7 +141,6 @@ const getVitalSignInfo = (
     }
   }
   
-  // SpO2 information
   else if (type === 'spo2') {
     const spo2 = typeof value === 'number' ? value : parseInt(value as string, 10);
     
@@ -155,7 +161,6 @@ const getVitalSignInfo = (
     }
   }
   
-  // Blood Pressure information
   else if (type === 'bloodPressure') {
     const bpString = value as string;
     
@@ -186,7 +191,6 @@ const getVitalSignInfo = (
     }
   }
   
-  // Arrhythmia information
   else if (type === 'arrhythmia') {
     const arrhythmiaStatus = value as string;
     const isArrhythmiaDetected = arrhythmiaStatus.includes('DETECTADA') || !isNaN(parseInt(arrhythmiaStatus as string, 10));
@@ -217,9 +221,47 @@ const getVitalSignInfo = (
       info.recommendation = 'Continúe monitoreando su ritmo cardíaco regularmente como parte de su rutina de salud.';
     }
   }
+  
+  else if (type === 'respiration') {
+    const respRate = typeof value === 'number' ? value : parseInt(value as string, 10);
+    
+    info.description = 'La frecuencia respiratoria es el número de respiraciones que una persona toma por minuto. La frecuencia respiratoria normal en reposo oscila entre 12 y 20 respiraciones por minuto para adultos.';
+    
+    if (isNaN(respRate) || value === '--') {
+      info.interpretation = 'No se pudo obtener una medición válida.';
+      info.recommendation = 'Intente una nueva medición asegurándose de mantener el dedo quieto sobre la cámara.';
+    } else if (respRate < 8) {
+      info.interpretation = 'Su frecuencia respiratoria está muy por debajo del rango normal (12-20 respiraciones/min). Esto se conoce como bradipnea severa.';
+      info.recommendation = 'Una frecuencia respiratoria muy baja puede indicar problemas respiratorios o neurológicos graves. Consulte a un médico lo antes posible.';
+    } else if (respRate < 12) {
+      info.interpretation = 'Su frecuencia respiratoria está por debajo del rango normal (12-20 respiraciones/min). Esto se conoce como bradipnea leve.';
+      info.recommendation = 'Si experimenta dificultad para respirar o somnolencia inusual, considere consultar a un médico.';
+    } else if (respRate <= 20) {
+      info.interpretation = 'Su frecuencia respiratoria está dentro del rango normal (12-20 respiraciones/min).';
+      info.recommendation = 'Continúe manteniendo hábitos saludables como ejercicio regular y evitar el tabaquismo.';
+    } else if (respRate <= 25) {
+      info.interpretation = 'Su frecuencia respiratoria está ligeramente por encima del rango normal (12-20 respiraciones/min). Esto se conoce como taquipnea leve.';
+      info.recommendation = 'Una respiración ligeramente acelerada puede ser normal durante el ejercicio o momentos de estrés. Si persiste en reposo, considere consultar a un médico.';
+    } else {
+      info.interpretation = 'Su frecuencia respiratoria está muy por encima del rango normal (12-20 respiraciones/min). Esto se conoce como taquipnea.';
+      info.recommendation = 'Una respiración rápida persistente puede indicar problemas respiratorios, cardíacos o metabólicos. Consulte a un médico para una evaluación.';
+    }
+    
+    if (secondaryValue !== undefined) {
+      const depth = typeof secondaryValue === 'number' ? secondaryValue : parseInt(secondaryValue as string, 10);
+      if (!isNaN(depth)) {
+        if (depth < 30) {
+          info.interpretation += ' La profundidad de su respiración es superficial, lo que puede indicar respiración restringida.';
+        } else if (depth >= 30 && depth <= 70) {
+          info.interpretation += ' La profundidad de su respiración es normal.';
+        } else {
+          info.interpretation += ' La profundidad de su respiración es profunda, lo que puede indicar un mayor esfuerzo respiratorio.';
+        }
+      }
+    }
+  }
 
   return info;
 };
 
 export default VitalSignDetail;
-

@@ -1,4 +1,3 @@
-
 export class HeartBeatProcessor {
   // ────────── CONFIGURACIONES PRINCIPALES ──────────
   private readonly SAMPLE_RATE = 30;
@@ -164,6 +163,7 @@ export class HeartBeatProcessor {
     isPeak: boolean;
     filteredValue: number;
     arrhythmiaCount: number;
+    amplitude?: number;
   } {
     // Filtros sucesivos para mejorar la señal
     const medVal = this.medianFilter(value);
@@ -227,7 +227,8 @@ export class HeartBeatProcessor {
       confidence,
       isPeak: isConfirmedPeak && !this.isInWarmup(),
       filteredValue: smoothed,
-      arrhythmiaCount: 0
+      arrhythmiaCount: 0,
+      amplitude: Math.abs(normalizedValue) // Adding amplitude for respiration monitoring
     };
   }
 
