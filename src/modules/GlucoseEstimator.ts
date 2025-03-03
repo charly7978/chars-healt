@@ -1,4 +1,3 @@
-
 /**
  * Glucose Estimator Module
  * 
@@ -19,7 +18,7 @@ export class GlucoseEstimator {
   private readonly PPG_BUFFER_SIZE = 300;
   private readonly GLUCOSE_HISTORY_SIZE = 10;
   
-  private ppgBuffer: CircularBuffer;
+  private ppgBuffer: CircularBuffer<number>;
   private hrvValues: number[] = [];
   private spo2Values: number[] = [];
   private lastBpms: number[] = [];

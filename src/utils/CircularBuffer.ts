@@ -34,28 +34,14 @@ export class CircularBuffer<T = number> {
   }
 }
 
-export class PPGBuffer {
-  private buffer: PPGDataPoint[];
-  private maxSize: number;
-
+export class PPGBuffer extends CircularBuffer<PPGDataPoint> {
   constructor(size: number) {
-    this.buffer = [];
-    this.maxSize = size;
+    super(size);
   }
 
-  push(point: PPGDataPoint): void {
-    this.buffer.push(point);
-    if (this.buffer.length > this.maxSize) {
-      this.buffer.shift();
-    }
-  }
-
+  // Override the getValues method with a more specific name for clarity
   getPoints(): PPGDataPoint[] {
-    return [...this.buffer];
-  }
-
-  clear(): void {
-    this.buffer = [];
+    return this.getValues();
   }
 }
 
