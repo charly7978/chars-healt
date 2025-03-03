@@ -73,6 +73,16 @@ export const useSignalHistory = () => {
   };
   
   /**
+   * Get recent signal values
+   * @param count Number of recent values to return
+   * @returns Array of recent signal values
+   */
+  const getRecentSignals = (count: number): number[] => {
+    // Return the last 'count' values from the signal history
+    return signalHistoryRef.current.slice(-count);
+  };
+  
+  /**
    * Reset all history data
    */
   const reset = () => {
@@ -85,6 +95,7 @@ export const useSignalHistory = () => {
     addSignal,
     addRRData,
     getSignalQuality,
+    getRecentSignals,
     reset,
     signalHistory: signalHistoryRef,
     rrDataHistory: rrDataHistoryRef
