@@ -1,3 +1,4 @@
+
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { VitalSignsProcessor } from '../modules/VitalSignsProcessor';
 import { useArrhythmiaAnalyzer } from './useArrhythmiaAnalyzer';
@@ -555,7 +556,7 @@ export const useVitalSignsProcessor = () => {
     }
     
     // Reset all specialized modules
-    arrhythmiaAnalyzer.reset();
+    arrhythmiaAnalyzer.reset(); // This is the correct method name
     bloodPressureStabilizer.current.reset();
     dataCollector.current.reset();
     signalHistory.reset();
