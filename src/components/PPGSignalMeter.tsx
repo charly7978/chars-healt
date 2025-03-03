@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -33,6 +34,9 @@ const PPGSignalMeter = ({
   const lastRenderTimeRef = useRef<number>(0);
   const lastArrhythmiaTime = useRef<number>(0);
   const arrhythmiaCountRef = useRef<number>(0);
+  const offscreenCanvasRef = useRef<OffscreenCanvas | null>(null);
+  const offscreenCtxRef = useRef<OffscreenCanvasRenderingContext2D | null>(null);
+  const lastValueTextRef = useRef<string[]>([]);
   
   const WINDOW_WIDTH_MS = 4000;
   const CANVAS_WIDTH = 550;
@@ -40,13 +44,84 @@ const PPGSignalMeter = ({
   const GRID_SIZE_X = 55;
   const GRID_SIZE_Y = 30;
   const verticalScale = 45.0;
-  const SMOOTHING_FACTOR = 1.4;
-  const TARGET_FPS = 90;
+  const SMOOTHING_FACTOR = 0.8; // Reduced smoothing factor for more fluid response
+  const TARGET_FPS = 120; // Higher target FPS for smoother rendering
   const FRAME_TIME = 900 / TARGET_FPS;
   const BUFFER_SIZE = 300;
   const INVERT_SIGNAL = false;
-
+  const TEXT_STABILITY_FRAMES = 10; // Only update text when value is stable for X frames
+  
+  // Pre-render the grid to an offscreen canvas
   useEffect(() => {
+    try {
+      // Create offscreen canvas once for grid
+      if (!offscreenCanvasRef.current && typeof OffscreenCanvas !== 'undefined') {
+        offscreenCanvasRef.current = new OffscreenCanvas(CANVAS_WIDTH, CANVAS_HEIGHT);
+        offscreenCtxRef.current = offscreenCanvasRef.current.getContext('2d', 
+          { alpha: false, desynchronized: true }) as OffscreenCanvasRenderingContext2D;
+        
+        if (offscreenCtxRef.current) {
+          // Pre-render grid to offscreen canvas
+          const ctx = offscreenCtxRef.current;
+          
+          ctx.fillStyle = '#f3f3f3';
+          ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+          ctx.beginPath();
+          ctx.strokeStyle = 'rgba(0, 180, 120, 0.15)';
+          ctx.lineWidth = 0.5;
+
+          for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X) {
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, CANVAS_HEIGHT);
+            if (x % (GRID_SIZE_X * 4) === 0) {
+              ctx.fillStyle = 'rgba(0, 150, 100, 0.9)';
+              ctx.font = '10px Inter';
+              ctx.textAlign = 'center';
+              ctx.fillText(`${x / 10}ms`, x, CANVAS_HEIGHT - 5);
+            }
+          }
+
+          for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y) {
+            ctx.moveTo(0, y);
+            ctx.lineTo(CANVAS_WIDTH, y);
+            if (y % (GRID_SIZE_Y * 4) === 0) {
+              const amplitude = ((CANVAS_HEIGHT / 2) - y) / verticalScale;
+              ctx.fillStyle = 'rgba(0, 150, 100, 0.9)';
+              ctx.font = '10px Inter';
+              ctx.textAlign = 'right';
+              ctx.fillText(amplitude.toFixed(1), 25, y + 4);
+            }
+          }
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.strokeStyle = 'rgba(0, 150, 100, 0.25)';
+          ctx.lineWidth = 1;
+
+          for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X * 4) {
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, CANVAS_HEIGHT);
+          }
+
+          for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y * 4) {
+            ctx.moveTo(0, y);
+            ctx.lineTo(CANVAS_WIDTH, y);
+          }
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.strokeStyle = 'rgba(0, 150, 100, 0.35)';
+          ctx.lineWidth = 1.5;
+          ctx.moveTo(0, CANVAS_HEIGHT * 0.6);
+          ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT * 0.6);
+          ctx.stroke();
+        }
+      }
+    } catch (err) {
+      console.error("Error creating offscreen canvas:", err);
+    }
+    
     if (!dataBufferRef.current) {
       dataBufferRef.current = new CircularBuffer(BUFFER_SIZE);
     }
@@ -74,6 +149,13 @@ const PPGSignalMeter = ({
   }, []);
 
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
+    // If we have an offscreen canvas with pre-rendered grid, use it for better performance
+    if (offscreenCanvasRef.current && offscreenCtxRef.current) {
+      ctx.drawImage(offscreenCanvasRef.current, 0, 0);
+      return;
+    }
+    
+    // Fallback to standard grid drawing if offscreen canvas isn't available
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     
     ctx.fillStyle = '#f3f3f3';
@@ -130,6 +212,42 @@ const PPGSignalMeter = ({
     ctx.stroke();
   }, []);
 
+  // Stabilize text rendering by using a buffer for peak amplitude text
+  const getStableText = useCallback((value: number): string => {
+    const newText = Math.abs(value / verticalScale).toFixed(2);
+    
+    if (lastValueTextRef.current.length === 0) {
+      // Initialize array with the same text
+      lastValueTextRef.current = Array(TEXT_STABILITY_FRAMES).fill(newText);
+      return newText;
+    }
+    
+    // Add new value to the buffer
+    lastValueTextRef.current.push(newText);
+    if (lastValueTextRef.current.length > TEXT_STABILITY_FRAMES) {
+      lastValueTextRef.current.shift();
+    }
+    
+    // Count occurrences of each text
+    const counts: Record<string, number> = {};
+    for (const text of lastValueTextRef.current) {
+      counts[text] = (counts[text] || 0) + 1;
+    }
+    
+    // Find the most frequent text
+    let mostFrequentText = newText;
+    let maxCount = 0;
+    
+    for (const text in counts) {
+      if (counts[text] > maxCount) {
+        maxCount = counts[text];
+        mostFrequentText = text;
+      }
+    }
+    
+    return mostFrequentText;
+  }, []);
+
   const renderSignal = useCallback(() => {
     if (!canvasRef.current || !dataBufferRef.current) {
       animationFrameRef.current = requestAnimationFrame(renderSignal);
@@ -156,7 +274,7 @@ const PPGSignalMeter = ({
     if (baselineRef.current === null) {
       baselineRef.current = value;
     } else {
-      baselineRef.current = baselineRef.current * 0.95 + value * 0.05;
+      baselineRef.current = baselineRef.current * 0.98 + value * 0.02;
     }
 
     const smoothedValue = smoothValue(value, lastValueRef.current);
@@ -192,55 +310,110 @@ const PPGSignalMeter = ({
       );
       
       if (visiblePoints.length > 1) {
+        // Draw signal with optimized rendering
         ctx.beginPath();
         ctx.strokeStyle = '#0EA5E9';
         ctx.lineWidth = 2;
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
         
-        let firstPoint = true;
-        
-        for (let i = 0; i < visiblePoints.length; i++) {
-          const point = visiblePoints[i];
-          const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-          const y = canvas.height * 0.6 - point.value;
+        // Use path2D for better performance if available
+        if (typeof Path2D !== 'undefined') {
+          const path = new Path2D();
+          let firstPoint = true;
           
-          if (firstPoint) {
-            ctx.moveTo(x, y);
-            firstPoint = false;
-          } else {
-            ctx.lineTo(x, y);
+          for (let i = 0; i < visiblePoints.length; i++) {
+            const point = visiblePoints[i];
+            // Skip rendering some points for better performance if there are too many
+            if (visiblePoints.length > 200 && i % 2 !== 0 && i !== visiblePoints.length - 1) continue;
+            
+            const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
+            const y = canvas.height * 0.6 - point.value;
+            
+            if (firstPoint) {
+              path.moveTo(x, y);
+              firstPoint = false;
+            } else {
+              path.lineTo(x, y);
+            }
           }
           
-          if (point.isArrhythmia && i < visiblePoints.length - 1) {
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.strokeStyle = '#DC2626';
-            ctx.lineWidth = 3;
-            ctx.setLineDash([3, 2]);
-            ctx.moveTo(x, y);
-            
-            const nextPoint = visiblePoints[i + 1];
-            const nextX = canvas.width - ((now - nextPoint.time) * canvas.width / WINDOW_WIDTH_MS);
-            const nextY = canvas.height * 0.6 - nextPoint.value;
-            ctx.lineTo(nextX, nextY);
-            ctx.stroke();
-            
-            ctx.beginPath();
-            ctx.strokeStyle = '#0EA5E9';
-            ctx.lineWidth = 2;
-            ctx.setLineDash([]);
-            ctx.moveTo(nextX, nextY);
-            firstPoint = false;
+          ctx.stroke(path);
+          
+          // Handle arrhythmia segments separately
+          for (let i = 0; i < visiblePoints.length - 1; i++) {
+            const point = visiblePoints[i];
+            if (point.isArrhythmia) {
+              const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
+              const y = canvas.height * 0.6 - point.value;
+              
+              const nextPoint = visiblePoints[i + 1];
+              const nextX = canvas.width - ((now - nextPoint.time) * canvas.width / WINDOW_WIDTH_MS);
+              const nextY = canvas.height * 0.6 - nextPoint.value;
+              
+              const arrhythmiaPath = new Path2D();
+              arrhythmiaPath.moveTo(x, y);
+              arrhythmiaPath.lineTo(nextX, nextY);
+              
+              ctx.save();
+              ctx.strokeStyle = '#DC2626';
+              ctx.lineWidth = 3;
+              ctx.setLineDash([3, 2]);
+              ctx.stroke(arrhythmiaPath);
+              ctx.restore();
+            }
           }
+        } else {
+          // Fallback to standard canvas drawing
+          let firstPoint = true;
+          
+          for (let i = 0; i < visiblePoints.length; i++) {
+            const point = visiblePoints[i];
+            const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
+            const y = canvas.height * 0.6 - point.value;
+            
+            if (firstPoint) {
+              ctx.moveTo(x, y);
+              firstPoint = false;
+            } else {
+              ctx.lineTo(x, y);
+            }
+            
+            if (point.isArrhythmia && i < visiblePoints.length - 1) {
+              ctx.stroke();
+              ctx.beginPath();
+              ctx.strokeStyle = '#DC2626';
+              ctx.lineWidth = 3;
+              ctx.setLineDash([3, 2]);
+              ctx.moveTo(x, y);
+              
+              const nextPoint = visiblePoints[i + 1];
+              const nextX = canvas.width - ((now - nextPoint.time) * canvas.width / WINDOW_WIDTH_MS);
+              const nextY = canvas.height * 0.6 - nextPoint.value;
+              ctx.lineTo(nextX, nextY);
+              ctx.stroke();
+              
+              ctx.beginPath();
+              ctx.strokeStyle = '#0EA5E9';
+              ctx.lineWidth = 2;
+              ctx.setLineDash([]);
+              ctx.moveTo(nextX, nextY);
+              firstPoint = false;
+            }
+          }
+          
+          ctx.stroke();
         }
-        
-        ctx.stroke();
       }
 
+      // Find peak points for labeling, optimized method
       const maxPeakIndices: number[] = [];
+      const peakThreshold = 7.0;
       
-      for (let i = 2; i < visiblePoints.length - 2; i++) {
+      // Use a stride-based approach for peak detection (check every Nth point)
+      const stride = visiblePoints.length > 100 ? 2 : 1;
+      
+      for (let i = 2; i < visiblePoints.length - 2; i += stride) {
         const point = visiblePoints[i];
         const prevPoint1 = visiblePoints[i - 1];
         const prevPoint2 = visiblePoints[i - 2];
@@ -250,39 +423,46 @@ const PPGSignalMeter = ({
         if (point.value > prevPoint1.value && 
             point.value > prevPoint2.value && 
             point.value > nextPoint1.value && 
-            point.value > nextPoint2.value) {
+            point.value > nextPoint2.value && 
+            point.value > peakThreshold) {
           
-          const peakAmplitude = point.value;
+          // Check for nearby peaks to avoid clustering
+          const peakTime = point.time;
+          const hasPeakNearby = maxPeakIndices.some(idx => {
+            const existingPeakTime = visiblePoints[idx].time;
+            return Math.abs(existingPeakTime - peakTime) < 250;
+          });
           
-          if (peakAmplitude > 7.0) {
-            const peakTime = point.time;
-            const hasPeakNearby = maxPeakIndices.some(idx => {
-              const existingPeakTime = visiblePoints[idx].time;
-              return Math.abs(existingPeakTime - peakTime) < 250;
-            });
-            
-            if (!hasPeakNearby) {
-              maxPeakIndices.push(i);
-            }
+          if (!hasPeakNearby) {
+            maxPeakIndices.push(i);
           }
         }
       }
+      
+      // Draw peaks and labels with optimized rendering
+      ctx.save();
       
       for (let idx of maxPeakIndices) {
         const point = visiblePoints[idx];
         const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
         const y = canvas.height * 0.6 - point.value;
         
+        // Draw peak marker
         ctx.beginPath();
         ctx.arc(x, y, point.isArrhythmia ? 5 : 4, 0, Math.PI * 2);
         ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
         ctx.fill();
 
+        // Get stable text value to prevent flickering
+        const stableText = getStableText(point.value);
+        
+        // Draw value text
         ctx.font = 'bold 12px Inter';
         ctx.fillStyle = '#666666';
         ctx.textAlign = 'center';
-        ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 20);
+        ctx.fillText(stableText, x, y - 20);
         
+        // Special highlighting for arrhythmia points
         if (point.isArrhythmia) {
           ctx.beginPath();
           ctx.arc(x, y, 9, 0, Math.PI * 2);
@@ -328,11 +508,13 @@ const PPGSignalMeter = ({
           ctx.setLineDash([]);
         }
       }
+      
+      ctx.restore();
     }
 
     lastRenderTimeRef.current = currentTime;
     animationFrameRef.current = requestAnimationFrame(renderSignal);
-  }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus, drawGrid, smoothValue]);
+  }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus, drawGrid, smoothValue, getStableText]);
 
   useEffect(() => {
     renderSignal();
@@ -390,7 +572,14 @@ const PPGSignalMeter = ({
           width={CANVAS_WIDTH}
           height={CANVAS_HEIGHT}
           className="w-full h-full"
-          style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 }}
+          style={{ 
+            position: 'absolute', 
+            top: 0, 
+            left: 0, 
+            right: 0, 
+            zIndex: 10,
+            imageRendering: 'high-quality' // Better image rendering quality
+          }}
         />
       </div>
       
