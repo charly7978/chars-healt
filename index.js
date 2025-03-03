@@ -6,6 +6,7 @@ import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import PermissionsHandler from "@/components/PermissionsHandler";
+import { toast } from "sonner";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -183,16 +184,20 @@ const Index = () => {
       const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
       
       if (vitals) {
-        console.log("Vital signs data:", {
+        console.log("Vital signs data details:", {
           spo2: vitals.spo2,
           pressure: vitals.pressure,
           arrhythmia: vitals.arrhythmiaStatus,
           respiration: vitals.respiration,
-          glucose: vitals.glucose
+          glucose: vitals.glucose ? `${vitals.glucose.value} mg/dL (${vitals.glucose.trend})` : 'No data'
         });
         
         setVitalSigns(vitals);
         setArrhythmiaCount(vitals.arrhythmiaStatus.split('|')[1] || "--");
+        
+        if (vitals.glucose && vitals.glucose.value > 0) {
+          console.log(`Glucose data received: ${vitals.glucose.value} mg/dL, trend: ${vitals.glucose.trend}`);
+        }
       }
       
       setSignalQuality(lastSignal.quality);
