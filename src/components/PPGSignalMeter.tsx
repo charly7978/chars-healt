@@ -49,26 +49,7 @@ const PPGSignalMeter = ({
     if (!dataBufferRef.current) {
       dataBufferRef.current = new CircularBuffer(BUFFER_SIZE);
     }
-    
-    if (arrhythmiaStatus) {
-      console.log("PPGSignalMeter: Estado de arritmia recibido:", arrhythmiaStatus);
-      
-      const isPrematureBeat = 
-        arrhythmiaStatus.includes("CONTRACCIÓN PREMATURA") || 
-        arrhythmiaStatus.includes("PREMATURA");
-      
-      if (isPrematureBeat && rawArrhythmiaData) {
-        console.log("PPGSignalMeter: ¡LATIDO PREMATURO DETECTADO!", {
-          status: arrhythmiaStatus,
-          data: rawArrhythmiaData
-        });
-        
-        arrhythmiaCountRef.current += 1;
-        
-        lastArrhythmiaTime.current = Date.now();
-      }
-    }
-  }, [arrhythmiaStatus, rawArrhythmiaData]);
+  }, []);
 
   const getQualityColor = useCallback((q: number) => {
     if (!isFingerDetected) return 'from-gray-400 to-gray-500';
@@ -148,124 +129,6 @@ const PPGSignalMeter = ({
     ctx.stroke();
   }, []);
 
-  const drawSignal = useCallback((ctx: CanvasRenderingContext2D, now: number) => {
-    if (!canvasRef.current || !dataBufferRef.current) return;
-    
-    const canvas = canvasRef.current;
-    
-    const points = dataBufferRef.current.getPoints();
-    if (points.length > 1) {
-      const visiblePoints = points.filter(
-        point => (now - point.time) <= WINDOW_WIDTH_MS
-      );
-      
-      if (visiblePoints.length > 1) {
-        ctx.beginPath();
-        ctx.lineWidth = 2;
-        ctx.lineJoin = 'round';
-        ctx.lineCap = 'round';
-        
-        const firstPoint = visiblePoints[0];
-        const firstX = canvas.width - ((now - firstPoint.time) * canvas.width / WINDOW_WIDTH_MS);
-        const firstY = canvas.height * 0.6 - firstPoint.value;
-        ctx.moveTo(firstX, firstY);
-        
-        for (let i = 1; i < visiblePoints.length; i++) {
-          const point = visiblePoints[i];
-          const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-          const y = canvas.height * 0.6 - point.value;
-          ctx.lineTo(x, y);
-        }
-        
-        const gradient = ctx.createLinearGradient(0, 0, canvas.width, 0);
-        
-        let lastSegmentStart = 0;
-        let lastArrhythmiaStatus = visiblePoints[0].isArrhythmia;
-        
-        for (let i = 1; i < visiblePoints.length; i++) {
-          const point = visiblePoints[i];
-          if (point.isArrhythmia !== lastArrhythmiaStatus) {
-            const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-            const position = x / canvas.width;
-            
-            gradient.addColorStop(position, lastArrhythmiaStatus ? '#FF0000' : '#0EA5E9');
-            lastArrhythmiaStatus = point.isArrhythmia;
-            lastSegmentStart = i;
-          }
-        }
-        
-        gradient.addColorStop(1, lastArrhythmiaStatus ? '#FF0000' : '#0EA5E9');
-        
-        ctx.strokeStyle = gradient;
-        ctx.stroke();
-        
-        visiblePoints.forEach((point, i) => {
-          if (point.isArrhythmia) {
-            const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-            const y = canvas.height * 0.6 - point.value;
-            
-            ctx.beginPath();
-            ctx.arc(x, y, 4, 0, Math.PI * 2);
-            ctx.fillStyle = '#FF0000';
-            ctx.fill();
-          }
-        });
-      }
-
-      const maxPeakIndices: number[] = [];
-      
-      for (let i = 2; i < visiblePoints.length - 2; i++) {
-        const point = visiblePoints[i];
-        const prevPoint1 = visiblePoints[i - 1];
-        const prevPoint2 = visiblePoints[i - 2];
-        const nextPoint1 = visiblePoints[i + 1];
-        const nextPoint2 = visiblePoints[i + 2];
-        
-        if (point.value > prevPoint1.value && 
-            point.value > prevPoint2.value && 
-            point.value > nextPoint1.value && 
-            point.value > nextPoint2.value) {
-          
-          const peakAmplitude = Math.abs(point.value);
-          
-          if (peakAmplitude > 5.0) {
-            const peakTime = point.time;
-            const hasPeakNearby = maxPeakIndices.some(idx => {
-              const existingPeakTime = visiblePoints[idx].time;
-              return Math.abs(existingPeakTime - peakTime) < 250;
-            });
-            
-            if (!hasPeakNearby) {
-              maxPeakIndices.push(i);
-            }
-          }
-        }
-      }
-      
-      for (let idx of maxPeakIndices) {
-        const point = visiblePoints[idx];
-        const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-        const y = canvas.height * 0.6 - point.value;
-        
-        ctx.beginPath();
-        ctx.arc(x, y, 4, 0, Math.PI * 2);
-        ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
-        ctx.fill();
-
-        ctx.font = 'bold 12px Inter';
-        ctx.fillStyle = '#666666';
-        ctx.textAlign = 'center';
-        ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 10);
-        
-        if (point.isArrhythmia) {
-          ctx.font = 'bold 10px Inter';
-          ctx.fillStyle = '#FF6B6B';
-          ctx.fillText("LATIDO PREMATURO", x, y - 25);
-        }
-      }
-    }
-  }, [WINDOW_WIDTH_MS, verticalScale]);
-
   const renderSignal = useCallback(() => {
     if (!canvasRef.current || !dataBufferRef.current) {
       animationFrameRef.current = requestAnimationFrame(renderSignal);
@@ -302,70 +165,173 @@ const PPGSignalMeter = ({
     const scaledValue = normalizedValue * verticalScale;
     
     let isArrhythmia = false;
-    if (
-      (arrhythmiaStatus && (
-        arrhythmiaStatus.includes("CONTRACCIÓN PREMATURA") || 
-        arrhythmiaStatus.includes("PREMATURA")
-      )) 
-    ) {
+    if (rawArrhythmiaData && 
+        arrhythmiaStatus?.includes("ARRITMIA") && 
+        now - rawArrhythmiaData.timestamp < 1000) {
       isArrhythmia = true;
-      arrhythmiaCountRef.current += 1;
       lastArrhythmiaTime.current = now;
-      console.log("PPGSignalMeter: Visualizando latido prematuro en gráfico");
+      
+      arrhythmiaCountRef.current++;
     }
 
-    const showingRecentArrhythmia = now - lastArrhythmiaTime.current < 3000;
-    
-    dataBufferRef.current.push({
+    const dataPoint: PPGDataPoint = {
       time: now,
       value: scaledValue,
-      isArrhythmia: isArrhythmia || showingRecentArrhythmia
-    });
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+      isArrhythmia
+    };
+    
+    dataBufferRef.current.push(dataPoint);
 
     drawGrid(ctx);
-    drawSignal(ctx, now);
-    
-    if (isArrhythmia || showingRecentArrhythmia) {
-      ctx.fillStyle = '#DC2626';
-      ctx.font = 'bold 14px Inter';
-      ctx.textAlign = 'center';
-      ctx.fillText('¡LATIDO PREMATURO!', canvas.width / 2, 30);
+
+    const points = dataBufferRef.current.getPoints();
+    if (points.length > 1) {
+      const visiblePoints = points.filter(
+        point => (now - point.time) <= WINDOW_WIDTH_MS
+      );
       
-      const latestPoint = dataBufferRef.current.getPoints().slice(-1)[0];
-      if (latestPoint) {
-        const x = canvas.width - ((now - latestPoint.time) * canvas.width / WINDOW_WIDTH_MS);
-        const y = canvas.height * 0.6 - latestPoint.value;
+      if (visiblePoints.length > 1) {
+        ctx.beginPath();
+        ctx.strokeStyle = '#0EA5E9';
+        ctx.lineWidth = 2;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        
+        let firstPoint = true;
+        
+        for (let i = 0; i < visiblePoints.length; i++) {
+          const point = visiblePoints[i];
+          const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
+          const y = canvas.height * 0.6 - point.value;
+          
+          if (firstPoint) {
+            ctx.moveTo(x, y);
+            firstPoint = false;
+          } else {
+            ctx.lineTo(x, y);
+          }
+          
+          if (point.isArrhythmia && i < visiblePoints.length - 1) {
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.strokeStyle = '#DC2626';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([3, 2]);
+            ctx.moveTo(x, y);
+            
+            const nextPoint = visiblePoints[i + 1];
+            const nextX = canvas.width - ((now - nextPoint.time) * canvas.width / WINDOW_WIDTH_MS);
+            const nextY = canvas.height * 0.6 - nextPoint.value;
+            ctx.lineTo(nextX, nextY);
+            ctx.stroke();
+            
+            ctx.beginPath();
+            ctx.strokeStyle = '#0EA5E9';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([]);
+            ctx.moveTo(nextX, nextY);
+            firstPoint = false;
+          }
+        }
+        
+        ctx.stroke();
+      }
+
+      const maxPeakIndices: number[] = [];
+      
+      for (let i = 2; i < visiblePoints.length - 2; i++) {
+        const point = visiblePoints[i];
+        const prevPoint1 = visiblePoints[i - 1];
+        const prevPoint2 = visiblePoints[i - 2];
+        const nextPoint1 = visiblePoints[i + 1];
+        const nextPoint2 = visiblePoints[i + 2];
+        
+        if (point.value > prevPoint1.value && 
+            point.value > prevPoint2.value && 
+            point.value > nextPoint1.value && 
+            point.value > nextPoint2.value) {
+          
+          const peakAmplitude = Math.abs(point.value);
+          
+          if (peakAmplitude > 7.0) {
+            const peakTime = point.time;
+            const hasPeakNearby = maxPeakIndices.some(idx => {
+              const existingPeakTime = visiblePoints[idx].time;
+              return Math.abs(existingPeakTime - peakTime) < 250;
+            });
+            
+            if (!hasPeakNearby) {
+              maxPeakIndices.push(i);
+            }
+          }
+        }
+      }
+      
+      for (let idx of maxPeakIndices) {
+        const point = visiblePoints[idx];
+        const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
+        const y = canvas.height * 0.6 - point.value;
         
         ctx.beginPath();
-        ctx.arc(x, y, 6, 0, Math.PI * 2);
-        ctx.fillStyle = '#FF0000';
+        ctx.arc(x, y, point.isArrhythmia ? 5 : 4, 0, Math.PI * 2);
+        ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
         ctx.fill();
-      }
-    }
 
-    if (arrhythmiaStatus && arrhythmiaStatus.includes("ARRITMIA")) {
-      const parts = arrhythmiaStatus.split('|');
-      const arrhythmiaCount = parseInt(parts[1] || "0", 10);
-      
-      ctx.font = 'bold 14px Inter';
-      ctx.fillStyle = '#FF0000';
-      ctx.textAlign = 'center';
-      
-      if (arrhythmiaCount === 1) {
-        ctx.fillText("¡ARRITMIA DETECTADA!", canvas.width / 2, 25);
-      } else {
-        const riskLabel = arrhythmiaCount <= 4 ? "ARRITMIA LEVE" : 
-                          arrhythmiaCount <= 7 ? "ARRITMIA MODERADA" : 
-                          "ARRITMIA SEVERA";
-        ctx.fillText(`${riskLabel} (${arrhythmiaCount})`, canvas.width / 2, 25);
+        ctx.font = 'bold 12px Inter';
+        ctx.fillStyle = '#666666';
+        ctx.textAlign = 'center';
+        ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 20);
+        
+        if (point.isArrhythmia) {
+          ctx.beginPath();
+          ctx.arc(x, y, 9, 0, Math.PI * 2);
+          ctx.strokeStyle = '#FFFF00';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          
+          ctx.beginPath();
+          ctx.arc(x, y, 14, 0, Math.PI * 2);
+          ctx.strokeStyle = '#FF6B6B';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([2, 2]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          
+          ctx.font = 'bold 10px Inter';
+          ctx.fillStyle = '#FF6B6B';
+          ctx.fillText("LATIDO PREMATURO", x, y - 35);
+          
+          ctx.beginPath();
+          ctx.setLineDash([2, 2]);
+          ctx.strokeStyle = 'rgba(255, 107, 107, 0.6)';
+          ctx.lineWidth = 1;
+          
+          if (idx > 0) {
+            const prevX = canvas.width - ((now - visiblePoints[idx-1].time) * canvas.width / WINDOW_WIDTH_MS);
+            const prevY = canvas.height * 0.6 - visiblePoints[idx-1].value;
+            
+            ctx.moveTo(prevX, prevY - 15);
+            ctx.lineTo(x, y - 15);
+            ctx.stroke();
+          }
+          
+          if (idx < visiblePoints.length - 1) {
+            const nextX = canvas.width - ((now - visiblePoints[idx+1].time) * canvas.width / WINDOW_WIDTH_MS);
+            const nextY = canvas.height * 0.6 - visiblePoints[idx+1].value;
+            
+            ctx.moveTo(x, y - 15);
+            ctx.lineTo(nextX, nextY - 15);
+            ctx.stroke();
+          }
+          
+          ctx.setLineDash([]);
+        }
       }
     }
 
     lastRenderTimeRef.current = currentTime;
     animationFrameRef.current = requestAnimationFrame(renderSignal);
-  }, [value, quality, isFingerDetected, arrhythmiaStatus, drawGrid, smoothValue, drawSignal, WINDOW_WIDTH_MS, verticalScale]);
+  }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus, drawGrid, smoothValue]);
 
   useEffect(() => {
     renderSignal();
@@ -426,14 +392,6 @@ const PPGSignalMeter = ({
           style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 }}
         />
       </div>
-      
-      {arrhythmiaStatus && arrhythmiaStatus.includes("ARRITMIA") && (
-        <div className="absolute top-[70px] left-0 right-0 z-40 flex justify-center">
-          <div className="bg-red-600 text-white px-4 py-2 rounded-lg animate-pulse shadow-lg">
-            <span className="font-bold">¡ARRITMIA DETECTADA!</span>
-          </div>
-        </div>
-      )}
       
       <div className="absolute" style={{ top: 'calc(50vh + 5px)', left: 0, right: 0, textAlign: 'center', zIndex: 30 }}>
         <h1 className="text-xl font-bold">

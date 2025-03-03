@@ -1,4 +1,5 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+
+import { useState, useRef, useCallback } from 'react';
 import { HeartBeatProcessor } from '../modules/HeartBeatProcessor';
 import { HeartBeatResult } from '../types/signal';
 
@@ -7,18 +8,12 @@ export const useHeartBeatProcessor = () => {
   const [confidence, setConfidence] = useState(0);
   const [isPeak, setIsPeak] = useState(false);
   const processorRef = useRef<HeartBeatProcessor | null>(null);
-  const [isAndroid] = useState<boolean>(() => /android/i.test(navigator.userAgent));
-  
-  useEffect(() => {
-    console.log('useHeartBeatProcessor: Inicializado en plataforma:', isAndroid ? 'Android' : 'Otro');
-  }, [isAndroid]);
   
   const getProcessor = useCallback(() => {
     if (!processorRef.current) {
       console.log('useHeartBeatProcessor: Creando nueva instancia de HeartBeatProcessor');
       processorRef.current = new HeartBeatProcessor();
       // Make it globally accessible for debugging
-      // @ts-ignore - Global window property for debugging
       window.heartBeatProcessor = processorRef.current;
     }
     return processorRef.current;
@@ -34,46 +29,22 @@ export const useHeartBeatProcessor = () => {
       setConfidence(result.confidence);
       setIsPeak(result.isPeak);
       
-      // Get RR intervals with amplitudes for arrhythmia detection
+      // Get RR intervals for arrhythmia detection, including amplitudes if available
       const rrData = processor.getRRIntervals();
-      const lastPeakTime = result.isPeak ? Date.now() : null;
       
-      // Enhanced amplitude handling - critical for arrhythmia detection
-      let amplitudes = rrData.amplitudes || [];
-      
-      // Add current peak amplitude if it's a peak
+      // Extract peak amplitudes for respiration analysis
       if (result.isPeak && result.amplitude !== undefined) {
-        if (!amplitudes.length) {
-          amplitudes = [];
+        if (!rrData.amplitudes) {
+          rrData.amplitudes = [];
         }
-        amplitudes.push(result.amplitude);
-        
-        console.log("HeartBeatProcessor: Peak detected with amplitude:", result.amplitude);
+        rrData.amplitudes.push(result.amplitude);
       }
       
-      // Ensure amplitudes array always exists, even if empty
-      rrData.amplitudes = amplitudes;
-      
-      console.log("useHeartBeatProcessor: Processed signal", { 
-        bpm: result.bpm, 
-        confidence: result.confidence, 
-        isPeak: result.isPeak,
-        intervals: rrData.intervals ? rrData.intervals.length : 0,
-        amplitudes: amplitudes.length,
-        amplitude: result.amplitude,
-        plataforma: isAndroid ? 'Android' : 'Otro'
-      });
-      
-      // Enhanced data structure with all necessary information
       return {
         bpm: result.bpm,
         confidence: result.confidence,
         isPeak: result.isPeak,
-        rrData: {
-          intervals: rrData.intervals || [],
-          lastPeakTime: lastPeakTime,
-          amplitudes: rrData.amplitudes || []
-        },
+        rrData,
         amplitude: result.amplitude
       };
     } catch (error) {
@@ -82,11 +53,11 @@ export const useHeartBeatProcessor = () => {
         bpm: 0,
         confidence: 0,
         isPeak: false,
-        rrData: { intervals: [], lastPeakTime: null, amplitudes: [] },
+        rrData: { intervals: [], lastPeakTime: null },
         amplitude: undefined
       };
     }
-  }, [getProcessor, isAndroid]);
+  }, [getProcessor]);
   
   const reset = useCallback(() => {
     if (processorRef.current) {

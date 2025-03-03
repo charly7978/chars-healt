@@ -19,31 +19,9 @@ interface VitalSigns {
     regularity: number;
   };
   hasRespirationData: boolean;
-  hasGlucoseData: boolean;
   glucose: {
     value: number;
     trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
-  };
-}
-
-interface ProcessedVitalSignsData {
-  spo2: number;
-  pressure: string;
-  arrhythmiaStatus: string;
-  lastArrhythmiaData?: {
-    timestamp: number;
-    rmssd: number;
-    rrVariation: number;
-    prematureBeat?: boolean;
-    confidence?: number;
-  } | null;
-  respiratoryRate?: number;
-  respiratoryPattern?: string;
-  respiratoryConfidence?: number;
-  glucose?: {
-    value: number;
-    trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
-    confidence: number;
   };
 }
 
@@ -51,17 +29,13 @@ const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [signalQuality, setSignalQuality] = useState(0);
-  const [vitalSigns, setVitalSigns] = useState<VitalSigns>({
-    spo2: 0,
-    pressure: "120/80",
-    arrhythmiaStatus: "LATIDO NORMAL|0",
+  const [vitalSigns, setVitalSigns] = useState<VitalSigns>({ 
+    spo2: 0, 
+    pressure: "--/--",
+    arrhythmiaStatus: "--",
     respiration: { rate: 0, depth: 0, regularity: 0 },
     hasRespirationData: false,
-    hasGlucoseData: true,
-    glucose: {
-      value: 95,
-      trend: 'stable'
-    }
+    glucose: { value: 0, trend: 'unknown' }
   });
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState<string | number>("--");
@@ -84,9 +58,7 @@ const Index = () => {
     glucose: {
       value: number;
       trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
-    },
-    hasGlucoseData: boolean,
-    arrhythmiaStatus: string
+    }
   } | null>(null);
   const [permissionsGranted, setPermissionsGranted] = useState(false);
   const measurementTimerRef = useRef<number | null>(null);
@@ -103,7 +75,7 @@ const Index = () => {
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat, reset: resetHeartBeat } = useHeartBeatProcessor();
-  const { vitalSignsData, processSignal, reset, getCurrentRespiratoryData, calibrateGlucose } = useVitalSignsProcessor();
+  const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
   const handlePermissionsGranted = () => {
     console.log("Permisos concedidos correctamente");
@@ -187,7 +159,7 @@ const Index = () => {
         glucose: avgGlucose
       });
       
-      let calculatedGlucoseTrend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown' = 'unknown';
+      let glucoseTrend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown' = 'unknown';
       if (validGlucoseValues.length >= 3) {
         const recentValues = validGlucoseValues.slice(-3);
         const changes = [];
@@ -198,28 +170,15 @@ const Index = () => {
         const avgChange = changes.reduce((a, b) => a + b, 0) / changes.length;
         
         if (Math.abs(avgChange) < 2) {
-          calculatedGlucoseTrend = 'stable';
+          glucoseTrend = 'stable';
         } else if (avgChange > 5) {
-          calculatedGlucoseTrend = 'rising_rapidly';
+          glucoseTrend = 'rising_rapidly';
         } else if (avgChange > 2) {
-          calculatedGlucoseTrend = 'rising';
+          glucoseTrend = 'rising';
         } else if (avgChange < -5) {
-          calculatedGlucoseTrend = 'falling_rapidly';
+          glucoseTrend = 'falling_rapidly';
         } else if (avgChange < -2) {
-          calculatedGlucoseTrend = 'falling';
-        }
-      }
-      
-      const glucoseValue = vitalSignsData?.glucose?.value || 0;
-      const glucoseTrend = vitalSignsData?.glucose?.trend || 'unknown';
-      
-      let calculatedArrhythmiaStatus = vitalSigns.arrhythmiaStatus;
-      if (vitalSignsData?.arrhythmiaStatus) {
-        if (vitalSignsData.arrhythmiaStatus.includes('ARRITMIA DETECTADA')) {
-          console.log('Arritmia detectada en frame actual:', vitalSignsData.arrhythmiaStatus);
-          calculatedArrhythmiaStatus = vitalSignsData.arrhythmiaStatus;
-        } else {
-          calculatedArrhythmiaStatus = vitalSignsData.arrhythmiaStatus;
+          glucoseTrend = 'falling';
         }
       }
       
@@ -233,11 +192,9 @@ const Index = () => {
           regularity: vitalSigns.respiration.regularity
         },
         glucose: {
-          value: glucoseValue > 0 ? glucoseValue : avgGlucose,
+          value: avgGlucose > 0 ? avgGlucose : vitalSigns.glucose.value,
           trend: glucoseTrend
-        },
-        hasGlucoseData: glucoseValue > 0,
-        arrhythmiaStatus: calculatedArrhythmiaStatus
+        }
       });
         
       hasValidValuesRef.current = true;
@@ -256,9 +213,7 @@ const Index = () => {
         spo2: vitalSigns.spo2,
         pressure: vitalSigns.pressure,
         respiration: vitalSigns.respiration,
-        glucose: vitalSigns.glucose,
-        hasGlucoseData: false,
-        arrhythmiaStatus: vitalSigns.arrhythmiaStatus
+        glucose: vitalSigns.glucose
       });
       hasValidValuesRef.current = true;
     }
@@ -320,7 +275,7 @@ const Index = () => {
     setElapsedTime(0);
     
     resetHeartBeat();
-    reset();
+    resetVitalSigns();
     VitalSignsRisk.resetHistory();
   };
 
@@ -387,17 +342,13 @@ const Index = () => {
     }
     
     setHeartRate(0);
-    setVitalSigns({
-      spo2: 0,
-      pressure: "120/80",
-      arrhythmiaStatus: "LATIDO NORMAL|0",
+    setVitalSigns({ 
+      spo2: 0, 
+      pressure: "--/--",
+      arrhythmiaStatus: "--",
       respiration: { rate: 0, depth: 0, regularity: 0 },
       hasRespirationData: false,
-      hasGlucoseData: true,
-      glucose: {
-        value: 95,
-        trend: 'stable'
-      }
+      glucose: { value: 0, trend: 'unknown' }
     });
     setArrhythmiaCount("--");
     setLastArrhythmiaData(null);
@@ -406,7 +357,7 @@ const Index = () => {
     setFinalValues(null);
     
     resetHeartBeat();
-    reset();
+    resetVitalSigns();
     VitalSignsRisk.resetHistory();
     
     hasValidValuesRef.current = false;
@@ -563,84 +514,6 @@ const Index = () => {
     };
   }, []);
 
-  const handleVitalsUpdate = (vitals: ProcessedVitalSignsData) => {
-    if (vitals) {
-      console.log("Index: Actualización de signos vitales recibida:", {
-        arrhythmiaStatus: vitals.arrhythmiaStatus,
-        lastArrhythmiaData: vitals.lastArrhythmiaData || "No hay datos de arritmia"
-      });
-      
-      setVitalSigns(current => ({
-        ...current,
-        spo2: vitals.spo2,
-        pressure: vitals.pressure
-      }));
-      
-      setVitalSigns(current => ({
-        ...current,
-        arrhythmiaStatus: vitals.arrhythmiaStatus
-      }));
-      
-      const storedGlucoseValue = sessionStorage.getItem('lastGlucoseValue');
-      if (storedGlucoseValue && parseInt(storedGlucoseValue) > 0) {
-        console.log("Procesando datos de glucosa almacenados:", storedGlucoseValue);
-        
-        const storedTrend = sessionStorage.getItem('glucoseTrend') || 'unknown';
-        const validTrend = (storedTrend === 'stable' || 
-                           storedTrend === 'rising' || 
-                           storedTrend === 'falling' || 
-                           storedTrend === 'rising_rapidly' || 
-                           storedTrend === 'falling_rapidly') 
-                           ? storedTrend as 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly'
-                           : 'unknown' as 'unknown';
-        
-        setVitalSigns(current => ({
-          ...current,
-          glucose: {
-            value: parseInt(storedGlucoseValue),
-            trend: validTrend
-          },
-          hasGlucoseData: true
-        }));
-      }
-      
-      if (vitals.respiratoryRate && vitals.respiratoryRate > 0) {
-        setVitalSigns(current => ({
-          ...current,
-          respiration: { 
-            rate: vitals.respiratoryRate || 0, 
-            depth: 75,
-            regularity: 80
-          },
-          hasRespirationData: true
-        }));
-        
-        if (vitals.respiratoryRate > 0) {
-          allRespirationRateValuesRef.current.push(vitals.respiratoryRate);
-          allRespirationDepthValuesRef.current.push(75);
-        }
-      }
-      
-      if (vitals.lastArrhythmiaData) {
-        console.log("Index: Datos de arritmia recibidos:", vitals.lastArrhythmiaData);
-        
-        setLastArrhythmiaData(vitals.lastArrhythmiaData);
-        
-        const [status, count] = vitals.arrhythmiaStatus.split('|');
-        setArrhythmiaCount(count || "0");
-        
-        if (vitals.lastArrhythmiaData.confidence && 
-            vitals.lastArrhythmiaData.confidence > 80 && 
-            status.includes("ARRITMIA")) {
-          toast.warning(`Arritmia detectada: ${status.replace("ARRITMIA DETECTADA: ", "")}`, {
-            position: "top-center",
-            duration: 3000
-          });
-        }
-      }
-    }
-  };
-
   useEffect(() => {
     if (lastSignal && lastSignal.fingerDetected && isMonitoring) {
       try {
@@ -652,9 +525,67 @@ const Index = () => {
             allHeartRateValuesRef.current.push(heartBeatResult.bpm);
           }
           
-          const vitals = processSignal(lastSignal.filteredValue, heartBeatResult.rrData);
+          const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
           if (vitals) {
-            handleVitalsUpdate(vitals);
+            if (vitals.spo2 > 0) {
+              setVitalSigns(current => ({
+                ...current,
+                spo2: vitals.spo2
+              }));
+              allSpo2ValuesRef.current.push(vitals.spo2);
+            }
+            
+            if (vitals.pressure !== "--/--" && vitals.pressure !== "0/0") {
+              setVitalSigns(current => ({
+                ...current,
+                pressure: vitals.pressure
+              }));
+              
+              const [systolic, diastolic] = vitals.pressure.split('/').map(Number);
+              if (systolic > 0 && diastolic > 0) {
+                allSystolicValuesRef.current.push(systolic);
+                allDiastolicValuesRef.current.push(diastolic);
+              }
+            }
+            
+            setVitalSigns(current => ({
+              ...current,
+              arrhythmiaStatus: vitals.arrhythmiaStatus
+            }));
+            
+            if (vitals.hasRespirationData && vitals.respiration) {
+              console.log("Procesando datos de respiración:", vitals.respiration);
+              setVitalSigns(current => ({
+                ...current,
+                respiration: vitals.respiration,
+                hasRespirationData: true
+              }));
+              
+              if (vitals.respiration.rate > 0) {
+                allRespirationRateValuesRef.current.push(vitals.respiration.rate);
+              }
+              
+              if (vitals.respiration.depth > 0) {
+                allRespirationDepthValuesRef.current.push(vitals.respiration.depth);
+              }
+            }
+            
+            if (vitals.glucose && vitals.glucose.value > 0) {
+              console.log("Procesando datos de glucosa:", vitals.glucose);
+              setVitalSigns(current => ({
+                ...current,
+                glucose: vitals.glucose
+              }));
+              
+              allGlucoseValuesRef.current.push(vitals.glucose.value);
+            }
+            
+            if (vitals.lastArrhythmiaData) {
+              setLastArrhythmiaData(vitals.lastArrhythmiaData);
+              
+              const [status, count] = vitals.arrhythmiaStatus.split('|');
+              setArrhythmiaCount(count || "0");
+            }
           }
         }
         
@@ -663,7 +594,7 @@ const Index = () => {
         console.error("Error procesando señal:", error);
       }
     }
-  }, [lastSignal, isMonitoring, processHeartBeat, processSignal, measurementComplete]);
+  }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns, measurementComplete]);
 
   useEffect(() => {
     return () => {
@@ -727,7 +658,9 @@ const Index = () => {
       {isMonitoring && (
         <div className="absolute z-30 text-sm bg-black/50 backdrop-blur-sm px-3 py-1 rounded-lg" 
           style={{ top: '35%', left: '50%', transform: 'translateX(-50%)', textAlign: 'center' }}>
-          <span className="text-cyan-400 font-medium">Medición en progreso...</span>
+          <span className="text-cyan-400 font-medium">Respiración: {vitalSigns.hasRespirationData ? 
+            `${vitalSigns.respiration.rate} RPM, Profundidad: ${vitalSigns.respiration.depth}%` : 
+            'Calibrando...'}</span>
         </div>
       )}
 
@@ -759,24 +692,18 @@ const Index = () => {
             />
             <VitalSign 
               label="RESPIRACIÓN"
-              value={finalValues ? 
-                finalValues.respiration.rate : 
-                (vitalSigns.respiration && vitalSigns.hasRespirationData ? vitalSigns.respiration.rate : "--")}
+              value={finalValues ? finalValues.respiration.rate : (vitalSigns.hasRespirationData ? vitalSigns.respiration.rate : "--")}
               unit="RPM"
-              secondaryValue={finalValues ? 
-                (finalValues.respiration.depth ? `Profundidad: ${finalValues.respiration.depth}%` : "Normal") : 
-                (vitalSigns.respiration && vitalSigns.hasRespirationData ? `Profundidad: ${vitalSigns.respiration.depth}%` : "Sin datos")}
+              secondaryValue={finalValues ? finalValues.respiration.depth : (vitalSigns.hasRespirationData ? vitalSigns.respiration.depth : "--")}
+              secondaryUnit="%"
               isFinalReading={measurementComplete}
             />
             <VitalSign 
               label="GLUCOSA"
-              value={finalValues && finalValues.hasGlucoseData ? 
-                finalValues.glucose.value : 
-                (sessionStorage.getItem('lastGlucoseValue') ? 
-                  parseInt(sessionStorage.getItem('lastGlucoseValue') || '95') : 95)}
+              value={finalValues ? finalValues.glucose.value : vitalSigns.glucose.value || "--"}
               unit="mg/dL"
+              trend={finalValues ? finalValues.glucose.trend : vitalSigns.glucose.trend}
               isFinalReading={measurementComplete}
-              trend={(sessionStorage.getItem('glucoseTrend') as 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown') || 'unknown'}
             />
           </div>
         </div>

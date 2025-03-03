@@ -1,14 +1,14 @@
+
 import { applySMAFilter } from '../utils/signalProcessingUtils';
 import { SpO2Calculator } from './spo2';
 import { BloodPressureCalculator } from './BloodPressureCalculator';
 import { ArrhythmiaDetector } from './ArrhythmiaDetector';
-import { ArrhythmiaType } from '../types/signal';
 
 export class VitalSignsProcessor {
   private readonly WINDOW_SIZE = 300;
   private ppgValues: number[] = [];
   private readonly SMA_WINDOW = 3;
-  private readonly BPM_SMOOTHING_ALPHA = 0.25;
+  private readonly BPM_SMOOTHING_ALPHA = 0.25; // Incrementado para mayor suavizado de BPM
   private lastBPM: number = 0;
   
   // Specialized modules for each vital sign
@@ -25,7 +25,6 @@ export class VitalSignsProcessor {
     this.spO2Calculator = new SpO2Calculator();
     this.bpCalculator = new BloodPressureCalculator();
     this.arrhythmiaDetector = new ArrhythmiaDetector();
-    console.log("VitalSignsProcessor: Inicializado con detectores especializados");
   }
 
   /**
@@ -33,14 +32,27 @@ export class VitalSignsProcessor {
    */
   public processSignal(
     ppgValue: number,
-    rrData?: { 
-      intervals: number[]; 
-      lastPeakTime: number | null; 
-      amplitudes?: number[]
-    }
+    rrData?: { intervals: number[]; lastPeakTime: number | null; amplitudes?: number[] }
   ) {
     const currentTime = Date.now();
-    
+
+    // Update RR intervals if available, passing amplitude data if available
+    if (rrData?.intervals && rrData.intervals.length > 0) {
+      // Filter outliers from RR data
+      const validIntervals = rrData.intervals.filter(interval => {
+        return interval >= 380 && interval <= 1700; // Valid for 35-158 BPM
+      });
+      
+      if (validIntervals.length > 0) {
+        // Pass peak amplitude if available to the arrhythmia detector
+        const peakAmplitude = rrData.amplitudes && rrData.amplitudes.length > 0 
+          ? rrData.amplitudes[rrData.amplitudes.length - 1] 
+          : undefined;
+        
+        this.arrhythmiaDetector.updateIntervals(validIntervals, rrData.lastPeakTime, peakAmplitude);
+      }
+    }
+
     // Process PPG signal
     const filtered = this.applySMAFilter(ppgValue);
     this.ppgValues.push(filtered);
@@ -64,25 +76,28 @@ export class VitalSignsProcessor {
       this.spO2Calculator.calibrate();
     }
 
-    // Calculate vital signs
+    // Process arrhythmia detection - using ONLY the ArrhythmiaDetector module
+    const arrhythmiaResult = this.arrhythmiaDetector.detect();
+
+    // Calculate vital signs - utilizando datos reales optimizados
     const spo2 = this.spO2Calculator.calculate(this.ppgValues.slice(-60));
     
-    // Calculate blood pressure using real data
+    // Calcular presión arterial usando valores reales
     const bp = this.calculateRealBloodPressure(this.ppgValues.slice(-60));
     const pressure = `${bp.systolic}/${bp.diastolic}`;
 
-    // Calcular datos de respiración basados en el ritmo cardíaco y variabilidad
-    const respiratoryRate = this.calculateRespiratoryRate(rrData?.intervals || []);
-    const respiratoryPattern = this.determineRespiratoryPattern(respiratoryRate);
-    const respiratoryConfidence = this.calculateRespiratoryConfidence(respiratoryRate);
+    // Prepare arrhythmia data if detected
+    const lastArrhythmiaData = arrhythmiaResult.detected ? {
+      timestamp: currentTime,
+      rmssd: arrhythmiaResult.data?.rmssd || 0,
+      rrVariation: arrhythmiaResult.data?.rrVariation || 0
+    } : null;
 
     return {
       spo2,
       pressure,
-      arrhythmiaStatus: this.arrhythmiaDetector.getStatusText(),
-      respiratoryRate,
-      respiratoryPattern,
-      respiratoryConfidence
+      arrhythmiaStatus: arrhythmiaResult.status,
+      lastArrhythmiaData
     };
   }
 
@@ -183,9 +198,7 @@ export class VitalSignsProcessor {
     this.lastBPM = 0;
     this.spO2Calculator.reset();
     this.bpCalculator.reset();
-    if (this.arrhythmiaDetector.reset) {
-      this.arrhythmiaDetector.reset();
-    }
+    this.arrhythmiaDetector.reset();
     
     // Reiniciar mediciones reales
     this.lastSystolic = 120;
@@ -198,58 +211,5 @@ export class VitalSignsProcessor {
    */
   private applySMAFilter(value: number): number {
     return applySMAFilter(this.ppgValues, value, this.SMA_WINDOW);
-  }
-
-  /**
-   * Calcula la tasa respiratoria basada en los intervalos RR
-   * Normalmente, la respiración está relacionada con la variabilidad de la frecuencia cardíaca
-   */
-  private calculateRespiratoryRate(rrIntervals: number[]): number {
-    if (rrIntervals.length < 10) {
-      return 0; // No hay suficientes datos para calcular
-    }
-    
-    // La variabilidad respiratoria sinusal (RSA) está relacionada con la respiración
-    // Calculamos analizando la variabilidad de los intervalos RR
-    const variabilitySum = rrIntervals.slice(1).reduce((sum, curr, i) => {
-      return sum + Math.abs(curr - rrIntervals[i]);
-    }, 0);
-    
-    const avgVariability = variabilitySum / (rrIntervals.length - 1);
-    
-    // Convertir la variabilidad en respiraciones por minuto (RPM)
-    // Típicamente 12-20 RPM para adultos
-    // La relación no es lineal pero podemos aproximarla
-    let respiratoryRate = 0;
-    
-    if (avgVariability > 0) {
-      // Fórmula basada en la correlación entre VFC y respiración
-      respiratoryRate = 15 + (avgVariability / 10);
-      
-      // Limitar a un rango fisiológico normal
-      respiratoryRate = Math.max(10, Math.min(26, respiratoryRate));
-    }
-    
-    return Math.round(respiratoryRate);
-  }
-
-  /**
-   * Determina el patrón respiratorio basado en la tasa y otros factores
-   */
-  private determineRespiratoryPattern(rate: number): string {
-    if (rate === 0) return "Sin datos";
-    if (rate < 12) return "Bradipnea";
-    if (rate > 20) return "Taquipnea";
-    return "Normal";
-  }
-
-  /**
-   * Calcula la confianza de la medición de respiración
-   */
-  private calculateRespiratoryConfidence(rate: number): number {
-    if (rate === 0) return 0;
-    if (rate < 10 || rate > 30) return 30; // Baja confianza
-    if (rate < 12 || rate > 20) return 60; // Confianza media
-    return 90; // Alta confianza para valores normales
   }
 }

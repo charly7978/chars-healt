@@ -164,26 +164,21 @@ const VitalSign: React.FC<VitalSignProps> = ({
 
   const getArrhythmiaRiskColor = (count: number): string => {
     if (count <= 0) return "#000000";
-    if (count <= 4) return "#FEC6A1";
-    if (count <= 7) return "#F97316";
+    if (count <= 3) return "#F2FCE2";
+    if (count <= 6) return "#FEC6A1";
+    if (count <= 8) return "#F97316";
     return "#DC2626";
   };
 
   const getArrhythmiaRiskLabel = (count: number): string => {
     if (count <= 0) return "";
-    if (count <= 4) return "ARRITMIA LEVE";
-    if (count <= 7) return "ARRITMIA MODERADA";
-    return "ARRITMIA SEVERA";
+    if (count <= 3) return "RIESGO MÍNIMO";
+    if (count <= 6) return "RIESGO BAJO";
+    if (count <= 8) return "RIESGO MODERADO";
+    return "RIESGO ALTO";
   };
 
-  interface ArrhythmiaDisplayResult {
-    text: string | number;
-    color: string;
-    label: string;
-    title?: string;
-  }
-
-  const getArrhythmiaDisplay = (): ArrhythmiaDisplayResult => {
+  const getArrhythmiaDisplay = () => {
     if (!isArrhythmiaDisplay) return { text: value, color: "", label: "" };
     
     if (value === "--") {
@@ -194,28 +189,19 @@ const VitalSign: React.FC<VitalSignProps> = ({
       };
     }
     
-    if (typeof value === 'string' && value.includes('|')) {
-      const [status, countStr] = value.split('|');
-      const count = parseInt(countStr || "0", 10);
+    const [status, countStr] = String(value).split('|');
+    const count = parseInt(countStr || "0", 10);
+    
+    if (status === "ARRITMIA DETECTADA") {
+      const riskLabel = getArrhythmiaRiskLabel(count);
+      const riskColor = getArrhythmiaRiskColor(count);
       
-      if (status === "ARRITMIA DETECTADA") {
-        const riskLabel = getArrhythmiaRiskLabel(count);
-        const riskColor = getArrhythmiaRiskColor(count);
-        
-        if (count === 1) {
-          return {
-            text: "ARRITMIA DETECTADA",
-            color: riskColor,
-            label: riskLabel
-          };
-        } else {
-          return {
-            text: `${count}`,
-            color: riskColor,
-            label: riskLabel
-          };
-        }
-      }
+      return {
+        text: `${count}`,
+        title: "ARRITMIA DETECTADA",
+        color: riskColor,
+        label: riskLabel
+      };
     }
     
     return {
@@ -226,25 +212,33 @@ const VitalSign: React.FC<VitalSignProps> = ({
   };
 
   const renderGlucoseTrend = (trend?: string) => {
-    if (!trend || trend === 'unknown') return null;
-
-    const trendConfig = {
-      'stable': { icon: '⟷', color: 'text-green-500', label: 'Estable' },
-      'rising': { icon: '↗', color: 'text-yellow-500', label: 'Subiendo' },
-      'falling': { icon: '↘', color: 'text-yellow-500', label: 'Bajando' },
-      'rising_rapidly': { icon: '⇑', color: 'text-red-500', label: 'Subiendo rápido' },
-      'falling_rapidly': { icon: '⇓', color: 'text-red-500', label: 'Bajando rápido' }
-    };
-
-    const config = trendConfig[trend as keyof typeof trendConfig] || { icon: '•', color: 'text-gray-400', label: 'Desconocido' };
-
+    if (!trend || trend === 'unknown' || trend === 'stable') return null;
+    
+    let icon = '';
+    let color = '';
+    
+    switch (trend) {
+      case 'rising':
+        icon = '↗';
+        color = '#F97316';
+        break;
+      case 'falling':
+        icon = '↘';
+        color = '#3B82F6';
+        break;
+      case 'rising_rapidly':
+        icon = '⇑';
+        color = '#DC2626';
+        break;
+      case 'falling_rapidly':
+        icon = '⇓';
+        color = '#DC2626';
+        break;
+    }
+    
     return (
-      <span 
-        className={`ml-1 ${config.color} text-lg font-bold`} 
-        title={config.label}
-        aria-label={config.label}
-      >
-        {config.icon}
+      <span className="text-lg font-bold ml-1" style={{ color }}>
+        {icon}
       </span>
     );
   };
@@ -270,13 +264,9 @@ const VitalSign: React.FC<VitalSignProps> = ({
     return "heartRate";
   };
 
-  const arrhythmiaResult = isArrhythmiaDisplay ? getArrhythmiaDisplay() : null;
-  const riskInfo = !isArrhythmiaDisplay ? getRiskInfo() : null;
-  
-  const text = isArrhythmiaDisplay ? arrhythmiaResult?.text : processedDisplayValue;
-  const color = isArrhythmiaDisplay ? arrhythmiaResult?.color : riskInfo?.color;
-  const riskLabel = isArrhythmiaDisplay ? arrhythmiaResult?.label : riskInfo?.label;
-  const title = arrhythmiaResult?.title;
+  const { text, title, color, label: riskLabel } = isArrhythmiaDisplay ? 
+    getArrhythmiaDisplay() : 
+    { text: processedDisplayValue, title: undefined, ...getRiskInfo() };
 
   return (
     <>
@@ -290,13 +280,13 @@ const VitalSign: React.FC<VitalSignProps> = ({
           <h3 className="text-white text-xs font-medium tracking-wider mb-2">{label}</h3>
           <div className="flex flex-col items-center gap-1">
             {isArrhythmiaDisplay && title && (
-              <span className="text-sm font-bold tracking-wider" style={{ color: color || '#FFFFFF' }}>
+              <span className="text-base font-bold tracking-wider" style={{ color: color || '#FFFFFF' }}>
                 {title}
               </span>
             )}
             <div className="flex items-baseline gap-1 justify-center">
               <span 
-                className={`${isArrhythmiaDisplay ? 'text-xl' : 'text-xl'} font-bold transition-colors duration-300 text-white`}
+                className={`${isArrhythmiaDisplay ? 'text-lg' : 'text-xl'} font-bold transition-colors duration-300 text-white`}
                 style={{ color: color || '#000000' }}
               >
                 {text}
@@ -347,7 +337,7 @@ const VitalSign: React.FC<VitalSignProps> = ({
           title={label}
           value={text as string | number}
           unit={unit}
-          riskLevel={riskLabel || ''}
+          riskLevel={riskLabel}
           type={getVitalSignType()}
           onBack={() => setShowDetail(false)}
           secondaryValue={secondaryValue as string | number}

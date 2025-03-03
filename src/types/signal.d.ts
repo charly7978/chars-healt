@@ -1,6 +1,5 @@
 
 import { HeartBeatProcessor } from '../modules/HeartBeatProcessor';
-import { ArrhythmiaDetector } from '../modules/ArrhythmiaDetector';
 
 export interface ProcessedSignal {
   timestamp: number;
@@ -42,7 +41,6 @@ export interface GlucoseData {
   trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
   confidence: number; // Nivel de confianza de la medición (0-100)
   timeOffset: number; // Tiempo desde la última calibración (minutos)
-  lastCalibration?: number; // Timestamp de la última calibración realizada
 }
 
 export interface HeartBeatResult {
@@ -52,18 +50,6 @@ export interface HeartBeatResult {
   filteredValue: number;
   arrhythmiaCount: number;
   amplitude?: number;
-}
-
-export type ArrhythmiaType = 'NONE' | 'PAC' | 'PVC' | 'AF' | 'UNKNOWN';
-
-export interface ArrhythmiaResult {
-  detected: boolean;
-  severity: number;  // 0-10 scale
-  confidence: number; // 0-1 scale
-  type: ArrhythmiaType;
-  rmssd?: number;      // Add rmssd property
-  rrVariation?: number; // Add rrVariation property
-  timestamp: number;
 }
 
 declare global {
