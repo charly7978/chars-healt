@@ -23,11 +23,6 @@ interface VitalSigns {
     value: number;
     trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
   };
-  lastArrhythmiaData: {
-    timestamp: number;
-    rmssd: number;
-    rrVariation: number;
-  } | null;
 }
 
 const Index = () => {
@@ -40,8 +35,7 @@ const Index = () => {
     arrhythmiaStatus: "--",
     respiration: { rate: 0, depth: 0, regularity: 0 },
     hasRespirationData: false,
-    glucose: { value: 0, trend: 'unknown' },
-    lastArrhythmiaData: null
+    glucose: { value: 0, trend: 'unknown' }
   });
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState<string | number>("--");
@@ -354,8 +348,7 @@ const Index = () => {
       arrhythmiaStatus: "--",
       respiration: { rate: 0, depth: 0, regularity: 0 },
       hasRespirationData: false,
-      glucose: { value: 0, trend: 'unknown' },
-      lastArrhythmiaData: null
+      glucose: { value: 0, trend: 'unknown' }
     });
     setArrhythmiaCount("--");
     setLastArrhythmiaData(null);
@@ -618,10 +611,6 @@ const Index = () => {
             
             if (vitals.lastArrhythmiaData) {
               setLastArrhythmiaData(vitals.lastArrhythmiaData);
-              setVitalSigns(current => ({
-                ...current,
-                lastArrhythmiaData: vitals.lastArrhythmiaData
-              }));
               
               const [status, count] = vitals.arrhythmiaStatus.split('|');
               setArrhythmiaCount(count || "0");

@@ -35,16 +35,15 @@ const PPGSignalMeter = ({
   const arrhythmiaCountRef = useRef<number>(0);
   
   const WINDOW_WIDTH_MS = 4000;
-  const CANVAS_WIDTH = 550;
-  const CANVAS_HEIGHT = 550;
-  const GRID_SIZE_X = 55;
-  const GRID_SIZE_Y = 30;
-  const verticalScale = 45.0;
-  const SMOOTHING_FACTOR = 1.4;
-  const TARGET_FPS = 90;
-  const FRAME_TIME = 900 / TARGET_FPS;
-  const BUFFER_SIZE = 300;
-  const INVERT_SIGNAL = false;
+  const CANVAS_WIDTH = 450;
+  const CANVAS_HEIGHT = 450;
+  const GRID_SIZE_X = 10;
+  const GRID_SIZE_Y = 10;
+  const verticalScale = 25.0;
+  const SMOOTHING_FACTOR = 0.7;
+  const TARGET_FPS = 60;
+  const FRAME_TIME = 1000 / TARGET_FPS;
+  const BUFFER_SIZE = 200;
 
   useEffect(() => {
     if (!dataBufferRef.current) {
@@ -252,7 +251,7 @@ const PPGSignalMeter = ({
             point.value > nextPoint1.value && 
             point.value > nextPoint2.value) {
           
-          const peakAmplitude = point.value;
+          const peakAmplitude = Math.abs(point.value);
           
           if (peakAmplitude > 7.0) {
             const peakTime = point.time;
