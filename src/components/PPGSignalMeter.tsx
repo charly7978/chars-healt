@@ -35,10 +35,10 @@ const PPGSignalMeter = ({
   const lastArrhythmiaTime = useRef<number>(0);
   const arrhythmiaCountRef = useRef<number>(0);
   
-  // Optimized constants with INCREASED dimensions for better visibility
+  // Optimized constants with SIGNIFICANTLY INCREASED dimensions for better visibility
   const WINDOW_WIDTH_MS = 5000; // Visualization time window
-  const CANVAS_WIDTH = 700; // Increased from 640px to 700px for better readability
-  const CANVAS_HEIGHT = 900; // Increased from 820px to 900px for better vertical detail
+  const CANVAS_WIDTH = 1000; // Increased from 700px to 1000px for much better readability
+  const CANVAS_HEIGHT = 1100; // Increased from 900px to 1100px for much better vertical detail
   const GRID_SIZE_X = 100; // Grid cell width
   const GRID_SIZE_Y = 25; // Grid cell height
   const VERTICAL_SCALE = 42.0; // Signal amplification factor
@@ -92,25 +92,25 @@ const PPGSignalMeter = ({
     // Draw the main horizontal axis line (zero line)
     const zeroY = CANVAS_HEIGHT * 0.6;
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(0, 150, 100, 0.8)'; // Increased opacity from 0.7 to 0.8
-    ctx.lineWidth = 1.8; // Increased from 1.5 to 1.8
+    ctx.strokeStyle = 'rgba(0, 150, 100, 0.85)'; // Increased opacity from 0.8 to 0.85
+    ctx.lineWidth = 2.0; // Increased from 1.8 to 2.0
     ctx.moveTo(0, zeroY);
     ctx.lineTo(CANVAS_WIDTH, zeroY);
     ctx.stroke();
 
-    // Draw minor grid lines with slightly increased visibility
+    // Draw minor grid lines with significantly increased visibility
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(0, 180, 120, 0.15)'; // Increased opacity from 0.12 to 0.15
-    ctx.lineWidth = 0.6; // Increased from 0.5 to 0.6 for better visibility
+    ctx.strokeStyle = 'rgba(0, 180, 120, 0.2)'; // Increased opacity from 0.15 to 0.2
+    ctx.lineWidth = 0.7; // Increased from 0.6 to 0.7 for better visibility
 
-    // Denser vertical grid lines (time axis)
-    for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X / 2) {
+    // Even denser vertical grid lines (time axis)
+    for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X / 4) {
       ctx.moveTo(x, 0);
       ctx.lineTo(x, CANVAS_HEIGHT);
     }
 
-    // Denser horizontal grid lines (amplitude axis)
-    for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y / 2) {
+    // Even denser horizontal grid lines (amplitude axis)
+    for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y / 4) {
       ctx.moveTo(0, y);
       ctx.lineTo(CANVAS_WIDTH, y);
     }
@@ -118,8 +118,8 @@ const PPGSignalMeter = ({
 
     // Draw major grid lines with increased visibility
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(0, 150, 100, 0.3)'; // Increased opacity from 0.25 to 0.3
-    ctx.lineWidth = 1.2; // Increased from 1 to 1.2
+    ctx.strokeStyle = 'rgba(0, 150, 100, 0.4)'; // Increased opacity from 0.3 to 0.4
+    ctx.lineWidth = 1.5; // Increased from 1.2 to 1.5
 
     // Major vertical grid lines
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X * 4) {
@@ -129,10 +129,10 @@ const PPGSignalMeter = ({
       // Add time labels with better formatting and increased font size
       if (x >= 0) {
         const timeMs = (x / CANVAS_WIDTH) * WINDOW_WIDTH_MS;
-        ctx.fillStyle = 'rgba(0, 120, 80, 0.95)'; // Increased opacity
-        ctx.font = '13px "Inter", sans-serif'; // Increased from 11px to 13px
+        ctx.fillStyle = 'rgba(0, 120, 80, 1.0)'; // Increased opacity to full
+        ctx.font = '16px "Inter", sans-serif'; // Increased from 13px to 16px
         ctx.textAlign = 'center';
-        ctx.fillText(`${Math.round(timeMs)}ms`, x, CANVAS_HEIGHT - 6);
+        ctx.fillText(`${Math.round(timeMs)}ms`, x, CANVAS_HEIGHT - 10);
       }
     }
 
@@ -144,22 +144,22 @@ const PPGSignalMeter = ({
       // Add amplitude labels with better formatting and increased font size
       if (y % (GRID_SIZE_Y * 4) === 0) {
         const amplitude = ((zeroY - y) / VERTICAL_SCALE).toFixed(1);
-        ctx.fillStyle = 'rgba(0, 120, 80, 0.95)'; // Increased opacity
-        ctx.font = '13px "Inter", sans-serif'; // Increased from 11px to 13px
+        ctx.fillStyle = 'rgba(0, 120, 80, 1.0)'; // Increased opacity to full
+        ctx.font = '16px "Inter", sans-serif'; // Increased from 13px to 16px
         ctx.textAlign = 'right';
-        ctx.fillText(amplitude, 28, y + 4); // Moved slightly right from 25 to 28
+        ctx.fillText(amplitude, 32, y + 6); // Moved slightly right from 28 to 32
       }
     }
     ctx.stroke();
 
     // Draw axis labels with increased font size
-    ctx.fillStyle = 'rgba(0, 120, 80, 0.95)'; // Increased opacity
-    ctx.font = 'bold 14px "Inter", sans-serif'; // Increased from 13px to 14px
+    ctx.fillStyle = 'rgba(0, 120, 80, 1.0)'; // Increased opacity to full
+    ctx.font = 'bold 18px "Inter", sans-serif'; // Increased from 14px to 18px
     ctx.textAlign = 'center';
-    ctx.fillText('Tiempo (ms)', CANVAS_WIDTH / 2, CANVAS_HEIGHT - 20);
+    ctx.fillText('Tiempo (ms)', CANVAS_WIDTH / 2, CANVAS_HEIGHT - 30);
     
     ctx.save();
-    ctx.translate(12, CANVAS_HEIGHT / 2);
+    ctx.translate(24, CANVAS_HEIGHT / 2);
     ctx.rotate(-Math.PI / 2);
     ctx.fillText('Amplitud', 0, 0);
     ctx.restore();
@@ -440,7 +440,7 @@ const PPGSignalMeter = ({
   return (
     <>
       <div className="absolute top-0 right-1 z-30 flex items-center gap-2 rounded-lg p-2"
-           style={{ top: '5px', right: '5px' }}>
+           style={{ top: '8px', right: '8px' }}>
         <div className="w-[190px]">
           <div className={`h-1.5 w-full rounded-full bg-gradient-to-r ${getQualityColor(quality)} transition-all duration-1000 ease-in-out`}>
             <div
@@ -478,7 +478,7 @@ const PPGSignalMeter = ({
         </div>
       </div>
 
-      <div className="absolute inset-0 w-full" style={{ height: '55vh', top: 0 }}>
+      <div className="absolute inset-0 w-full" style={{ height: '65vh', top: 0 }}>
         <canvas
           ref={canvasRef}
           width={CANVAS_WIDTH}
@@ -496,7 +496,7 @@ const PPGSignalMeter = ({
         />
       </div>
       
-      <div className="absolute" style={{ top: 'calc(55vh + 5px)', left: 0, right: 0, textAlign: 'center', zIndex: 30 }}>
+      <div className="absolute" style={{ top: 'calc(65vh + 5px)', left: 0, right: 0, textAlign: 'center', zIndex: 30 }}>
         <h1 className="text-xl font-bold">
           <span className="text-white">Chars</span>
           <span className="text-[#ea384c]">Healt</span>
