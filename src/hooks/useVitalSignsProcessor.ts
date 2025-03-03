@@ -52,7 +52,7 @@ export const useVitalSignsProcessor = () => {
       confidence: glucoseResult.confidence || 0
     };
     
-    // Define arrhythmiaResult with default values explicitly typed as ArrhythmiaResult
+    // Define arrhythmiaResult con valores predeterminados explícitamente tipados como ArrhythmiaResult
     const defaultArrhythmiaResult: ArrhythmiaResult = {
       detected: false,
       severity: 0,
@@ -65,26 +65,44 @@ export const useVitalSignsProcessor = () => {
     
     let arrhythmiaResult: ArrhythmiaResult = defaultArrhythmiaResult;
     
-    if (rrData && rrData.intervals && rrData.intervals.length > 0) {
-      console.log('useVitalSignsProcessor: Enviando datos a detector de arritmias:', {
+    // Mejora para Android: asegurarse de que los intervalos son arrays válidos
+    // y que tienen una longitud adecuada para el análisis
+    if (rrData && Array.isArray(rrData.intervals) && rrData.intervals.length >= 3) {
+      console.log('useVitalSignsProcessor: Analizando intervalos RR para arritmias:', {
         intervals: rrData.intervals.length,
-        amplitudes: (rrData.amplitudes || []).length
+        amplitudes: Array.isArray(rrData.amplitudes) ? rrData.amplitudes.length : 0,
+        plataforma: navigator.userAgent
       });
       
-      arrhythmiaResult = arrhythmiaDetector.processRRIntervals(
-        rrData.intervals,
-        rrData.amplitudes || []
-      );
-      
-      if (arrhythmiaResult.detected) {
-        console.log('useVitalSignsProcessor: ¡ARRITMIA DETECTADA!', {
-          type: arrhythmiaResult.type,
-          severity: arrhythmiaResult.severity,
-          confidence: arrhythmiaResult.confidence,
-          rmssd: arrhythmiaResult.rmssd,
-          rrVariation: arrhythmiaResult.rrVariation
-        });
+      try {
+        // Intentamos usar amplitudes si existen, sino creamos un array del mismo tamaño
+        const amplitudesToUse = Array.isArray(rrData.amplitudes) && rrData.amplitudes.length > 0 
+          ? rrData.amplitudes 
+          : Array(rrData.intervals.length).fill(100); // Valor predeterminado si no hay amplitudes
+        
+        arrhythmiaResult = arrhythmiaDetector.processRRIntervals(
+          rrData.intervals,
+          amplitudesToUse
+        );
+        
+        if (arrhythmiaResult.detected) {
+          console.log('useVitalSignsProcessor: ¡ARRITMIA DETECTADA!', {
+            type: arrhythmiaResult.type,
+            severity: arrhythmiaResult.severity,
+            confidence: arrhythmiaResult.confidence,
+            rmssd: arrhythmiaResult.rmssd || 0,
+            rrVariation: arrhythmiaResult.rrVariation || 0,
+            timestamp: arrhythmiaResult.timestamp
+          });
+        }
+      } catch (error) {
+        console.error('useVitalSignsProcessor: Error al procesar arritmias:', error);
+        // Mantener el valor predeterminado en caso de error
       }
+    } else {
+      console.log('useVitalSignsProcessor: Datos RR insuficientes para análisis de arritmias', {
+        intervalos: rrData?.intervals?.length || 0
+      });
     }
     
     const arrhythmiaStatus = arrhythmiaDetector.getStatusText();
@@ -95,23 +113,43 @@ export const useVitalSignsProcessor = () => {
       arrhythmiaStatus: arrhythmiaStatus
     };
     
+    // Verificación adicional para dispositivos Android
     const lastArrhythmia = arrhythmiaDetector.getLastArrhythmia();
+    const isAndroid = /android/i.test(navigator.userAgent);
+    
     if (lastArrhythmia && lastArrhythmia.detected) {
-      // Ensure we always have values for rmssd and rrVariation
+      // Asegurarse de que siempre tenemos valores para rmssd y rrVariation
       combinedResult.lastArrhythmiaData = {
         timestamp: lastArrhythmia.timestamp,
         rmssd: lastArrhythmia.rmssd || 0,
         rrVariation: lastArrhythmia.rrVariation || 0
       };
       
-      console.log('useVitalSignsProcessor: Datos de arritmia agregados:', combinedResult.lastArrhythmiaData);
+      console.log('useVitalSignsProcessor: Datos de arritmia agregados:', 
+        JSON.stringify(combinedResult.lastArrhythmiaData));
+      
+      // Forzar la actualización para dispositivos Android con más información de log
+      if (isAndroid) {
+        console.log('useVitalSignsProcessor: Forzando actualización para Android', {
+          arrhythmiaStatus: combinedResult.arrhythmiaStatus,
+          type: lastArrhythmia.type,
+          timestamp: lastArrhythmia.timestamp,
+          datos: combinedResult.lastArrhythmiaData
+        });
+        
+        // Asegurar que el estado siempre refleje correctamente la arritmia en Android
+        if (!combinedResult.arrhythmiaStatus.includes("ARRITMIA DETECTADA")) {
+          combinedResult.arrhythmiaStatus = `ARRITMIA DETECTADA (${lastArrhythmia.type})|1`;
+          console.log('useVitalSignsProcessor: Estado de arritmia forzado para Android');
+        }
+      }
     }
     
     if (combinedResult.arrhythmiaStatus.includes("ARRITMIA DETECTADA")) {
-      console.log('useVitalSignsProcessor: ¡ARRITMIA DETECTADA!', {
+      console.log('useVitalSignsProcessor: ¡ARRITMIA DETECTADA EN RESULTADO FINAL!', {
         status: combinedResult.arrhythmiaStatus,
-        data: combinedResult.lastArrhythmiaData,
-        type: lastArrhythmia?.type
+        data: combinedResult.lastArrhythmiaData ? JSON.stringify(combinedResult.lastArrhythmiaData) : 'null',
+        type: lastArrhythmia?.type || 'desconocido'
       });
     }
     
