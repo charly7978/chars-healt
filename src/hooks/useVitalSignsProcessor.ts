@@ -134,7 +134,13 @@ export const useVitalSignsProcessor = () => {
     const combinedResult: VitalSignsResult = {
       ...vitalSignsResult,
       glucose: glucoseData,
-      arrhythmiaStatus: arrhythmiaStatus
+      arrhythmiaStatus: arrhythmiaStatus,
+      respiration: vitalSignsResult.respiration || {
+        rate: 0,
+        depth: 0,
+        regularity: 0
+      },
+      hasRespirationData: vitalSignsResult.hasRespirationData || false
     };
     
     // Verificación adicional para dispositivos Android
