@@ -1,3 +1,4 @@
+
 import { HeartBeatProcessor } from '../modules/HeartBeatProcessor';
 
 export interface ProcessedSignal {
@@ -36,7 +37,7 @@ export interface RespirationData {
 }
 
 export interface GlucoseData {
-  value: number;
+  value: number;     // Valor de glucosa en mg/dL
   trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
 }
 

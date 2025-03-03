@@ -1,3 +1,4 @@
+
 import { useState, useCallback, useRef } from 'react';
 import { VitalSignsProcessor } from '../modules/VitalSignsProcessor';
 import { useArrhythmiaAnalyzer } from './useArrhythmiaAnalyzer';
@@ -6,7 +7,6 @@ import { createVitalSignsDataCollector } from '../utils/vitalSignsDataCollector'
 import { useSignalHistory } from './useSignalHistory';
 import { VitalSignsRisk } from '../utils/vitalSignsRisk';
 import { RespirationProcessor } from '../modules/RespirationProcessor';
-import { GlucoseData } from '../types/signal';
 
 export const useVitalSignsProcessor = () => {
   // Core processor
@@ -18,9 +18,6 @@ export const useVitalSignsProcessor = () => {
   const dataCollector = useRef(createVitalSignsDataCollector());
   const signalHistory = useSignalHistory();
   const respirationProcessorRef = useRef<RespirationProcessor | null>(null);
-  
-  // Glucose tracking variables
-  const lastGlucoseRef = useRef<GlucoseData>({ value: 0, trend: 'unknown' });
   
   /**
    * Lazy initialization of the VitalSignsProcessor
@@ -68,7 +65,7 @@ export const useVitalSignsProcessor = () => {
       // Smoothing BPM here
       if (rrData.intervals && rrData.intervals.length > 0) {
         // Calculate raw BPM from intervals
-        const avgInterval = rrData.intervals.reduce((sum: number, val: number) => sum + val, 0) / rrData.intervals.length;
+        const avgInterval = rrData.intervals.reduce((sum, val) => sum + val, 0) / rrData.intervals.length;
         const rawBPM = Math.round(60000 / avgInterval);
         
         // Apply smoothing through processor
@@ -105,19 +102,9 @@ export const useVitalSignsProcessor = () => {
       dataCollector.current.addRespirationRate(respirationResult.rate);
     }
     
-    // Process glucose
-    const glucoseFromCollector = dataCollector.current.getAverageGlucose();
-    const glucoseTrend = dataCollector.current.getGlucoseTrend();
-    
-    if (glucoseFromCollector > 0) {
-      lastGlucoseRef.current = { 
-        value: glucoseFromCollector, 
-        trend: glucoseTrend 
-      };
-    }
-    
-    // Advanced arrhythmia analysis
+    // Advanced arrhythmia analysis - asegurarse de pasar los datos de amplitud si están disponibles
     if (rrData?.intervals && rrData.intervals.length >= 4) {
+      // Asegurarse de pasar los datos de amplitud al analizador de arritmias si están disponibles
       const arrhythmiaResult = arrhythmiaAnalyzer.processArrhythmia(rrData);
       
       if (arrhythmiaResult.detected) {
@@ -127,8 +114,7 @@ export const useVitalSignsProcessor = () => {
           arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus,
           lastArrhythmiaData: arrhythmiaResult.lastArrhythmiaData,
           respiration: respirationResult,
-          hasRespirationData: respirationProcessor.hasValidData(),
-          glucose: lastGlucoseRef.current
+          hasRespirationData: respirationProcessor.hasValidData()
         };
       }
       
@@ -137,8 +123,7 @@ export const useVitalSignsProcessor = () => {
         pressure: stabilizedBP,
         arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus,
         respiration: respirationResult,
-        hasRespirationData: respirationProcessor.hasValidData(),
-        glucose: lastGlucoseRef.current
+        hasRespirationData: respirationProcessor.hasValidData()
       };
     }
     
@@ -150,11 +135,10 @@ export const useVitalSignsProcessor = () => {
       pressure: stabilizedBP,
       arrhythmiaStatus,
       respiration: respirationResult,
-      hasRespirationData: respirationProcessor.hasValidData(),
-      glucose: lastGlucoseRef.current
+      hasRespirationData: respirationProcessor.hasValidData()
     };
   }, [getProcessor, getRespirationProcessor, arrhythmiaAnalyzer, signalHistory]);
-  
+
   /**
    * Reset all processors
    */
@@ -173,12 +157,9 @@ export const useVitalSignsProcessor = () => {
       respirationProcessorRef.current.reset();
     }
     
-    // Reset glucose tracking
-    lastGlucoseRef.current = { value: 0, trend: 'unknown' };
-    
     VitalSignsRisk.resetHistory();
     
-    console.log("Reseteo de detección de arritmias, presión arterial, respiración y glucosa");
+    console.log("Reseteo de detección de arritmias, presión arterial y respiración");
   }, [arrhythmiaAnalyzer, signalHistory]);
   
   /**
@@ -204,9 +185,6 @@ export const useVitalSignsProcessor = () => {
       respirationProcessorRef.current = null;
     }
     
-    // Reset glucose tracking
-    lastGlucoseRef.current = { value: 0, trend: 'unknown' };
-    
     VitalSignsRisk.resetHistory();
     
     // Force garbage collection if available
@@ -218,27 +196,11 @@ export const useVitalSignsProcessor = () => {
       }
     }
   }, [arrhythmiaAnalyzer, signalHistory]);
-  
-  /**
-   * Add glucose manual reading
-   */
-  const addGlucoseReading = useCallback((value: number) => {
-    if (value > 0) {
-      dataCollector.current.addGlucose(value);
-      lastGlucoseRef.current = { 
-        value, 
-        trend: dataCollector.current.getGlucoseTrend() 
-      };
-      return true;
-    }
-    return false;
-  }, []);
 
   return {
     processSignal,
     reset,
     cleanMemory,
-    addGlucoseReading,
     arrhythmiaCounter: arrhythmiaAnalyzer.arrhythmiaCounter,
     dataCollector: dataCollector.current
   };
