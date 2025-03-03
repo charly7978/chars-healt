@@ -164,18 +164,16 @@ const VitalSign: React.FC<VitalSignProps> = ({
 
   const getArrhythmiaRiskColor = (count: number): string => {
     if (count <= 0) return "#000000";
-    if (count <= 3) return "#F2FCE2";
-    if (count <= 6) return "#FEC6A1";
-    if (count <= 8) return "#F97316";
+    if (count <= 4) return "#FEC6A1";
+    if (count <= 7) return "#F97316";
     return "#DC2626";
   };
 
   const getArrhythmiaRiskLabel = (count: number): string => {
     if (count <= 0) return "";
-    if (count <= 3) return "RIESGO MÍNIMO";
-    if (count <= 6) return "RIESGO BAJO";
-    if (count <= 8) return "RIESGO MODERADO";
-    return "RIESGO ALTO";
+    if (count <= 4) return "ARRITMIA LEVE";
+    if (count <= 7) return "ARRITMIA MODERADA";
+    return "ARRITMIA SEVERA";
   };
 
   const getArrhythmiaDisplay = () => {
@@ -272,13 +270,13 @@ const VitalSign: React.FC<VitalSignProps> = ({
           <h3 className="text-white text-xs font-medium tracking-wider mb-2">{label}</h3>
           <div className="flex flex-col items-center gap-1">
             {isArrhythmiaDisplay && title && (
-              <span className="text-base font-bold tracking-wider" style={{ color: color || '#FFFFFF' }}>
+              <span className="text-sm font-bold tracking-wider" style={{ color: color || '#FFFFFF' }}>
                 {title}
               </span>
             )}
             <div className="flex items-baseline gap-1 justify-center">
               <span 
-                className={`${isArrhythmiaDisplay ? 'text-lg' : 'text-xl'} font-bold transition-colors duration-300 text-white`}
+                className={`${isArrhythmiaDisplay ? 'text-xl' : 'text-xl'} font-bold transition-colors duration-300 text-white`}
                 style={{ color: color || '#000000' }}
               >
                 {text}
