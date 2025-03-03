@@ -534,46 +534,28 @@ export const useVitalSignsProcessor = () => {
     }
     
     // Advanced arrhythmia analysis - ensure amplitude data is passed if available
+    let lastArrhythmiaData = null;
+    let arrhythmiaStatus = `SIN ARRITMIAS|${arrhythmiaAnalyzer.arrhythmiaCounter}`;
+    
     if (rrData?.intervals && rrData.intervals.length >= 4) {
       // Ensure amplitude data is passed to the arrhythmia analyzer if available
       const arrhythmiaResult = arrhythmiaAnalyzer.processArrhythmia(rrData);
+      arrhythmiaStatus = arrhythmiaResult.arrhythmiaStatus;
       
-      const vitalsData = {
-        spo2: result.spo2,
-        pressure: stabilizedBP,
-        arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus,
-        respiration: respirationResult,
-        hasRespirationData: respirationProcessor.hasValidData(),
-        glucose: glucoseData
-      };
-      
-      // Log the full vitals data for debugging
-      console.log("Raw vital signs data:", JSON.stringify(vitalsData));
-      
-      if (vitalsData.glucose === null) {
-        console.log("Glucose data from vitals: No hay datos de glucosa");
+      if (arrhythmiaResult.detected && arrhythmiaResult.lastArrhythmiaData) {
+        lastArrhythmiaData = arrhythmiaResult.lastArrhythmiaData;
       }
-      
-      if (arrhythmiaResult.detected) {
-        return {
-          ...vitalsData,
-          lastArrhythmiaData: arrhythmiaResult.lastArrhythmiaData
-        };
-      }
-      
-      return vitalsData;
     }
     
-    // If we already analyzed arrhythmias before, use the last state
-    const arrhythmiaStatus = `SIN ARRITMIAS|${arrhythmiaAnalyzer.arrhythmiaCounter}`;
-    
+    // Always return the same object structure with lastArrhythmiaData (which may be null)
     const vitalsData = {
       spo2: result.spo2,
       pressure: stabilizedBP,
       arrhythmiaStatus,
       respiration: respirationResult,
       hasRespirationData: respirationProcessor.hasValidData(),
-      glucose: glucoseData
+      glucose: glucoseData,
+      lastArrhythmiaData
     };
     
     // Log the full vitals data for debugging
