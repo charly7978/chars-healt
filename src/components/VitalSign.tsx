@@ -212,33 +212,25 @@ const VitalSign: React.FC<VitalSignProps> = ({
   };
 
   const renderGlucoseTrend = (trend?: string) => {
-    if (!trend || trend === 'unknown' || trend === 'stable') return null;
-    
-    let icon = '';
-    let color = '';
-    
-    switch (trend) {
-      case 'rising':
-        icon = '↗';
-        color = '#F97316';
-        break;
-      case 'falling':
-        icon = '↘';
-        color = '#3B82F6';
-        break;
-      case 'rising_rapidly':
-        icon = '⇑';
-        color = '#DC2626';
-        break;
-      case 'falling_rapidly':
-        icon = '⇓';
-        color = '#DC2626';
-        break;
-    }
-    
+    if (!trend || trend === 'unknown') return null;
+
+    const trendConfig = {
+      'stable': { icon: '⟷', color: 'text-green-500', label: 'Estable' },
+      'rising': { icon: '↗', color: 'text-yellow-500', label: 'Subiendo' },
+      'falling': { icon: '↘', color: 'text-yellow-500', label: 'Bajando' },
+      'rising_rapidly': { icon: '⇑', color: 'text-red-500', label: 'Subiendo rápido' },
+      'falling_rapidly': { icon: '⇓', color: 'text-red-500', label: 'Bajando rápido' }
+    };
+
+    const config = trendConfig[trend as keyof typeof trendConfig] || { icon: '•', color: 'text-gray-400', label: 'Desconocido' };
+
     return (
-      <span className="text-lg font-bold ml-1" style={{ color }}>
-        {icon}
+      <span 
+        className={`ml-1 ${config.color} text-lg font-bold`} 
+        title={config.label}
+        aria-label={config.label}
+      >
+        {config.icon}
       </span>
     );
   };
