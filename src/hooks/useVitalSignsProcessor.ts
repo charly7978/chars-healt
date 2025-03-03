@@ -35,12 +35,11 @@ export const useVitalSignsProcessor = () => {
   }, []);
 
   const processSignal = useCallback((ppgValue: number, rrData?: any) => {
-    // IMPORTANTE: primero procesar la señal principal con el procesador original
-    // sin ninguna modificación para mantener la detección de arritmias intacta
+    // Procesar la señal principal con el procesador original
+    // Este procesador ahora tiene el algoritmo simplificado de arritmias
     const vitalSignsResult = processor.processSignal(ppgValue, rrData);
     
-    // DESPUÉS, como paso separado, procesar los datos de glucosa
-    // sin interferir con el procesamiento principal
+    // Procesar datos de glucosa como paso separado
     const glucoseResult = glucoseProcessor.processSignal(ppgValue);
     
     // Preparar datos de glucosa
@@ -50,14 +49,13 @@ export const useVitalSignsProcessor = () => {
       confidence: glucoseResult.confidence || 0
     };
     
-    // Combinar resultados PRESERVANDO todos los datos originales
-    // especialmente los relacionados con arritmias
+    // Combinar resultados manteniendo el formato esperado por el display
     const combinedResult: VitalSignsResult = {
       ...vitalSignsResult,
       glucose: glucoseData
     };
     
-    // Asegurarse de que lastArrhythmiaData se preserve exactamente como viene del procesador original
+    // Asegurarse de que lastArrhythmiaData se preserve exactamente
     if (vitalSignsResult.lastArrhythmiaData) {
       combinedResult.lastArrhythmiaData = vitalSignsResult.lastArrhythmiaData;
     }
@@ -68,7 +66,7 @@ export const useVitalSignsProcessor = () => {
     // Guardar datos combinados en estado
     setVitalSignsData(combinedResult);
     
-    // Importante: verificamos si hay arritmias en el resultado
+    // Log para debugging de arritmias
     if (vitalSignsResult.arrhythmiaStatus && vitalSignsResult.arrhythmiaStatus.includes('ARRITMIA DETECTADA')) {
       console.log('¡ARRITMIA DETECTADA!', vitalSignsResult.lastArrhythmiaData);
     }
