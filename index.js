@@ -178,29 +178,33 @@ const Index = () => {
 
   useEffect(() => {
     if (lastSignal && lastSignal.fingerDetected && isMonitoring) {
-      const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
-      setHeartRate(heartBeatResult.bpm);
-      
-      const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
-      
-      if (vitals) {
-        console.log("Vital signs data details:", {
-          spo2: vitals.spo2,
-          pressure: vitals.pressure,
-          arrhythmia: vitals.arrhythmiaStatus,
-          respiration: vitals.respiration,
-          glucose: vitals.glucose ? `${vitals.glucose.value} mg/dL (${vitals.glucose.trend})` : 'No data'
-        });
+      try {
+        const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
+        setHeartRate(heartBeatResult.bpm);
         
-        setVitalSigns(vitals);
-        setArrhythmiaCount(vitals.arrhythmiaStatus.split('|')[1] || "--");
+        const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
         
-        if (vitals.glucose && vitals.glucose.value > 0) {
-          console.log(`Glucose data received: ${vitals.glucose.value} mg/dL, trend: ${vitals.glucose.trend}`);
+        if (vitals) {
+          console.log("Vital signs data details:", {
+            spo2: vitals.spo2,
+            pressure: vitals.pressure,
+            arrhythmia: vitals.arrhythmiaStatus,
+            respiration: vitals.respiration,
+            glucose: vitals.glucose ? `${vitals.glucose.value} mg/dL (${vitals.glucose.trend})` : 'No data'
+          });
+          
+          setVitalSigns(vitals);
+          setArrhythmiaCount(vitals.arrhythmiaStatus.split('|')[1] || "--");
+          
+          if (vitals.glucose && vitals.glucose.value > 0) {
+            console.log(`Glucose data received: ${vitals.glucose.value} mg/dL, trend: ${vitals.glucose.trend}`);
+          }
         }
+        
+        setSignalQuality(lastSignal.quality);
+      } catch (error) {
+        console.error("Error processing signal:", error);
       }
-      
-      setSignalQuality(lastSignal.quality);
     }
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
 

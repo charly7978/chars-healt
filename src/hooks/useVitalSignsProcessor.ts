@@ -1,4 +1,3 @@
-
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { VitalSignsProcessor } from '../modules/VitalSignsProcessor';
 import { useArrhythmiaAnalyzer } from './useArrhythmiaAnalyzer';
@@ -8,6 +7,7 @@ import { useSignalHistory } from './useSignalHistory';
 import { VitalSignsRisk } from '../utils/vitalSignsRisk';
 import { RespirationProcessor } from '../modules/RespirationProcessor';
 import { GlucoseData } from '../types/signal';
+import { GlucoseProcessor } from '../modules/GlucoseProcessor';
 
 // Constants for advanced glucose detection algorithm
 const BASELINE_R_VALUE = 0.92; // Reference R value for calculation
@@ -47,6 +47,7 @@ export const useVitalSignsProcessor = () => {
   const dataCollector = useRef(createVitalSignsDataCollector());
   const signalHistory = useSignalHistory();
   const respirationProcessorRef = useRef<RespirationProcessor | null>(null);
+  const glucoseProcessorRef = useRef<GlucoseProcessor | null>(null);
   
   // Data for glucose analysis
   const glucoseBufferRef = useRef<number[]>([]);
@@ -89,6 +90,15 @@ export const useVitalSignsProcessor = () => {
       respirationProcessorRef.current = new RespirationProcessor();
     }
     return respirationProcessorRef.current;
+  }, []);
+  
+  // Initialization of glucose processor
+  const getGlucoseProcessor = useCallback(() => {
+    if (!glucoseProcessorRef.current) {
+      console.log('useVitalSignsProcessor: Creating GlucoseProcessor instance');
+      glucoseProcessorRef.current = new GlucoseProcessor();
+    }
+    return glucoseProcessorRef.current;
   }, []);
   
   /**
@@ -406,6 +416,7 @@ export const useVitalSignsProcessor = () => {
   const processSignal = useCallback((value: number, rrData?: { intervals: number[], lastPeakTime: number | null, amplitudes?: number[] }) => {
     const processor = getProcessor();
     const respirationProcessor = getRespirationProcessor();
+    const glucoseProcessor = getGlucoseProcessor();
     const currentTime = Date.now();
     
     // Store data for analysis
@@ -491,8 +502,14 @@ export const useVitalSignsProcessor = () => {
     const signalQuality = signalHistory.getSignalQuality();
     const stabilizedBP = bloodPressureStabilizer.current.stabilizeBloodPressure(result.pressure, signalQuality);
     
-    // Process glucose data using advanced algorithm
-    const glucoseData = processGlucoseSignal(value, signalQuality);
+    // Process glucose data using simplified direct approach
+    const glucoseData = glucoseProcessor.calculateGlucose(
+      signalHistory.getRecentSignals(60), // Use last 60 samples
+      signalQuality
+    );
+    
+    console.log('Glucose data from processor:', glucoseData ? 
+      `${glucoseData.value} mg/dL (${glucoseData.trend})` : 'No data available');
     
     // Collect data for final averages
     if (result.spo2 > 0) {
@@ -545,7 +562,7 @@ export const useVitalSignsProcessor = () => {
       hasRespirationData: respirationProcessor.hasValidData(),
       glucose: glucoseData
     };
-  }, [getProcessor, getRespirationProcessor, arrhythmiaAnalyzer, signalHistory, processGlucoseSignal]);
+  }, [getProcessor, getRespirationProcessor, getGlucoseProcessor, arrhythmiaAnalyzer, signalHistory]);
 
   /**
    * Reset all processors
@@ -563,6 +580,10 @@ export const useVitalSignsProcessor = () => {
     
     if (respirationProcessorRef.current) {
       respirationProcessorRef.current.reset();
+    }
+    
+    if (glucoseProcessorRef.current) {
+      glucoseProcessorRef.current.reset();
     }
     
     // Reset glucose data
@@ -608,6 +629,11 @@ export const useVitalSignsProcessor = () => {
     if (respirationProcessorRef.current) {
       respirationProcessorRef.current.reset();
       respirationProcessorRef.current = null;
+    }
+    
+    if (glucoseProcessorRef.current) {
+      glucoseProcessorRef.current.reset();
+      glucoseProcessorRef.current = null;
     }
     
     // Reset glucose data
