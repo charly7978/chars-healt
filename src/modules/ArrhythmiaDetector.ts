@@ -1,3 +1,4 @@
+
 /**
  * ArrhythmiaDetector.ts
  * 
@@ -8,21 +9,30 @@
 export class ArrhythmiaDetector {
   // Constants optimized specifically for premature beat detection
   private readonly RR_WINDOW_SIZE = 5;
-  private readonly LEARNING_PERIOD = 3000; // Extended learning period for better baseline
+  private readonly LEARNING_PERIOD = 4000; // Extended learning period for better baseline (increased from 3000)
   
-  // Thresholds focused specifically on premature beat patterns
-  private readonly PREMATURE_BEAT_THRESHOLD = 0.70; // Timing threshold for premature beats
-  private readonly AMPLITUDE_RATIO_THRESHOLD = 0.65; // Premature beats typically have 65% or less amplitude
-  private readonly NORMAL_PEAK_MIN_THRESHOLD = 0.90; // Higher threshold for normal beats
+  // Enhanced thresholds focused specifically on premature beat patterns
+  private readonly PREMATURE_BEAT_THRESHOLD = 0.65; // More restrictive timing threshold (decreased from 0.70)
+  private readonly AMPLITUDE_RATIO_THRESHOLD = 0.60; // More restrictive amplitude threshold (decreased from 0.65)
+  private readonly NORMAL_PEAK_MIN_THRESHOLD = 0.92; // Higher threshold for normal beats (increased from 0.90)
   
   // Rhythm deviation threshold specifically for premature beat timing
-  private readonly RHYTHM_DEVIATION_THRESHOLD = 0.30; // Detect early beats (30% earlier than expected)
+  private readonly RHYTHM_DEVIATION_THRESHOLD = 0.35; // More restrictive threshold (increased from 0.30)
   
-  // Minimum confidence for detection to reduce false positives
-  private readonly MIN_CONFIDENCE_THRESHOLD = 0.85; // Increased confidence threshold
+  // Higher minimum confidence for detection to reduce false positives
+  private readonly MIN_CONFIDENCE_THRESHOLD = 0.90; // Increased from 0.85 for higher precision
   
   // Pattern recognition cooldown to prevent multiple detections of the same event
-  private readonly DETECTION_COOLDOWN = 650; // ms between detections
+  private readonly DETECTION_COOLDOWN = 800; // Increased from 650ms to avoid multiple detections
+  
+  // New: Minimum consecutive normal beats before considering premature beat detection
+  private readonly MIN_NORMAL_BEATS_SEQUENCE = 3;
+  
+  // New: Minimum RR interval for a valid heartbeat (prevents ultra-fast sequences)
+  private readonly MIN_VALID_RR_INTERVAL = 500; // 500ms (120 BPM max)
+  
+  // New: Maximum RR ratio change that can be considered normal variation
+  private readonly MAX_NORMAL_RR_VARIATION = 0.15; // 15% variation is still normal
 
   // State variables
   private rrIntervals: number[] = [];
@@ -92,11 +102,11 @@ export class ArrhythmiaDetector {
       if (timeSinceStart > this.LEARNING_PERIOD) {
         this.isLearningPhase = false;
         
-        // Calculate baseline values after learning phase
+        // Calculate baseline values after learning phase with improved methods
         if (this.amplitudes.length > 5) {
-          // Use upper median for normal amplitude reference
+          // Improved amplitude baseline calculation - use upper third for better reference
           const sortedAmplitudes = [...this.amplitudes].sort((a, b) => b - a);
-          const normalCount = Math.max(3, Math.ceil(sortedAmplitudes.length * 0.33));
+          const normalCount = Math.max(4, Math.ceil(sortedAmplitudes.length * 0.4)); // Increased from 0.33 to 0.4
           const topAmplitudes = sortedAmplitudes.slice(0, normalCount);
           this.avgNormalAmplitude = topAmplitudes.reduce((a, b) => a + b, 0) / topAmplitudes.length;
           
@@ -105,22 +115,27 @@ export class ArrhythmiaDetector {
           }
         }
         
-        // Calculate normal RR interval reference
+        // Improved RR interval baseline calculation - more robust outlier handling
         if (this.rrIntervals.length > 5) {
-          // Sort RR intervals and remove outliers
-          const sortedRR = [...this.rrIntervals].sort((a, b) => a - b);
-          const cutSize = Math.max(1, Math.floor(sortedRR.length * 0.1));
-          const filteredRR = sortedRR.slice(cutSize, sortedRR.length - cutSize);
+          // Filter out physiologically impossible intervals first
+          const validIntervals = this.rrIntervals.filter(rr => rr >= 500 && rr <= 1500);
           
-          // Use median as reference
-          const medianIndex = Math.floor(filteredRR.length / 2);
-          this.baseRRInterval = filteredRR[medianIndex];
-          
-          // Learn rhythm pattern
-          this.learnRhythmPattern();
-          
-          if (this.DEBUG_MODE) {
-            console.log('ArrhythmiaDetector - Base RR interval:', this.baseRRInterval);
+          if (validIntervals.length > 3) {
+            // Sort RR intervals and remove outliers more aggressively
+            const sortedRR = [...validIntervals].sort((a, b) => a - b);
+            const cutSize = Math.max(1, Math.floor(sortedRR.length * 0.15)); // Increased from 0.1 to 0.15
+            const filteredRR = sortedRR.slice(cutSize, sortedRR.length - cutSize);
+            
+            // Use median as reference for robustness
+            const medianIndex = Math.floor(filteredRR.length / 2);
+            this.baseRRInterval = filteredRR[medianIndex];
+            
+            // Learn rhythm pattern
+            this.learnRhythmPattern();
+            
+            if (this.DEBUG_MODE) {
+              console.log('ArrhythmiaDetector - Base RR interval:', this.baseRRInterval);
+            }
           }
         }
       }
@@ -133,16 +148,17 @@ export class ArrhythmiaDetector {
   private learnRhythmPattern(): void {
     if (this.rrIntervals.length < 4) return;
     
-    // Use last 4 intervals that aren't too different from each other
-    const lastIntervals = this.rrIntervals.slice(-4);
+    // Improved pattern learning - use last 5 (increased from 4) intervals with stricter filtering
+    const lastIntervals = this.rrIntervals.slice(-5);
     const avgInterval = lastIntervals.reduce((sum, val) => sum + val, 0) / lastIntervals.length;
     
-    // Filter to include only intervals within 20% of the average
+    // Filter to include only intervals within 15% of the average (reduced from 20%)
     const normalIntervals = lastIntervals.filter(interval => 
-      Math.abs(interval - avgInterval) / avgInterval < 0.2
+      Math.abs(interval - avgInterval) / avgInterval < this.MAX_NORMAL_RR_VARIATION
     );
     
-    if (normalIntervals.length >= 3) {
+    // Require more valid intervals for a robust pattern
+    if (normalIntervals.length >= 4) { // Increased from 3 to 4
       this.rhythmPattern = [...normalIntervals];
       
       // Calculate next expected beat time
@@ -164,8 +180,8 @@ export class ArrhythmiaDetector {
 
     const currentTime = Date.now();
     
-    // Store valid intervals within physiological range (30-200 BPM)
-    this.rrIntervals = intervals.filter(interval => interval >= 300 && interval <= 2000);
+    // Enhanced filtering: Store valid intervals within physiological range (40-120 BPM)
+    this.rrIntervals = intervals.filter(interval => interval >= this.MIN_VALID_RR_INTERVAL && interval <= 1500);
     this.lastPeakTime = lastPeakTime;
     
     // Update expected next beat time based on rhythm pattern
@@ -184,29 +200,32 @@ export class ArrhythmiaDetector {
       }
     }
     
-    // Store peak amplitude if provided
+    // Store and process peak amplitude if provided
     if (typeof peakAmplitude === 'number' && !isNaN(peakAmplitude) && peakAmplitude > 0) {
       this.amplitudes.push(Math.abs(peakAmplitude));
       
-      // Update peak sequence
+      // Update peak sequence with improved classification
       if (lastPeakTime) {
         // Initial classification as unknown
         let peakType: 'normal' | 'premature' | 'unknown' = 'unknown';
         
-        // Classify based on amplitude if reference is available
+        // Enhanced classification based on amplitude if reference is available
         if (this.avgNormalAmplitude > 0 && !this.isLearningPhase) {
           const ratio = Math.abs(peakAmplitude) / this.avgNormalAmplitude;
           
+          // More strict classification criteria
           // Classify as normal if close to or above normal average
           if (ratio >= this.NORMAL_PEAK_MIN_THRESHOLD) {
             peakType = 'normal';
             this.consecutiveNormalBeats++;
           } 
-          // Classify as premature if significantly smaller
-          else if (ratio <= this.AMPLITUDE_RATIO_THRESHOLD) {
+          // Classify as premature only if significantly smaller AND we have established normal beats
+          else if (ratio <= this.AMPLITUDE_RATIO_THRESHOLD && this.consecutiveNormalBeats >= this.MIN_NORMAL_BEATS_SEQUENCE) {
             peakType = 'premature';
             this.consecutiveNormalBeats = 0;
           } else {
+            // More careful with borderline cases - mark as unknown
+            peakType = 'unknown';
             this.consecutiveNormalBeats = 0;
           }
         }
@@ -237,6 +256,8 @@ export class ArrhythmiaDetector {
    * using two complementary methods:
    * 1. Rhythm-based detection: beats occurring earlier than the expected rhythm
    * 2. Morphology-based detection: characteristic small peaks between normal peaks
+   * 
+   * Enhanced with additional validation to reduce false positives
    */
   detect(): {
     detected: boolean;
@@ -246,6 +267,18 @@ export class ArrhythmiaDetector {
   } {
     // Skip detection during learning phase or with insufficient data
     if (this.rrIntervals.length < 3 || this.amplitudes.length < 3 || this.isLearningPhase) {
+      return {
+        detected: false,
+        count: this.arrhythmiaCount,
+        status: this.arrhythmiaCount > 0 ? 
+          `ARRITMIA DETECTADA|${this.arrhythmiaCount}` : 
+          `SIN ARRITMIAS|${this.arrhythmiaCount}`,
+        data: null
+      };
+    }
+
+    // Require sufficient consecutive normal beats before detecting premature beats
+    if (this.consecutiveNormalBeats < this.MIN_NORMAL_BEATS_SEQUENCE) {
       return {
         detected: false,
         count: this.arrhythmiaCount,
@@ -269,11 +302,12 @@ export class ArrhythmiaDetector {
     // Look for premature beats using timing and rhythm pattern
     let prematureBeatDetected = false;
     let detectionConfidence = 0;
+    let detectionMethod = "";
     
     // METHOD 1: RHYTHM-BASED DETECTION
     // Check if the last beat occurred significantly earlier than expected
     if (this.lastPeakTime && this.expectedNextBeatTime > 0 && 
-        this.peakSequence.length >= 3 && this.consecutiveNormalBeats >= 3) {
+        this.peakSequence.length >= 3 && this.consecutiveNormalBeats >= this.MIN_NORMAL_BEATS_SEQUENCE) {
       
       // Calculate how early the beat occurred compared to expected time
       const timeDifference = this.lastPeakTime - this.expectedNextBeatTime;
@@ -284,17 +318,25 @@ export class ArrhythmiaDetector {
         // Also check if amplitude is smaller (characteristic of premature beats)
         const lastPeak = this.peakSequence[this.peakSequence.length - 1];
         const previousPeak = this.peakSequence[this.peakSequence.length - 2];
+        const twoBeforePeak = this.peakSequence.length > 2 ? this.peakSequence[this.peakSequence.length - 3] : null;
         
-        if (lastPeak.amplitude < previousPeak.amplitude * this.AMPLITUDE_RATIO_THRESHOLD) {
+        // Enhanced criteria: require a significantly smaller amplitude AND verify it's smaller than both neighbors
+        const isAmplitudeSmaller = lastPeak.amplitude < previousPeak.amplitude * this.AMPLITUDE_RATIO_THRESHOLD;
+        const isConsistentlySmaller = twoBeforePeak ? 
+            (lastPeak.amplitude < twoBeforePeak.amplitude * this.AMPLITUDE_RATIO_THRESHOLD) : true;
+        
+        if (isAmplitudeSmaller && isConsistentlySmaller) {
           prematureBeatDetected = true;
-          detectionConfidence = 0.88 + (relativeDeviation * 0.1); // Higher confidence for more premature beats
+          detectionConfidence = 0.90 + (relativeDeviation * 0.05); // Reduced impact of deviation
+          detectionMethod = "rhythm";
           
           if (this.DEBUG_MODE) {
             console.log('ArrhythmiaDetector - Premature beat detected by rhythm pattern', {
               expected: this.expectedNextBeatTime,
               actual: this.lastPeakTime,
               deviation: relativeDeviation,
-              amplitudeRatio: lastPeak.amplitude / previousPeak.amplitude
+              amplitudeRatio: lastPeak.amplitude / previousPeak.amplitude,
+              confidence: detectionConfidence
             });
           }
         }
@@ -306,11 +348,12 @@ export class ArrhythmiaDetector {
     if (!prematureBeatDetected && this.peakSequence.length >= 3) {
       const lastThreePeaks = this.peakSequence.slice(-3);
       
-      // Explicitly classify peaks by amplitude
+      // Improved peak classification with stricter criteria
       for (let i = 0; i < lastThreePeaks.length; i++) {
         const peak = lastThreePeaks[i];
         const ratio = peak.amplitude / this.avgNormalAmplitude;
         
+        // More decisive classification with narrower "unknown" zone
         if (ratio >= this.NORMAL_PEAK_MIN_THRESHOLD) {
           lastThreePeaks[i].type = 'normal';
         } else if (ratio <= this.AMPLITUDE_RATIO_THRESHOLD) {
@@ -320,32 +363,51 @@ export class ArrhythmiaDetector {
         }
       }
       
-      // Check for normal-premature-normal pattern
+      // Check for normal-premature-normal pattern with strict verification
       if (
         lastThreePeaks[0].type === 'normal' && 
         lastThreePeaks[1].type === 'premature' && 
         lastThreePeaks[2].type === 'normal'
       ) {
-        // Verify amplitude relationships match expected pattern
+        // Enhanced amplitude verification
         const firstPeakRatio = lastThreePeaks[0].amplitude / this.avgNormalAmplitude;
         const secondPeakRatio = lastThreePeaks[1].amplitude / this.avgNormalAmplitude;
         const thirdPeakRatio = lastThreePeaks[2].amplitude / this.avgNormalAmplitude;
         
-        // Premature beat must be significantly smaller than surrounding normal beats
-        if (secondPeakRatio <= this.AMPLITUDE_RATIO_THRESHOLD && 
-            secondPeakRatio < firstPeakRatio * 0.75 && 
-            secondPeakRatio < thirdPeakRatio * 0.75 && 
-            firstPeakRatio >= this.NORMAL_PEAK_MIN_THRESHOLD && 
-            thirdPeakRatio >= this.NORMAL_PEAK_MIN_THRESHOLD) {
+        // Stricter criteria: premature beat must be significantly smaller than both surrounding normal beats
+        // and normal beats must be clearly above the normal threshold
+        if (
+            secondPeakRatio <= this.AMPLITUDE_RATIO_THRESHOLD && 
+            secondPeakRatio < firstPeakRatio * 0.70 && // More strict (from 0.75 to 0.70)
+            secondPeakRatio < thirdPeakRatio * 0.70 && // More strict (from 0.75 to 0.70)
+            firstPeakRatio >= this.NORMAL_PEAK_MIN_THRESHOLD * 1.05 && // Must be clearly normal
+            thirdPeakRatio >= this.NORMAL_PEAK_MIN_THRESHOLD * 1.05     // Must be clearly normal
+        ) {
           
-          prematureBeatDetected = true;
-          detectionConfidence = 0.92; // High confidence for this classic pattern
+          // Additional timing check: verify that time intervals match the premature pattern
+          // Get time differences
+          const firstToSecond = lastThreePeaks[1].time - lastThreePeaks[0].time;
+          const secondToThird = lastThreePeaks[2].time - lastThreePeaks[1].time;
           
-          if (this.DEBUG_MODE) {
-            console.log('ArrhythmiaDetector - Premature beat detected by morphology pattern', {
-              prematureRatio: secondPeakRatio,
-              normalRatios: [firstPeakRatio, thirdPeakRatio]
-            });
+          // In a classic premature pattern, firstToSecond is shorter than normal and secondToThird is longer
+          if (
+              this.baseRRInterval > 0 && 
+              firstToSecond < this.baseRRInterval * this.PREMATURE_BEAT_THRESHOLD && 
+              secondToThird > this.baseRRInterval * 1.05
+          ) {
+            prematureBeatDetected = true;
+            detectionConfidence = 0.95; // High confidence for this classic verified pattern
+            detectionMethod = "morphology";
+            
+            if (this.DEBUG_MODE) {
+              console.log('ArrhythmiaDetector - Premature beat detected by morphology pattern', {
+                prematureRatio: secondPeakRatio,
+                normalRatios: [firstPeakRatio, thirdPeakRatio],
+                timeIntervals: [firstToSecond, secondToThird],
+                baseInterval: this.baseRRInterval,
+                confidence: detectionConfidence
+              });
+            }
           }
         }
       }
@@ -358,7 +420,7 @@ export class ArrhythmiaDetector {
     
     // Count arrhythmia only if:
     // 1. A premature beat was detected
-    // 2. Confidence exceeds minimum threshold
+    // 2. Confidence exceeds higher minimum threshold
     // 3. Enough time has passed since last detection to avoid duplicates
     if (prematureBeatDetected && 
         detectionConfidence >= this.MIN_CONFIDENCE_THRESHOLD && 
@@ -377,6 +439,7 @@ export class ArrhythmiaDetector {
         console.log('ArrhythmiaDetector - NEW ARRHYTHMIA COUNTED:', {
           count: this.arrhythmiaCount,
           confidence: detectionConfidence,
+          method: detectionMethod,
           timestamp: new Date(currentTime).toISOString(),
           peakSequence: this.peakSequence.slice(-5).map(p => ({
             type: p.type,
