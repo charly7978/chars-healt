@@ -1,6 +1,7 @@
 
 import { useState, useRef, useCallback } from 'react';
 import { HeartBeatProcessor } from '../modules/HeartBeatProcessor';
+import { HeartBeatResult } from '../types/signal';
 
 export const useHeartBeatProcessor = () => {
   const [bpm, setBpm] = useState(0);
@@ -43,7 +44,8 @@ export const useHeartBeatProcessor = () => {
         bpm: result.bpm,
         confidence: result.confidence,
         isPeak: result.isPeak,
-        rrData
+        rrData,
+        amplitude: result.amplitude
       };
     } catch (error) {
       console.error('Error processing signal:', error);
@@ -51,7 +53,8 @@ export const useHeartBeatProcessor = () => {
         bpm: 0,
         confidence: 0,
         isPeak: false,
-        rrData: { intervals: [], lastPeakTime: null }
+        rrData: { intervals: [], lastPeakTime: null },
+        amplitude: undefined
       };
     }
   }, [getProcessor]);

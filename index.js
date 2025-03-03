@@ -179,8 +179,13 @@ const Index = () => {
       const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
       setHeartRate(heartBeatResult.bpm);
       
+      // Pass the heart beat result to the vital signs processor
       const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
+      
       if (vitals) {
+        // Log respiration data to debug
+        console.log("Respiration data:", vitals.respiration, "hasData:", vitals.hasRespirationData);
+        
         setVitalSigns(vitals);
         setArrhythmiaCount(vitals.arrhythmiaStatus.split('|')[1] || "--");
       }
@@ -233,20 +238,24 @@ const Index = () => {
                 label="FRECUENCIA CARDÍACA"
                 value={heartRate || "--"}
                 unit="BPM"
+                isFinalReading={heartRate > 0 && elapsedTime >= 15}
               />
               <VitalSign 
                 label="SPO2"
                 value={vitalSigns.spo2 || "--"}
                 unit="%"
+                isFinalReading={vitalSigns.spo2 > 0 && elapsedTime >= 15}
               />
               <VitalSign 
                 label="PRESIÓN ARTERIAL"
                 value={vitalSigns.pressure}
                 unit="mmHg"
+                isFinalReading={vitalSigns.pressure !== "--/--" && elapsedTime >= 15}
               />
               <VitalSign 
                 label="ARRITMIAS"
                 value={vitalSigns.arrhythmiaStatus}
+                isFinalReading={heartRate > 0 && elapsedTime >= 15}
               />
               <VitalSign 
                 label="RESPIRACIÓN"
@@ -254,9 +263,18 @@ const Index = () => {
                 unit="RPM"
                 secondaryValue={vitalSigns.hasRespirationData ? vitalSigns.respiration.depth : "--"}
                 secondaryUnit="Prof."
+                isFinalReading={vitalSigns.hasRespirationData && elapsedTime >= 15}
               />
             </div>
           </div>
+
+          {/* Debugging Info */}
+          {isMonitoring && (
+            <div className="absolute bottom-[150px] left-0 right-0 text-center z-30 text-xs text-gray-400">
+              <span>Resp Data: {vitalSigns.hasRespirationData ? 'Disponible' : 'No disponible'} | 
+              Rate: {vitalSigns.respiration.rate} RPM | Depth: {vitalSigns.respiration.depth}</span>
+            </div>
+          )}
 
           {isMonitoring && (
             <div className="absolute bottom-40 left-0 right-0 text-center z-30">

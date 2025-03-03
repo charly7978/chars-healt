@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 
@@ -34,8 +35,8 @@ const VitalSignDetail: React.FC<VitalSignDetailProps> = ({
 
   useEffect(() => {
     // Get relevant information based on the vital sign type and value
-    setInfo(getVitalSignInfo(type, value, riskLevel));
-  }, [type, value, riskLevel]);
+    setInfo(getVitalSignInfo(type, value, riskLevel, secondaryValue));
+  }, [type, value, riskLevel, secondaryValue]);
 
   return (
     <div className="fixed inset-0 bg-black text-white flex flex-col animate-fade-in z-50">
@@ -113,7 +114,8 @@ const getRiskBadgeColor = (riskLevel: string): string => {
 const getVitalSignInfo = (
   type: 'heartRate' | 'spo2' | 'bloodPressure' | 'arrhythmia' | 'respiration',
   value: string | number,
-  riskLevel?: string
+  riskLevel?: string,
+  secondaryValue?: string | number
 ) => {
   let info = {
     description: '',

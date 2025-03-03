@@ -36,6 +36,15 @@ export interface RespirationData {
   regularity: number; // Regularidad (0-100)
 }
 
+export interface HeartBeatResult {
+  bpm: number;
+  confidence: number;
+  isPeak: boolean;
+  filteredValue: number;
+  arrhythmiaCount: number;
+  amplitude?: number;
+}
+
 declare global {
   interface Window {
     heartBeatProcessor: HeartBeatProcessor;
