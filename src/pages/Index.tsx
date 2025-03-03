@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -20,6 +21,8 @@ interface VitalSigns {
   };
   hasRespirationData: boolean;
   glucose: number;
+  glucoseTrend?: 'rising' | 'falling' | 'stable';
+  glucoseConfidence?: number;
 }
 
 const Index = () => {
@@ -56,6 +59,7 @@ const Index = () => {
   } | null>(null);
   const [permissionsGranted, setPermissionsGranted] = useState(false);
   const measurementTimerRef = useRef<number | null>(null);
+  const isStartingRef = useRef(false); // Prevent multiple rapid starts
   
   const allHeartRateValuesRef = useRef<number[]>([]);
   const allSpo2ValuesRef = useRef<number[]>([]);
@@ -191,27 +195,44 @@ const Index = () => {
   };
 
   const startMonitoring = () => {
+    if (isStartingRef.current) {
+      console.log("Already starting measurement, ignoring duplicate call");
+      return;
+    }
+    
     if (!permissionsGranted) {
       console.log("No se puede iniciar sin permisos");
       return;
     }
     
-    if (!isMonitoring && lastSignal?.quality < 50) {
-      console.log("Señal insuficiente para iniciar medición", lastSignal?.quality);
-      toast.warning("Calidad de señal insuficiente. Posicione bien su dedo en la cámara.", {
-        duration: 3000,
-      });
+    if (isMonitoring) {
+      console.log("Already monitoring, stopping instead");
+      stopMonitoringOnly();
       return;
     }
     
-    if (isMonitoring) {
-      stopMonitoringOnly();
-    } else {
-      prepareProcessorsOnly();
-      
+    console.log("Starting new measurement");
+    isStartingRef.current = true;
+    
+    // Check signal quality only if we have a signal
+    if (lastSignal && lastSignal.quality < 50) {
+      console.log("Señal insuficiente para iniciar medición", lastSignal.quality);
+      toast.warning("Calidad de señal insuficiente. Posicione bien su dedo en la cámara.", {
+        duration: 3000,
+      });
+      isStartingRef.current = false;
+      return;
+    }
+    
+    prepareProcessorsOnly();
+    
+    // First start the camera and processors
+    setIsCameraOn(true);
+    startProcessing();
+    
+    // Then set monitoring state after a brief delay to avoid race conditions
+    setTimeout(() => {
       setIsMonitoring(true);
-      setIsCameraOn(true);
-      startProcessing();
       setElapsedTime(0);
       setMeasurementComplete(false);
       
@@ -237,7 +258,9 @@ const Index = () => {
           return prev + 1;
         });
       }, 1000);
-    }
+      
+      isStartingRef.current = false;
+    }, 200);
   };
 
   const prepareProcessorsOnly = () => {
@@ -251,10 +274,13 @@ const Index = () => {
   };
 
   const stopMonitoringOnly = () => {
-    try {
-      console.log("Deteniendo SOLO monitorización (displays intactos)");
-      
-      setIsMonitoring(false);
+    console.log("Stopping monitoring");
+    
+    // First set state variables
+    setIsMonitoring(false);
+    
+    // Then stop processing with slight delay to avoid race conditions
+    setTimeout(() => {
       setIsCameraOn(false);
       stopProcessing();
       setMeasurementComplete(true);
@@ -289,15 +315,7 @@ const Index = () => {
         clearInterval(measurementTimerRef.current);
         measurementTimerRef.current = null;
       }
-    } catch (error) {
-      console.error("Error en stopMonitoringOnly:", error);
-      if (measurementTimerRef.current) {
-        clearInterval(measurementTimerRef.current);
-        measurementTimerRef.current = null;
-      }
-      setIsMonitoring(false);
-      setIsCameraOn(false);
-    }
+    }, 100);
   };
 
   const handleReset = () => {
@@ -343,8 +361,12 @@ const Index = () => {
   };
 
   const handleStreamReady = (stream: MediaStream) => {
-    if (!isMonitoring) return;
+    if (!isMonitoring || !isCameraOn) {
+      console.log("Stream ready but not monitoring, ignoring");
+      return;
+    }
     
+    console.log("Stream ready, starting frame processing");
     const videoTrack = stream.getVideoTracks()[0];
     const imageCapture = new ImageCapture(videoTrack);
     
@@ -362,7 +384,7 @@ const Index = () => {
     }
     
     const processImage = async () => {
-      if (!isMonitoring) return;
+      if (!isMonitoring || !isCameraOn) return;
       
       try {
         const frame = await imageCapture.grabFrame();
@@ -372,12 +394,12 @@ const Index = () => {
         const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
         processFrame(imageData);
         
-        if (isMonitoring) {
+        if (isMonitoring && isCameraOn) {
           requestAnimationFrame(processImage);
         }
       } catch (error) {
         console.error("Error capturando frame:", error);
-        if (isMonitoring) {
+        if (isMonitoring && isCameraOn) {
           requestAnimationFrame(processImage);
         }
       }
@@ -551,7 +573,9 @@ const Index = () => {
             if (vitals.glucose > 0) {
               setVitalSigns(current => ({
                 ...current,
-                glucose: vitals.glucose
+                glucose: vitals.glucose,
+                glucoseTrend: vitals.glucoseTrend,
+                glucoseConfidence: vitals.glucoseConfidence
               }));
               allGlucoseValuesRef.current.push(vitals.glucose);
             }

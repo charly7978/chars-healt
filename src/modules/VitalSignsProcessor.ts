@@ -9,9 +9,11 @@ export class VitalSignsProcessor {
   private isFingerDetected = false;
   private lastProcessTime = 0;
   private processingInterval = 50; // Process every 50ms to avoid excessive calculations
+  private processingCount = 0;
 
   constructor() {
     this.glucoseEstimator = new GlucoseEstimator();
+    console.log("VitalSignsProcessor: constructor initialized");
   }
 
   smoothBPM(rawBPM: number): number {
@@ -38,12 +40,20 @@ export class VitalSignsProcessor {
       return null; // Skip processing if called too frequently
     }
     this.lastProcessTime = currentTime;
+    this.processingCount++;
+    
+    if (this.processingCount % 20 === 0) {
+      console.log(`VitalSignsProcessor: processing signal #${this.processingCount}, value: ${value.toFixed(2)}`);
+    }
     
     // Calculate if finger is detected - more strict threshold
     this.isFingerDetected = Math.abs(value) > 0.5;
     
     // Only process when finger is detected to avoid false readings
     if (!this.isFingerDetected) {
+      if (this.processingCount % 20 === 0) {
+        console.log("VitalSignsProcessor: No finger detected");
+      }
       return {
         spo2: 0,
         pressure: "--/--",
@@ -85,6 +95,11 @@ export class VitalSignsProcessor {
     let glucose: BloodGlucoseData | null = null;
     if (this.glucoseEstimator.hasValidGlucoseData()) {
       glucose = this.glucoseEstimator.estimateGlucose();
+      if (this.processingCount % 20 === 0) {
+        console.log("VitalSignsProcessor: estimated glucose:", glucose);
+      }
+    } else if (this.processingCount % 20 === 0) {
+      console.log("VitalSignsProcessor: not enough data for glucose estimation");
     }
     
     // Simplified blood pressure calculation based on heart rate and signal strength
@@ -121,10 +136,12 @@ export class VitalSignsProcessor {
   }
   
   reset(): void {
+    console.log("VitalSignsProcessor: reset called");
     this.bpmHistory = [];
     this.spo2History = [];
     this.glucoseEstimator.reset();
     this.isFingerDetected = false;
     this.lastProcessTime = 0;
+    this.processingCount = 0;
   }
 }

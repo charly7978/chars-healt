@@ -18,6 +18,7 @@ const CameraView = ({
   const streamRef = useRef<MediaStream | null>(null);
   const mountedRef = useRef(true);
   const initializingRef = useRef(false);
+  const lastMonitoringStateRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [isAndroid, setIsAndroid] = useState(false);
 
@@ -81,8 +82,11 @@ const CameraView = ({
       return;
     }
     
+    // Actualizamos el estado de último monitoring
+    lastMonitoringStateRef.current = isMonitoring;
+    
     initializingRef.current = true;
-    console.log("CameraView: Iniciando cámara");
+    console.log("CameraView: Iniciando cámara, isMonitoring:", isMonitoring);
     setError(null);
     
     try {
@@ -91,6 +95,12 @@ const CameraView = ({
       
       // Esperar un momento para que los recursos se liberen (especialmente en Android)
       await new Promise(resolve => setTimeout(resolve, isAndroid ? 300 : 50));
+
+      if (!mountedRef.current || !isMonitoring) {
+        console.log("CameraView: Componente desmontado o isMonitoring cambió durante inicialización");
+        initializingRef.current = false;
+        return;
+      }
 
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error('La API getUserMedia no está disponible');
@@ -182,19 +192,21 @@ const CameraView = ({
       await new Promise(resolve => setTimeout(resolve, isAndroid ? 200 : 0));
 
       // Intentar activar la linterna si estamos monitorizando
-      const videoTrack = mediaStream.getVideoTracks()[0];
-      if (videoTrack && videoTrack.getCapabilities()?.torch) {
-        try {
-          console.log("CameraView: Intentando activar linterna");
-          await videoTrack.applyConstraints({
-            advanced: [{ torch: true }]
-          });
-          console.log("CameraView: Linterna activada");
-        } catch (e) {
-          console.error("Error configurando linterna:", e);
+      if (isMonitoring) {
+        const videoTrack = mediaStream.getVideoTracks()[0];
+        if (videoTrack && videoTrack.getCapabilities()?.torch) {
+          try {
+            console.log("CameraView: Intentando activar linterna");
+            await videoTrack.applyConstraints({
+              advanced: [{ torch: true }]
+            });
+            console.log("CameraView: Linterna activada");
+          } catch (e) {
+            console.error("Error configurando linterna:", e);
+          }
+        } else {
+          console.log("CameraView: Linterna no disponible");
         }
-      } else {
-        console.log("CameraView: Linterna no disponible");
       }
 
       // Notificar que el stream está listo
@@ -213,7 +225,15 @@ const CameraView = ({
 
   // Efecto para iniciar/detener la cámara cuando cambia isMonitoring
   useEffect(() => {
-    console.log("CameraView: isMonitoring cambió a:", isMonitoring);
+    console.log("CameraView: isMonitoring cambió a:", isMonitoring, "lastState:", lastMonitoringStateRef.current);
+    
+    // Evitar cambios redundantes
+    if (isMonitoring === lastMonitoringStateRef.current) {
+      console.log("CameraView: Estado de monitorización no cambió realmente, ignorando");
+      return;
+    }
+    
+    lastMonitoringStateRef.current = isMonitoring;
     
     if (isMonitoring) {
       // Usar un timeout más largo para Android
