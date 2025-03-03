@@ -669,12 +669,19 @@ export const useVitalSignsProcessor = () => {
     }
   }, [arrhythmiaAnalyzer, signalHistory]);
 
+  // Get glucose data from GlucoseProcessor for exposure
+  const glucose = useCallback(() => {
+    const processor = getGlucoseProcessor();
+    return processor || null;
+  }, [getGlucoseProcessor]);
+
   return {
     processSignal,
     reset,
     cleanMemory,
     calibrateGlucose,
     arrhythmiaCounter: arrhythmiaAnalyzer.arrhythmiaCounter,
-    dataCollector: dataCollector.current
+    dataCollector: dataCollector.current,
+    glucose // Expose the glucose processor or data
   };
 };
