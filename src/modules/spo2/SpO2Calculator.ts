@@ -11,13 +11,14 @@ export class SpO2Calculator {
   private calibration: SpO2Calibration;
   private processor: SpO2Processor;
   private lastCalculationTime: number = 0;
-  private calculationThrottleMs: number = 75; // Reduced throttle for smoother display updates
+  private calculationThrottleMs: number = 125; // Increased throttle to prevent excessive updates
   private signalCache: number[] = [];
   private cacheMean: number = 0;
   private bufferFull: boolean = false;
   private previousResults: number[] = [];
   private resultIndex: number = 0;
-  private readonly RESULT_BUFFER_SIZE = 3; // Store recent results for display smoothing
+  private readonly RESULT_BUFFER_SIZE = 5; // Increased buffer for smoother display
+  private stableValue: number = 0; // Extra stable display value
 
   constructor() {
     this.calibration = new SpO2Calibration();
@@ -38,6 +39,7 @@ export class SpO2Calculator {
     this.bufferFull = false;
     this.previousResults = new Array(this.RESULT_BUFFER_SIZE).fill(0);
     this.resultIndex = 0;
+    this.stableValue = 0;
   }
 
   /**
@@ -46,7 +48,7 @@ export class SpO2Calculator {
   calculateRaw(values: number[]): number {
     if (values.length < 20) return 0;
 
-    // More balanced throttling for smoother display values
+    // More balanced throttling to prevent excessive updates
     const now = performance.now();
     if (now - this.lastCalculationTime < this.calculationThrottleMs) {
       return this.processor.getLastValue();
@@ -56,7 +58,7 @@ export class SpO2Calculator {
     try {
       // Only recalculate signal variance periodically to improve performance
       const cacheUpdateNeeded = this.signalCache.length === 0 || 
-                               (now % 400 < this.calculationThrottleMs);
+                               (now % 800 < this.calculationThrottleMs); // Less frequent updates
       
       let signalVariance: number;
       let signalMean: number;
@@ -131,13 +133,13 @@ export class SpO2Calculator {
     try {
       // If not enough values or no finger, use previous value or 0
       if (values.length < 20) {
-        return this.processor.getLastValue() || 0;
+        return this.stableValue || this.processor.getLastValue() || 0;
       }
 
       // Get raw SpO2 value
       const rawSpO2 = this.calculateRaw(values);
       if (rawSpO2 <= 0) {
-        return this.processor.getLastValue() || 0;
+        return this.stableValue || this.processor.getLastValue() || 0;
       }
 
       // Save raw value for analysis
@@ -156,21 +158,36 @@ export class SpO2Calculator {
       // Process and filter the SpO2 value
       const processedSpO2 = this.processor.processValue(calibratedSpO2);
       
-      // Apply additional smoothing for display purposes
+      // Apply additional heavy smoothing for display purposes
       this.previousResults[this.resultIndex] = processedSpO2;
       this.resultIndex = (this.resultIndex + 1) % this.RESULT_BUFFER_SIZE;
       
-      // Simple rolling average for display stability
-      const sum = this.previousResults.reduce((acc, val) => acc + val, 0);
-      const count = this.previousResults.filter(val => val > 0).length;
+      // Weighted average for display stability (more recent values get more weight)
+      let weightedSum = 0;
+      let totalWeight = 0;
       
-      const finalSpO2 = count > 0 ? 
-                        Math.round(sum / count) : 
+      for (let i = 0; i < this.RESULT_BUFFER_SIZE; i++) {
+        const value = this.previousResults[(this.resultIndex + i) % this.RESULT_BUFFER_SIZE];
+        if (value > 0) {
+          // More recent values get higher weight
+          const weight = i < 2 ? 3 : 1;
+          weightedSum += value * weight;
+          totalWeight += weight;
+        }
+      }
+      
+      const finalSpO2 = totalWeight > 0 ? 
+                        Math.round(weightedSum / totalWeight) : 
                         processedSpO2;
       
-      return finalSpO2;
+      // Extra stability layer - only update if the change is significant
+      if (this.stableValue === 0 || Math.abs(finalSpO2 - this.stableValue) >= 1) {
+        this.stableValue = finalSpO2;
+      }
+      
+      return this.stableValue;
     } catch (err) {
-      return this.processor.getLastValue() || 0;
+      return this.stableValue || this.processor.getLastValue() || 0;
     }
   }
   
