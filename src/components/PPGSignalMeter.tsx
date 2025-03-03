@@ -48,7 +48,7 @@ const PPGSignalMeter = ({
   const BUFFER_SIZE = 650; // Signal history buffer size
   const INVERT_SIGNAL = false;
   const PEAK_MIN_VALUE = 100.0; // Minimum threshold for peak detection
-  const PEAK_DISTANCE_MS = 400; // Minimum time between peaks in milliseconds
+  const PEAK_DISTANCE_MS = 800; // Minimum time between peaks in milliseconds
 
   useEffect(() => {
     if (!dataBufferRef.current) {
