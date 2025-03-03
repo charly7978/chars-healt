@@ -11,13 +11,13 @@ export class SpO2Calculator {
   private calibration: SpO2Calibration;
   private processor: SpO2Processor;
   private lastCalculationTime: number = 0;
-  private calculationThrottleMs: number = 25; // Even lower throttle for maximum display fluidity
+  private calculationThrottleMs: number = 75; // Reduced throttle for smoother display updates
   private signalCache: number[] = [];
   private cacheMean: number = 0;
   private bufferFull: boolean = false;
   private previousResults: number[] = [];
   private resultIndex: number = 0;
-  private readonly RESULT_BUFFER_SIZE = 5; // Increased buffer size for smoother display transitions
+  private readonly RESULT_BUFFER_SIZE = 3; // Store recent results for display smoothing
 
   constructor() {
     this.calibration = new SpO2Calibration();
@@ -46,7 +46,7 @@ export class SpO2Calculator {
   calculateRaw(values: number[]): number {
     if (values.length < 20) return 0;
 
-    // Ultra-low throttling for maximum display fluidity
+    // More balanced throttling for smoother display values
     const now = performance.now();
     if (now - this.lastCalculationTime < this.calculationThrottleMs) {
       return this.processor.getLastValue();
@@ -56,7 +56,7 @@ export class SpO2Calculator {
     try {
       // Only recalculate signal variance periodically to improve performance
       const cacheUpdateNeeded = this.signalCache.length === 0 || 
-                               (now % 300 < this.calculationThrottleMs);
+                               (now % 400 < this.calculationThrottleMs);
       
       let signalVariance: number;
       let signalMean: number;
@@ -156,27 +156,16 @@ export class SpO2Calculator {
       // Process and filter the SpO2 value
       const processedSpO2 = this.processor.processValue(calibratedSpO2);
       
-      // Apply additional progressive smoothing for ultra-smooth display purposes
+      // Apply additional smoothing for display purposes
       this.previousResults[this.resultIndex] = processedSpO2;
       this.resultIndex = (this.resultIndex + 1) % this.RESULT_BUFFER_SIZE;
       
-      // Weighted moving average for display stability - newer values have more weight
-      let weightedSum = 0;
-      let totalWeight = 0;
+      // Simple rolling average for display stability
+      const sum = this.previousResults.reduce((acc, val) => acc + val, 0);
+      const count = this.previousResults.filter(val => val > 0).length;
       
-      for (let i = 0; i < this.RESULT_BUFFER_SIZE; i++) {
-        const index = (this.resultIndex - i + this.RESULT_BUFFER_SIZE) % this.RESULT_BUFFER_SIZE;
-        const value = this.previousResults[index];
-        if (value > 0) {
-          // Newer values have higher weights in the average
-          const weight = this.RESULT_BUFFER_SIZE - i;
-          weightedSum += value * weight;
-          totalWeight += weight;
-        }
-      }
-      
-      const finalSpO2 = totalWeight > 0 ? 
-                        Math.round(weightedSum / totalWeight) : 
+      const finalSpO2 = count > 0 ? 
+                        Math.round(sum / count) : 
                         processedSpO2;
       
       return finalSpO2;
@@ -195,27 +184,22 @@ export class SpO2Calculator {
     const n = values.length;
     
     // Use loop unrolling for better performance with larger arrays
-    const remainder = n % 8; // Increased unrolling for better performance
+    const remainder = n % 4;
     let i = 0;
     
-    // Process remaining elements (that don't fit in groups of 8)
+    // Process remaining elements (that don't fit in groups of 4)
     for (; i < remainder; i++) {
       sum += values[i];
       sumSquared += values[i] * values[i];
     }
     
-    // Process elements in groups of 8 for better performance through extended loop unrolling
-    for (; i < n; i += 8) {
-      sum += values[i] + values[i+1] + values[i+2] + values[i+3] + 
-             values[i+4] + values[i+5] + values[i+6] + values[i+7];
+    // Process elements in groups of 4 for better performance through loop unrolling
+    for (; i < n; i += 4) {
+      sum += values[i] + values[i+1] + values[i+2] + values[i+3];
       sumSquared += values[i] * values[i] + 
                     values[i+1] * values[i+1] + 
                     values[i+2] * values[i+2] + 
-                    values[i+3] * values[i+3] +
-                    values[i+4] * values[i+4] + 
-                    values[i+5] * values[i+5] + 
-                    values[i+6] * values[i+6] + 
-                    values[i+7] * values[i+7];
+                    values[i+3] * values[i+3];
     }
     
     const mean = sum / n;
