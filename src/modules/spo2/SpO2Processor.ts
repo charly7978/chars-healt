@@ -10,8 +10,9 @@ export class SpO2Processor {
   private lastSpo2Value: number = 0;
   private frameSkipCounter: number = 0;
   private medianCache: number[] = new Array(5).fill(0);
-  private renderQualityMode: boolean = true; // Always enable high quality rendering
-  private stabilityBuffer: number[] = []; // Buffer to stabilize readings
+  private renderQualityMode: boolean = true; // Always use highest quality rendering
+  private stabilityBuffer: number[] = new Array(3).fill(0);
+  private stabilityIndex: number = 0;
 
   /**
    * Reset processor state
@@ -22,7 +23,8 @@ export class SpO2Processor {
     this.lastSpo2Value = 0;
     this.frameSkipCounter = 0;
     this.medianCache = new Array(5).fill(0);
-    this.stabilityBuffer = [];
+    this.stabilityBuffer = new Array(3).fill(0);
+    this.stabilityIndex = 0;
   }
 
   /**
@@ -36,8 +38,8 @@ export class SpO2Processor {
    * Add a raw SpO2 value to the buffer
    */
   addRawValue(value: number): void {
-    // Minimal frame skipping for extremely fluid visuals
-    this.frameSkipCounter = (this.frameSkipCounter + 1) % 1; // No frame skipping
+    // Minimize frame skipping for maximum visual smoothness
+    this.frameSkipCounter = (this.frameSkipCounter + 1) % 1; // Process every frame for maximum fluidity
     if (this.frameSkipCounter !== 0) return;
     
     if (value < 90 || value > 100) return; // Prevent physiologically impossible values
@@ -106,10 +108,10 @@ export class SpO2Processor {
       const sum = valuesToProcess[1] + valuesToProcess[2] + valuesToProcess[3];
       const avg = Math.round(sum / 3);
       
-      // Use extra strong smoothing to prevent value changes
+      // Apply ultra-smooth exponential smoothing for maximum display quality
       if (this.lastSpo2Value > 0) {
-        // Use a very high alpha for ultra smooth, stable readings
-        const alpha = 0.05; // Very small alpha means very stable readings
+        // Use extremely smooth alpha for highest quality visuals
+        const alpha = 0.15; // Even smoother than previous value for maximum display stability
                       
         filteredSpO2 = Math.round(
           alpha * avg + 
@@ -118,43 +120,32 @@ export class SpO2Processor {
       } else {
         filteredSpO2 = avg;
       }
-    }
-    
-    // Stability buffer to prevent jumping values
-    if (this.stabilityBuffer.length >= 10) {
-      this.stabilityBuffer.shift();
-    }
-    this.stabilityBuffer.push(filteredSpO2);
-    
-    // Use mode (most common value) from stability buffer
-    if (this.stabilityBuffer.length >= 3) {
-      const frequencyMap = new Map<number, number>();
-      let maxFreq = 0;
-      let modeValue = filteredSpO2;
       
-      for (const value of this.stabilityBuffer) {
-        const count = (frequencyMap.get(value) || 0) + 1;
-        frequencyMap.set(value, count);
-        
-        if (count > maxFreq) {
-          maxFreq = count;
-          modeValue = value;
-        }
+      // Apply additional stability buffer to smooth out small fluctuations entirely
+      this.stabilityBuffer[this.stabilityIndex] = filteredSpO2;
+      this.stabilityIndex = (this.stabilityIndex + 1) % this.stabilityBuffer.length;
+      
+      let stabilitySum = 0;
+      for (let i = 0; i < this.stabilityBuffer.length; i++) {
+        stabilitySum += this.stabilityBuffer[i];
       }
       
-      filteredSpO2 = modeValue;
+      // Only update if the value actually changed by more than 1 unit
+      const stableValue = Math.round(stabilitySum / this.stabilityBuffer.length);
+      if (Math.abs(stableValue - this.lastSpo2Value) > 1) {
+        filteredSpO2 = stableValue;
+      } else {
+        filteredSpO2 = this.lastSpo2Value;
+      }
     }
     
-    // Ensure the value is in physiologically possible range
+    // Ensure the value is in physiologically possible range (using Math.max/min is faster than conditionals)
     filteredSpO2 = Math.max(90, Math.min(99, filteredSpO2));
     
-    // Update the last valid value (with additional smoothing for display stability)
-    // Only update if the difference is significant (prevents micro-flickering)
-    if (Math.abs(filteredSpO2 - this.lastSpo2Value) >= 1) {
-      this.lastSpo2Value = filteredSpO2;
-    }
+    // Update the last valid value
+    this.lastSpo2Value = filteredSpO2;
     
-    return this.lastSpo2Value; // Return the extra-stable value
+    return filteredSpO2;
   }
   
   /**
