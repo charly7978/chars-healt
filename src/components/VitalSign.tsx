@@ -176,7 +176,14 @@ const VitalSign: React.FC<VitalSignProps> = ({
     return "ARRITMIA SEVERA";
   };
 
-  const getArrhythmiaDisplay = () => {
+  interface ArrhythmiaDisplayResult {
+    text: string | number;
+    color: string;
+    label: string;
+    title?: string;
+  }
+
+  const getArrhythmiaDisplay = (): ArrhythmiaDisplayResult => {
     if (!isArrhythmiaDisplay) return { text: value, color: "", label: "" };
     
     if (value === "--") {
@@ -263,9 +270,13 @@ const VitalSign: React.FC<VitalSignProps> = ({
     return "heartRate";
   };
 
-  const { text, title, color, label: riskLabel } = isArrhythmiaDisplay ? 
-    getArrhythmiaDisplay() : 
-    { text: processedDisplayValue, title: undefined, ...getRiskInfo() };
+  const arrhythmiaResult = isArrhythmiaDisplay ? getArrhythmiaDisplay() : null;
+  const riskInfo = !isArrhythmiaDisplay ? getRiskInfo() : null;
+  
+  const text = isArrhythmiaDisplay ? arrhythmiaResult?.text : processedDisplayValue;
+  const color = isArrhythmiaDisplay ? arrhythmiaResult?.color : riskInfo?.color;
+  const riskLabel = isArrhythmiaDisplay ? arrhythmiaResult?.label : riskInfo?.label;
+  const title = arrhythmiaResult?.title;
 
   return (
     <>
@@ -336,7 +347,7 @@ const VitalSign: React.FC<VitalSignProps> = ({
           title={label}
           value={text as string | number}
           unit={unit}
-          riskLevel={riskLabel}
+          riskLevel={riskLabel || ''}
           type={getVitalSignType()}
           onBack={() => setShowDetail(false)}
           secondaryValue={secondaryValue as string | number}
