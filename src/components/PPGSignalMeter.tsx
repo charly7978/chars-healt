@@ -204,44 +204,58 @@ const PPGSignalMeter = ({
       );
       
       if (visiblePoints.length > 1) {
-        ctx.beginPath();
-        ctx.strokeStyle = '#0EA5E9';
-        ctx.lineWidth = 2;
-        ctx.lineJoin = 'round';
-        ctx.lineCap = 'round';
+        // Primero, encontramos los segmentos continuos de arritmia
+        const segments: { start: number, end: number, isArrhythmia: boolean }[] = [];
         
-        let firstPoint = true;
+        let currentSegmentStart = 0;
+        let currentIsArrhythmia = visiblePoints[0].isArrhythmia;
         
-        for (let i = 0; i < visiblePoints.length; i++) {
-          const point = visiblePoints[i];
-          const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-          const y = canvas.height * 0.6 - point.value;
-          
-          if (firstPoint) {
-            ctx.moveTo(x, y);
-            firstPoint = false;
-          } else {
-            ctx.lineTo(x, y);
-          }
-          
-          if (point.isArrhythmia) {
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.strokeStyle = '#DC2626';
-            ctx.lineWidth = 3;
-            ctx.arc(x, y, 4, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.strokeStyle = '#0EA5E9';
-            ctx.lineWidth = 2;
-            ctx.moveTo(x, y);
-            firstPoint = false;
+        for (let i = 1; i < visiblePoints.length; i++) {
+          if (visiblePoints[i].isArrhythmia !== currentIsArrhythmia) {
+            segments.push({
+              start: currentSegmentStart,
+              end: i - 1,
+              isArrhythmia: currentIsArrhythmia
+            });
+            
+            currentSegmentStart = i;
+            currentIsArrhythmia = visiblePoints[i].isArrhythmia;
           }
         }
         
-        ctx.stroke();
+        // Añadimos el último segmento
+        segments.push({
+          start: currentSegmentStart,
+          end: visiblePoints.length - 1,
+          isArrhythmia: currentIsArrhythmia
+        });
+        
+        // Dibujamos cada segmento con su color correspondiente
+        for (const segment of segments) {
+          ctx.beginPath();
+          ctx.strokeStyle = segment.isArrhythmia ? '#DC2626' : '#0EA5E9';
+          ctx.lineWidth = 2;
+          ctx.lineJoin = 'round';
+          ctx.lineCap = 'round';
+          
+          const segmentPoints = visiblePoints.slice(segment.start, segment.end + 1);
+          
+          for (let i = 0; i < segmentPoints.length; i++) {
+            const point = segmentPoints[i];
+            const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
+            const y = canvas.height * 0.6 - point.value;
+            
+            if (i === 0) {
+              ctx.moveTo(x, y);
+            } else {
+              ctx.lineTo(x, y);
+            }
+          }
+          ctx.stroke();
+        }
       }
 
+      // Detectar y marcar picos máximos
       const maxPeakIndices: number[] = [];
       
       for (let i = 2; i < visiblePoints.length - 2; i++) {
@@ -272,68 +286,34 @@ const PPGSignalMeter = ({
         }
       }
       
+      // Dibujar círculos en los picos máximos
       for (let idx of maxPeakIndices) {
         const point = visiblePoints[idx];
         const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
         const y = canvas.height * 0.6 - point.value;
         
+        // Dibujar círculo en el pico
         ctx.beginPath();
-        ctx.arc(x, y, point.isArrhythmia ? 5 : 4, 0, Math.PI * 2);
+        ctx.arc(x, y, 4, 0, Math.PI * 2);
         ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
         ctx.fill();
 
+        // Mostrar valor del pico
         ctx.font = 'bold 12px Inter';
         ctx.fillStyle = '#666666';
         ctx.textAlign = 'center';
-        ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 20);
+        ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 10);
         
+        // Si es arritmia, agregar una etiqueta
         if (point.isArrhythmia) {
-          ctx.beginPath();
-          ctx.arc(x, y, 9, 0, Math.PI * 2);
-          ctx.strokeStyle = '#FFFF00';
-          ctx.lineWidth = 2;
-          ctx.stroke();
-          
-          ctx.beginPath();
-          ctx.arc(x, y, 14, 0, Math.PI * 2);
-          ctx.strokeStyle = '#FF6B6B';
-          ctx.lineWidth = 1;
-          ctx.setLineDash([2, 2]);
-          ctx.stroke();
-          ctx.setLineDash([]);
-          
           ctx.font = 'bold 10px Inter';
           ctx.fillStyle = '#FF6B6B';
-          ctx.fillText("LATIDO PREMATURO", x, y - 35);
-          
-          ctx.beginPath();
-          ctx.setLineDash([2, 2]);
-          ctx.strokeStyle = 'rgba(255, 107, 107, 0.6)';
-          ctx.lineWidth = 1;
-          
-          if (idx > 0) {
-            const prevX = canvas.width - ((now - visiblePoints[idx-1].time) * canvas.width / WINDOW_WIDTH_MS);
-            const prevY = canvas.height * 0.6 - visiblePoints[idx-1].value;
-            
-            ctx.moveTo(prevX, prevY - 15);
-            ctx.lineTo(x, y - 15);
-            ctx.stroke();
-          }
-          
-          if (idx < visiblePoints.length - 1) {
-            const nextX = canvas.width - ((now - visiblePoints[idx+1].time) * canvas.width / WINDOW_WIDTH_MS);
-            const nextY = canvas.height * 0.6 - visiblePoints[idx+1].value;
-            
-            ctx.moveTo(x, y - 15);
-            ctx.lineTo(nextX, nextY - 15);
-            ctx.stroke();
-          }
-          
-          ctx.setLineDash([]);
+          ctx.fillText("LATIDO PREMATURO", x, y - 25);
         }
       }
     }
 
+    // Mostrar notificación de arritmia en la parte superior del gráfico
     if (arrhythmiaStatus && arrhythmiaStatus.includes("ARRITMIA")) {
       const parts = arrhythmiaStatus.split('|');
       const arrhythmiaCount = parseInt(parts[1] || "0", 10);
