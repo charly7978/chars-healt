@@ -1,144 +1,125 @@
 
 /**
- * Utility for collecting and calculating final vital signs values
+ * Creates a collector for vital signs data
  */
 export const createVitalSignsDataCollector = () => {
-  const heartRateValues: number[] = [];
   const spo2Values: number[] = [];
-  const systolicValues: number[] = [];
-  const diastolicValues: number[] = [];
-  let hasValidValues = false;
-  
-  /**
-   * Reset all collected data
-   */
-  const reset = () => {
-    heartRateValues.length = 0;
-    spo2Values.length = 0;
-    systolicValues.length = 0;
-    diastolicValues.length = 0;
-    hasValidValues = false;
-  };
-  
-  /**
-   * Add heart rate value to collection
-   */
-  const addHeartRate = (bpm: number) => {
-    if (bpm > 0) {
-      heartRateValues.push(bpm);
-    }
-  };
-  
-  /**
-   * Add SpO2 value to collection
-   */
-  const addSpO2 = (spo2: number) => {
-    if (spo2 > 0) {
-      spo2Values.push(spo2);
-    }
-  };
-  
-  /**
-   * Add blood pressure value to collection
-   */
-  const addBloodPressure = (pressure: string) => {
-    if (pressure === "--/--" || pressure === "0/0") return;
-    
-    const [systolic, diastolic] = pressure.split('/').map(Number);
-    if (systolic > 0 && diastolic > 0) {
-      systolicValues.push(systolic);
-      diastolicValues.push(diastolic);
-    }
-  };
-  
-  /**
-   * Calculate final values based on collected data
-   */
-  const calculateFinalValues = (currentHeartRate: number, currentSpO2: number, currentPressure: string) => {
-    try {
-      console.log("Calculando PROMEDIOS REALES con todos los valores capturados...");
-      
-      const validHeartRates = heartRateValues.filter(v => v > 0);
-      const validSpo2Values = spo2Values.filter(v => v > 0);
-      const validSystolicValues = systolicValues.filter(v => v > 0);
-      const validDiastolicValues = diastolicValues.filter(v => v > 0);
-      
-      console.log("Valores acumulados para promedios:", {
-        heartRateValues: validHeartRates.length,
-        spo2Values: validSpo2Values.length,
-        systolicValues: validSystolicValues.length,
-        diastolicValues: validDiastolicValues.length
-      });
-      
-      let avgHeartRate = 0;
-      let avgSpo2 = 0;
-      let avgSystolic = 0;
-      let avgDiastolic = 0;
-      
-      if (validHeartRates.length > 0) {
-        avgHeartRate = Math.round(validHeartRates.reduce((a, b) => a + b, 0) / validHeartRates.length);
-      } else {
-        avgHeartRate = currentHeartRate;
-      }
-      
-      if (validSpo2Values.length > 0) {
-        avgSpo2 = Math.round(validSpo2Values.reduce((a, b) => a + b, 0) / validSpo2Values.length);
-      } else {
-        avgSpo2 = currentSpO2;
-      }
-      
-      let finalBPString = currentPressure;
-      if (validSystolicValues.length > 0 && validDiastolicValues.length > 0) {
-        avgSystolic = Math.round(validSystolicValues.reduce((a, b) => a + b, 0) / validSystolicValues.length);
-        avgDiastolic = Math.round(validDiastolicValues.reduce((a, b) => a + b, 0) / validDiastolicValues.length);
-        finalBPString = `${avgSystolic}/${avgDiastolic}`;
-      }
-      
-      console.log("PROMEDIOS REALES calculados:", {
-        heartRate: avgHeartRate,
-        spo2: avgSpo2,
-        pressure: finalBPString
-      });
-      
-      hasValidValues = true;
-      
-      return {
-        heartRate: avgHeartRate > 0 ? avgHeartRate : currentHeartRate,
-        spo2: avgSpo2 > 0 ? avgSpo2 : currentSpO2,
-        pressure: finalBPString
-      };
-    } catch (error) {
-      console.error("Error en calculateFinalValues:", error);
-      hasValidValues = true;
-      
-      return {
-        heartRate: currentHeartRate,
-        spo2: currentSpO2,
-        pressure: currentPressure
-      };
-    }
-  };
-  
-  /**
-   * Get current data collection status
-   */
-  const getStats = () => {
-    return {
-      heartRateCount: heartRateValues.length,
-      spo2Count: spo2Values.length,
-      bpCount: systolicValues.length,
-      hasValidValues
-    };
-  };
+  const bpValues: string[] = [];
+  const respirationRates: number[] = [];
+  const respirationDepths: number[] = [];
   
   return {
-    addHeartRate,
-    addSpO2,
-    addBloodPressure,
-    calculateFinalValues,
-    reset,
-    getStats
+    /**
+     * Add SpO2 value to collection
+     */
+    addSpO2: (value: number) => {
+      if (value >= 80 && value <= 100) {
+        spo2Values.push(value);
+        if (spo2Values.length > 30) {
+          spo2Values.shift();
+        }
+      }
+    },
+    
+    /**
+     * Add blood pressure reading to collection
+     */
+    addBloodPressure: (value: string) => {
+      if (value !== '--/--' && value !== '0/0') {
+        bpValues.push(value);
+        if (bpValues.length > 10) {
+          bpValues.shift();
+        }
+      }
+    },
+    
+    /**
+     * Add respiration rate reading to collection
+     */
+    addRespirationRate: (value: number) => {
+      if (value >= 4 && value <= 60) {
+        respirationRates.push(value);
+        if (respirationRates.length > 10) {
+          respirationRates.shift();
+        }
+      }
+    },
+    
+    /**
+     * Add respiration depth reading to collection
+     */
+    addRespirationDepth: (value: number) => {
+      if (value >= 0 && value <= 100) {
+        respirationDepths.push(value);
+        if (respirationDepths.length > 10) {
+          respirationDepths.shift();
+        }
+      }
+    },
+    
+    /**
+     * Get average SpO2 from collected values
+     */
+    getAverageSpO2: (): number => {
+      if (spo2Values.length === 0) return 0;
+      const sum = spo2Values.reduce((acc, val) => acc + val, 0);
+      return Math.round(sum / spo2Values.length);
+    },
+    
+    /**
+     * Get average blood pressure from collected values
+     */
+    getAverageBloodPressure: (): string => {
+      if (bpValues.length === 0) return '--/--';
+      
+      // Extraer systolic/diastolic
+      const systolicValues: number[] = [];
+      const diastolicValues: number[] = [];
+      
+      bpValues.forEach(bp => {
+        const [sys, dia] = bp.split('/').map(Number);
+        if (!isNaN(sys) && !isNaN(dia)) {
+          systolicValues.push(sys);
+          diastolicValues.push(dia);
+        }
+      });
+      
+      if (systolicValues.length === 0 || diastolicValues.length === 0) {
+        return '--/--';
+      }
+      
+      const avgSystolic = Math.round(systolicValues.reduce((acc, val) => acc + val, 0) / systolicValues.length);
+      const avgDiastolic = Math.round(diastolicValues.reduce((acc, val) => acc + val, 0) / diastolicValues.length);
+      
+      return `${avgSystolic}/${avgDiastolic}`;
+    },
+    
+    /**
+     * Get average respiration rate from collected values
+     */
+    getAverageRespirationRate: (): number => {
+      if (respirationRates.length === 0) return 0;
+      const sum = respirationRates.reduce((acc, val) => acc + val, 0);
+      return Math.round(sum / respirationRates.length * 10) / 10; // Redondear a 1 decimal
+    },
+    
+    /**
+     * Get average respiration depth from collected values (0-100)
+     */
+    getAverageRespirationDepth: (): number => {
+      if (respirationDepths.length === 0) return 0;
+      const sum = respirationDepths.reduce((acc, val) => acc + val, 0);
+      return Math.round(sum / respirationDepths.length);
+    },
+    
+    /**
+     * Reset all collected data
+     */
+    reset: () => {
+      spo2Values.length = 0;
+      bpValues.length = 0;
+      respirationRates.length = 0;
+      respirationDepths.length = 0;
+    }
   };
 };
-
-export type VitalSignsDataCollector = ReturnType<typeof createVitalSignsDataCollector>;

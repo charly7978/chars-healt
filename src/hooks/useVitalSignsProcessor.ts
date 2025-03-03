@@ -6,6 +6,7 @@ import { createBloodPressureStabilizer } from '../utils/bloodPressureStabilizer'
 import { createVitalSignsDataCollector } from '../utils/vitalSignsDataCollector';
 import { useSignalHistory } from './useSignalHistory';
 import { VitalSignsRisk } from '../utils/vitalSignsRisk';
+import { RespirationProcessor } from '../modules/RespirationProcessor';
 
 export const useVitalSignsProcessor = () => {
   // Core processor
@@ -16,6 +17,7 @@ export const useVitalSignsProcessor = () => {
   const bloodPressureStabilizer = useRef(createBloodPressureStabilizer());
   const dataCollector = useRef(createVitalSignsDataCollector());
   const signalHistory = useSignalHistory();
+  const respirationProcessorRef = useRef<RespirationProcessor | null>(null);
   
   /**
    * Lazy initialization of the VitalSignsProcessor
@@ -29,17 +31,36 @@ export const useVitalSignsProcessor = () => {
   }, []);
   
   /**
+   * Lazy initialization of the RespirationProcessor
+   */
+  const getRespirationProcessor = useCallback(() => {
+    if (!respirationProcessorRef.current) {
+      console.log('useVitalSignsProcessor: Creando instancia de RespirationProcessor');
+      respirationProcessorRef.current = new RespirationProcessor();
+    }
+    return respirationProcessorRef.current;
+  }, []);
+  
+  /**
    * Process a new signal value and update all vitals
    */
   const processSignal = useCallback((value: number, rrData?: { intervals: number[], lastPeakTime: number | null, amplitudes?: number[] }) => {
     const processor = getProcessor();
+    const respirationProcessor = getRespirationProcessor();
     const currentTime = Date.now();
     
     // Store data for analysis
     signalHistory.addSignal(value);
     
+    let peakAmplitude: number | undefined;
+    
     if (rrData) {
       signalHistory.addRRData(rrData);
+      
+      // Obtener amplitud del pico si está disponible para análisis respiratorio
+      if (rrData.amplitudes && rrData.amplitudes.length > 0) {
+        peakAmplitude = rrData.amplitudes[rrData.amplitudes.length - 1];
+      }
       
       // Smoothing BPM here
       if (rrData.intervals && rrData.intervals.length > 0) {
@@ -61,6 +82,9 @@ export const useVitalSignsProcessor = () => {
     // Get base results from the core processor
     const result = processor.processSignal(value, rrData);
     
+    // Procesar datos respiratorios
+    const respirationResult = respirationProcessor.processSignal(value, peakAmplitude);
+    
     // Stabilize blood pressure
     const signalQuality = signalHistory.getSignalQuality();
     const stabilizedBP = bloodPressureStabilizer.current.stabilizeBloodPressure(result.pressure, signalQuality);
@@ -74,6 +98,10 @@ export const useVitalSignsProcessor = () => {
       dataCollector.current.addBloodPressure(stabilizedBP);
     }
     
+    if (respirationResult.rate > 0) {
+      dataCollector.current.addRespirationRate(respirationResult.rate);
+    }
+    
     // Advanced arrhythmia analysis - asegurarse de pasar los datos de amplitud si están disponibles
     if (rrData?.intervals && rrData.intervals.length >= 4) {
       // Asegurarse de pasar los datos de amplitud al analizador de arritmias si están disponibles
@@ -84,14 +112,18 @@ export const useVitalSignsProcessor = () => {
           spo2: result.spo2,
           pressure: stabilizedBP,
           arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus,
-          lastArrhythmiaData: arrhythmiaResult.lastArrhythmiaData
+          lastArrhythmiaData: arrhythmiaResult.lastArrhythmiaData,
+          respiration: respirationResult,
+          hasRespirationData: respirationProcessor.hasValidData()
         };
       }
       
       return {
         spo2: result.spo2,
         pressure: stabilizedBP,
-        arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus
+        arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus,
+        respiration: respirationResult,
+        hasRespirationData: respirationProcessor.hasValidData()
       };
     }
     
@@ -101,12 +133,14 @@ export const useVitalSignsProcessor = () => {
     return {
       spo2: result.spo2,
       pressure: stabilizedBP,
-      arrhythmiaStatus
+      arrhythmiaStatus,
+      respiration: respirationResult,
+      hasRespirationData: respirationProcessor.hasValidData()
     };
-  }, [getProcessor, arrhythmiaAnalyzer, signalHistory]);
+  }, [getProcessor, getRespirationProcessor, arrhythmiaAnalyzer, signalHistory]);
 
   /**
-   * Reset all processors and data
+   * Reset all processors
    */
   const reset = useCallback(() => {
     if (processorRef.current) {
@@ -118,9 +152,14 @@ export const useVitalSignsProcessor = () => {
     bloodPressureStabilizer.current.reset();
     dataCollector.current.reset();
     signalHistory.reset();
+    
+    if (respirationProcessorRef.current) {
+      respirationProcessorRef.current.reset();
+    }
+    
     VitalSignsRisk.resetHistory();
     
-    console.log("Reseteo de detección de arritmias y presión arterial");
+    console.log("Reseteo de detección de arritmias, presión arterial y respiración");
   }, [arrhythmiaAnalyzer, signalHistory]);
   
   /**
@@ -140,6 +179,12 @@ export const useVitalSignsProcessor = () => {
     bloodPressureStabilizer.current.reset();
     dataCollector.current.reset();
     signalHistory.reset();
+    
+    if (respirationProcessorRef.current) {
+      respirationProcessorRef.current.reset();
+      respirationProcessorRef.current = null;
+    }
+    
     VitalSignsRisk.resetHistory();
     
     // Force garbage collection if available

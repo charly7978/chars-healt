@@ -1,3 +1,4 @@
+
 import { useState, useRef, useCallback } from 'react';
 import { HeartBeatProcessor } from '../modules/HeartBeatProcessor';
 
@@ -29,6 +30,14 @@ export const useHeartBeatProcessor = () => {
       
       // Get RR intervals for arrhythmia detection, including amplitudes if available
       const rrData = processor.getRRIntervals();
+      
+      // Extract peak amplitudes for respiration analysis
+      if (result.isPeak && result.amplitude !== undefined) {
+        if (!rrData.amplitudes) {
+          rrData.amplitudes = [];
+        }
+        rrData.amplitudes.push(result.amplitude);
+      }
       
       return {
         bpm: result.bpm,

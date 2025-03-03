@@ -8,12 +8,22 @@ interface VitalSignProps {
   value: string | number;
   unit?: string;
   isFinalReading?: boolean;
+  secondaryValue?: string | number;
+  secondaryUnit?: string;
 }
 
-const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReading = false }) => {
+const VitalSign: React.FC<VitalSignProps> = ({ 
+  label, 
+  value, 
+  unit, 
+  isFinalReading = false,
+  secondaryValue,
+  secondaryUnit 
+}) => {
   const [showDetail, setShowDetail] = useState(false);
   const isArrhythmiaDisplay = label === "ARRITMIAS";
   const isBloodPressure = label === "PRESIÓN ARTERIAL";
+  const isRespiration = label === "RESPIRACIÓN";
 
   // Helper function to check if blood pressure value is unrealistic
   const isBloodPressureUnrealistic = (bpString: string): boolean => {
@@ -82,6 +92,16 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
       }
     }
 
+    // For respiration rate
+    if (isRespiration) {
+      if (value === "--" || value === 0) {
+        return { color: '#000000', label: '' };
+      }
+      if (typeof value === 'number') {
+        return getRespirationRiskDisplay(value);
+      }
+    }
+
     // For blood pressure, show real value without checking risk if no measurement
     if (label === "PRESIÓN ARTERIAL") {
       if (value === "--/--" || value === "0/0") {
@@ -97,6 +117,16 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     }
 
     return { color: '#000000', label: '' };
+  };
+  
+  // Nueva función para evaluar riesgo respiratorio
+  const getRespirationRiskDisplay = (rate: number) => {
+    // Valores basados en directrices médicas estándar
+    if (rate < 8) return { color: '#DC2626', label: 'BRADIPNEA' };
+    if (rate < 12) return { color: '#F97316', label: 'LEVE BRADIPNEA' };
+    if (rate <= 20) return { color: '#22C55E', label: 'NORMAL' };
+    if (rate <= 25) return { color: '#F97316', label: 'LEVE TAQUIPNEA' };
+    return { color: '#DC2626', label: 'TAQUIPNEA' };
   };
   
   const getArrhythmiaRiskColor = (count: number): string => {
@@ -179,6 +209,7 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
     if (label === "SPO2") return "spo2";
     if (label === "PRESIÓN ARTERIAL") return "bloodPressure";
     if (label === "ARRITMIAS") return "arrhythmia";
+    if (label === "RESPIRACIÓN") return "respiration";
     return "heartRate"; // Default
   };
 
@@ -210,6 +241,19 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
                 <span className="text-white text-xs">{unit}</span>
               )}
             </div>
+            
+            {/* Mostrar valor secundario si está disponible */}
+            {secondaryValue !== undefined && (
+              <div className="flex items-baseline gap-1 justify-center mt-1">
+                <span className="text-sm font-medium text-white/80">
+                  {secondaryValue}
+                </span>
+                {secondaryUnit && (
+                  <span className="text-white/70 text-[10px]">{secondaryUnit}</span>
+                )}
+              </div>
+            )}
+            
             {riskLabel && (
               <span 
                 className="text-[10px] font-semibold tracking-wider mt-1 text-white"
@@ -242,6 +286,8 @@ const VitalSign: React.FC<VitalSignProps> = ({ label, value, unit, isFinalReadin
           riskLevel={riskLabel}
           type={getVitalSignType()}
           onBack={() => setShowDetail(false)}
+          secondaryValue={secondaryValue as string | number}
+          secondaryUnit={secondaryUnit}
         />
       )}
     </>

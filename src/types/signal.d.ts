@@ -30,6 +30,12 @@ export interface SignalProcessor {
   onError?: (error: ProcessingError) => void;
 }
 
+export interface RespirationData {
+  rate: number;      // Respiraciones por minuto
+  depth: number;     // Profundidad (0-100)
+  regularity: number; // Regularidad (0-100)
+}
+
 declare global {
   interface Window {
     heartBeatProcessor: HeartBeatProcessor;

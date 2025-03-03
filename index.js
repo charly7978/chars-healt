@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -14,7 +15,9 @@ const Index = () => {
   const [vitalSigns, setVitalSigns] = useState({ 
     spo2: 0, 
     pressure: "--/--",
-    arrhythmiaStatus: "--" 
+    arrhythmiaStatus: "--",
+    respiration: { rate: 0, depth: 0, regularity: 0 },
+    hasRespirationData: false
   });
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState("--");
@@ -114,7 +117,9 @@ const Index = () => {
     setVitalSigns({ 
       spo2: 0, 
       pressure: "--/--",
-      arrhythmiaStatus: "--" 
+      arrhythmiaStatus: "--",
+      respiration: { rate: 0, depth: 0, regularity: 0 },
+      hasRespirationData: false
     });
     setArrhythmiaCount("--");
     setSignalQuality(0);
@@ -161,7 +166,7 @@ const Index = () => {
       } catch (error) {
         console.error("Error capturando frame:", error);
         if (isMonitoring) {
-          requestAnimationFrame(processImage);
+          setTimeout(() => requestAnimationFrame(processImage), 100); // Con un pequeño retardo para recuperarse
         }
       }
     };
@@ -223,7 +228,7 @@ const Index = () => {
           </div>
 
           <div className="absolute bottom-[200px] left-0 right-0 px-4 z-30">
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-5 gap-2">
               <VitalSign 
                 label="FRECUENCIA CARDÍACA"
                 value={heartRate || "--"}
@@ -242,6 +247,13 @@ const Index = () => {
               <VitalSign 
                 label="ARRITMIAS"
                 value={vitalSigns.arrhythmiaStatus}
+              />
+              <VitalSign 
+                label="RESPIRACIÓN"
+                value={vitalSigns.hasRespirationData ? vitalSigns.respiration.rate : "--"}
+                unit="RPM"
+                secondaryValue={vitalSigns.hasRespirationData ? vitalSigns.respiration.depth : "--"}
+                secondaryUnit="Prof."
               />
             </div>
           </div>
