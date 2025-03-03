@@ -1,3 +1,4 @@
+
 import { useState, useCallback, useEffect } from 'react';
 import { VitalSignsProcessor } from '../modules/VitalSignsProcessor';
 import { GlucoseProcessor } from '../modules/GlucoseProcessor';
@@ -97,11 +98,28 @@ export const useVitalSignsProcessor = () => {
     return false;
   }, [glucoseProcessor]);
 
+  // Añadir el método cleanMemory que falta
+  const cleanMemory = useCallback(() => {
+    console.log('useVitalSignsProcessor: Realizando limpieza de memoria');
+    
+    // Reiniciar procesadores
+    processor.reset();
+    glucoseProcessor.reset();
+    
+    // Limpiar el estado
+    setVitalSignsData(null);
+    
+    console.log('useVitalSignsProcessor: Memoria liberada');
+    
+    return true;
+  }, [processor, glucoseProcessor]);
+
   return {
     vitalSignsData,
     processSignal,
     reset,
     getCurrentRespiratoryData,
-    calibrateGlucose
+    calibrateGlucose,
+    cleanMemory  // Exportamos el nuevo método
   };
 };
