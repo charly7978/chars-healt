@@ -7,6 +7,7 @@ import { createVitalSignsDataCollector } from '../utils/vitalSignsDataCollector'
 import { useSignalHistory } from './useSignalHistory';
 import { VitalSignsRisk } from '../utils/vitalSignsRisk';
 import { RespirationProcessor } from '../modules/RespirationProcessor';
+import { BloodGlucoseData } from '../types/signal';
 
 export const useVitalSignsProcessor = () => {
   // Core processor
@@ -102,6 +103,15 @@ export const useVitalSignsProcessor = () => {
       dataCollector.current.addRespirationRate(respirationResult.rate);
     }
     
+    if (respirationResult.depth > 0) {
+      dataCollector.current.addRespirationDepth(respirationResult.depth);
+    }
+    
+    // Add glucose data to collector
+    if (result.glucose && result.glucose.value > 0) {
+      dataCollector.current.addBloodGlucose(result.glucose);
+    }
+    
     // Advanced arrhythmia analysis - asegurarse de pasar los datos de amplitud si están disponibles
     if (rrData?.intervals && rrData.intervals.length >= 4) {
       // Asegurarse de pasar los datos de amplitud al analizador de arritmias si están disponibles
@@ -114,7 +124,10 @@ export const useVitalSignsProcessor = () => {
           arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus,
           lastArrhythmiaData: arrhythmiaResult.lastArrhythmiaData,
           respiration: respirationResult,
-          hasRespirationData: respirationProcessor.hasValidData()
+          hasRespirationData: respirationProcessor.hasValidData(),
+          glucose: result.glucose?.value || 0,
+          glucoseTrend: result.glucose?.trend || 'stable',
+          glucoseConfidence: result.glucose?.confidence || 0
         };
       }
       
@@ -123,7 +136,10 @@ export const useVitalSignsProcessor = () => {
         pressure: stabilizedBP,
         arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus,
         respiration: respirationResult,
-        hasRespirationData: respirationProcessor.hasValidData()
+        hasRespirationData: respirationProcessor.hasValidData(),
+        glucose: result.glucose?.value || 0,
+        glucoseTrend: result.glucose?.trend || 'stable',
+        glucoseConfidence: result.glucose?.confidence || 0
       };
     }
     
@@ -135,7 +151,10 @@ export const useVitalSignsProcessor = () => {
       pressure: stabilizedBP,
       arrhythmiaStatus,
       respiration: respirationResult,
-      hasRespirationData: respirationProcessor.hasValidData()
+      hasRespirationData: respirationProcessor.hasValidData(),
+      glucose: result.glucose?.value || 0,
+      glucoseTrend: result.glucose?.trend || 'stable',
+      glucoseConfidence: result.glucose?.confidence || 0
     };
   }, [getProcessor, getRespirationProcessor, arrhythmiaAnalyzer, signalHistory]);
 

@@ -1,4 +1,6 @@
 
+import { BloodGlucoseData } from '../types/signal';
+
 /**
  * Creates a collector for vital signs data
  */
@@ -7,7 +9,7 @@ export const createVitalSignsDataCollector = () => {
   const bpValues: string[] = [];
   const respirationRates: number[] = [];
   const respirationDepths: number[] = [];
-  const glucoseValues: number[] = [];
+  const glucoseValues: BloodGlucoseData[] = [];
   
   return {
     /**
@@ -61,9 +63,9 @@ export const createVitalSignsDataCollector = () => {
     /**
      * Add blood glucose reading to collection
      */
-    addBloodGlucose: (value: number) => {
-      if (value >= 40 && value <= 400) {
-        glucoseValues.push(value);
+    addBloodGlucose: (data: BloodGlucoseData) => {
+      if (data.value >= 40 && data.value <= 400) {
+        glucoseValues.push(data);
         if (glucoseValues.length > 10) {
           glucoseValues.shift();
         }
@@ -130,8 +132,24 @@ export const createVitalSignsDataCollector = () => {
      */
     getAverageBloodGlucose: (): number => {
       if (glucoseValues.length === 0) return 0;
-      const sum = glucoseValues.reduce((acc, val) => acc + val, 0);
+      const sum = glucoseValues.reduce((acc, val) => acc + val.value, 0);
       return Math.round(sum / glucoseValues.length);
+    },
+    
+    /**
+     * Get current blood glucose trend
+     */
+    getBloodGlucoseTrend: (): 'rising' | 'falling' | 'stable' => {
+      if (glucoseValues.length === 0) return 'stable';
+      return glucoseValues[glucoseValues.length - 1].trend;
+    },
+    
+    /**
+     * Get latest glucose confidence level
+     */
+    getGlucoseConfidence: (): number => {
+      if (glucoseValues.length === 0) return 0;
+      return glucoseValues[glucoseValues.length - 1].confidence;
     },
     
     /**
