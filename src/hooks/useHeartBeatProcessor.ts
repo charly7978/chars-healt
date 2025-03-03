@@ -41,9 +41,9 @@ export const useHeartBeatProcessor = () => {
       }
       lastProcessTimeRef.current = currentTime;
       
-      // Validate input
-      if (isNaN(value) || !isFinite(value)) {
-        console.error('useHeartBeatProcessor: Invalid input value:', value);
+      // Validate input - more lenient validation to accept more signal values
+      if (value === null || value === undefined || !isFinite(value)) {
+        console.warn('useHeartBeatProcessor: Invalid input value:', value);
         return {
           bpm: 0,
           confidence: 0,
@@ -52,6 +52,9 @@ export const useHeartBeatProcessor = () => {
           amplitude: undefined
         };
       }
+      
+      // Ensure value is a number (convert strings if needed)
+      const numericValue = Number(value);
       
       const processor = getProcessor();
       if (!processor) {
@@ -65,7 +68,26 @@ export const useHeartBeatProcessor = () => {
         };
       }
       
-      const result = processor.processSignal(value);
+      // Process signal with more robust error handling
+      let result;
+      try {
+        result = processor.processSignal(numericValue);
+      } catch (procError) {
+        console.error('useHeartBeatProcessor: Error in processor.processSignal:', procError);
+        // Recover from processor error by resetting
+        try {
+          processor.reset();
+        } catch (resetError) {
+          console.error('useHeartBeatProcessor: Error resetting after processor error:', resetError);
+        }
+        return {
+          bpm: 0,
+          confidence: 0,
+          isPeak: false,
+          rrData: { intervals: [], lastPeakTime: null },
+          amplitude: undefined
+        };
+      }
       
       // Update state with the latest results
       if (result.bpm > 0) {
@@ -75,7 +97,13 @@ export const useHeartBeatProcessor = () => {
       setIsPeak(result.isPeak);
       
       // Get RR intervals for arrhythmia detection, including amplitudes if available
-      const rrData = processor.getRRIntervals();
+      let rrData;
+      try {
+        rrData = processor.getRRIntervals();
+      } catch (rrError) {
+        console.error('useHeartBeatProcessor: Error getting RR intervals:', rrError);
+        rrData = { intervals: [], lastPeakTime: null };
+      }
       
       // Extract peak amplitudes for respiration analysis
       if (result.isPeak && result.amplitude !== undefined) {

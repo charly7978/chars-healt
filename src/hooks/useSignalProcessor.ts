@@ -10,6 +10,7 @@ export const useSignalProcessor = () => {
   const [error, setError] = useState<ProcessingError | null>(null);
   const initializingRef = useRef<boolean>(false);
   const forceReinitializeRef = useRef<boolean>(false);
+  const frameCountRef = useRef<number>(0);
   
   // Use lazy initialization for the processor
   const initializeProcessor = useCallback(() => {
@@ -35,13 +36,25 @@ export const useSignalProcessor = () => {
       processorRef.current = new PPGSignalProcessor();
       
       processorRef.current.onSignalReady = (signal: ProcessedSignal) => {
-        console.log("useSignalProcessor: Signal received:", {
-          timestamp: signal.timestamp,
-          quality: signal.quality,
-          filteredValue: signal.filteredValue,
-          fingerDetected: signal.fingerDetected
-        });
-        setLastSignal(signal);
+        if (frameCountRef.current % 20 === 0) {
+          console.log("useSignalProcessor: Signal received:", {
+            timestamp: signal.timestamp,
+            quality: signal.quality,
+            filteredValue: signal.filteredValue,
+            fingerDetected: signal.fingerDetected
+          });
+        }
+        frameCountRef.current++;
+        
+        // Only update state if finger is detected or if there was a previous detection
+        // This prevents false negatives from briefly flickering the UI
+        if (signal.fingerDetected || (lastSignal && lastSignal.fingerDetected)) {
+          setLastSignal(signal);
+        } else if (!lastSignal) {
+          // If there's no previous signal, always update to show initial state
+          setLastSignal(signal);
+        }
+        
         setError(null);
       };
 
@@ -73,7 +86,7 @@ export const useSignalProcessor = () => {
       initializingRef.current = false;
       return Promise.reject(error);
     }
-  }, []);
+  }, [lastSignal]);
 
   // Create the processor on mount
   useEffect(() => {
@@ -109,9 +122,21 @@ export const useSignalProcessor = () => {
       await initializeProcessor();
       
       if (processorRef.current) {
+        // Set isProcessing first to ensure UI updates
         setIsProcessing(true);
-        processorRef.current.start();
-        console.log("useSignalProcessor: Processing started successfully");
+        frameCountRef.current = 0;
+        
+        // Reset the last signal to ensure we're starting fresh
+        setLastSignal(null);
+        
+        // Start the processor after a brief delay to ensure state has updated
+        setTimeout(() => {
+          if (processorRef.current) {
+            processorRef.current.start();
+            console.log("useSignalProcessor: Processing started successfully");
+          }
+        }, 50);
+        
         return true;
       } else {
         console.error("useSignalProcessor: Cannot start processing - processor not initialized");
@@ -130,8 +155,7 @@ export const useSignalProcessor = () => {
       processorRef.current.stop();
     }
     setIsProcessing(false);
-    // Explicitly free memory
-    setLastSignal(null);
+    // Do not clear lastSignal here to allow viewing the final readings
     setError(null);
     return true;
   }, []);
