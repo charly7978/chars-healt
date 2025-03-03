@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 
@@ -268,20 +269,49 @@ const getVitalSignInfo = (
   else if (type === 'glucose') {
     const glucose = typeof value === 'number' ? value : parseInt(value as string, 10);
     
-    info.description = 'El nivel de glucosa en sangre es un indicador importante de la salud metabólica. Un nivel de glucosa normal oscila entre 70 y 100 mg/dL.';
+    info.description = 'El nivel de glucosa en sangre es un indicador importante de la salud metabólica. Un nivel de glucosa normal oscila entre 70 y 100 mg/dL en ayunas.';
     
     if (isNaN(glucose) || value === '--') {
       info.interpretation = 'No se pudo obtener una medición válida.';
       info.recommendation = 'Intente una nueva medición asegurándose de posicionar correctamente el dedo sobre la cámara.';
     } else if (glucose < 70) {
-      info.interpretation = 'Su nivel de glucosa está por debajo del rango normal (70-100 mg/dL). Esto se conoce como hipoglicemia.';
-      info.recommendation = 'Una hipoglicemia puede ser peligrosa y requiere atención médica. Consulte a un médico lo antes posible.';
+      info.interpretation = 'Su nivel de glucosa está por debajo del rango normal (70-100 mg/dL). Esto se conoce como hipoglucemia.';
+      
+      if (trend === 'falling' || trend === 'falling_rapidly') {
+        info.interpretation += ' La tendencia indica que su nivel de glucosa está disminuyendo, lo que podría empeorar esta condición.';
+      }
+      
+      info.recommendation = 'Niveles bajos de glucosa pueden causar mareos, confusión y desmayos. Considere consumir alimentos o bebidas con azúcar rápidamente y consulte a un médico si los síntomas persisten.';
     } else if (glucose >= 70 && glucose <= 100) {
       info.interpretation = 'Su nivel de glucosa está dentro del rango normal (70-100 mg/dL).';
-      info.recommendation = 'Continúe manteniendo hábitos saludables como ejercicio regular, buena alimentación y control del estrés.';
+      
+      if (trend === 'rising_rapidly') {
+        info.interpretation += ' Sin embargo, la tendencia indica un aumento rápido que debe vigilarse.';
+      } else if (trend === 'falling_rapidly' && glucose < 85) {
+        info.interpretation += ' Sin embargo, la tendencia indica una disminución rápida que podría llevarlo a hipoglucemia.';
+      }
+      
+      info.recommendation = 'Continúe manteniendo hábitos saludables como una alimentación equilibrada, ejercicio regular y control del estrés.';
+    } else if (glucose > 100 && glucose < 126) {
+      info.interpretation = 'Su nivel de glucosa está ligeramente elevado (100-125 mg/dL), lo que podría indicar prediabetes.';
+      
+      if (trend === 'rising' || trend === 'rising_rapidly') {
+        info.interpretation += ' La tendencia indica que su nivel de glucosa está aumentando, lo que podría empeorar esta condición.';
+      }
+      
+      info.recommendation = 'Considere modificar su dieta, aumentar la actividad física y consultar a un médico para una evaluación más detallada.';
     } else {
-      info.interpretation = 'Su nivel de glucosa está por encima del rango normal (70-100 mg/dL). Esto se conoce como hiperglicemia.';
-      info.recommendation = 'Una hiperglicemia puede ser peligrosa y requiere atención médica. Consulte a un médico lo antes posible.';
+      info.interpretation = 'Su nivel de glucosa está por encima del rango normal (>125 mg/dL). Niveles superiores a 125 mg/dL en ayunas pueden indicar diabetes.';
+      
+      if (trend === 'rising' || trend === 'rising_rapidly') {
+        info.interpretation += ' La tendencia indica que su nivel de glucosa está aumentando, lo que podría empeorar esta condición.';
+      }
+      
+      if (glucose > 180) {
+        info.recommendation = 'Niveles muy elevados de glucosa requieren atención médica. Consulte a un médico lo antes posible para una evaluación y tratamiento adecuados.';
+      } else {
+        info.recommendation = 'Consulte a un médico para una evaluación completa. Podría ser necesario realizar análisis adicionales para determinar si tiene diabetes.';
+      }
     }
   }
 

@@ -19,6 +19,10 @@ interface VitalSigns {
     regularity: number;
   };
   hasRespirationData: boolean;
+  glucose: {
+    value: number;
+    trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
+  };
 }
 
 const Index = () => {
@@ -30,7 +34,8 @@ const Index = () => {
     pressure: "--/--",
     arrhythmiaStatus: "--",
     respiration: { rate: 0, depth: 0, regularity: 0 },
-    hasRespirationData: false
+    hasRespirationData: false,
+    glucose: { value: 0, trend: 'unknown' }
   });
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState<string | number>("--");
@@ -49,6 +54,10 @@ const Index = () => {
       rate: number;
       depth: number;
       regularity: number;
+    },
+    glucose: {
+      value: number;
+      trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
     }
   } | null>(null);
   const [permissionsGranted, setPermissionsGranted] = useState(false);
@@ -60,6 +69,7 @@ const Index = () => {
   const allDiastolicValuesRef = useRef<number[]>([]);
   const allRespirationRateValuesRef = useRef<number[]>([]);
   const allRespirationDepthValuesRef = useRef<number[]>([]);
+  const allGlucoseValuesRef = useRef<number[]>([]);
   
   const hasValidValuesRef = useRef(false);
   
@@ -87,6 +97,7 @@ const Index = () => {
       const validDiastolicValues = allDiastolicValuesRef.current.filter(v => v > 0);
       const validRespRates = allRespirationRateValuesRef.current.filter(v => v > 0);
       const validRespDepths = allRespirationDepthValuesRef.current.filter(v => v > 0);
+      const validGlucoseValues = allGlucoseValuesRef.current.filter(v => v > 0);
       
       console.log("Valores acumulados para promedios:", {
         heartRateValues: validHeartRates.length,
@@ -94,22 +105,18 @@ const Index = () => {
         systolicValues: validSystolicValues.length,
         diastolicValues: validDiastolicValues.length,
         respirationRates: validRespRates.length,
-        respirationDepths: validRespDepths.length
+        respirationDepths: validRespDepths.length,
+        glucoseValues: validGlucoseValues.length
       });
       
       let avgHeartRate = 0;
-      let avgSpo2 = 0;
-      let avgSystolic = 0;
-      let avgDiastolic = 0;
-      let avgRespRate = 0;
-      let avgRespDepth = 0;
-      
       if (validHeartRates.length > 0) {
         avgHeartRate = Math.round(validHeartRates.reduce((a, b) => a + b, 0) / validHeartRates.length);
       } else {
         avgHeartRate = heartRate;
       }
       
+      let avgSpo2 = 0;
       if (validSpo2Values.length > 0) {
         avgSpo2 = Math.round(validSpo2Values.reduce((a, b) => a + b, 0) / validSpo2Values.length);
       } else {
@@ -118,29 +125,62 @@ const Index = () => {
       
       let finalBPString = vitalSigns.pressure;
       if (validSystolicValues.length > 0 && validDiastolicValues.length > 0) {
-        avgSystolic = Math.round(validSystolicValues.reduce((a, b) => a + b, 0) / validSystolicValues.length);
-        avgDiastolic = Math.round(validDiastolicValues.reduce((a, b) => a + b, 0) / validDiastolicValues.length);
+        let avgSystolic = Math.round(validSystolicValues.reduce((a, b) => a + b, 0) / validSystolicValues.length);
+        let avgDiastolic = Math.round(validDiastolicValues.reduce((a, b) => a + b, 0) / validDiastolicValues.length);
         finalBPString = `${avgSystolic}/${avgDiastolic}`;
       }
-
+      
+      let avgRespRate = 0;
       if (validRespRates.length > 0) {
         avgRespRate = Math.round(validRespRates.reduce((a, b) => a + b, 0) / validRespRates.length);
       } else {
         avgRespRate = vitalSigns.respiration.rate;
       }
       
+      let avgRespDepth = 0;
       if (validRespDepths.length > 0) {
         avgRespDepth = Math.round(validRespDepths.reduce((a, b) => a + b, 0) / validRespDepths.length);
       } else {
         avgRespDepth = vitalSigns.respiration.depth;
       }
       
+      let avgGlucose = 0;
+      if (validGlucoseValues.length > 0) {
+        avgGlucose = Math.round(validGlucoseValues.reduce((a, b) => a + b, 0) / validGlucoseValues.length);
+      } else {
+        avgGlucose = vitalSigns.glucose.value;
+      }
+      
       console.log("PROMEDIOS REALES calculados:", {
         heartRate: avgHeartRate,
         spo2: avgSpo2,
         pressure: finalBPString,
-        respiration: { rate: avgRespRate, depth: avgRespDepth }
+        respiration: { rate: avgRespRate, depth: avgRespDepth },
+        glucose: avgGlucose
       });
+      
+      let glucoseTrend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown' = 'unknown';
+      if (validGlucoseValues.length >= 3) {
+        const recentValues = validGlucoseValues.slice(-3);
+        const changes = [];
+        for (let i = 1; i < recentValues.length; i++) {
+          changes.push(recentValues[i] - recentValues[i-1]);
+        }
+        
+        const avgChange = changes.reduce((a, b) => a + b, 0) / changes.length;
+        
+        if (Math.abs(avgChange) < 2) {
+          glucoseTrend = 'stable';
+        } else if (avgChange > 5) {
+          glucoseTrend = 'rising_rapidly';
+        } else if (avgChange > 2) {
+          glucoseTrend = 'rising';
+        } else if (avgChange < -5) {
+          glucoseTrend = 'falling_rapidly';
+        } else if (avgChange < -2) {
+          glucoseTrend = 'falling';
+        }
+      }
       
       setFinalValues({
         heartRate: avgHeartRate > 0 ? avgHeartRate : heartRate,
@@ -150,6 +190,10 @@ const Index = () => {
           rate: avgRespRate > 0 ? avgRespRate : vitalSigns.respiration.rate,
           depth: avgRespDepth > 0 ? avgRespDepth : vitalSigns.respiration.depth,
           regularity: vitalSigns.respiration.regularity
+        },
+        glucose: {
+          value: avgGlucose > 0 ? avgGlucose : vitalSigns.glucose.value,
+          trend: glucoseTrend
         }
       });
         
@@ -161,13 +205,15 @@ const Index = () => {
       allDiastolicValuesRef.current = [];
       allRespirationRateValuesRef.current = [];
       allRespirationDepthValuesRef.current = [];
+      allGlucoseValuesRef.current = [];
     } catch (error) {
       console.error("Error en calculateFinalValues:", error);
       setFinalValues({
         heartRate: heartRate,
         spo2: vitalSigns.spo2,
         pressure: vitalSigns.pressure,
-        respiration: vitalSigns.respiration
+        respiration: vitalSigns.respiration,
+        glucose: vitalSigns.glucose
       });
       hasValidValuesRef.current = true;
     }
@@ -204,6 +250,7 @@ const Index = () => {
       allDiastolicValuesRef.current = [];
       allRespirationRateValuesRef.current = [];
       allRespirationDepthValuesRef.current = [];
+      allGlucoseValuesRef.current = [];
       
       if (measurementTimerRef.current) {
         clearInterval(measurementTimerRef.current);
@@ -300,7 +347,8 @@ const Index = () => {
       pressure: "--/--",
       arrhythmiaStatus: "--",
       respiration: { rate: 0, depth: 0, regularity: 0 },
-      hasRespirationData: false
+      hasRespirationData: false,
+      glucose: { value: 0, trend: 'unknown' }
     });
     setArrhythmiaCount("--");
     setLastArrhythmiaData(null);
@@ -320,6 +368,7 @@ const Index = () => {
     allDiastolicValuesRef.current = [];
     allRespirationRateValuesRef.current = [];
     allRespirationDepthValuesRef.current = [];
+    allGlucoseValuesRef.current = [];
   };
 
   const handleStreamReady = (stream: MediaStream) => {
@@ -521,6 +570,16 @@ const Index = () => {
               }
             }
             
+            if (vitals.glucose && vitals.glucose.value > 0) {
+              console.log("Procesando datos de glucosa:", vitals.glucose);
+              setVitalSigns(current => ({
+                ...current,
+                glucose: vitals.glucose
+              }));
+              
+              allGlucoseValuesRef.current.push(vitals.glucose.value);
+            }
+            
             if (vitals.lastArrhythmiaData) {
               setLastArrhythmiaData(vitals.lastArrhythmiaData);
               
@@ -607,7 +666,7 @@ const Index = () => {
 
       <div className="absolute z-20" style={{ bottom: '65px', left: 0, right: 0, padding: '0 12px' }}>
         <div className="p-2 rounded-lg">
-          <div className="grid grid-cols-3 gap-1 sm:grid-cols-5">
+          <div className="grid grid-cols-3 gap-1 sm:grid-cols-6">
             <VitalSign 
               label="FRECUENCIA CARDÍACA"
               value={finalValues ? finalValues.heartRate : heartRate || "--"}
@@ -637,6 +696,13 @@ const Index = () => {
               unit="RPM"
               secondaryValue={finalValues ? finalValues.respiration.depth : (vitalSigns.hasRespirationData ? vitalSigns.respiration.depth : "--")}
               secondaryUnit="%"
+              isFinalReading={measurementComplete}
+            />
+            <VitalSign 
+              label="GLUCOSA"
+              value={finalValues ? finalValues.glucose.value : vitalSigns.glucose.value || "--"}
+              unit="mg/dL"
+              trend={finalValues ? finalValues.glucose.trend : vitalSigns.glucose.trend}
               isFinalReading={measurementComplete}
             />
           </div>
