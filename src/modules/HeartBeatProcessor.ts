@@ -364,38 +364,55 @@ export class HeartBeatProcessor {
     }
   }
 
-  private getSmoothBPM(): number {
-    const rawBPM = this.calculateCurrentBPM();
-    if (this.smoothBPM === 0) {
-      this.smoothBPM = rawBPM;
-      return rawBPM;
-    }
-    this.smoothBPM =
-      this.BPM_ALPHA * rawBPM + (1 - this.BPM_ALPHA) * this.smoothBPM;
-    return this.smoothBPM;
-  }
-
-  private calculateCurrentBPM(): number {
-    if (this.bpmHistory.length < 2) {
+  public getSmoothBPM(): number {
+    // Si no hay suficientes datos, retornar 0
+    if (this.bpmHistory.length === 0) {
       return 0;
     }
-    const sorted = [...this.bpmHistory].sort((a, b) => a - b);
-    const trimmed = sorted.slice(1, -1);
-    if (!trimmed.length) return 0;
-    const avg = trimmed.reduce((a, b) => a + b, 0) / trimmed.length;
-    return avg;
+    
+    // Calcular un promedio ponderado de las últimas lecturas
+    const weightedSum = this.bpmHistory.reduce((sum, bpm, index) => {
+      // Damos más peso a las lecturas más recientes
+      const weight = (index + 1) / this.bpmHistory.length;
+      return sum + bpm * weight;
+    }, 0);
+    
+    const weightedAverage = weightedSum / (this.bpmHistory.reduce((sum, _, index) => sum + (index + 1) / this.bpmHistory.length, 0));
+    
+    // Actualizar el BPM suavizado
+    this.smoothBPM = this.smoothBPM === 0
+      ? weightedAverage
+      : this.smoothBPM * 0.7 + weightedAverage * 0.3;
+    
+    // Asegurar que el valor esté dentro de límites fisiológicos
+    const boundedBPM = Math.max(this.MIN_BPM, Math.min(this.MAX_BPM, this.smoothBPM));
+    
+    // Retornar valor redondeado a entero
+    return Math.round(boundedBPM);
   }
 
   public getFinalBPM(): number {
-    if (this.bpmHistory.length < 5) {
+    if (this.bpmHistory.length === 0) {
       return 0;
     }
-    const sorted = [...this.bpmHistory].sort((a, b) => a - b);
-    const cut = Math.round(sorted.length * 0.1);
-    const finalSet = sorted.slice(cut, sorted.length - cut);
-    if (!finalSet.length) return 0;
-    const sum = finalSet.reduce((acc, val) => acc + val, 0);
-    return Math.round(sum / finalSet.length);
+    
+    // Filtrar valores extremos para obtener un cálculo más estable
+    const sortedBPM = [...this.bpmHistory].sort((a, b) => a - b);
+    const validBPM = sortedBPM.slice(
+      Math.floor(sortedBPM.length * 0.2), 
+      Math.ceil(sortedBPM.length * 0.8)
+    );
+    
+    // Si no quedan suficientes valores después del filtrado, usar el último BPM calculado
+    if (validBPM.length === 0) {
+      return Math.round(this.getSmoothBPM());
+    }
+    
+    // Calcular el promedio de los valores válidos
+    const average = validBPM.reduce((sum, bpm) => sum + bpm, 0) / validBPM.length;
+    
+    // Retornar valor redondeado a entero
+    return Math.round(average);
   }
 
   public reset() {
@@ -424,7 +441,7 @@ export class HeartBeatProcessor {
     // This ensures arrhythmia detection has amplitude data to work with
     const amplitudes = this.bpmHistory.map(bpm => {
       // Higher BPM (shorter RR) typically means lower amplitude for premature beats
-      return 100 / (bpm || 800) * (this.calculateCurrentBPM() / 100);
+      return 100 / (bpm || 800) * (this.getSmoothBPM() / 100);
     });
     
     return {
