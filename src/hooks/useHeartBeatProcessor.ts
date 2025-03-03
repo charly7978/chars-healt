@@ -30,15 +30,19 @@ export const useHeartBeatProcessor = () => {
       setConfidence(result.confidence);
       setIsPeak(result.isPeak);
       
-      // Get RR intervals for arrhythmia detection, including amplitudes if available
+      // Get RR intervals for arrhythmia detection, including amplitudes
       const rrData = processor.getRRIntervals();
       
-      // Extract peak amplitudes for respiration analysis
+      // Add peak amplitude for arrhythmia detection
       if (result.isPeak && result.amplitude !== undefined) {
         if (!rrData.amplitudes) {
           rrData.amplitudes = [];
         }
+        // Make sure we add the amplitude to the end of the array
         rrData.amplitudes.push(result.amplitude);
+        
+        // Log for debugging
+        console.log("Peak detected with amplitude:", result.amplitude);
       }
       
       return {
@@ -54,7 +58,7 @@ export const useHeartBeatProcessor = () => {
         bpm: 0,
         confidence: 0,
         isPeak: false,
-        rrData: { intervals: [], lastPeakTime: null },
+        rrData: { intervals: [], lastPeakTime: null, amplitudes: [] },
         amplitude: undefined
       };
     }

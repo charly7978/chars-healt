@@ -1,3 +1,4 @@
+
 import { applySMAFilter } from '../utils/signalProcessingUtils';
 import { SpO2Calculator } from './spo2';
 import { BloodPressureCalculator } from './BloodPressureCalculator';
@@ -24,6 +25,7 @@ export class VitalSignsProcessor {
     this.spO2Calculator = new SpO2Calculator();
     this.bpCalculator = new BloodPressureCalculator();
     this.arrhythmiaDetector = new ArrhythmiaDetector();
+    console.log("VitalSignsProcessor: Inicializado con detectores especializados");
   }
 
   /**
@@ -31,9 +33,17 @@ export class VitalSignsProcessor {
    */
   public processSignal(
     ppgValue: number,
-    rrData?: { intervals: number[]; lastPeakTime: number | null; amplitude?: number }
+    rrData?: { 
+      intervals: number[]; 
+      lastPeakTime: number | null; 
+      amplitudes?: number[]
+    }
   ) {
     const currentTime = Date.now();
+    
+    // Log arrhythmia detector state
+    console.log("VitalSignsProcessor: Estado de aprendizaje del detector:", 
+      this.arrhythmiaDetector.isInLearningPhase());
 
     // Update RR intervals if available, passing amplitude data if available
     if (rrData?.intervals && rrData.intervals.length > 0) {
@@ -43,10 +53,22 @@ export class VitalSignsProcessor {
       });
       
       if (validIntervals.length > 0) {
-        // Pass peak amplitude if available to the arrhythmia detector
-        const peakAmplitude = rrData.amplitude;
+        // Get the most recent amplitude if available
+        const amplitudes = rrData.amplitudes || [];
+        const peakAmplitude = amplitudes.length > 0 ? 
+          amplitudes[amplitudes.length - 1] : undefined;
         
-        this.arrhythmiaDetector.updateIntervals(validIntervals, rrData.lastPeakTime, peakAmplitude);
+        // Log for debugging
+        if (peakAmplitude !== undefined) {
+          console.log("VitalSignsProcessor: Actualizando intervalos con amplitud:", peakAmplitude);
+        }
+        
+        // Pass all data to arrhythmia detector
+        this.arrhythmiaDetector.updateIntervals(
+          validIntervals, 
+          rrData.lastPeakTime, 
+          peakAmplitude
+        );
       }
     }
 
@@ -75,6 +97,12 @@ export class VitalSignsProcessor {
 
     // Process arrhythmia detection - using ONLY the ArrhythmiaDetector module
     const arrhythmiaResult = this.arrhythmiaDetector.detect();
+    
+    // Log arrhythmia results for debugging
+    if (arrhythmiaResult.detected) {
+      console.log("VitalSignsProcessor: Arritmia detectada con confianza:", 
+        arrhythmiaResult.data?.confidence);
+    }
 
     // Calculate vital signs - utilizando datos reales optimizados
     const spo2 = this.spO2Calculator.calculate(this.ppgValues.slice(-60));

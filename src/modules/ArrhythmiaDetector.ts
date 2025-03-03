@@ -20,6 +20,7 @@ export class ArrhythmiaDetector {
 
   constructor() {
     this.reset();
+    console.log("ArrhythmiaDetector: Inicializado con sensibilidad ultra-alta");
   }
 
   /**
@@ -40,7 +41,10 @@ export class ArrhythmiaDetector {
    * Check if detector is still in learning phase
    */
   isInLearningPhase(): boolean {
-    return this.rrIntervals.length < this.LEARNING_SAMPLES || this.baseRRInterval === 0;
+    const isLearning = this.rrIntervals.length < this.LEARNING_SAMPLES || this.baseRRInterval === 0;
+    console.log("ArrhythmiaDetector: isInLearningPhase =", isLearning, 
+      "- intervals:", this.rrIntervals.length, "baseRR:", this.baseRRInterval);
+    return isLearning;
   }
 
   /**
@@ -49,9 +53,16 @@ export class ArrhythmiaDetector {
   updateIntervals(intervals: number[], lastPeakTime: number | null, peakAmplitude?: number): void {
     // Update RR intervals
     if (intervals && intervals.length > 0) {
-      this.rrIntervals = intervals.slice(-20); // Keep only the last 20 intervals (reduced from 30)
+      // Log before update
+      const prevLength = this.rrIntervals.length;
+      
+      // Update intervals
+      this.rrIntervals = intervals.slice(-20); // Keep only the last 20 intervals
+      
+      console.log("ArrhythmiaDetector: Intervals updated from", prevLength, "to", this.rrIntervals.length);
     }
     
+    // Update lastPeakTime
     this.lastPeakTime = lastPeakTime;
     
     // Store peak amplitude if provided
@@ -62,13 +73,16 @@ export class ArrhythmiaDetector {
       if (this.peakAmplitudes.length > this.rrIntervals.length) {
         this.peakAmplitudes = this.peakAmplitudes.slice(-this.rrIntervals.length);
       }
+      
+      console.log("ArrhythmiaDetector: Amplitude added:", peakAmplitude, 
+        "- total amplitudes:", this.peakAmplitudes.length);
     }
     
     // Calculate baseline RR interval after collecting enough samples
     if (this.rrIntervals.length >= this.LEARNING_SAMPLES && this.baseRRInterval === 0) {
       this.calculateBaseRRInterval();
     } else if (this.rrIntervals.length >= this.LEARNING_SAMPLES) {
-      // Continuously update baseline for better reactivity (new ultra-sensitive feature)
+      // Continuously update baseline for better reactivity
       this.updateBaseRRInterval();
     }
   }

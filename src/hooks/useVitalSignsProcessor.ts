@@ -35,16 +35,21 @@ export const useVitalSignsProcessor = () => {
   }, []);
 
   const processSignal = useCallback((ppgValue: number, rrData?: any) => {
-    // Ensure we always pass the amplitude data to VitalSignsProcessor for arrhythmia detection
-    // This is critical for ultra-sensitive arrhythmia detection
-    const amplitude = rrData?.amplitude || null;
+    // Ensure proper extraction of amplitude data for arrhythmia detection
+    const amplitudes = rrData?.amplitudes || [];
+    const amplitude = amplitudes.length > 0 ? amplitudes[amplitudes.length - 1] : null;
+    
+    // Log for debugging
+    if (amplitude !== null) {
+      console.log("useVitalSignsProcessor: Procesando señal con amplitud:", amplitude);
+    }
     
     // Procesar la señal principal con el procesador original
-    // Este procesador ahora tiene el algoritmo ultra-sensible de arritmias
+    // Asegurarnos de pasar todos los datos RR correctamente para la detección de arritmias
     const vitalSignsResult = processor.processSignal(ppgValue, {
       intervals: rrData?.intervals || [],
       lastPeakTime: rrData?.lastPeakTime || null,
-      amplitude: amplitude
+      amplitudes: rrData?.amplitudes || []  // Pass the full amplitudes array
     });
     
     // Procesar datos de glucosa como paso separado
@@ -71,17 +76,18 @@ export const useVitalSignsProcessor = () => {
     // Asegurarse de que arrhythmiaStatus se preserve exactamente
     combinedResult.arrhythmiaStatus = vitalSignsResult.arrhythmiaStatus;
     
-    // Guardar datos combinados en estado
-    setVitalSignsData(combinedResult);
-    
-    // Log para debugging de arritmias (más detallado para la versión ultra-sensible)
+    // Log para debugging de arritmias cuando se detecta
     if (vitalSignsResult.arrhythmiaStatus && vitalSignsResult.arrhythmiaStatus.includes('ARRITMIA DETECTADA')) {
       console.log('¡ARRITMIA DETECTADA!', { 
         status: vitalSignsResult.arrhythmiaStatus,
         data: vitalSignsResult.lastArrhythmiaData,
-        amplitude: amplitude 
+        amplitudes: rrData?.amplitudes,
+        lastAmplitude: amplitude 
       });
     }
+    
+    // Guardar datos combinados en estado
+    setVitalSignsData(combinedResult);
     
     return combinedResult;
   }, [processor, glucoseProcessor]);
