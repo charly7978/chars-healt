@@ -70,7 +70,7 @@ export const useVitalSignsProcessor = () => {
     
     // Importante: verificamos si hay arritmias en el resultado
     if (vitalSignsResult.arrhythmiaStatus && vitalSignsResult.arrhythmiaStatus.includes('ARRITMIA DETECTADA')) {
-      console.log('¡ARRITMIA DETECTADA!', vitalSignsResult.arrhythmiaStatus);
+      console.log('¡ARRITMIA DETECTADA!', vitalSignsResult.lastArrhythmiaData);
     }
     
     return combinedResult;
@@ -98,7 +98,7 @@ export const useVitalSignsProcessor = () => {
     return false;
   }, [glucoseProcessor]);
 
-  // Añadir el método cleanMemory que falta
+  // Método cleanMemory para liberar recursos
   const cleanMemory = useCallback(() => {
     console.log('useVitalSignsProcessor: Realizando limpieza de memoria');
     
@@ -120,6 +120,6 @@ export const useVitalSignsProcessor = () => {
     reset,
     getCurrentRespiratoryData,
     calibrateGlucose,
-    cleanMemory  // Exportamos el nuevo método
+    cleanMemory
   };
 };
