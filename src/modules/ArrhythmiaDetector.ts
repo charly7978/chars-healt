@@ -1,372 +1,264 @@
-/**
- * New improved arrhythmia detection module that analyzes heart rhythm patterns
- * using RR intervals and amplitude data to detect irregularities.
- */
 
-type ArrhythmiaResult = {
-  detected: boolean;
-  severity: number;  // 0-10 scale where 0 is no arrhythmia, 10 is severe
-  confidence: number; // 0-1 scale
-  type: ArrhythmiaType;
-  rmssd?: number;    // Root Mean Square of Successive Differences (variability measure)
-  rrVariation?: number; // Variation coefficient of RR intervals
-  timestamp: number;
-};
-
-type ArrhythmiaType = 'NONE' | 'PAC' | 'PVC' | 'AF' | 'UNKNOWN';
+import { ArrhythmiaResult, ArrhythmiaType } from '../types/signal';
 
 export class ArrhythmiaDetector {
-  private rrBuffer: number[] = [];
-  private amplitudeBuffer: number[] = [];
-  private detectionHistory: ArrhythmiaResult[] = [];
-  private learningPhaseDuration = 10000; // 10 seconds of learning phase
-  private startTime: number;
-  private lastDetectionTime: number = 0;
+  private rrIntervals: number[] = [];
+  private amplitudes: number[] = [];
+  private lastPeakTimes: number[] = [];
+  private learningPhase: boolean = true;
+  private learningPhaseCount: number = 0;
+  private readonly LEARNING_PHASE_THRESHOLD = 20;
+  private readonly MAX_INTERVALS = 50;
+  private lastAnalysisTime: number = 0;
+  private lastPeakTime: number | null = null;
+  private readonly ANALYSIS_COOLDOWN_MS = 1000; // Prevent overanalyzing
   
-  // Constants for detection algorithms
-  private readonly MAX_BUFFER_SIZE = 30;
-  private readonly RR_VARIATION_THRESHOLD = 0.20; // 20% variation threshold for suspicious beats
-  private readonly AMPLITUDE_VARIATION_THRESHOLD = 0.30; // 30% amplitude variation for PVCs
-  private readonly MIN_DETECTION_INTERVAL = 2000; // Min 2 seconds between detections to avoid false positives
-  private readonly MIN_RR_INTERVALS = 6; // Minimum intervals needed for reliable detection
-  private readonly SEVERE_RMSSD_THRESHOLD = 50; // Threshold for severe arrhythmia (ms)
-
   constructor() {
-    this.startTime = Date.now();
-    console.log("New ArrhythmiaDetector initialized");
+    console.log("ArrhythmiaDetector: Inicializado");
   }
-
-  /**
-   * Process heart beat data to detect arrhythmias
-   * @param rrInterval Current RR interval in ms
-   * @param amplitude Current beat amplitude (optional)
-   * @returns ArrhythmiaResult with detection data
-   */
-  public processHeartbeat(rrInterval: number, amplitude?: number): ArrhythmiaResult {
-    const now = Date.now();
+  
+  public addRRInterval(interval: number, amplitude?: number): void {
+    if (interval < 300 || interval > 2000) {
+      // Filtrar intervalos no fisiológicos
+      return;
+    }
     
-    // Add new data to buffers
-    if (rrInterval > 0) {
-      this.rrBuffer.push(rrInterval);
-      
-      // Maintain buffer size
-      if (this.rrBuffer.length > this.MAX_BUFFER_SIZE) {
-        this.rrBuffer.shift();
+    this.rrIntervals.push(interval);
+    this.amplitudes.push(amplitude || 0);
+    
+    // Mantener los arrays dentro de un tamaño máximo
+    if (this.rrIntervals.length > this.MAX_INTERVALS) {
+      this.rrIntervals.shift();
+      this.amplitudes.shift();
+    }
+    
+    // Fase de aprendizaje
+    if (this.learningPhase) {
+      this.learningPhaseCount++;
+      if (this.learningPhaseCount >= this.LEARNING_PHASE_THRESHOLD) {
+        this.learningPhase = false;
+        console.log("ArrhythmiaDetector: Fase de aprendizaje completada");
       }
     }
-    
-    if (amplitude !== undefined && amplitude > 0) {
-      this.amplitudeBuffer.push(amplitude);
-      
-      // Maintain amplitude buffer size
-      if (this.amplitudeBuffer.length > this.MAX_BUFFER_SIZE) {
-        this.amplitudeBuffer.shift();
-      }
-    }
-    
-    // Default result (no arrhythmia)
-    const result: ArrhythmiaResult = {
-      detected: false,
-      severity: 0,
-      confidence: 0,
-      type: 'NONE',
-      timestamp: now
-    };
-    
-    // Skip detection during learning phase or if we don't have enough data
-    if (this.isInLearningPhase() || this.rrBuffer.length < this.MIN_RR_INTERVALS) {
-      return result;
-    }
-    
-    // Calculate key metrics for detection
-    const metrics = this.calculateMetrics();
-    
-    // Detect arrhythmias based on metrics
-    const detection = this.detectArrhythmia(metrics);
-    
-    // Only allow a new detection after MIN_DETECTION_INTERVAL has passed
-    if (detection.detected && (now - this.lastDetectionTime) >= this.MIN_DETECTION_INTERVAL) {
-      this.lastDetectionTime = now;
-      this.detectionHistory.push(detection);
-      
-      // Keep only the last 10 detections
-      if (this.detectionHistory.length > 10) {
-        this.detectionHistory.shift();
-      }
-      
-      console.log("ArrhythmiaDetector: Arrhythmia detected!", {
-        type: detection.type,
-        severity: detection.severity,
-        confidence: detection.confidence,
-        rmssd: detection.rmssd,
-        rrVariation: detection.rrVariation
-      });
-      
-      return detection;
-    }
-    
-    return result;
   }
   
-  /**
-   * Process batch RR intervals and amplitudes
-   * @param rrIntervals Array of RR intervals
-   * @param amplitudes Array of corresponding amplitudes (optional)
-   * @returns The latest arrhythmia detection result
-   */
-  public processRRIntervals(rrIntervals: number[], amplitudes?: number[]): ArrhythmiaResult {
-    let latestResult: ArrhythmiaResult = {
-      detected: false,
-      severity: 0,
-      confidence: 0,
-      type: 'NONE',
-      timestamp: Date.now()
-    };
+  public setLastPeakTime(timestamp: number): void {
+    this.lastPeakTime = timestamp;
+    this.lastPeakTimes.push(timestamp);
     
-    if (!rrIntervals || rrIntervals.length === 0) {
-      return latestResult;
+    // Mantener el historial de tiempos de pico dentro de un límite
+    if (this.lastPeakTimes.length > this.MAX_INTERVALS) {
+      this.lastPeakTimes.shift();
     }
-    
-    // Add all intervals to the buffer
-    rrIntervals.forEach((interval, index) => {
-      if (interval > 0) {
-        const amp = amplitudes && amplitudes.length > index ? amplitudes[index] : undefined;
-        const result = this.processHeartbeat(interval, amp);
-        if (result.detected) {
-          latestResult = result;
-        }
-      }
-    });
-    
-    return latestResult;
   }
   
-  /**
-   * Calculate metrics used for arrhythmia detection
-   */
-  private calculateMetrics() {
-    // Calculate average RR interval
-    const avgRR = this.rrBuffer.reduce((sum, val) => sum + val, 0) / this.rrBuffer.length;
-    
-    // Calculate RR variation (coefficient of variation)
-    const rrVariation = this.calculateRRVariation(avgRR);
-    
-    // Calculate RMSSD (Root Mean Square of Successive Differences) - key HRV metric
-    const rmssd = this.calculateRMSSD();
-    
-    // Calculate amplitude variation if we have amplitude data
-    const amplitudeVariation = this.calculateAmplitudeVariation();
-    
-    // Calculate last-to-average ratio (to detect premature beats)
-    const lastRR = this.rrBuffer[this.rrBuffer.length - 1];
-    const lastToAvgRatio = lastRR / avgRR;
-    
-    // Detect outlier RR intervals
-    const outliers = this.detectOutliers();
-    
-    return {
-      avgRR,
-      rrVariation,
-      rmssd,
-      amplitudeVariation,
-      lastToAvgRatio,
-      outlierCount: outliers.length,
-      outlierRatios: outliers
-    };
-  }
-  
-  /**
-   * Calculate the variation coefficient of RR intervals
-   */
-  private calculateRRVariation(avgRR: number): number {
-    if (this.rrBuffer.length < 3 || avgRR === 0) return 0;
-    
-    const sumSquaredDiff = this.rrBuffer.reduce((sum, rr) => {
-      const diff = rr - avgRR;
-      return sum + (diff * diff);
-    }, 0);
-    
-    const stdDev = Math.sqrt(sumSquaredDiff / this.rrBuffer.length);
-    return stdDev / avgRR; // Coefficient of variation
-  }
-  
-  /**
-   * Calculate RMSSD (Root Mean Square of Successive Differences)
-   * A key HRV metric sensitive to short-term variability
-   */
-  private calculateRMSSD(): number {
-    if (this.rrBuffer.length < 2) return 0;
-    
-    let sumSquaredDiffs = 0;
-    for (let i = 1; i < this.rrBuffer.length; i++) {
-      const diff = this.rrBuffer[i] - this.rrBuffer[i-1];
-      sumSquaredDiffs += diff * diff;
-    }
-    
-    return Math.sqrt(sumSquaredDiffs / (this.rrBuffer.length - 1));
-  }
-  
-  /**
-   * Calculate amplitude variation for PVC detection
-   */
-  private calculateAmplitudeVariation(): number {
-    if (this.amplitudeBuffer.length < 3) return 0;
-    
-    const avgAmplitude = this.amplitudeBuffer.reduce((sum, val) => sum + val, 0) / 
-      this.amplitudeBuffer.length;
-    
-    const sumSquaredDiff = this.amplitudeBuffer.reduce((sum, amp) => {
-      const diff = amp - avgAmplitude;
-      return sum + (diff * diff);
-    }, 0);
-    
-    const stdDev = Math.sqrt(sumSquaredDiff / this.amplitudeBuffer.length);
-    return stdDev / avgAmplitude; // Coefficient of variation for amplitude
-  }
-  
-  /**
-   * Detect outlier RR intervals (potential arrhythmias)
-   */
-  private detectOutliers(): number[] {
-    if (this.rrBuffer.length < 4) return [];
-    
-    const avgRR = this.rrBuffer.reduce((sum, val) => sum + val, 0) / this.rrBuffer.length;
-    const outlierRatios: number[] = [];
-    
-    for (let i = 0; i < this.rrBuffer.length; i++) {
-      const ratio = this.rrBuffer[i] / avgRR;
-      
-      // Consider as outlier if >30% shorter or >50% longer than average
-      if (ratio < 0.7 || ratio > 1.5) {
-        outlierRatios.push(ratio);
-      }
-    }
-    
-    return outlierRatios;
-  }
-  
-  /**
-   * Main arrhythmia detection algorithm based on calculated metrics
-   */
-  private detectArrhythmia(metrics: any): ArrhythmiaResult {
-    const {
-      avgRR, 
-      rrVariation, 
-      rmssd, 
-      amplitudeVariation, 
-      lastToAvgRatio,
-      outlierCount,
-      outlierRatios
-    } = metrics;
-    
-    // Initialize result
-    const result: ArrhythmiaResult = {
-      detected: false,
-      severity: 0,
-      confidence: 0,
-      type: 'NONE',
-      timestamp: Date.now(),
-      rmssd,
-      rrVariation
-    };
-    
-    // Detect Atrial Fibrillation - characterized by high RMSSD and RR variation
-    if (rrVariation > 0.18 && rmssd > 40) {
-      result.detected = true;
-      result.type = 'AF';
-      result.severity = Math.min(Math.floor(rrVariation * 30), 10);
-      result.confidence = Math.min(rrVariation * 3, 1);
-    }
-    // Detect Premature Ventricular Contractions (PVCs) 
-    // PVCs show early beats (short RR) followed by compensatory pause (long RR)
-    // And often have different amplitude
-    else if (outlierCount >= 2 && 
-            (outlierRatios.some(r => r < 0.7) && outlierRatios.some(r => r > 1.3)) &&
-            amplitudeVariation > this.AMPLITUDE_VARIATION_THRESHOLD) {
-      result.detected = true;
-      result.type = 'PVC';
-      result.severity = Math.min(Math.floor(outlierCount * 2), 10);
-      result.confidence = Math.min(0.5 + (amplitudeVariation * 0.5), 1);
-    }
-    // Detect Premature Atrial Contractions (PACs)
-    // PACs show early beats but usually without the amplitude changes of PVCs
-    else if (outlierCount >= 1 && 
-             outlierRatios.some(r => r < 0.7) && 
-             amplitudeVariation < this.AMPLITUDE_VARIATION_THRESHOLD) {
-      result.detected = true;
-      result.type = 'PAC';
-      result.severity = Math.min(Math.floor(outlierCount * 1.5), 10);
-      result.confidence = Math.min(0.4 + (rrVariation * 0.6), 0.9); // PACs are harder to confirm
-    }
-    // Catch other arrhythmias based on general irregularity
-    else if (rrVariation > this.RR_VARIATION_THRESHOLD) {
-      result.detected = true;
-      result.type = 'UNKNOWN';
-      result.severity = Math.min(Math.floor(rrVariation * 20), 10);
-      result.confidence = Math.min(rrVariation * 2, 0.8);
-    }
-    
-    return result;
-  }
-  
-  /**
-   * Check if we're still in the learning phase
-   */
   public isInLearningPhase(): boolean {
-    return (Date.now() - this.startTime) < this.learningPhaseDuration;
+    return this.learningPhase;
   }
   
-  /**
-   * Get the count of detected arrhythmias
-   */
-  public getArrhythmiaCount(): number {
-    return this.detectionHistory.length;
-  }
-  
-  /**
-   * Get the most recently detected arrhythmia
-   */
-  public getLastArrhythmia(): ArrhythmiaResult | null {
-    if (this.detectionHistory.length === 0) return null;
-    return this.detectionHistory[this.detectionHistory.length - 1];
-  }
-  
-  /**
-   * Generate status text for display
-   * @returns String describing the arrhythmia status
-   */
-  public getStatusText(): string {
-    if (this.isInLearningPhase()) {
-      return "CALIBRANDO";
+  public analyzeRhythm(): ArrhythmiaResult {
+    const currentTime = Date.now();
+    
+    // Evitar análisis demasiado frecuentes
+    if (currentTime - this.lastAnalysisTime < this.ANALYSIS_COOLDOWN_MS) {
+      return {
+        detected: false,
+        severity: 0,
+        confidence: 0,
+        type: 'NONE',
+        timestamp: currentTime
+      };
     }
     
-    const count = this.getArrhythmiaCount();
+    this.lastAnalysisTime = currentTime;
     
-    if (count === 0) {
-      return "LATIDO NORMAL";
+    // Si estamos en fase de aprendizaje o no tenemos suficientes datos
+    if (this.learningPhase || this.rrIntervals.length < 8) {
+      return {
+        detected: false,
+        severity: 0,
+        confidence: 0,
+        type: 'NONE',
+        timestamp: currentTime
+      };
     }
     
-    const lastArrhythmia = this.getLastArrhythmia();
-    if (!lastArrhythmia) return "LATIDO NORMAL";
-    
-    // If a recent detection occurred (within 5 seconds)
-    if ((Date.now() - lastArrhythmia.timestamp) < 5000) {
-      return `ARRITMIA DETECTADA|${count}`;
+    try {
+      // Análisis de variabilidad RR para detectar fibrilación auricular
+      const rmssd = this.calculateRMSSD();
+      const rrVariation = this.calculateRRVariation();
+      
+      console.log(`ArrhythmiaDetector: RMSSD = ${rmssd.toFixed(2)}, RRVariation = ${rrVariation.toFixed(2)}`);
+      
+      // Detección de PAC (contracciones auriculares prematuras)
+      const hasPAC = this.detectPAC();
+      
+      // Detección de PVC (contracciones ventriculares prematuras)
+      const hasPVC = this.detectPVC();
+      
+      // Detección de AF (fibrilación auricular)
+      const hasAF = this.detectAF(rmssd, rrVariation);
+      
+      // Determinar tipo de arritmia detectada
+      let arrhythmiaType: ArrhythmiaType = 'NONE';
+      let severity = 0;
+      let confidence = 0;
+      
+      if (hasAF) {
+        arrhythmiaType = 'AF';
+        severity = Math.min(10, 5 + Math.floor(rmssd / 50));
+        confidence = Math.min(1, rrVariation / 0.2);
+      } else if (hasPVC) {
+        arrhythmiaType = 'PVC';
+        severity = 7;
+        confidence = 0.8;
+      } else if (hasPAC) {
+        arrhythmiaType = 'PAC';
+        severity = 5;
+        confidence = 0.7;
+      }
+      
+      const detected = arrhythmiaType !== 'NONE';
+      
+      if (detected) {
+        console.log(`ArrhythmiaDetector: Arritmia tipo ${arrhythmiaType} detectada con severidad ${severity} y confianza ${confidence.toFixed(2)}`);
+      }
+      
+      return {
+        detected,
+        severity,
+        confidence,
+        type: arrhythmiaType,
+        timestamp: currentTime,
+        rmssd,
+        rrVariation
+      };
+    } catch (error) {
+      console.error("Error en análisis de arritmias:", error);
+      return {
+        detected: false,
+        severity: 0,
+        confidence: 0,
+        type: 'NONE',
+        timestamp: currentTime
+      };
     }
-    
-    // If we have detections but none recent
-    return `LATIDO IRREGULAR|${count}`;
   }
   
-  /**
-   * Reset the detector state
-   */
+  private calculateRMSSD(): number {
+    if (this.rrIntervals.length < 2) return 0;
+    
+    let sum = 0;
+    for (let i = 1; i < this.rrIntervals.length; i++) {
+      const diff = this.rrIntervals[i] - this.rrIntervals[i - 1];
+      sum += diff * diff;
+    }
+    
+    return Math.sqrt(sum / (this.rrIntervals.length - 1));
+  }
+  
+  private calculateRRVariation(): number {
+    if (this.rrIntervals.length < 3) return 0;
+    
+    const diffs = [];
+    for (let i = 1; i < this.rrIntervals.length; i++) {
+      diffs.push(Math.abs(this.rrIntervals[i] - this.rrIntervals[i - 1]));
+    }
+    
+    // Normalizar por el promedio de los intervalos RR
+    const avgRR = this.rrIntervals.reduce((a, b) => a + b, 0) / this.rrIntervals.length;
+    const variation = diffs.reduce((a, b) => a + b, 0) / diffs.length / avgRR;
+    
+    return variation;
+  }
+  
+  private detectPAC(): boolean {
+    if (this.rrIntervals.length < 4) return false;
+    
+    // Buscar un patrón corto-largo-normal (característico de PAC)
+    for (let i = 2; i < this.rrIntervals.length; i++) {
+      const prev2 = this.rrIntervals[i - 2];
+      const prev1 = this.rrIntervals[i - 1];
+      const current = this.rrIntervals[i];
+      
+      // Si hay un intervalo corto seguido de uno largo
+      if (prev2 > 600 && prev1 < 0.8 * prev2 && current > 1.1 * prev1) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+  
+  private detectPVC(): boolean {
+    if (this.rrIntervals.length < 4 || this.amplitudes.length < 4) return false;
+    
+    // PVC típicamente tienen: 
+    // 1. Un latido prematuro (intervalo RR corto)
+    // 2. Una pausa compensatoria después (intervalo RR largo)
+    // 3. Mayor amplitud en la onda R
+    
+    for (let i = 2; i < this.rrIntervals.length - 1; i++) {
+      const prev = this.rrIntervals[i - 1];
+      const current = this.rrIntervals[i];
+      const next = this.rrIntervals[i + 1];
+      
+      const avgNormal = (this.rrIntervals.reduce((sum, val) => sum + val, 0) - current) / 
+                          (this.rrIntervals.length - 1);
+      
+      // Si hay un intervalo corto seguido de uno largo (pausa compensatoria)
+      // Y la amplitud es significativamente mayor
+      if (current < 0.8 * avgNormal && 
+          next > 1.2 * avgNormal &&
+          this.amplitudes[i] > 1.3 * (this.getAvgAmplitude())) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+  
+  private detectAF(rmssd: number, rrVariation: number): boolean {
+    // AF se caracteriza por alta variabilidad en los intervalos RR
+    // y ausencia de un patrón regular
+    
+    // Criterios basados en estudios clínicos
+    const highRMSSD = rmssd > 100; // Alta variabilidad instantánea
+    const highVariation = rrVariation > 0.1; // Alta variabilidad general
+    
+    // Verificar patrones irregulares consecutivos
+    let irregularCount = 0;
+    for (let i = 1; i < this.rrIntervals.length; i++) {
+      const diff = Math.abs(this.rrIntervals[i] - this.rrIntervals[i - 1]);
+      if (diff > 100) {
+        irregularCount++;
+      }
+    }
+    
+    const highIrregularity = irregularCount >= this.rrIntervals.length * 0.7;
+    
+    return highRMSSD && highVariation && highIrregularity;
+  }
+  
+  private getAvgAmplitude(): number {
+    if (this.amplitudes.length === 0) return 0;
+    
+    // Filtrar valores de 0 que podrían no ser reales
+    const validAmplitudes = this.amplitudes.filter(a => a > 0);
+    if (validAmplitudes.length === 0) return 0;
+    
+    return validAmplitudes.reduce((sum, val) => sum + val, 0) / validAmplitudes.length;
+  }
+  
   public reset(): void {
-    this.rrBuffer = [];
-    this.amplitudeBuffer = [];
-    this.detectionHistory = [];
-    this.startTime = Date.now();
-    this.lastDetectionTime = 0;
-    console.log("ArrhythmiaDetector: Reset completed");
+    this.rrIntervals = [];
+    this.amplitudes = [];
+    this.lastPeakTimes = [];
+    this.learningPhase = true;
+    this.learningPhaseCount = 0;
+    this.lastAnalysisTime = 0;
+    this.lastPeakTime = null;
+    
+    console.log("ArrhythmiaDetector: Reset completo");
   }
 }
