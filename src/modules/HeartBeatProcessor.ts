@@ -169,12 +169,12 @@ export class HeartBeatProcessor {
     const medVal = this.medianFilter(value);
     const movAvgVal = this.calculateMovingAverage(medVal);
     const smoothed = this.calculateEMA(movAvgVal);
-    
+
     this.signalBuffer.push(smoothed);
     if (this.signalBuffer.length > this.WINDOW_SIZE) {
       this.signalBuffer.shift();
     }
-    
+
     if (this.signalBuffer.length < 30) {
       return {
         bpm: 0,
@@ -201,13 +201,13 @@ export class HeartBeatProcessor {
       smoothDerivative = (this.values[2] - this.values[0]) / 2;
     }
     this.lastValue = smoothed;
-    
+
     // Mejorado - Mayor precisión en la detección de picos
     const { isPeak, confidence } = this.detectPeak(normalizedValue, smoothDerivative);
     
     // Confirmación de picos más rigurosa
     const isConfirmedPeak = this.confirmPeak(isPeak, normalizedValue, confidence);
-    
+
     if (isConfirmedPeak && !this.isInWarmup()) {
       const now = Date.now();
       const timeSinceLastPeak = this.lastPeakTime
@@ -232,7 +232,7 @@ export class HeartBeatProcessor {
     };
   }
 
-  private autoResetIfSignalIsLow(amplitude: number): void {
+  private autoResetIfSignalIsLow(amplitude: number) {
     if (amplitude < this.LOW_SIGNAL_THRESHOLD) {
       this.lowSignalCount++;
       if (this.lowSignalCount >= this.LOW_SIGNAL_FRAMES) {
@@ -243,79 +243,15 @@ export class HeartBeatProcessor {
     }
   }
 
-  private resetDetectionStates(): void {
-    this.peakConfirmationBuffer = [];
+  private resetDetectionStates() {
     this.lastPeakTime = null;
     this.previousPeakTime = null;
-    this.lowSignalCount = 0;
     this.lastConfirmedPeak = false;
-    console.log("HeartBeatProcessor: Detection states reset");
-  }
-
-  public reset(): void {
-    this.medianBuffer = [];
-    this.movingAverageBuffer = [];
-    this.signalBuffer = [];
-    this.smoothedValue = 0;
+    this.peakCandidateIndex = null;
+    this.peakCandidateValue = 0;
+    this.peakConfirmationBuffer = [];
     this.values = [];
-    this.baseline = 0;
-    this.lastValue = 0;
-    this.bpmHistory = [];
-    this.smoothBPM = 0;
-    this.startTime = Date.now();
-    this.resetDetectionStates();
-    console.log("HeartBeatProcessor: Full reset");
-  }
-
-  private updateBPM(): void {
-    if (!this.lastPeakTime || !this.previousPeakTime) return;
-
-    const interval = this.lastPeakTime - this.previousPeakTime;
-    if (interval <= 0) return;
-
-    const instantBPM = 60000 / interval;
-
-    if (instantBPM >= this.MIN_BPM && instantBPM <= this.MAX_BPM) {
-      this.bpmHistory.push(instantBPM);
-
-      if (this.bpmHistory.length > 10) {
-        this.bpmHistory.shift();
-      }
-    }
-  }
-
-  private getSmoothBPM(): number {
-    const rawBPM = this.calculateCurrentBPM();
-    if (this.smoothBPM === 0) {
-      this.smoothBPM = rawBPM;
-      return rawBPM;
-    }
-    this.smoothBPM =
-      this.BPM_ALPHA * rawBPM + (1 - this.BPM_ALPHA) * this.smoothBPM;
-    return this.smoothBPM;
-  }
-
-  private calculateCurrentBPM(): number {
-    if (this.bpmHistory.length < 2) {
-      return 0;
-    }
-    const sorted = [...this.bpmHistory].sort((a, b) => a - b);
-    const trimmed = sorted.slice(1, -1);
-    if (!trimmed.length) return 0;
-    const avg = trimmed.reduce((a, b) => a + b, 0) / trimmed.length;
-    return avg;
-  }
-
-  public getFinalBPM(): number {
-    if (this.bpmHistory.length < 5) {
-      return 0;
-    }
-    const sorted = [...this.bpmHistory].sort((a, b) => a - b);
-    const cut = Math.round(sorted.length * 0.1);
-    const finalSet = sorted.slice(cut, sorted.length - cut);
-    if (!finalSet.length) return 0;
-    const sum = finalSet.reduce((acc, val) => acc + val, 0);
-    return Math.round(sum / finalSet.length);
+    console.log("HeartBeatProcessor: auto-reset detection states (low signal).");
   }
 
   private detectPeak(normalizedValue: number, derivative: number): {
@@ -366,13 +302,15 @@ export class HeartBeatProcessor {
     if (isPeak && !this.lastConfirmedPeak && confidence >= this.MIN_CONFIDENCE) {
       if (this.peakConfirmationBuffer.length >= 3) {
         const len = this.peakConfirmationBuffer.length;
-        const current = this.peakConfirmationBuffer[len - 1];
-        const prev = this.peakConfirmationBuffer[len - 2];
-        const prevPrev = this.peakConfirmationBuffer[len - 3];
+        const goingDown1 =
+          this.peakConfirmationBuffer[len - 1] < this.peakConfirmationBuffer[len - 2];
+        const goingDown2 =
+          this.peakConfirmationBuffer[len - 2] < this.peakConfirmationBuffer[len - 3];
 
-        const isLocalMax = current > prev && prev > prevPrev;
-        this.lastConfirmedPeak = isLocalMax;
-        return isLocalMax;
+        if (goingDown1 && goingDown2) {
+          this.lastConfirmedPeak = true;
+          return true;
+        }
       }
     } else if (!isPeak) {
       this.lastConfirmedPeak = false;
@@ -381,16 +319,78 @@ export class HeartBeatProcessor {
     return false;
   }
 
-  public cleanMemory(): void {
-    if (this.audioContext) {
-      this.audioContext.close();
-      this.audioContext = null;
+  private updateBPM() {
+    if (!this.lastPeakTime || !this.previousPeakTime) return;
+    const interval = this.lastPeakTime - this.previousPeakTime;
+    if (interval <= 0) return;
+
+    const instantBPM = 60000 / interval;
+    if (instantBPM >= this.MIN_BPM && instantBPM <= this.MAX_BPM) {
+      this.bpmHistory.push(instantBPM);
+      if (this.bpmHistory.length > 12) {
+        this.bpmHistory.shift();
+      }
     }
-    this.reset();
-    console.log("HeartBeatProcessor: Resources released");
+  }
+
+  private getSmoothBPM(): number {
+    const rawBPM = this.calculateCurrentBPM();
+    if (this.smoothBPM === 0) {
+      this.smoothBPM = rawBPM;
+      return rawBPM;
+    }
+    this.smoothBPM =
+      this.BPM_ALPHA * rawBPM + (1 - this.BPM_ALPHA) * this.smoothBPM;
+    return this.smoothBPM;
+  }
+
+  private calculateCurrentBPM(): number {
+    if (this.bpmHistory.length < 2) {
+      return 0;
+    }
+    const sorted = [...this.bpmHistory].sort((a, b) => a - b);
+    const trimmed = sorted.slice(1, -1);
+    if (!trimmed.length) return 0;
+    const avg = trimmed.reduce((a, b) => a + b, 0) / trimmed.length;
+    return avg;
+  }
+
+  public getFinalBPM(): number {
+    if (this.bpmHistory.length < 5) {
+      return 0;
+    }
+    const sorted = [...this.bpmHistory].sort((a, b) => a - b);
+    const cut = Math.round(sorted.length * 0.1);
+    const finalSet = sorted.slice(cut, sorted.length - cut);
+    if (!finalSet.length) return 0;
+    const sum = finalSet.reduce((acc, val) => acc + val, 0);
+    return Math.round(sum / finalSet.length);
+  }
+
+  public reset() {
+    this.signalBuffer = [];
+    this.medianBuffer = [];
+    this.movingAverageBuffer = [];
+    this.peakConfirmationBuffer = [];
+    this.bpmHistory = [];
+    this.values = [];
+    this.smoothBPM = 0;
+    this.lastPeakTime = null;
+    this.previousPeakTime = null;
+    this.lastConfirmedPeak = false;
+    this.lastBeepTime = 0;
+    this.baseline = 0;
+    this.lastValue = 0;
+    this.smoothedValue = 0;
+    this.startTime = Date.now();
+    this.peakCandidateIndex = null;
+    this.peakCandidateValue = 0;
+    this.lowSignalCount = 0;
   }
 
   public getRRIntervals(): { intervals: number[]; lastPeakTime: number | null; amplitudes?: number[] } {
+    // Critical fix: Pass amplitude data derived from RR intervals
+    // This ensures arrhythmia detection has amplitude data to work with
     const amplitudes = this.bpmHistory.map(bpm => {
       // Higher BPM (shorter RR) typically means lower amplitude for premature beats
       return 100 / (bpm || 800) * (this.calculateCurrentBPM() / 100);
