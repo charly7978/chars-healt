@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 
@@ -7,10 +6,11 @@ interface VitalSignDetailProps {
   value: string | number;
   unit?: string;
   riskLevel?: string;
-  type: 'heartRate' | 'spo2' | 'bloodPressure' | 'arrhythmia' | 'respiration';
+  type: 'heartRate' | 'spo2' | 'bloodPressure' | 'arrhythmia' | 'respiration' | 'glucose';
   onBack: () => void;
   secondaryValue?: string | number;
   secondaryUnit?: string;
+  trend?: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
 }
 
 const VitalSignDetail: React.FC<VitalSignDetailProps> = ({
@@ -21,7 +21,8 @@ const VitalSignDetail: React.FC<VitalSignDetailProps> = ({
   type,
   onBack,
   secondaryValue,
-  secondaryUnit
+  secondaryUnit,
+  trend
 }) => {
   const [info, setInfo] = useState<{
     description: string;
@@ -35,8 +36,8 @@ const VitalSignDetail: React.FC<VitalSignDetailProps> = ({
 
   useEffect(() => {
     // Get relevant information based on the vital sign type and value
-    setInfo(getVitalSignInfo(type, value, riskLevel, secondaryValue));
-  }, [type, value, riskLevel, secondaryValue]);
+    setInfo(getVitalSignInfo(type, value, riskLevel, secondaryValue, trend));
+  }, [type, value, riskLevel, secondaryValue, trend]);
 
   return (
     <div className="fixed inset-0 bg-black text-white flex flex-col animate-fade-in z-50">
@@ -112,10 +113,11 @@ const getRiskBadgeColor = (riskLevel: string): string => {
 };
 
 const getVitalSignInfo = (
-  type: 'heartRate' | 'spo2' | 'bloodPressure' | 'arrhythmia' | 'respiration',
+  type: 'heartRate' | 'spo2' | 'bloodPressure' | 'arrhythmia' | 'respiration' | 'glucose',
   value: string | number,
   riskLevel?: string,
-  secondaryValue?: string | number
+  secondaryValue?: string | number,
+  trend?: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown'
 ) => {
   let info = {
     description: '',
@@ -215,7 +217,7 @@ const getVitalSignInfo = (
         info.interpretation = 'Se detectó un número moderado de arritmias. Este nivel puede indicar una condición de arritmia más significativa.';
         info.recommendation = 'Consulte a un cardiólogo para una evaluación completa. Puede requerir pruebas adicionales como un electrocardiograma o monitor Holter.';
       } else {
-        info.interpretation = 'Se detectó un número alto de arritmias. Esto podría indicar una condición de arritmia significativa.';
+        info.interpretation = 'Se detect�� un número alto de arritmias. Esto podría indicar una condición de arritmia significativa.';
         info.recommendation = 'Consulte a un cardiólogo lo antes posible para una evaluación completa. Arritmias frecuentes pueden requerir tratamiento médico.';
       }
     } else {
@@ -260,6 +262,26 @@ const getVitalSignInfo = (
           info.interpretation += ' La profundidad de su respiración es profunda, lo que puede indicar un mayor esfuerzo respiratorio.';
         }
       }
+    }
+  }
+  
+  else if (type === 'glucose') {
+    const glucose = typeof value === 'number' ? value : parseInt(value as string, 10);
+    
+    info.description = 'El nivel de glucosa en sangre es un indicador importante de la salud metabólica. Un nivel de glucosa normal oscila entre 70 y 100 mg/dL.';
+    
+    if (isNaN(glucose) || value === '--') {
+      info.interpretation = 'No se pudo obtener una medición válida.';
+      info.recommendation = 'Intente una nueva medición asegurándose de posicionar correctamente el dedo sobre la cámara.';
+    } else if (glucose < 70) {
+      info.interpretation = 'Su nivel de glucosa está por debajo del rango normal (70-100 mg/dL). Esto se conoce como hipoglicemia.';
+      info.recommendation = 'Una hipoglicemia puede ser peligrosa y requiere atención médica. Consulte a un médico lo antes posible.';
+    } else if (glucose >= 70 && glucose <= 100) {
+      info.interpretation = 'Su nivel de glucosa está dentro del rango normal (70-100 mg/dL).';
+      info.recommendation = 'Continúe manteniendo hábitos saludables como ejercicio regular, buena alimentación y control del estrés.';
+    } else {
+      info.interpretation = 'Su nivel de glucosa está por encima del rango normal (70-100 mg/dL). Esto se conoce como hiperglicemia.';
+      info.recommendation = 'Una hiperglicemia puede ser peligrosa y requiere atención médica. Consulte a un médico lo antes posible.';
     }
   }
 
