@@ -7,6 +7,7 @@ export const createVitalSignsDataCollector = () => {
   const bpValues: string[] = [];
   const respirationRates: number[] = [];
   const respirationDepths: number[] = [];
+  const glucoseValues: number[] = [];
   
   return {
     /**
@@ -53,6 +54,18 @@ export const createVitalSignsDataCollector = () => {
         respirationDepths.push(value);
         if (respirationDepths.length > 10) {
           respirationDepths.shift();
+        }
+      }
+    },
+    
+    /**
+     * Add blood glucose reading to collection
+     */
+    addBloodGlucose: (value: number) => {
+      if (value >= 40 && value <= 400) {
+        glucoseValues.push(value);
+        if (glucoseValues.length > 10) {
+          glucoseValues.shift();
         }
       }
     },
@@ -113,6 +126,15 @@ export const createVitalSignsDataCollector = () => {
     },
     
     /**
+     * Get average blood glucose from collected values
+     */
+    getAverageBloodGlucose: (): number => {
+      if (glucoseValues.length === 0) return 0;
+      const sum = glucoseValues.reduce((acc, val) => acc + val, 0);
+      return Math.round(sum / glucoseValues.length);
+    },
+    
+    /**
      * Reset all collected data
      */
     reset: () => {
@@ -120,6 +142,7 @@ export const createVitalSignsDataCollector = () => {
       bpValues.length = 0;
       respirationRates.length = 0;
       respirationDepths.length = 0;
+      glucoseValues.length = 0;
     }
   };
 };
