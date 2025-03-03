@@ -216,8 +216,8 @@ export class ArrhythmiaDetector {
   }
   
   public analyzeRhythm(): ArrhythmiaResult {
-    // Necesitamos al menos 3 intervalos para análisis básico
-    if (this.rrIntervals.length < 3) {
+    // Necesitamos al menos 2 intervalos para detectar latidos prematuros
+    if (this.rrIntervals.length < 2) {
       return {
         detected: false,
         severity: 0,
@@ -227,72 +227,37 @@ export class ArrhythmiaDetector {
       };
     }
     
-    // Calcular métricas de variabilidad
-    const rmssd = this.calculateRMSSD();
-    const rrVariation = this.calculateRRVariation();
+    // ENFOQUE EXCLUSIVO PARA LATIDOS PREMATUROS
+    // Ignoramos todos los demás tipos de arritmias (fibrilación, taquicardia, etc.)
     
-    // Detectar latido prematuro (extrasístole)
+    // Detectar SOLO latido prematuro (extrasístole)
     const prematureBeatResult = this.detectPrematureBeat();
     
-    // MEJORA: Reducimos los umbrales para aumentar sensibilidad
-    
-    // Detectar arritmias específicas basadas en métricas
+    // Inicializar valores por defecto
     let detected = false;
     let severity = 0;
     let confidence = 0;
     let type: string = "NORMAL";
     
-    // Detectar Fibrilación Auricular basada en alta variabilidad RR sin patrón
-    // MEJORA: Umbrales significativamente reducidos
-    if (rmssd > 25 && rrVariation > 0.15) {
-      detected = true;
-      severity = Math.min(10, Math.max(1, Math.round(rmssd / 10)));
-      confidence = Math.min(95, Math.max(70, 70 + (rrVariation * 100)));
-      type = "FIBRILACIÓN AURICULAR";
-    }
-    // Detectar Bradicardia significativa
-    else if (this.rrIntervals.length >= 5) {
-      const avg = this.rrIntervals.reduce((a, b) => a + b, 0) / this.rrIntervals.length;
-      const bpm = 60000 / avg;
-      
-      // MEJORA: Umbral elevado aún más
-      if (bpm < 60) {
-        detected = true;
-        severity = Math.min(10, Math.max(1, Math.round((60 - bpm) / 3)));
-        confidence = Math.min(95, Math.max(70, 70 + ((60 - bpm) * 3)));
-        type = "BRADICARDIA";
-      }
-      // Detectar Taquicardia significativa - umbral reducido más
-      else if (bpm > 95) {
-        detected = true;
-        severity = Math.min(10, Math.max(1, Math.round((bpm - 95) / 5)));
-        confidence = Math.min(95, Math.max(70, 70 + ((bpm - 95) / 2)));
-        type = "TAQUICARDIA";
-      }
-    }
-    
-    // Detectar latidos prematuros (mayor prioridad)
+    // Si se detecta latido prematuro, actualizar valores
     if (prematureBeatResult.detected) {
       detected = true;
       severity = prematureBeatResult.severity;
       confidence = prematureBeatResult.confidence;
       type = "CONTRACCIÓN PREMATURA";
+      
+      console.log("ArrhythmiaDetector: CONTRACCIÓN PREMATURA DETECTADA ✓", {
+        severity,
+        confidence
+      });
     }
-    
-    // MEJORA: Log para depuración
-    console.log("ArrhythmiaDetector.analyzeRhythm: Análisis completo:", {
-      rmssd,
-      rrVariation,
-      prematureBeat: prematureBeatResult.detected,
-      detected,
-      type
-    });
     
     // Actualizar el estado del detector
     const currentTime = Date.now();
     
-    // MEJORA: Actualizar el texto de estado con información más descriptiva
+    // Actualizar el texto de estado
     if (detected) {
+      this.prematureBeatsCount++; // Incrementar contador de latidos prematuros
       this.statusText = `ARRITMIA DETECTADA: ${type}|${this.prematureBeatsCount}`;
     } else {
       // Solo actualizar a normal si ha pasado cierto tiempo desde la última arritmia
@@ -305,15 +270,23 @@ export class ArrhythmiaDetector {
       }
     }
     
-    return {
+    // Crear objeto de resultado
+    const result = {
       detected,
       severity,
       confidence,
       type: type as ArrhythmiaType,
       timestamp: currentTime,
-      rmssd,
-      rrVariation
+      rmssd: 0,
+      rrVariation: 0
     };
+    
+    // Si se detectó, guardar como último resultado
+    if (detected) {
+      this.lastArrhythmiaResult = result;
+    }
+    
+    return result;
   }
   
   private calculateRMSSD(): number {
@@ -344,54 +317,77 @@ export class ArrhythmiaDetector {
   }
   
   private detectPrematureBeat(): { detected: boolean; severity: number; confidence: number } {
-    if (this.rrIntervals.length < 3) {
+    // Verificar si tenemos suficientes datos
+    if (this.rrIntervals.length < 2) {
       return { detected: false, severity: 0, confidence: 0 };
     }
     
-    // Tomar últimos 4 intervalos (o los que haya)
-    const numIntervals = Math.min(4, this.rrIntervals.length);
-    const recentIntervals = this.rrIntervals.slice(-numIntervals);
+    // DETECCIÓN SIMPLIFICADA Y ULTRA-SENSIBLE DE LATIDOS PREMATUROS
     
-    // MEJORA: Umbral aún más bajo para detección de intervalo prematuro
-    const threshold = 0.6; // Reducido para mayor sensibilidad
+    // 1. Tomar los últimos intervalos (hasta 10)
+    const recentIntervals = this.rrIntervals.slice(-10);
     
-    for (let i = 1; i < recentIntervals.length; i++) {
-      const currentInterval = recentIntervals[i];
-      const previousInterval = recentIntervals[i-1];
+    // 2. Calcular la mediana para tener un valor de referencia robusto
+    const sorted = [...recentIntervals].sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)];
+    
+    console.log("ArrhythmiaDetector: Analizando latidos prematuros", {
+      recentIntervals,
+      median
+    });
+    
+    // 3. DETECCIÓN DIRECTA: Cualquier intervalo significativamente más corto
+    // Usar umbral muy liberal (0.90 = 10% más corto) para máxima sensibilidad
+    const shortIntervals = recentIntervals.filter(interval => interval < median * 0.90);
+    
+    if (shortIntervals.length > 0) {
+      // Tomar el más corto para calcular severidad
+      const shortestInterval = Math.min(...shortIntervals);
+      const ratio = shortestInterval / median;
       
-      // RR significativamente más corto que el anterior es prematura
-      if (currentInterval < previousInterval * threshold) {
-        // Solo si no es el último
-        if (i < recentIntervals.length - 1) {
-          const followingInterval = recentIntervals[i+1];
-          
-          // Intervalo compensatorio (ligeramente más largo que el normal)
-          if (followingInterval > previousInterval * 1.05) {
-            // MEJORA: Log para depuración del patrón detectado
-            console.log("ArrhythmiaDetector: Patrón de latido prematuro detectado:", {
-              prevInterval: previousInterval,
-              prematureInterval: currentInterval,
-              compensatoryInterval: followingInterval,
-              ratio: currentInterval / previousInterval
-            });
-            
-            // Calcular severidad basada en lo corto del intervalo prematuro
-            const ratio = currentInterval / previousInterval;
-            const severity = Math.min(10, Math.max(1, Math.round((1 - ratio) * 10)));
-            
-            // Más corto = más confianza en ser prematuro
-            const confidence = Math.min(95, Math.max(70, 70 + (1 - ratio) * 100));
-            
-            return { 
-              detected: true, 
-              severity, 
-              confidence 
-            };
-          }
-        }
+      // Incluso pequeñas diferencias son consideradas prematuros
+      const severity = Math.min(10, Math.max(1, Math.round((1 - ratio) * 20)));
+      // Alta confianza incluso con pequeñas diferencias
+      const confidence = Math.min(95, Math.max(70, (1 - ratio) * 200));
+      
+      console.log(`ArrhythmiaDetector: Latido prematuro confirmado - Intervalo ${shortestInterval}ms vs normal ${median}ms`);
+      console.log(`  Severidad: ${severity}, Confianza: ${confidence.toFixed(1)}%`);
+      
+      return {
+        detected: true,
+        severity,
+        confidence
+      };
+    }
+    
+    // 4. DETECCIÓN DE PATRONES ESPECÍFICOS
+    for (let i = 0; i < recentIntervals.length - 2; i++) {
+      const normal = recentIntervals[i];
+      const current = recentIntervals[i + 1];
+      const following = recentIntervals[i + 2];
+      
+      // Patrón típico: normal → corto → compensatorio
+      // Umbral muy sensible (0.85 = 15% más corto)
+      if (current < normal * 0.85 && following > normal) {
+        const ratio = current / normal;
+        const severity = Math.min(10, Math.max(3, Math.round((1 - ratio) * 15)));
+        const confidence = 90;
+        
+        console.log(`ArrhythmiaDetector: Patrón de latido prematuro clásico detectado`, {
+          normal,
+          prematuro: current,
+          compensatorio: following
+        });
+        
+        return {
+          detected: true,
+          severity,
+          confidence
+        };
       }
     }
     
+    // No se detectaron latidos prematuros
     return { detected: false, severity: 0, confidence: 0 };
   }
   
