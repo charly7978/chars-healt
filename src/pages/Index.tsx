@@ -13,6 +13,12 @@ interface VitalSigns {
   spo2: number;
   pressure: string;
   arrhythmiaStatus: string;
+  respiration: {
+    rate: number;
+    depth: number;
+    regularity: number;
+  };
+  hasRespirationData: boolean;
 }
 
 const Index = () => {
@@ -22,7 +28,9 @@ const Index = () => {
   const [vitalSigns, setVitalSigns] = useState<VitalSigns>({ 
     spo2: 0, 
     pressure: "--/--",
-    arrhythmiaStatus: "--" 
+    arrhythmiaStatus: "--",
+    respiration: { rate: 0, depth: 0, regularity: 0 },
+    hasRespirationData: false
   });
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState<string | number>("--");
@@ -36,7 +44,12 @@ const Index = () => {
   const [finalValues, setFinalValues] = useState<{
     heartRate: number,
     spo2: number,
-    pressure: string
+    pressure: string,
+    respiration: {
+      rate: number;
+      depth: number;
+      regularity: number;
+    }
   } | null>(null);
   const [permissionsGranted, setPermissionsGranted] = useState(false);
   const measurementTimerRef = useRef<number | null>(null);
@@ -45,6 +58,8 @@ const Index = () => {
   const allSpo2ValuesRef = useRef<number[]>([]);
   const allSystolicValuesRef = useRef<number[]>([]);
   const allDiastolicValuesRef = useRef<number[]>([]);
+  const allRespirationRateValuesRef = useRef<number[]>([]);
+  const allRespirationDepthValuesRef = useRef<number[]>([]);
   
   const hasValidValuesRef = useRef(false);
   
@@ -70,18 +85,24 @@ const Index = () => {
       const validSpo2Values = allSpo2ValuesRef.current.filter(v => v > 0);
       const validSystolicValues = allSystolicValuesRef.current.filter(v => v > 0);
       const validDiastolicValues = allDiastolicValuesRef.current.filter(v => v > 0);
+      const validRespRates = allRespirationRateValuesRef.current.filter(v => v > 0);
+      const validRespDepths = allRespirationDepthValuesRef.current.filter(v => v > 0);
       
       console.log("Valores acumulados para promedios:", {
         heartRateValues: validHeartRates.length,
         spo2Values: validSpo2Values.length,
         systolicValues: validSystolicValues.length,
-        diastolicValues: validDiastolicValues.length
+        diastolicValues: validDiastolicValues.length,
+        respirationRates: validRespRates.length,
+        respirationDepths: validRespDepths.length
       });
       
       let avgHeartRate = 0;
       let avgSpo2 = 0;
       let avgSystolic = 0;
       let avgDiastolic = 0;
+      let avgRespRate = 0;
+      let avgRespDepth = 0;
       
       if (validHeartRates.length > 0) {
         avgHeartRate = Math.round(validHeartRates.reduce((a, b) => a + b, 0) / validHeartRates.length);
@@ -101,17 +122,35 @@ const Index = () => {
         avgDiastolic = Math.round(validDiastolicValues.reduce((a, b) => a + b, 0) / validDiastolicValues.length);
         finalBPString = `${avgSystolic}/${avgDiastolic}`;
       }
+
+      if (validRespRates.length > 0) {
+        avgRespRate = Math.round(validRespRates.reduce((a, b) => a + b, 0) / validRespRates.length);
+      } else {
+        avgRespRate = vitalSigns.respiration.rate;
+      }
+      
+      if (validRespDepths.length > 0) {
+        avgRespDepth = Math.round(validRespDepths.reduce((a, b) => a + b, 0) / validRespDepths.length);
+      } else {
+        avgRespDepth = vitalSigns.respiration.depth;
+      }
       
       console.log("PROMEDIOS REALES calculados:", {
         heartRate: avgHeartRate,
         spo2: avgSpo2,
-        pressure: finalBPString
+        pressure: finalBPString,
+        respiration: { rate: avgRespRate, depth: avgRespDepth }
       });
       
       setFinalValues({
         heartRate: avgHeartRate > 0 ? avgHeartRate : heartRate,
         spo2: avgSpo2 > 0 ? avgSpo2 : vitalSigns.spo2,
-        pressure: finalBPString
+        pressure: finalBPString,
+        respiration: {
+          rate: avgRespRate > 0 ? avgRespRate : vitalSigns.respiration.rate,
+          depth: avgRespDepth > 0 ? avgRespDepth : vitalSigns.respiration.depth,
+          regularity: vitalSigns.respiration.regularity
+        }
       });
         
       hasValidValuesRef.current = true;
@@ -120,12 +159,15 @@ const Index = () => {
       allSpo2ValuesRef.current = [];
       allSystolicValuesRef.current = [];
       allDiastolicValuesRef.current = [];
+      allRespirationRateValuesRef.current = [];
+      allRespirationDepthValuesRef.current = [];
     } catch (error) {
       console.error("Error en calculateFinalValues:", error);
       setFinalValues({
         heartRate: heartRate,
         spo2: vitalSigns.spo2,
-        pressure: vitalSigns.pressure
+        pressure: vitalSigns.pressure,
+        respiration: vitalSigns.respiration
       });
       hasValidValuesRef.current = true;
     }
@@ -160,6 +202,8 @@ const Index = () => {
       allSpo2ValuesRef.current = [];
       allSystolicValuesRef.current = [];
       allDiastolicValuesRef.current = [];
+      allRespirationRateValuesRef.current = [];
+      allRespirationDepthValuesRef.current = [];
       
       if (measurementTimerRef.current) {
         clearInterval(measurementTimerRef.current);
@@ -254,7 +298,9 @@ const Index = () => {
     setVitalSigns({ 
       spo2: 0, 
       pressure: "--/--",
-      arrhythmiaStatus: "--" 
+      arrhythmiaStatus: "--",
+      respiration: { rate: 0, depth: 0, regularity: 0 },
+      hasRespirationData: false
     });
     setArrhythmiaCount("--");
     setLastArrhythmiaData(null);
@@ -272,6 +318,8 @@ const Index = () => {
     allSpo2ValuesRef.current = [];
     allSystolicValuesRef.current = [];
     allDiastolicValuesRef.current = [];
+    allRespirationRateValuesRef.current = [];
+    allRespirationDepthValuesRef.current = [];
   };
 
   const handleStreamReady = (stream: MediaStream) => {
@@ -456,6 +504,23 @@ const Index = () => {
               arrhythmiaStatus: vitals.arrhythmiaStatus
             }));
             
+            if (vitals.hasRespirationData && vitals.respiration) {
+              console.log("Procesando datos de respiración:", vitals.respiration);
+              setVitalSigns(current => ({
+                ...current,
+                respiration: vitals.respiration,
+                hasRespirationData: true
+              }));
+              
+              if (vitals.respiration.rate > 0) {
+                allRespirationRateValuesRef.current.push(vitals.respiration.rate);
+              }
+              
+              if (vitals.respiration.depth > 0) {
+                allRespirationDepthValuesRef.current.push(vitals.respiration.depth);
+              }
+            }
+            
             if (vitals.lastArrhythmiaData) {
               setLastArrhythmiaData(vitals.lastArrhythmiaData);
               
@@ -533,7 +598,7 @@ const Index = () => {
 
       <div className="absolute z-20" style={{ bottom: '65px', left: 0, right: 0, padding: '0 12px' }}>
         <div className="p-2 rounded-lg">
-          <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
+          <div className="grid grid-cols-3 gap-1 sm:grid-cols-5">
             <VitalSign 
               label="FRECUENCIA CARDÍACA"
               value={finalValues ? finalValues.heartRate : heartRate || "--"}
@@ -557,9 +622,23 @@ const Index = () => {
               value={vitalSigns.arrhythmiaStatus}
               isFinalReading={measurementComplete}
             />
+            <VitalSign 
+              label="RESPIRACIÓN"
+              value={finalValues ? finalValues.respiration.rate : (vitalSigns.hasRespirationData ? vitalSigns.respiration.rate : "--")}
+              unit="RPM"
+              secondaryValue={finalValues ? finalValues.respiration.depth : (vitalSigns.hasRespirationData ? vitalSigns.respiration.depth : "--")}
+              secondaryUnit="%"
+              isFinalReading={measurementComplete}
+            />
           </div>
         </div>
       </div>
+
+      {isMonitoring && (
+        <div className="absolute z-30 text-xs text-gray-400" style={{ bottom: '120px', left: 0, right: 0, textAlign: 'center' }}>
+          <span>Respiración: {vitalSigns.hasRespirationData ? `${vitalSigns.respiration.rate} RPM, Profundidad: ${vitalSigns.respiration.depth}%` : 'Calibrando...'}</span>
+        </div>
+      )}
 
       <div className="absolute z-50" style={{ bottom: 0, left: 0, right: 0, height: '55px' }}>
         <div className="grid grid-cols-2 gap-px w-full h-full">
