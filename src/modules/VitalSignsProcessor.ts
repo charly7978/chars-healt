@@ -9,7 +9,7 @@ export class VitalSignsProcessor {
   private readonly WINDOW_SIZE = 300;
   private ppgValues: number[] = [];
   private readonly SMA_WINDOW = 3;
-  private readonly BPM_SMOOTHING_ALPHA = 0.25; // Incrementado para mayor suavizado de BPM
+  private readonly BPM_SMOOTHING_ALPHA = 0.25;
   private lastBPM: number = 0;
   
   // Specialized modules for each vital sign
@@ -68,30 +68,14 @@ export class VitalSignsProcessor {
     // Calculate vital signs
     const spo2 = this.spO2Calculator.calculate(this.ppgValues.slice(-60));
     
-    // Calcular presión arterial usando valores reales
+    // Calculate blood pressure using real data
     const bp = this.calculateRealBloodPressure(this.ppgValues.slice(-60));
     const pressure = `${bp.systolic}/${bp.diastolic}`;
-
-    // Generate some basic respiration data (simplified for now)
-    const respirationRate = this.lastBPM > 0 ? Math.round(this.lastBPM / 4) : 0;
-    const respirationDepth = Math.min(100, Math.max(0, 50 + Math.random() * 20));
-    const respirationRegularity = Math.min(100, Math.max(0, 70 + Math.random() * 15));
-    
-    const respiration = {
-      rate: respirationRate,
-      depth: respirationDepth,
-      regularity: respirationRegularity
-    };
-    
-    // We have respiration data if we have a valid heart rate
-    const hasRespirationData = this.lastBPM > 0;
 
     return {
       spo2,
       pressure,
-      arrhythmiaStatus: this.arrhythmiaDetector.getStatusText(),
-      respiration,
-      hasRespirationData
+      arrhythmiaStatus: this.arrhythmiaDetector.getStatusText()
     };
   }
 

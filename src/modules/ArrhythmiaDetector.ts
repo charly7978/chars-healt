@@ -11,7 +11,7 @@ export class ArrhythmiaDetector {
   private readonly MAX_INTERVALS = 50;
   private lastAnalysisTime: number = 0;
   private lastPeakTime: number | null = null;
-  private readonly ANALYSIS_COOLDOWN_MS = 250; // Reduced from 500ms to 250ms to be more sensitive
+  private readonly ANALYSIS_COOLDOWN_MS = 200; // Reduced for higher sensitivity
   private lastArrhythmiaResult: ArrhythmiaResult | null = null;
   private statusText: string = "LATIDO NORMAL|0";
   private prematureBeatsCount: number = 0;
@@ -26,9 +26,9 @@ export class ArrhythmiaDetector {
   }
   
   public addRRInterval(interval: number, amplitude?: number): void {
-    // More permissive physiological interval range to increase sensitivity
-    const minInterval = 300; // Less restrictive minimum (was 400)
-    const maxInterval = 2000; // Less restrictive maximum (was 1800)
+    // More permissive physiological interval range for higher sensitivity
+    const minInterval = 250; // Less restrictive minimum (was 300)
+    const maxInterval = 2200; // More permissive maximum (was 2000)
     
     if (interval < minInterval || interval > maxInterval) {
       console.log(`ArrhythmiaDetector: Intervalo fuera de rango fisiológico: ${interval}ms`);
@@ -150,7 +150,7 @@ export class ArrhythmiaDetector {
     this.lastAnalysisTime = currentTime;
     
     // If we're in learning phase or don't have enough data
-    if (this.learningPhase || this.rrIntervals.length < 3) {
+    if (this.learningPhase || this.rrIntervals.length < 2) { // Reduced from 3 to 2
       return {
         detected: false,
         severity: 0,
@@ -167,7 +167,7 @@ export class ArrhythmiaDetector {
       const rmssd = this.calculateRMSSD();
       const rrVariation = this.calculateRRVariation();
       
-      // FOCUS ONLY ON PREMATURE BEATS - detect premature contractions with higher sensitivity
+      // Detect premature beats with higher sensitivity
       const prematureBeat = this.detectPrematureBeat();
       
       let arrhythmiaType: ArrhythmiaType = 'NONE';
@@ -250,7 +250,7 @@ export class ArrhythmiaDetector {
   
   private detectPrematureBeat(): { detected: boolean; severity: number; confidence: number } {
     // Focus only on detecting premature beats based on baseline rhythm
-    if (this.rrIntervals.length < 3 || this.baselineRRMean === 0) {
+    if (this.rrIntervals.length < 2 || this.baselineRRMean === 0) { // Reduced from 3 to 2
       return { detected: false, severity: 0, confidence: 0 };
     }
     
@@ -260,8 +260,8 @@ export class ArrhythmiaDetector {
     
     // Check if the latest interval is significantly shorter than baseline
     // A premature beat will have an RR interval shorter than the baseline
-    // More sensitive threshold - reduced from 1.5 to 1.2 standard deviations
-    const prematureThreshold = this.baselineRRMean - (1.2 * this.baselineRRStdDev);
+    // More sensitive threshold - reduced from 1.2 to 0.8 standard deviations
+    const prematureThreshold = this.baselineRRMean - (0.8 * this.baselineRRStdDev);
     
     // A premature beat is followed by a compensatory pause (longer interval)
     const isPremature = latestInterval < prematureThreshold;
@@ -279,15 +279,15 @@ export class ArrhythmiaDetector {
     let confidence = 0;
     
     // Lower thresholds for detection to increase sensitivity
-    if (deviationPercent > 25) { // Lowered from 30%
+    if (deviationPercent > 20) { // Lowered from 25%
       // Very premature
       severity = 8;
       confidence = 0.9;
-    } else if (deviationPercent > 15) { // Lowered from 20%
+    } else if (deviationPercent > 10) { // Lowered from 15%
       // Moderately premature
       severity = 6;
       confidence = 0.8;
-    } else if (deviationPercent > 10) { // Lowered from 15%
+    } else if (deviationPercent > 5) { // Lowered from 10%
       // Mildly premature
       severity = 5;
       confidence = 0.7;

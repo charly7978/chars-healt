@@ -14,17 +14,6 @@ type VitalSignsResult = {
     rmssd: number;
     rrVariation: number;
   } | null;
-  respiration: {
-    rate: number;
-    depth: number;
-    regularity: number;
-  };
-  hasRespirationData: boolean;
-  glucose?: {
-    value: number;
-    trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
-    confidence: number;
-  };
 };
 
 export const useVitalSignsProcessor = () => {
@@ -71,8 +60,8 @@ export const useVitalSignsProcessor = () => {
     
     let arrhythmiaResult: ArrhythmiaResult = defaultArrhythmiaResult;
     
-    // Requerimos al menos 3 intervalos para un análisis fiable
-    const minIntervalsRequired = 3;
+    // Requerimos al menos 2 intervalos para un análisis
+    const minIntervalsRequired = 2;
     
     if (rrData && Array.isArray(rrData.intervals) && rrData.intervals.length >= minIntervalsRequired) {
       console.log('useVitalSignsProcessor: Analizando intervalos RR para arritmias:', {
@@ -134,13 +123,7 @@ export const useVitalSignsProcessor = () => {
     const combinedResult: VitalSignsResult = {
       ...vitalSignsResult,
       glucose: glucoseData,
-      arrhythmiaStatus: arrhythmiaStatus,
-      respiration: vitalSignsResult.respiration || {
-        rate: 0,
-        depth: 0,
-        regularity: 0
-      },
-      hasRespirationData: vitalSignsResult.hasRespirationData || false
+      arrhythmiaStatus: arrhythmiaStatus
     };
     
     // Verificación adicional para dispositivos Android

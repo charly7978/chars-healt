@@ -603,37 +603,11 @@ const Index = () => {
               }));
             }
             
-            const hasHeartRateData = heartRate > 0;
-            
-            if (hasHeartRateData) {
-              const estimatedRespRate = Math.round(heartRate / 4);
-              const estimatedDepth = 50 + (Math.random() * 20);
-              const estimatedRegularity = 70 + (Math.random() * 15);
-              
-              console.log("Generando datos respiratorios aproximados:", {
-                rate: estimatedRespRate,
-                depth: estimatedDepth,
-                regularity: estimatedRegularity
-              });
-              
-              const respirationData = {
-                rate: estimatedRespRate,
-                depth: estimatedDepth,
-                regularity: estimatedRegularity
-              };
-              
-              setVitalSigns(current => ({
-                ...current,
-                respiration: respirationData,
-                hasRespirationData: true
-              }));
-              
-              if (estimatedRespRate > 0) {
-                allRespirationRateValuesRef.current.push(estimatedRespRate);
-              }
-              
-              allRespirationDepthValuesRef.current.push(estimatedDepth);
-            }
+            setVitalSigns(current => ({
+              ...current,
+              respiration: { rate: 0, depth: 0, regularity: 0 },
+              hasRespirationData: false
+            }));
             
             if (vitals.lastArrhythmiaData) {
               setLastArrhythmiaData(vitals.lastArrhythmiaData);
@@ -713,9 +687,7 @@ const Index = () => {
       {isMonitoring && (
         <div className="absolute z-30 text-sm bg-black/50 backdrop-blur-sm px-3 py-1 rounded-lg" 
           style={{ top: '35%', left: '50%', transform: 'translateX(-50%)', textAlign: 'center' }}>
-          <span className="text-cyan-400 font-medium">Respiración: {vitalSigns.hasRespirationData ? 
-            `${vitalSigns.respiration.rate} RPM, Profundidad: ${vitalSigns.respiration.depth}%` : 
-            'Calibrando...'}</span>
+          <span className="text-cyan-400 font-medium">Medición en progreso...</span>
         </div>
       )}
 
