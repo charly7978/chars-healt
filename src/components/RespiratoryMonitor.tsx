@@ -51,7 +51,7 @@ const RespiratoryMonitor: React.FC<RespiratoryMonitorProps> = ({
   
   // Animar la visualización de respiración
   useEffect(() => {
-    if (!canvasRef.current || respirationRate === 0) return;
+    if (!canvasRef.current) return;
     
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
@@ -61,7 +61,9 @@ const RespiratoryMonitor: React.FC<RespiratoryMonitorProps> = ({
     let breathPhase = lastBreathPhaseRef.current;
     
     // Calcular duración del ciclo respiratorio en milisegundos
-    const breathCycleDuration = 60000 / Math.max(8, respirationRate);
+    const breathCycleDuration = respirationRate > 0 ? 
+      60000 / Math.max(8, respirationRate) : 
+      5000; // Valor por defecto para animación inicial
     
     const animate = (timestamp: number) => {
       if (!lastTimestamp) lastTimestamp = timestamp;
@@ -87,7 +89,7 @@ const RespiratoryMonitor: React.FC<RespiratoryMonitorProps> = ({
         // Calcular posición en la onda respiratoria
         const normalizedX = x / width;
         // Añadir fase actual para crear animación
-        const y = centerY - Math.sin((normalizedX * Math.PI * 2) + (breathPhase * Math.PI * 2)) * (height * 0.4 * estimatedDepth);
+        const y = centerY - Math.sin((normalizedX * Math.PI * 2) + (breathPhase * Math.PI * 2)) * (height * 0.4 * Math.max(0.2, estimatedDepth));
         ctx.lineTo(x, y);
       }
       
@@ -113,9 +115,9 @@ const RespiratoryMonitor: React.FC<RespiratoryMonitorProps> = ({
   
   // Calidad visual según confianza
   const qualityClasses = confidence < 0.3 
-    ? 'opacity-40' 
+    ? 'opacity-50' 
     : confidence < 0.7 
-      ? 'opacity-75' 
+      ? 'opacity-85' 
       : 'opacity-100';
 
   return (
@@ -130,7 +132,7 @@ const RespiratoryMonitor: React.FC<RespiratoryMonitorProps> = ({
         </h3>
         
         <div className="flex items-center">
-          {confidence > 0.5 && (
+          {confidence > 0.4 && (
             <span className={cn(
               "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium mr-2",
               breathingPattern === 'normal' ? 'bg-green-100 text-green-800 dark:bg-green-800/20 dark:text-green-400' :

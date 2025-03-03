@@ -15,6 +15,7 @@ export const useRespiratoryMonitor = () => {
   // Inicializar el monitor si no existe
   useEffect(() => {
     if (!respiratoryMonitor.current) {
+      console.log("Inicializando monitor respiratorio");
       respiratoryMonitor.current = new RespiratoryMonitor();
     }
     
@@ -30,6 +31,7 @@ export const useRespiratoryMonitor = () => {
    * Iniciar monitoreo respiratorio
    */
   const startMonitoring = useCallback(() => {
+    console.log("Iniciando monitoreo respiratorio");
     if (respiratoryMonitor.current) {
       respiratoryMonitor.current.reset();
       setIsMonitoring(true);
@@ -40,6 +42,7 @@ export const useRespiratoryMonitor = () => {
    * Detener monitoreo respiratorio
    */
   const stopMonitoring = useCallback(() => {
+    console.log("Deteniendo monitoreo respiratorio");
     setIsMonitoring(false);
   }, []);
   
@@ -52,6 +55,7 @@ export const useRespiratoryMonitor = () => {
     if (!isMonitoring || !respiratoryMonitor.current) return;
     
     try {
+      console.log(`Procesando señal para respiración: valor=${ppgValue.toFixed(2)}, calidad=${quality}`);
       const respData = respiratoryMonitor.current.processSignal(ppgValue, quality);
       if (respData) {
         setRespiratoryData(respData);
@@ -65,6 +69,7 @@ export const useRespiratoryMonitor = () => {
    * Resetear el monitor respiratorio
    */
   const reset = useCallback(() => {
+    console.log("Reseteando monitor respiratorio");
     if (respiratoryMonitor.current) {
       respiratoryMonitor.current.reset();
       setRespiratoryData(null);
