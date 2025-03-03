@@ -36,13 +36,13 @@ const PPGSignalMeter = ({
   
   const WINDOW_WIDTH_MS = 4100;
   const CANVAS_WIDTH = 350;
-  const CANVAS_HEIGHT = 600;
+  const CANVAS_HEIGHT = 700;
   const GRID_SIZE_X = 255;
   const GRID_SIZE_Y = 350;
   const verticalScale = 45.0;
   const SMOOTHING_FACTOR = 1.4;
   const TARGET_FPS = 60;
-  const FRAME_TIME = 900 / TARGET_FPS;
+  const FRAME_TIME = 2000 / TARGET_FPS;
   const BUFFER_SIZE = 300;
   const INVERT_SIGNAL = false;
 
