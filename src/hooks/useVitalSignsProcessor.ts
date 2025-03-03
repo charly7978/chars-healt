@@ -117,6 +117,10 @@ export const useVitalSignsProcessor = () => {
       // Asegurarse de pasar los datos de amplitud al analizador de arritmias si están disponibles
       const arrhythmiaResult = arrhythmiaAnalyzer.processArrhythmia(rrData);
       
+      const glucoseValue = result.glucose?.value || 0;
+      const glucoseTrend = result.glucose?.trend || 'stable';
+      const glucoseConfidence = result.glucose?.confidence || 0;
+      
       if (arrhythmiaResult.detected) {
         return {
           spo2: result.spo2,
@@ -125,9 +129,9 @@ export const useVitalSignsProcessor = () => {
           lastArrhythmiaData: arrhythmiaResult.lastArrhythmiaData,
           respiration: respirationResult,
           hasRespirationData: respirationProcessor.hasValidData(),
-          glucose: result.glucose?.value || 0,
-          glucoseTrend: result.glucose?.trend || 'stable',
-          glucoseConfidence: result.glucose?.confidence || 0
+          glucose: glucoseValue,
+          glucoseTrend,
+          glucoseConfidence
         };
       }
       
@@ -137,9 +141,9 @@ export const useVitalSignsProcessor = () => {
         arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus,
         respiration: respirationResult,
         hasRespirationData: respirationProcessor.hasValidData(),
-        glucose: result.glucose?.value || 0,
-        glucoseTrend: result.glucose?.trend || 'stable',
-        glucoseConfidence: result.glucose?.confidence || 0
+        glucose: glucoseValue,
+        glucoseTrend,
+        glucoseConfidence
       };
     }
     

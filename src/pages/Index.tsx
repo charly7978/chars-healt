@@ -547,12 +547,27 @@ const Index = () => {
               const [status, count] = vitals.arrhythmiaStatus.split('|');
               setArrhythmiaCount(count || "0");
             }
+            
+            if (vitals.glucose > 0) {
+              setVitalSigns(current => ({
+                ...current,
+                glucose: vitals.glucose
+              }));
+              allGlucoseValuesRef.current.push(vitals.glucose);
+            }
           }
         }
         
         setSignalQuality(lastSignal.quality);
       } catch (error) {
         console.error("Error procesando señal:", error);
+      }
+    } else if (!lastSignal?.fingerDetected && isMonitoring) {
+      if (!measurementComplete) {
+        setVitalSigns(current => ({
+          ...current,
+          glucose: 0
+        }));
       }
     }
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns, measurementComplete]);
@@ -565,40 +580,6 @@ const Index = () => {
       }
     };
   }, []);
-
-  const simulateGlucoseReading = () => {
-    if (isMonitoring && lastSignal?.fingerDetected) {
-      const baseGlucose = 95;
-      const hrFactor = heartRate > 0 ? (heartRate - 70) / 10 : 0;
-      const randomComponent = Math.random() * 20 - 10;
-      
-      let glucose = Math.round(baseGlucose + hrFactor + randomComponent);
-      glucose = Math.max(70, Math.min(180, glucose));
-      
-      setVitalSigns(prev => ({
-        ...prev,
-        glucose
-      }));
-      
-      allGlucoseValuesRef.current.push(glucose);
-    }
-  };
-
-  useEffect(() => {
-    let glucoseTimer: number | null = null;
-    
-    if (isMonitoring && !measurementComplete) {
-      glucoseTimer = window.setInterval(() => {
-        simulateGlucoseReading();
-      }, 3000);
-    }
-    
-    return () => {
-      if (glucoseTimer) {
-        clearInterval(glucoseTimer);
-      }
-    };
-  }, [isMonitoring, lastSignal, measurementComplete, heartRate]);
 
   return (
     <div 
