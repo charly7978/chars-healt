@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -19,8 +20,6 @@ const Index = () => {
     spo2: 0, 
     pressure: "--/--",
     arrhythmiaStatus: "--",
-    respiration: { rate: 0, depth: 0, regularity: 0 },
-    hasRespirationData: false,
     glucose: null,
     lastArrhythmiaData: null
   });
@@ -125,9 +124,8 @@ const Index = () => {
       spo2: 0, 
       pressure: "--/--",
       arrhythmiaStatus: "--",
-      respiration: { rate: 0, depth: 0, regularity: 0 },
-      hasRespirationData: false,
-      glucose: null
+      glucose: null,
+      lastArrhythmiaData: null
     });
     setArrhythmiaCount("--");
     setSignalQuality(0);
@@ -218,7 +216,7 @@ const Index = () => {
             requestAnimationFrame(checkTrackAndProcess);
           }
         } catch (error) {
-          console.error("Error processing frame:", error);
+          console.error("Error procesando frame:", error);
           if (isMonitoring) {
             setTimeout(() => requestAnimationFrame(checkTrackAndProcess), 500);
           }
@@ -343,11 +341,11 @@ const Index = () => {
               />
               <VitalSign 
                 label="RESPIRACIÓN"
-                value={vitalSigns.hasRespirationData ? vitalSigns.respiration.rate : "--"}
+                value="--"
                 unit="RPM"
-                secondaryValue={vitalSigns.hasRespirationData ? vitalSigns.respiration.depth : "--"}
+                secondaryValue="--"
                 secondaryUnit="Prof."
-                isFinalReading={vitalSigns.hasRespirationData && elapsedTime >= 15}
+                isFinalReading={false}
               />
               <VitalSign 
                 label="GLUCOSA"
@@ -363,9 +361,8 @@ const Index = () => {
 
           {isMonitoring && (
             <div className="absolute bottom-[150px] left-0 right-0 text-center z-30 text-xs text-gray-400">
-              <span>Resp Data: {vitalSigns.hasRespirationData ? 'Disponible' : 'No disponible'} | 
-              Rate: {vitalSigns.respiration.rate} RPM | 
-              Glucosa: {vitalSigns.glucose ? `${vitalSigns.glucose.value} mg/dL (${vitalSigns.glucose.confidence}%)` : 'No disponible'}</span>
+              <span>Glucosa: {vitalSigns.glucose ? `${vitalSigns.glucose.value} mg/dL (${vitalSigns.glucose.confidence}%)` : 'No disponible'} | 
+              Arritmias: {arrhythmiaCount !== "--" ? arrhythmiaCount : "0"}</span>
             </div>
           )}
 

@@ -29,7 +29,7 @@ export const useVitalSignsProcessor = () => {
   const [vitalSignsData, setVitalSignsData] = useState<VitalSignsResult | null>(null);
   
   useEffect(() => {
-    console.log('Inicializando procesadores de signos vitales');
+    console.log('Inicializando procesadores de signos vitales - Versión mejorada');
     
     return () => {
       console.log('Limpiando procesadores de signos vitales');
@@ -66,8 +66,8 @@ export const useVitalSignsProcessor = () => {
     
     let arrhythmiaResult: ArrhythmiaResult = defaultArrhythmiaResult;
     
-    // Requerimos al menos 2 intervalos para un análisis
-    const minIntervalsRequired = 2;
+    // Requerimos solo 1 intervalo para análisis básico (aumentada sensibilidad)
+    const minIntervalsRequired = 1; // Reducido de 2 a 1 para mayor sensibilidad
     
     if (rrData && Array.isArray(rrData.intervals) && rrData.intervals.length >= minIntervalsRequired) {
       console.log('useVitalSignsProcessor: Analizando intervalos RR para arritmias:', {
@@ -101,7 +101,7 @@ export const useVitalSignsProcessor = () => {
           );
           
           if (arrhythmiaResult.detected) {
-            console.log('useVitalSignsProcessor: ¡ARRITMIA DETECTADA!', {
+            console.log('useVitalSignsProcessor: ¡¡ARRITMIA DETECTADA!!', {
               type: arrhythmiaResult.type,
               severity: arrhythmiaResult.severity,
               confidence: arrhythmiaResult.confidence,
@@ -168,6 +168,7 @@ export const useVitalSignsProcessor = () => {
   }, [processor, glucoseProcessor, arrhythmiaDetector]);
 
   const getCurrentRespiratoryData = useCallback(() => {
+    // Respiratory data is currently not implemented
     return null;
   }, []);
 
