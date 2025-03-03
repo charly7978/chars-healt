@@ -35,20 +35,20 @@ const PPGSignalMeter = ({
   const lastArrhythmiaTime = useRef<number>(0);
   const arrhythmiaCountRef = useRef<number>(0);
   
-  // Clinical visualization constants - increased quality/visibility
-  const WINDOW_WIDTH_MS = 5000; // 5-second window (clinical standard)
+  // Clinical visualization constants - improved visibility without changing style
+  const WINDOW_WIDTH_MS = 5000; // 5-second window (keeping same time scale)
   const CANVAS_WIDTH = 650; 
   const CANVAS_HEIGHT = 300; 
-  const GRID_SIZE_X = 40; // Grid size for time (better scale)
-  const GRID_SIZE_Y = 15; // Grid size for amplitude
-  const VERTICAL_SCALE = 38.0; // Signal amplification factor
-  const SMOOTHING_FACTOR = 1.3; // Reduced smoothing for better detail
-  const TARGET_FPS = 30; // Optimal FPS for performance/quality balance
+  const GRID_SIZE_X = 40; // Grid size for time (kept same)
+  const GRID_SIZE_Y = 15; // Grid size for amplitude (kept same)
+  const VERTICAL_SCALE = 38.0; // Same signal amplification factor
+  const SMOOTHING_FACTOR = 1.3; // Same smoothing level
+  const TARGET_FPS = 30; // Same FPS
   const FRAME_TIME = 1000 / TARGET_FPS;
-  const BUFFER_SIZE = 300; // Optimized buffer size
-  const INVERT_SIGNAL = false;
-  const PEAK_MIN_VALUE = 5.5; // Lower threshold for peak detection
-  const PEAK_DISTANCE_MS = 300; // Minimum time between peaks
+  const BUFFER_SIZE = 300; // Same buffer size
+  const INVERT_SIGNAL = false; // Kept same
+  const PEAK_MIN_VALUE = 5.5; // Same threshold
+  const PEAK_DISTANCE_MS = 300; // Same minimum time between peaks
 
   useEffect(() => {
     if (!dataBufferRef.current) {
@@ -79,21 +79,21 @@ const PPGSignalMeter = ({
 
   // Enhanced grid drawing with better visibility and resolution
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
-    // Clear canvas with optimized method
+    // Clear canvas
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     
     // Clean white background (clinical standard)
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    const zeroY = CANVAS_HEIGHT * 0.5; // Center baseline
+    const zeroY = CANVAS_HEIGHT * 0.5; // Center baseline (keeping same)
     
-    // Draw minor gridlines (lighter)
+    // Draw minor gridlines - improved visibility
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(180, 210, 210, 0.35)'; // Lighter for minor gridlines
-    ctx.lineWidth = 0.6;
+    ctx.strokeStyle = 'rgba(160, 190, 190, 0.4)'; // Slightly darker for better visibility
+    ctx.lineWidth = 0.7; // Slightly thicker
     
-    // Minor vertical gridlines (time) - clinical standard spacing
+    // Minor vertical gridlines (time)
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X / 5) {
       ctx.moveTo(x, 0);
       ctx.lineTo(x, CANVAS_HEIGHT);
@@ -106,12 +106,12 @@ const PPGSignalMeter = ({
     }
     ctx.stroke();
     
-    // Draw medium gridlines
+    // Draw medium gridlines - improved visibility
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(120, 160, 160, 0.55)'; // More visible medium grid
-    ctx.lineWidth = 0.9;
+    ctx.strokeStyle = 'rgba(100, 140, 140, 0.6)'; // Darker for better visibility
+    ctx.lineWidth = 1.0; // Slightly thicker
     
-    // Medium gridlines - 200ms standard
+    // Medium gridlines
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X) {
       ctx.moveTo(x, 0);
       ctx.lineTo(x, CANVAS_HEIGHT);
@@ -124,12 +124,12 @@ const PPGSignalMeter = ({
     }
     ctx.stroke();
     
-    // Draw major gridlines (1 second / major amplitude)
+    // Draw major gridlines - improved visibility
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(80, 120, 120, 0.7)'; // Darker, more visible major grid
-    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = 'rgba(60, 100, 100, 0.75)'; // Darker for better visibility
+    ctx.lineWidth = 1.3; // Slightly thicker
     
-    // Major vertical gridlines - 1000ms (1 second) standard
+    // Major vertical gridlines
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X * 5) {
       ctx.moveTo(x, 0);
       ctx.lineTo(x, CANVAS_HEIGHT);
@@ -137,8 +137,8 @@ const PPGSignalMeter = ({
       // Add time labels with improved visibility
       if (x >= 0) {
         const timeMs = (x / CANVAS_WIDTH) * WINDOW_WIDTH_MS;
-        ctx.fillStyle = '#004466'; // Darker, more visible text
-        ctx.font = 'bold 14px Arial'; // Larger, bold font
+        ctx.fillStyle = '#004466'; // Darker for better visibility
+        ctx.font = 'bold 15px Arial'; // Larger font
         ctx.textAlign = 'center';
         ctx.fillText(`${Math.round(timeMs/1000)}s`, x, CANVAS_HEIGHT - 5);
       }
@@ -153,23 +153,23 @@ const PPGSignalMeter = ({
       if (y % (GRID_SIZE_Y * 5) === 0) {
         const amplitude = ((zeroY - y) / VERTICAL_SCALE).toFixed(1);
         ctx.fillStyle = '#004466'; // Darker text
-        ctx.font = 'bold 14px Arial'; // Larger, bold font
+        ctx.font = 'bold 15px Arial'; // Larger font
         ctx.textAlign = 'right';
         ctx.fillText(amplitude, 25, y + 5);
       }
     }
     ctx.stroke();
     
-    // Draw the baseline (zero line)
+    // Draw the baseline (zero line) - improved visibility
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(0, 100, 120, 0.8)'; // More visible baseline
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = 'rgba(0, 90, 110, 0.85)'; // More visible baseline
+    ctx.lineWidth = 1.8; // Thicker
     ctx.moveTo(0, zeroY);
     ctx.lineTo(CANVAS_WIDTH, zeroY);
     ctx.stroke();
     
     // Draw axis labels with improved visibility
-    ctx.fillStyle = '#003355'; // Darker text for better contrast
+    ctx.fillStyle = '#003355'; // Darker text for better visibility
     ctx.font = 'bold 16px Arial'; // Larger font
     ctx.textAlign = 'center';
     ctx.fillText('Tiempo (s)', CANVAS_WIDTH / 2, CANVAS_HEIGHT - 20);
@@ -182,7 +182,7 @@ const PPGSignalMeter = ({
     ctx.restore();
   }, []);
 
-  // Optimized high-quality signal rendering
+  // Optimized signal rendering with improved visibility
   const renderSignal = useCallback(() => {
     if (!canvasRef.current || !dataBufferRef.current) {
       animationFrameRef.current = requestAnimationFrame(renderSignal);
@@ -192,7 +192,7 @@ const PPGSignalMeter = ({
     const currentTime = performance.now();
     const timeSinceLastRender = currentTime - lastRenderTimeRef.current;
 
-    // Frame rate control for better performance
+    // Frame rate control
     if (timeSinceLastRender < FRAME_TIME) {
       animationFrameRef.current = requestAnimationFrame(renderSignal);
       return;
@@ -211,7 +211,7 @@ const PPGSignalMeter = ({
 
     const now = Date.now();
     
-    // Adaptive baseline calculation for better signal centering
+    // Adaptive baseline calculation
     if (baselineRef.current === null) {
       baselineRef.current = value;
     } else {
@@ -219,7 +219,7 @@ const PPGSignalMeter = ({
       baselineRef.current = baselineRef.current * adaptiveRate + value * (1 - adaptiveRate);
     }
 
-    // Apply enhanced smoothing for cleaner signal
+    // Apply smoothing
     const smoothedValue = smoothValue(value, lastValueRef.current);
     lastValueRef.current = smoothedValue;
 
@@ -251,16 +251,16 @@ const PPGSignalMeter = ({
 
     const points = dataBufferRef.current.getPoints();
     if (points.length > 1) {
-      // Filter only visible points for better performance
+      // Filter only visible points
       const visiblePoints = points.filter(
         point => (now - point.time) <= WINDOW_WIDTH_MS
       );
       
       if (visiblePoints.length > 1) {
-        // Draw the main PPG signal with enhanced visibility
+        // Draw the main PPG signal with improved visibility
         ctx.beginPath();
-        ctx.strokeStyle = '#0080FF'; // Brighter, more visible blue
-        ctx.lineWidth = 3.0; // Thicker line for better visibility
+        ctx.strokeStyle = '#006eff'; // Brighter blue for better visibility
+        ctx.lineWidth = 3.5; // Thicker line for better visibility
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
         
@@ -282,9 +282,9 @@ const PPGSignalMeter = ({
           if (point.isArrhythmia && i < visiblePoints.length - 1) {
             ctx.stroke();
             ctx.beginPath();
-            ctx.strokeStyle = '#FF2200'; // Brighter red
-            ctx.lineWidth = 3.5; // Thicker
-            ctx.setLineDash([5, 2]);
+            ctx.strokeStyle = '#ff2a00'; // Brighter red for better visibility
+            ctx.lineWidth = 4.0; // Thicker for better visibility
+            ctx.setLineDash([6, 2]);
             ctx.moveTo(x, y);
             
             const nextPoint = visiblePoints[i + 1];
@@ -295,8 +295,8 @@ const PPGSignalMeter = ({
             
             // Reset for continuing normal signal
             ctx.beginPath();
-            ctx.strokeStyle = '#0080FF';
-            ctx.lineWidth = 3.0;
+            ctx.strokeStyle = '#006eff';
+            ctx.lineWidth = 3.5;
             ctx.setLineDash([]);
             ctx.moveTo(nextX, nextY);
             firstPoint = false;
@@ -316,7 +316,7 @@ const PPGSignalMeter = ({
         const nextPoint1 = visiblePoints[i + 1];
         const nextPoint2 = visiblePoints[i + 2];
         
-        // Optimized peak detection criteria
+        // Peak detection criteria
         if (point.value > prevPoint1.value && 
             point.value > prevPoint2.value && 
             point.value > nextPoint1.value && 
@@ -324,7 +324,7 @@ const PPGSignalMeter = ({
           
           const peakAmplitude = point.value;
           
-          // Only significant peaks with minimum amplitude
+          // Only significant peaks
           if (peakAmplitude > PEAK_MIN_VALUE) {
             const peakTime = point.time;
             
@@ -341,47 +341,47 @@ const PPGSignalMeter = ({
         }
       }
       
-      // Draw peaks with enhanced visibility
+      // Draw peaks with improved visibility
       for (const idx of maxPeakIndices) {
         const point = visiblePoints[idx];
         const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
         const y = canvas.height * 0.5 - point.value;
         
         const isArrhythmiaPeak = point.isArrhythmia;
-        const peakColor = isArrhythmiaPeak ? '#FF0000' : '#0080FF';
+        const peakColor = isArrhythmiaPeak ? '#FF0000' : '#0066FF';
         
         // Draw peak marker with improved visibility
         ctx.fillStyle = peakColor;
         ctx.beginPath();
-        ctx.arc(x, y, 6, 0, Math.PI * 2); // Larger marker
+        ctx.arc(x, y, 7, 0, Math.PI * 2); // Larger marker for better visibility
         ctx.fill();
         
         // Add stroke for better definition
-        ctx.strokeStyle = isArrhythmiaPeak ? '#FF0000' : '#0066CC';
-        ctx.lineWidth = 2.0;
+        ctx.strokeStyle = isArrhythmiaPeak ? '#FF3300' : '#0044CC';
+        ctx.lineWidth = 2.5; // Thicker for better visibility
         ctx.stroke();
 
         // Draw peak value with improved visibility
-        ctx.font = 'bold 14px Arial'; // Bold, larger font
-        ctx.fillStyle = isArrhythmiaPeak ? '#FF0000' : '#0066CC';
+        ctx.font = 'bold 16px Arial'; // Larger font for better visibility
+        ctx.fillStyle = isArrhythmiaPeak ? '#FF0000' : '#0044CC';
         ctx.textAlign = 'center';
-        ctx.fillText(Math.abs(point.value / VERTICAL_SCALE).toFixed(1), x, y - 15);
+        ctx.fillText(Math.abs(point.value / VERTICAL_SCALE).toFixed(1), x, y - 18);
         
         // Enhanced arrhythmia visualization
         if (isArrhythmiaPeak) {
           // Warning indicator
           ctx.beginPath();
-          ctx.arc(x, y, 15, 0, Math.PI * 2);
-          ctx.strokeStyle = 'rgba(255, 0, 0, 0.8)'; // More opaque
-          ctx.lineWidth = 1.8; // Thicker
+          ctx.arc(x, y, 16, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(255, 0, 0, 0.9)'; // More opaque for better visibility
+          ctx.lineWidth = 2.0; // Thicker for better visibility
           ctx.setLineDash([2, 2]);
           ctx.stroke();
           ctx.setLineDash([]);
           
           // Warning label with improved visibility
-          ctx.font = 'bold 14px Arial'; // Bold, larger font
+          ctx.font = 'bold 16px Arial'; // Larger font for better visibility
           ctx.fillStyle = '#FF0000';
-          ctx.fillText("LATIDO PREMATURO", x, y - 30);
+          ctx.fillText("LATIDO PREMATURO", x, y - 35);
         }
       }
     }
@@ -452,7 +452,7 @@ const PPGSignalMeter = ({
             style={{ 
               imageRendering: 'crisp-edges',
               transform: 'translateZ(0)',
-              filter: 'contrast(1.05)',
+              filter: 'contrast(1.1)', // Slightly more contrast for better visibility
               boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
               borderRadius: '8px'
             }}
