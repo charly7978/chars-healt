@@ -34,53 +34,64 @@ export const useVitalSignsProcessor = () => {
   }, []);
 
   const processSignal = useCallback((ppgValue: number, rrData?: any) => {
-    // CRUCIAL: Primero procesar con el procesador original exactamente como antes
-    // Esto es crítico para mantener la detección de arritmias intacta
-    const originalResult = processor.processSignal(ppgValue, rrData);
+    // IMPORTANTE: primero procesar la señal principal con el procesador original
+    // sin ninguna modificación para mantener la detección de arritmias intacta
+    const vitalSignsResult = processor.processSignal(ppgValue, rrData);
     
-    // DESPUÉS, y como paso SEPARADO, procesar glucosa (este era el error - antes estábamos
-    // combinando resultados de forma incorrecta)
+    // DESPUÉS, como paso separado, procesar los datos de glucosa
+    // sin interferir con el procesamiento principal
     const glucoseResult = glucoseProcessor.processSignal(ppgValue);
     
-    // Combinar resultados preservando EXACTAMENTE todos los datos de arritmias
-    const result = {
-      ...originalResult,  // Mantener TODOS los datos originales exactamente como estaban
-      // Agregar glucosa como dato adicional sin alterar ninguna otra propiedad
-      glucose: {
-        value: glucoseResult.value || 0,
-        trend: glucoseResult.trend || 'unknown',
-        confidence: glucoseResult.confidence || 0
-      }
+    // Preparar datos de glucosa
+    const glucoseData = {
+      value: glucoseResult.value || 0,
+      trend: glucoseResult.trend || 'unknown',
+      confidence: glucoseResult.confidence || 0
     };
     
-    // Actualizar el estado con el resultado combinado
-    setVitalSignsData(result);
+    // Combinar resultados PRESERVANDO todos los datos originales
+    // especialmente los relacionados con arritmias
+    const combinedResult: VitalSignsResult = {
+      ...vitalSignsResult,
+      glucose: glucoseData
+    };
     
-    // Retornar el resultado combinado
-    return result;
+    // Asegurarse de que lastArrhythmiaData se preserve exactamente como viene del procesador original
+    if (vitalSignsResult.lastArrhythmiaData) {
+      combinedResult.lastArrhythmiaData = vitalSignsResult.lastArrhythmiaData;
+    }
+    
+    // Asegurarse de que arrhythmiaStatus se preserve exactamente
+    combinedResult.arrhythmiaStatus = vitalSignsResult.arrhythmiaStatus;
+    
+    // Guardar datos combinados en estado
+    setVitalSignsData(combinedResult);
+    
+    // Importante: verificamos si hay arritmias en el resultado
+    if (vitalSignsResult.arrhythmiaStatus && vitalSignsResult.arrhythmiaStatus.includes('ARRITMIA DETECTADA')) {
+      console.log('¡ARRITMIA DETECTADA!', vitalSignsResult.arrhythmiaStatus);
+    }
+    
+    return combinedResult;
   }, [processor, glucoseProcessor]);
 
   const reset = useCallback(() => {
-    // Resetear ambos procesadores
     processor.reset();
     glucoseProcessor.reset();
     setVitalSignsData(null);
+    console.log('Procesadores reiniciados');
   }, [processor, glucoseProcessor]);
 
   const getCurrentRespiratoryData = useCallback(() => {
-    if (!vitalSignsData) return null;
-    
-    return {
-      rate: vitalSignsData.respiratoryRate,
-      pattern: vitalSignsData.respiratoryPattern,
-      confidence: vitalSignsData.respiratoryConfidence
-    };
-  }, [vitalSignsData]);
+    // Por ahora, retornamos null ya que no tenemos datos respiratorios directos
+    return null;
+  }, []);
   
   // Función para calibrar el medidor de glucosa
   const calibrateGlucose = useCallback((referenceValue: number) => {
     if (glucoseProcessor && typeof referenceValue === 'number' && referenceValue > 0) {
       glucoseProcessor.calibrateWithReference(referenceValue);
+      console.log('Glucosa calibrada con valor de referencia:', referenceValue);
       return true;
     }
     return false;
