@@ -1,6 +1,8 @@
 import { applySMAFilter } from '../utils/signalProcessingUtils';
 import { SpO2Calculator } from './spo2';
 import { BloodPressureCalculator } from './BloodPressureCalculator';
+import { ArrhythmiaDetector } from './ArrhythmiaDetector';
+import { RespiratoryRateProcessor } from './RespiratoryRateProcessor';
 
 export class VitalSignsProcessor {
   private readonly WINDOW_SIZE = 300;
@@ -12,6 +14,9 @@ export class VitalSignsProcessor {
   // Specialized modules for each vital sign
   private spO2Calculator: SpO2Calculator;
   private bpCalculator: BloodPressureCalculator;
+  private arrhythmiaDetector: ArrhythmiaDetector;
+  // NUEVO: Procesador de tasa respiratoria
+  private respiratoryProcessor: RespiratoryRateProcessor;
   
   // Variables para medición real - valores iniciales basados en estadísticas médicas reales
   private lastSystolic: number = 120;
@@ -21,6 +26,9 @@ export class VitalSignsProcessor {
   constructor() {
     this.spO2Calculator = new SpO2Calculator();
     this.bpCalculator = new BloodPressureCalculator();
+    this.arrhythmiaDetector = new ArrhythmiaDetector();
+    // NUEVO: Inicializar procesador respiratorio
+    this.respiratoryProcessor = new RespiratoryRateProcessor();
   }
 
   /**
@@ -32,6 +40,18 @@ export class VitalSignsProcessor {
   ) {
     const currentTime = Date.now();
 
+    // Update RR intervals if available
+    if (rrData?.intervals && rrData.intervals.length > 0) {
+      // Filter outliers
+      const validIntervals = rrData.intervals.filter(interval => {
+        return interval >= 400 && interval <= 1500; // 40-150 BPM
+      });
+      
+      if (validIntervals.length > 0) {
+        this.arrhythmiaDetector.updateIntervals(validIntervals, rrData.lastPeakTime, rrData.amplitudes && rrData.amplitudes.length > 0 ? rrData.amplitudes[rrData.amplitudes.length - 1] : undefined);
+      }
+    }
+
     // Process PPG signal
     const filtered = this.applySMAFilter(ppgValue);
     this.ppgValues.push(filtered);
@@ -39,32 +59,46 @@ export class VitalSignsProcessor {
       this.ppgValues.shift();
     }
 
-    // Check if we have enough data for SpO2 calculation
-    const isDataCollectionPhase = this.ppgValues.length < 60;
-    
-    // During collection phase, collect values for SpO2 calibration
-    if (isDataCollectionPhase) {
-      if (this.ppgValues.length >= 60) {
-        const tempSpO2 = this.spO2Calculator.calculateRaw(this.ppgValues.slice(-60));
-        if (tempSpO2 > 0) {
-          this.spO2Calculator.addCalibrationValue(tempSpO2);
-        }
-      }
-    } else {
-      // Auto-calibrate SpO2
-      this.spO2Calculator.calibrate();
-    }
+    // Check learning phase
+    const isLearning = this.arrhythmiaDetector.isInLearningPhase();
 
-    // Calculate vital signs - utilizando datos reales optimizados
+    // Arrhythmia detection
+    const arrhythmiaResult = this.arrhythmiaDetector.detect();
+
+    // Calculate blood pressure
+    const bp = this.calculateRealBloodPressure(this.ppgValues);
+    const pressure = `${bp.systolic}/${bp.diastolic}`;
+
+    // Calculate SpO2
     const spo2 = this.spO2Calculator.calculate(this.ppgValues.slice(-60));
     
-    // Calcular presión arterial usando valores reales
-    const bp = this.calculateRealBloodPressure(this.ppgValues.slice(-60));
-    const pressure = `${bp.systolic}/${bp.diastolic}`;
+    // NUEVO: Calcular tasa respiratoria
+    // La calidad de señal para la respiración se puede basar en varios factores
+    const signalQuality = Math.min(100, 
+      isLearning ? 50 : // Durante aprendizaje, calidad moderada
+      arrhythmiaResult.detected ? 65 : // Durante arritmia, calidad algo reducida
+      80); // Calidad normal
+    
+    const respData = this.respiratoryProcessor.processSignal(filtered, signalQuality);
+    
+    // Preparar datos de arritmia si se detectó
+    const lastArrhythmiaData = arrhythmiaResult.detected ? {
+      timestamp: currentTime,
+      rmssd: arrhythmiaResult.data?.rmssd || 0,
+      rrVariation: arrhythmiaResult.data?.rrVariation || 0
+    } : null;
+    
+    this.measurementCount++;
 
     return {
       spo2,
-      pressure
+      pressure,
+      arrhythmiaStatus: arrhythmiaResult.status,
+      lastArrhythmiaData,
+      // NUEVO: Incluir datos respiratorios
+      respiratoryRate: respData ? respData.rate : 0,
+      respiratoryPattern: respData ? respData.pattern : 'unknown',
+      respiratoryConfidence: respData ? respData.confidence : 0
     };
   }
 
@@ -72,67 +106,33 @@ export class VitalSignsProcessor {
    * Calcula valores de presión arterial reales basados en datos biométricos
    */
   private calculateRealBloodPressure(values: number[]): { systolic: number; diastolic: number } {
-    // Aumentar el contador de mediciones
-    this.measurementCount++;
+    if (values.length < 30) {
+      return { systolic: this.lastSystolic, diastolic: this.lastDiastolic };
+    }
     
-    // Obtener datos reales del calculador principal
-    const rawBP = this.bpCalculator.calculate(values);
-    
-    // Si tenemos valores reales del calculador, usarlos
-    if (rawBP.systolic > 0 && rawBP.diastolic > 0) {
-      // Aplicar pequeños ajustes para suavizar transiciones entre mediciones
-      const systolicAdjustment = Math.min(5, Math.max(-5, (rawBP.systolic - this.lastSystolic) / 2));
-      const diastolicAdjustment = Math.min(3, Math.max(-3, (rawBP.diastolic - this.lastDiastolic) / 2));
+    try {
+      // Use BP calculator for accurate measurement
+      const result = this.bpCalculator.calculate(values);
       
-      // Aplicar los ajustes para obtener valores más consistentes
-      const finalSystolic = Math.round(this.lastSystolic + systolicAdjustment);
-      const finalDiastolic = Math.round(this.lastDiastolic + diastolicAdjustment);
+      if (result.systolic > 0 && result.diastolic > 0) {
+        // Update last valid values
+        this.lastSystolic = result.systolic;
+        this.lastDiastolic = result.diastolic;
+        return result;
+      }
       
-      // Actualizar los últimos valores válidos
-      this.lastSystolic = finalSystolic;
-      this.lastDiastolic = finalDiastolic;
-      
-      // Garantizar rangos médicamente válidos
-      return {
-        systolic: Math.max(90, Math.min(180, finalSystolic)),
-        diastolic: Math.max(60, Math.min(110, Math.min(finalSystolic - 30, finalDiastolic)))
+      // If calculator returned invalid values, use last valid ones
+      return { 
+        systolic: this.lastSystolic,
+        diastolic: this.lastDiastolic
+      };
+    } catch (error) {
+      console.error('Error calculating blood pressure:', error);
+      return { 
+        systolic: this.lastSystolic,
+        diastolic: this.lastDiastolic
       };
     }
-    
-    // Si no tenemos mediciones reales, usar los últimos valores válidos
-    // o valores estadísticamente normales si no hay valores previos
-    if (this.lastSystolic === 0 || this.lastDiastolic === 0) {
-      // Primera medición, usar valores estadísticos normales
-      const systolic = 120 + Math.floor(Math.random() * 8) - 4;
-      const diastolic = 80 + Math.floor(Math.random() * 6) - 3;
-      
-      this.lastSystolic = systolic;
-      this.lastDiastolic = diastolic;
-      
-      return { systolic, diastolic };
-    }
-    
-    // Retornar los últimos valores válidos con pequeñas variaciones naturales
-    // basadas en la calidad de la señal actual
-    const signalQuality = Math.min(1.0, Math.max(0.1, 
-      values.length > 30 ? 
-      (values.reduce((sum, v) => sum + Math.abs(v), 0) / values.length) / 100 : 
-      0.5
-    ));
-    
-    // Pequeña variación basada en la calidad de la señal
-    const variationFactor = (1.1 - signalQuality) * 4;
-    const systolicVariation = Math.floor(Math.random() * variationFactor) - Math.floor(variationFactor/2);
-    const diastolicVariation = Math.floor(Math.random() * (variationFactor * 0.6)) - Math.floor((variationFactor * 0.6)/2);
-    
-    const systolic = Math.max(90, Math.min(180, this.lastSystolic + systolicVariation));
-    const diastolic = Math.max(60, Math.min(110, Math.min(systolic - 30, this.lastDiastolic + diastolicVariation)));
-    
-    // Actualizar los últimos valores válidos
-    this.lastSystolic = systolic;
-    this.lastDiastolic = diastolic;
-    
-    return { systolic, diastolic };
   }
 
   /**
@@ -140,21 +140,23 @@ export class VitalSignsProcessor {
    * @param rawBPM Raw BPM value
    */
   public smoothBPM(rawBPM: number): number {
-    if (rawBPM <= 0) return 0;
+    if (rawBPM <= 0) {
+      return this.lastBPM > 0 ? this.lastBPM : 0;
+    }
     
     if (this.lastBPM <= 0) {
       this.lastBPM = rawBPM;
       return rawBPM;
     }
     
-    // Apply increased exponential smoothing for more stability
-    const smoothed = Math.round(
+    // Apply exponential smoothing
+    const smoothedBPM = Math.round(
       this.BPM_SMOOTHING_ALPHA * rawBPM + 
       (1 - this.BPM_SMOOTHING_ALPHA) * this.lastBPM
     );
     
-    this.lastBPM = smoothed;
-    return smoothed;
+    this.lastBPM = smoothedBPM;
+    return smoothedBPM;
   }
 
   /**
@@ -165,8 +167,11 @@ export class VitalSignsProcessor {
     this.lastBPM = 0;
     this.spO2Calculator.reset();
     this.bpCalculator.reset();
+    this.arrhythmiaDetector.reset();
+    // NUEVO: Resetear procesador respiratorio
+    this.respiratoryProcessor.reset();
     
-    // Reiniciar mediciones reales
+    // Reset BP estimates
     this.lastSystolic = 120;
     this.lastDiastolic = 80;
     this.measurementCount = 0;

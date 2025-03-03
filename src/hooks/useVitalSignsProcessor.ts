@@ -1,4 +1,3 @@
-
 import { useState, useCallback, useRef } from 'react';
 import { VitalSignsProcessor } from '../modules/VitalSignsProcessor';
 import { ArrhythmiaDetector } from '../modules/ArrhythmiaDetector';
@@ -6,6 +5,20 @@ import { createBloodPressureStabilizer } from '../utils/bloodPressureStabilizer'
 import { createVitalSignsDataCollector } from '../utils/vitalSignsDataCollector';
 import { useSignalHistory } from './useSignalHistory';
 import { VitalSignsRisk } from '../utils/vitalSignsRisk';
+
+type VitalSignsResult = {
+  spo2: number;
+  pressure: string;
+  arrhythmiaStatus: string;
+  lastArrhythmiaData?: {
+    timestamp: number;
+    rmssd: number;
+    rrVariation: number;
+  } | null;
+  respiratoryRate: number;
+  respiratoryPattern: string;
+  respiratoryConfidence: number;
+};
 
 export const useVitalSignsProcessor = () => {
   // Core processor
@@ -19,6 +32,7 @@ export const useVitalSignsProcessor = () => {
   
   // Estado para el contador de arritmias
   const [arrhythmiaCounter, setArrhythmiaCounter] = useState(0);
+  const [vitalSignsData, setVitalSignsData] = useState<VitalSignsResult | null>(null);
   
   /**
    * Lazy initialization of the VitalSignsProcessor and ArrhythmiaDetector
@@ -124,6 +138,23 @@ export const useVitalSignsProcessor = () => {
       setArrhythmiaCounter(arrhythmiaResult.count);
     }
     
+    // NUEVO: Actualizar datos respiratorios
+    setVitalSignsData({
+      spo2: result.spo2,
+      pressure: stabilizedBP,
+      arrhythmiaStatus: arrhythmiaResult.status,
+      lastArrhythmiaData: arrhythmiaResult.detected ? {
+        timestamp: currentTime,
+        rmssd: arrhythmiaResult.data?.rmssd || 0,
+        rrVariation: arrhythmiaResult.data?.rrVariation || 0,
+        isPrematureBeat: arrhythmiaResult.data?.prematureBeat || false,
+        confidence: arrhythmiaResult.data?.confidence || 0
+      } : null,
+      respiratoryRate: result.respiratoryRate,
+      respiratoryPattern: result.respiratoryPattern,
+      respiratoryConfidence: result.respiratoryConfidence
+    });
+    
     return {
       spo2: result.spo2,
       pressure: stabilizedBP,
@@ -134,7 +165,10 @@ export const useVitalSignsProcessor = () => {
         rrVariation: arrhythmiaResult.data?.rrVariation || 0,
         isPrematureBeat: arrhythmiaResult.data?.prematureBeat || false,
         confidence: arrhythmiaResult.data?.confidence || 0
-      } : null
+      } : null,
+      respiratoryRate: result.respiratoryRate,
+      respiratoryPattern: result.respiratoryPattern,
+      respiratoryConfidence: result.respiratoryConfidence
     };
   }, [getProcessor, getArrhythmiaDetector, arrhythmiaCounter, signalHistory]);
 
@@ -158,6 +192,7 @@ export const useVitalSignsProcessor = () => {
     VitalSignsRisk.resetHistory();
     
     console.log("Reseteo de detección de arritmias y presión arterial");
+    setVitalSignsData(null);
   }, [signalHistory]);
   
   /**
@@ -192,13 +227,27 @@ export const useVitalSignsProcessor = () => {
         console.log("GC no disponible en este entorno");
       }
     }
+    setVitalSignsData(null);
   }, [signalHistory]);
 
+  // NUEVO: Método para obtener datos respiratorios actuales
+  const getCurrentRespiratoryData = useCallback(() => {
+    if (!vitalSignsData) return null;
+    
+    return {
+      rate: vitalSignsData.respiratoryRate,
+      pattern: vitalSignsData.respiratoryPattern,
+      confidence: vitalSignsData.respiratoryConfidence
+    };
+  }, [vitalSignsData]);
+
   return {
+    vitalSignsData,
     processSignal,
     reset,
     cleanMemory,
     arrhythmiaCounter,
-    dataCollector: dataCollector.current
+    dataCollector: dataCollector.current,
+    getCurrentRespiratoryData
   };
 };
