@@ -25,6 +25,11 @@ export class CircularBuffer<T = number> {
     return [...this.buffer];
   }
 
+  // Adding getPoints for backward compatibility with non-generic usage
+  getPoints(): T[] {
+    return this.getValues();
+  }
+
   size(): number {
     return this.buffer.length;
   }
