@@ -9,43 +9,70 @@ export const useSignalProcessor = () => {
   const [lastSignal, setLastSignal] = useState<ProcessedSignal | null>(null);
   const [error, setError] = useState<ProcessingError | null>(null);
   const initializingRef = useRef<boolean>(false);
+  const forceReinitializeRef = useRef<boolean>(false);
   
   // Use lazy initialization for the processor
   const initializeProcessor = useCallback(() => {
+    // Force re-initialization if requested
+    if (forceReinitializeRef.current) {
+      console.log("useSignalProcessor: Force re-initialization requested");
+      if (processorRef.current) {
+        processorRef.current.stop();
+        processorRef.current.onSignalReady = null;
+        processorRef.current.onError = null;
+        processorRef.current = null;
+      }
+      forceReinitializeRef.current = false;
+    }
+    
     if (processorRef.current) return Promise.resolve();
     if (initializingRef.current) return Promise.resolve();
     
     initializingRef.current = true;
     console.log("useSignalProcessor: Creating new processor instance");
     
-    processorRef.current = new PPGSignalProcessor();
-    
-    processorRef.current.onSignalReady = (signal: ProcessedSignal) => {
-      console.log("useSignalProcessor: Signal received:", {
-        timestamp: signal.timestamp,
-        quality: signal.quality,
-        filteredValue: signal.filteredValue
-      });
-      setLastSignal(signal);
-      setError(null);
-    };
+    try {
+      processorRef.current = new PPGSignalProcessor();
+      
+      processorRef.current.onSignalReady = (signal: ProcessedSignal) => {
+        console.log("useSignalProcessor: Signal received:", {
+          timestamp: signal.timestamp,
+          quality: signal.quality,
+          filteredValue: signal.filteredValue,
+          fingerDetected: signal.fingerDetected
+        });
+        setLastSignal(signal);
+        setError(null);
+      };
 
-    processorRef.current.onError = (error: ProcessingError) => {
-      console.error("useSignalProcessor: Error received:", error);
-      setError(error);
-    };
+      processorRef.current.onError = (error: ProcessingError) => {
+        console.error("useSignalProcessor: Error received:", error);
+        setError(error);
+      };
 
-    console.log("useSignalProcessor: Initializing processor");
-    return processorRef.current.initialize()
-      .then(() => {
-        console.log("useSignalProcessor: Initialization successful");
-        initializingRef.current = false;
-      })
-      .catch(error => {
-        console.error("useSignalProcessor: Initialization error:", error);
-        initializingRef.current = false;
-        throw error;
-      });
+      console.log("useSignalProcessor: Initializing processor");
+      return processorRef.current.initialize()
+        .then(() => {
+          console.log("useSignalProcessor: Initialization successful");
+          initializingRef.current = false;
+          return true;
+        })
+        .catch(error => {
+          console.error("useSignalProcessor: Initialization error:", error);
+          initializingRef.current = false;
+          // Clear processor on initialization failure
+          if (processorRef.current) {
+            processorRef.current.onSignalReady = null;
+            processorRef.current.onError = null;
+            processorRef.current = null;
+          }
+          throw error;
+        });
+    } catch (error) {
+      console.error("useSignalProcessor: Error creating processor:", error);
+      initializingRef.current = false;
+      return Promise.reject(error);
+    }
   }, []);
 
   // Create the processor on mount
@@ -73,18 +100,27 @@ export const useSignalProcessor = () => {
     console.log("useSignalProcessor: Starting processing");
     
     try {
+      // If processor failed before, force reinitialization
+      if (!processorRef.current) {
+        forceReinitializeRef.current = true;
+      }
+      
       // Make sure processor is initialized before starting
       await initializeProcessor();
       
       if (processorRef.current) {
         setIsProcessing(true);
         processorRef.current.start();
+        console.log("useSignalProcessor: Processing started successfully");
+        return true;
       } else {
         console.error("useSignalProcessor: Cannot start processing - processor not initialized");
+        return false;
       }
     } catch (error) {
       console.error("useSignalProcessor: Error starting processing:", error);
       setIsProcessing(false);
+      return false;
     }
   }, [initializeProcessor]);
 
@@ -97,6 +133,7 @@ export const useSignalProcessor = () => {
     // Explicitly free memory
     setLastSignal(null);
     setError(null);
+    return true;
   }, []);
 
   const calibrate = useCallback(async () => {
@@ -119,12 +156,19 @@ export const useSignalProcessor = () => {
   }, [initializeProcessor]);
 
   const processFrame = useCallback((imageData: ImageData) => {
-    if (isProcessing && processorRef.current) {
+    if (!processorRef.current) {
+      console.warn("useSignalProcessor: No processor available for frame processing");
+      return;
+    }
+    
+    if (!isProcessing) {
+      return; // Don't process if not in processing state
+    }
+    
+    try {
       processorRef.current.processFrame(imageData);
-    } else if (!isProcessing) {
-      console.log("useSignalProcessor: Frame ignored (not processing)");
-    } else if (!processorRef.current) {
-      console.error("useSignalProcessor: No processor available for frame processing");
+    } catch (error) {
+      console.error("useSignalProcessor: Error processing frame:", error);
     }
   }, [isProcessing]);
 
@@ -158,6 +202,8 @@ export const useSignalProcessor = () => {
         console.log("useSignalProcessor: Garbage collection not available");
       }
     }
+    
+    forceReinitializeRef.current = true;
   }, []);
 
   return {

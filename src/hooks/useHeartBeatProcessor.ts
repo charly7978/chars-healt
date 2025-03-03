@@ -14,9 +14,14 @@ export const useHeartBeatProcessor = () => {
   const getProcessor = useCallback(() => {
     if (!processorRef.current) {
       console.log('useHeartBeatProcessor: Creating new HeartBeatProcessor instance');
-      processorRef.current = new HeartBeatProcessor();
-      // Make it globally accessible for debugging
-      window.heartBeatProcessor = processorRef.current;
+      try {
+        processorRef.current = new HeartBeatProcessor();
+        // Make it globally accessible for debugging
+        window.heartBeatProcessor = processorRef.current;
+      } catch (error) {
+        console.error('useHeartBeatProcessor: Error creating processor:', error);
+        return null;
+      }
     }
     return processorRef.current;
   }, []);
@@ -49,6 +54,17 @@ export const useHeartBeatProcessor = () => {
       }
       
       const processor = getProcessor();
+      if (!processor) {
+        console.error('useHeartBeatProcessor: Failed to get processor');
+        return {
+          bpm: 0,
+          confidence: 0,
+          isPeak: false,
+          rrData: { intervals: [], lastPeakTime: null },
+          amplitude: undefined
+        };
+      }
+      
       const result = processor.processSignal(value);
       
       // Update state with the latest results
@@ -91,10 +107,23 @@ export const useHeartBeatProcessor = () => {
   const reset = useCallback(() => {
     console.log('useHeartBeatProcessor: Resetting processor');
     if (processorRef.current) {
-      processorRef.current.reset();
-    } else {
-      processorRef.current = new HeartBeatProcessor();
+      try {
+        processorRef.current.reset();
+      } catch (error) {
+        console.error('useHeartBeatProcessor: Error resetting processor:', error);
+        processorRef.current = null;
+      }
     }
+    
+    if (!processorRef.current) {
+      try {
+        processorRef.current = new HeartBeatProcessor();
+        window.heartBeatProcessor = processorRef.current;
+      } catch (error) {
+        console.error('useHeartBeatProcessor: Error creating processor during reset:', error);
+      }
+    }
+    
     setBpm(0);
     setConfidence(0);
     setIsPeak(false);
@@ -103,7 +132,12 @@ export const useHeartBeatProcessor = () => {
   
   const getFinalBPM = useCallback(() => {
     if (!processorRef.current) return 0;
-    return processorRef.current.getFinalBPM();
+    try {
+      return processorRef.current.getFinalBPM();
+    } catch (error) {
+      console.error('useHeartBeatProcessor: Error getting final BPM:', error);
+      return 0;
+    }
   }, []);
   
   const cleanMemory = useCallback(() => {
@@ -135,7 +169,11 @@ export const useHeartBeatProcessor = () => {
     setTimeout(() => {
       if (processorRef.current) {
         // Clear any internal arrays/buffers the processor might have
-        processorRef.current.reset();
+        try {
+          processorRef.current.reset();
+        } catch (error) {
+          console.error('Error cleaning HeartBeatProcessor after timeout:', error);
+        }
       }
     }, 100);
   }, []);

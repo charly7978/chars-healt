@@ -17,16 +17,23 @@ const Index = () => {
     pressure: "--/--",
     arrhythmiaStatus: "--",
     respiration: { rate: 0, depth: 0, regularity: 0 },
-    hasRespirationData: false
+    hasRespirationData: false,
+    glucose: 0,
+    glucoseTrend: 'stable',
+    glucoseConfidence: 0
   });
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState("--");
   const [elapsedTime, setElapsedTime] = useState(0);
   const [permissionsGranted, setPermissionsGranted] = useState(false);
-  const measurementTimerRef = useRef(null);
+  const [isTransitioning, setIsTransitioning] = useState(false);
   
-  const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
-  const { processSignal: processHeartBeat } = useHeartBeatProcessor();
+  const measurementTimerRef = useRef(null);
+  const startTimeRef = useRef(0);
+  const isProcessingFrameRef = useRef(false);
+  
+  const { startProcessing, stopProcessing, lastSignal, processFrame, isProcessing } = useSignalProcessor();
+  const { processSignal: processHeartBeat, reset: resetHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
   const handlePermissionsGranted = () => {
@@ -80,38 +87,19 @@ const Index = () => {
     };
   }, []);
 
-  const startMonitoring = () => {
-    if (!permissionsGranted) {
-      console.log("No se puede iniciar sin permisos");
-      return;
-    }
+  // Function to completely reset all state and processors
+  const fullReset = () => {
+    console.log("Performing full reset of all components");
     
-    enterFullScreen();
-    setIsMonitoring(true);
-    setIsCameraOn(true);
-    startProcessing();
-    setElapsedTime(0);
-    
+    // Stop all timers
     if (measurementTimerRef.current) {
       clearInterval(measurementTimerRef.current);
+      measurementTimerRef.current = null;
     }
     
-    measurementTimerRef.current = window.setInterval(() => {
-      setElapsedTime(prev => {
-        if (prev >= 30) {
-          stopMonitoring();
-          return 30;
-        }
-        return prev + 1;
-      });
-    }, 1000);
-  };
-
-  const stopMonitoring = () => {
+    // Reset all state
     setIsMonitoring(false);
     setIsCameraOn(false);
-    stopProcessing();
-    resetVitalSigns();
     setElapsedTime(0);
     setHeartRate(0);
     setVitalSigns({ 
@@ -119,80 +107,240 @@ const Index = () => {
       pressure: "--/--",
       arrhythmiaStatus: "--",
       respiration: { rate: 0, depth: 0, regularity: 0 },
-      hasRespirationData: false
+      hasRespirationData: false,
+      glucose: 0,
+      glucoseTrend: 'stable',
+      glucoseConfidence: 0
     });
     setArrhythmiaCount("--");
     setSignalQuality(0);
     
-    if (measurementTimerRef.current) {
-      clearInterval(measurementTimerRef.current);
-      measurementTimerRef.current = null;
+    // Reset all processors
+    resetHeartBeat();
+    resetVitalSigns();
+    stopProcessing();
+    
+    // Reset refs
+    startTimeRef.current = 0;
+    isProcessingFrameRef.current = false;
+  };
+
+  const startMonitoring = async () => {
+    if (!permissionsGranted) {
+      console.log("No se puede iniciar sin permisos");
+      return;
+    }
+    
+    // Prevent multiple calls during transition
+    if (isTransitioning) {
+      console.log("Ya hay una transición en curso, ignorando");
+      return;
+    }
+    
+    setIsTransitioning(true);
+    
+    // If we're already monitoring, stop first to ensure clean state
+    if (isMonitoring) {
+      await stopMonitoring();
+      setTimeout(() => {
+        doStartMonitoring();
+      }, 300);
+    } else {
+      doStartMonitoring();
+    }
+  };
+  
+  const doStartMonitoring = async () => {
+    console.log("Iniciando monitorización");
+    
+    try {
+      // Ensure we're starting from a clean state
+      fullReset();
+      
+      // Enter fullscreen and start camera first
+      await enterFullScreen();
+      setIsCameraOn(true);
+      
+      // Short delay to ensure camera is ready
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // Start signal processing
+      const success = await startProcessing();
+      if (!success) {
+        console.error("Error al iniciar el procesamiento de señal");
+        setIsTransitioning(false);
+        setIsCameraOn(false);
+        return;
+      }
+      
+      // Now mark as monitoring and start timer
+      setIsMonitoring(true);
+      startTimeRef.current = Date.now();
+      setElapsedTime(0);
+      
+      if (measurementTimerRef.current) {
+        clearInterval(measurementTimerRef.current);
+      }
+      
+      measurementTimerRef.current = window.setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
+        setElapsedTime(prev => {
+          if (elapsed >= 30) {
+            stopMonitoring();
+            return 30;
+          }
+          return elapsed;
+        });
+      }, 1000);
+      
+      console.log("Monitorización iniciada correctamente");
+    } catch (error) {
+      console.error("Error al iniciar monitorización:", error);
+      fullReset();
+    } finally {
+      setIsTransitioning(false);
+    }
+  };
+
+  const stopMonitoring = async () => {
+    if (isTransitioning) {
+      console.log("Ya hay una transición en curso, ignorando");
+      return;
+    }
+    
+    setIsTransitioning(true);
+    console.log("Deteniendo monitorización");
+    
+    try {
+      // Stop in the correct order
+      if (measurementTimerRef.current) {
+        clearInterval(measurementTimerRef.current);
+        measurementTimerRef.current = null;
+      }
+      
+      setIsMonitoring(false);
+      await stopProcessing();
+      
+      // Short delay before turning off camera
+      await new Promise(resolve => setTimeout(resolve, 100));
+      setIsCameraOn(false);
+      
+      // Reset all processors and state
+      resetVitalSigns();
+      resetHeartBeat();
+      
+      setElapsedTime(0);
+      setHeartRate(0);
+      setVitalSigns({ 
+        spo2: 0, 
+        pressure: "--/--",
+        arrhythmiaStatus: "--",
+        respiration: { rate: 0, depth: 0, regularity: 0 },
+        hasRespirationData: false,
+        glucose: 0,
+        glucoseTrend: 'stable',
+        glucoseConfidence: 0
+      });
+      setArrhythmiaCount("--");
+      setSignalQuality(0);
+      
+      console.log("Monitorización detenida correctamente");
+    } catch (error) {
+      console.error("Error al detener monitorización:", error);
+      fullReset();
+    } finally {
+      setIsTransitioning(false);
     }
   };
 
   const handleStreamReady = (stream) => {
-    if (!isMonitoring) return;
+    if (!isCameraOn) return;
     
-    const videoTrack = stream.getVideoTracks()[0];
-    const imageCapture = new ImageCapture(videoTrack);
-    
-    if (videoTrack.getCapabilities()?.torch) {
-      videoTrack.applyConstraints({
-        advanced: [{ torch: true }]
-      }).catch(err => console.error("Error activando linterna:", err));
-    }
-    
-    const tempCanvas = document.createElement('canvas');
-    const tempCtx = tempCanvas.getContext('2d');
-    if (!tempCtx) {
-      console.error("No se pudo obtener el contexto 2D");
-      return;
-    }
-    
-    const processImage = async () => {
-      if (!isMonitoring) return;
+    try {
+      console.log("Stream listo, configurando captura de frames");
+      const videoTrack = stream.getVideoTracks()[0];
+      const imageCapture = new ImageCapture(videoTrack);
       
-      try {
-        const frame = await imageCapture.grabFrame();
-        tempCanvas.width = frame.width;
-        tempCanvas.height = frame.height;
-        tempCtx.drawImage(frame, 0, 0);
-        const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
-        processFrame(imageData);
-        
-        if (isMonitoring) {
-          requestAnimationFrame(processImage);
-        }
-      } catch (error) {
-        console.error("Error capturando frame:", error);
-        if (isMonitoring) {
-          setTimeout(() => requestAnimationFrame(processImage), 100); // Con un pequeño retardo para recuperarse
-        }
+      if (videoTrack.getCapabilities()?.torch) {
+        videoTrack.applyConstraints({
+          advanced: [{ torch: true }]
+        }).catch(err => console.error("Error activando linterna:", err));
       }
-    };
+      
+      const tempCanvas = document.createElement('canvas');
+      const tempCtx = tempCanvas.getContext('2d');
+      if (!tempCtx) {
+        console.error("No se pudo obtener el contexto 2D");
+        return;
+      }
+      
+      const processImage = async () => {
+        if (!isCameraOn || isProcessingFrameRef.current) return;
+        
+        try {
+          isProcessingFrameRef.current = true;
+          const frame = await imageCapture.grabFrame();
+          tempCanvas.width = frame.width;
+          tempCanvas.height = frame.height;
+          tempCtx.drawImage(frame, 0, 0);
+          const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
+          processFrame(imageData);
+          isProcessingFrameRef.current = false;
+          
+          if (isCameraOn) {
+            requestAnimationFrame(processImage);
+          }
+        } catch (error) {
+          console.error("Error capturando frame:", error);
+          isProcessingFrameRef.current = false;
+          
+          if (isCameraOn) {
+            setTimeout(() => requestAnimationFrame(processImage), 100); // Con un pequeño retardo para recuperarse
+          }
+        }
+      };
 
-    processImage();
+      processImage();
+    } catch (error) {
+      console.error("Error en handleStreamReady:", error);
+    }
   };
 
   useEffect(() => {
     if (lastSignal && lastSignal.fingerDetected && isMonitoring) {
-      const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
-      setHeartRate(heartBeatResult.bpm);
-      
-      // Pass the heart beat result to the vital signs processor
-      const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
-      
-      if (vitals) {
-        // Log respiration data to debug
-        console.log("Respiration data:", vitals.respiration, "hasData:", vitals.hasRespirationData);
-        
-        setVitalSigns(vitals);
-        setArrhythmiaCount(vitals.arrhythmiaStatus.split('|')[1] || "--");
+      try {
+        const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
+        if (heartBeatResult && heartBeatResult.bpm > 0) {
+          setHeartRate(heartBeatResult.bpm);
+          
+          // Pass the heart beat result to the vital signs processor
+          const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
+          
+          if (vitals) {
+            // Log respiration data to debug
+            console.log("Respiration data:", vitals.respiration, "hasData:", vitals.hasRespirationData);
+            
+            setVitalSigns(vitals);
+            setArrhythmiaCount(vitals.arrhythmiaStatus.split('|')[1] || "--");
+          }
+          
+          setSignalQuality(lastSignal.quality);
+        }
+      } catch (error) {
+        console.error("Error procesando señal:", error);
       }
-      
-      setSignalQuality(lastSignal.quality);
     }
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      console.log("Index component unmounting, cleaning up");
+      if (measurementTimerRef.current) {
+        clearInterval(measurementTimerRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div 
@@ -285,16 +433,25 @@ const Index = () => {
           <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 mt-auto relative z-30">
             <button 
               onClick={startMonitoring}
-              className={`w-full h-full text-2xl font-bold text-white active:bg-gray-800 ${!permissionsGranted ? 'bg-gray-600' : 'bg-black/80'}`}
-              disabled={!permissionsGranted}
+              disabled={!permissionsGranted || isTransitioning}
+              className={`w-full h-full text-2xl font-bold text-white active:bg-gray-800 
+                ${!permissionsGranted ? 'bg-gray-600' : isTransitioning ? 'bg-gray-700' : 'bg-black/80'}`}
             >
-              {!permissionsGranted ? 'PERMISOS REQUERIDOS' : 'INICIAR'}
+              {!permissionsGranted 
+                ? 'PERMISOS REQUERIDOS' 
+                : isTransitioning 
+                  ? 'INICIANDO...' 
+                  : isMonitoring 
+                    ? 'REINICIAR'
+                    : 'INICIAR'}
             </button>
             <button 
               onClick={stopMonitoring}
-              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
+              disabled={isTransitioning}
+              className={`w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800 
+                ${isTransitioning ? 'bg-gray-700' : 'bg-black/80'}`}
             >
-              RESET
+              {isTransitioning ? 'DETENIENDO...' : 'RESET'}
             </button>
           </div>
           
@@ -305,6 +462,13 @@ const Index = () => {
               </span>
             </div>
           )}
+          
+          {/* Estado de monitorización para depuración */}
+          <div className="absolute top-2 right-2 z-50 text-xs bg-black/70 p-1 rounded text-white">
+            {isMonitoring ? 'MONITOR: ON' : 'MONITOR: OFF'} | 
+            {isCameraOn ? 'CAM: ON' : 'CAM: OFF'} |
+            {isProcessing ? 'PROC: ON' : 'PROC: OFF'}
+          </div>
         </div>
       </div>
     </div>
