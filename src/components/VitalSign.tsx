@@ -187,19 +187,23 @@ const VitalSign: React.FC<VitalSignProps> = ({
       };
     }
     
-    const [status, countStr] = String(value).split('|');
-    const count = parseInt(countStr || "0", 10);
-    
-    if (status === "ARRITMIA DETECTADA") {
-      const riskLabel = getArrhythmiaRiskLabel(count);
-      const riskColor = getArrhythmiaRiskColor(count);
+    if (typeof value === 'string' && value.includes('|')) {
+      const [status, countStr] = value.split('|');
+      const count = parseInt(countStr || "0", 10);
       
-      return {
-        text: `${count}`,
-        title: "ARRITMIA DETECTADA",
-        color: riskColor,
-        label: riskLabel
-      };
+      if (status === "ARRITMIA DETECTADA") {
+        const riskLabel = getArrhythmiaRiskLabel(count);
+        const riskColor = getArrhythmiaRiskColor(count);
+        
+        const isFirstDetection = count === 1;
+        
+        return {
+          text: `${count}`,
+          title: isFirstDetection ? "ARRITMIA DETECTADA" : "",
+          color: riskColor,
+          label: riskLabel
+        };
+      }
     }
     
     return {
