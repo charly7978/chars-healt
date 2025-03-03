@@ -19,7 +19,7 @@ export class GlucoseEstimator {
   private readonly PPG_BUFFER_SIZE = 300;
   private readonly GLUCOSE_HISTORY_SIZE = 10;
   
-  private ppgBuffer: CircularBuffer<number>;
+  private ppgBuffer: CircularBuffer;
   private hrvValues: number[] = [];
   private spo2Values: number[] = [];
   private lastBpms: number[] = [];
@@ -37,7 +37,7 @@ export class GlucoseEstimator {
   private readonly TIME_FACTOR = 0.3;
   
   constructor() {
-    this.ppgBuffer = new CircularBuffer<number>(this.PPG_BUFFER_SIZE);
+    this.ppgBuffer = new CircularBuffer(this.PPG_BUFFER_SIZE);
     // Set initial meal time to 2 hours ago
     this.lastMealTime = Date.now() - 7200000;
     

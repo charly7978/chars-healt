@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 
@@ -7,7 +6,7 @@ interface VitalSignDetailProps {
   value: string | number;
   unit?: string;
   riskLevel?: string;
-  type: 'heartRate' | 'spo2' | 'bloodPressure' | 'arrhythmia' | 'respiration';
+  type: 'heartRate' | 'spo2' | 'bloodPressure' | 'arrhythmia' | 'respiration' | 'glucose';
   onBack: () => void;
   secondaryValue?: string | number;
   secondaryUnit?: string;
@@ -34,7 +33,6 @@ const VitalSignDetail: React.FC<VitalSignDetailProps> = ({
   });
 
   useEffect(() => {
-    // Get relevant information based on the vital sign type and value
     setInfo(getVitalSignInfo(type, value, riskLevel, secondaryValue));
   }, [type, value, riskLevel, secondaryValue]);
 
@@ -112,7 +110,7 @@ const getRiskBadgeColor = (riskLevel: string): string => {
 };
 
 const getVitalSignInfo = (
-  type: 'heartRate' | 'spo2' | 'bloodPressure' | 'arrhythmia' | 'respiration',
+  type: 'heartRate' | 'spo2' | 'bloodPressure' | 'arrhythmia' | 'respiration' | 'glucose',
   value: string | number,
   riskLevel?: string,
   secondaryValue?: string | number
@@ -260,6 +258,35 @@ const getVitalSignInfo = (
           info.interpretation += ' La profundidad de su respiración es profunda, lo que puede indicar un mayor esfuerzo respiratorio.';
         }
       }
+    }
+  }
+  
+  else if (type === 'glucose') {
+    const glucose = typeof value === 'number' ? value : parseInt(value as string, 10);
+    
+    info.description = 'La glucosa en sangre es una medida de la cantidad de azúcar (glucosa) presente en su sangre. Es un indicador importante de la función metabólica y puede ayudar a detectar o controlar afecciones como la diabetes.';
+    
+    if (isNaN(glucose) || value === '--') {
+      info.interpretation = 'No se pudo obtener una medición válida.';
+      info.recommendation = 'Intente una nueva medición asegurándose de posicionar correctamente el dedo sobre la cámara.';
+    } else if (glucose < 70) {
+      info.interpretation = 'Su nivel de glucosa está por debajo del rango normal (70-100 mg/dL). Esto se conoce como hipoglucemia.';
+      info.recommendation = 'Los niveles bajos de glucosa pueden causar mareos, confusión y debilidad. Considere consumir una fuente rápida de azúcar y consultar a un médico si los síntomas persisten.';
+    } else if (glucose <= 100) {
+      info.interpretation = 'Su nivel de glucosa está dentro del rango normal (70-100 mg/dL).';
+      info.recommendation = 'Continúe manteniendo hábitos saludables como una dieta equilibrada, ejercicio regular y control del peso.';
+    } else if (glucose <= 125) {
+      info.interpretation = 'Su nivel de glucosa está ligeramente elevado (101-125 mg/dL). Esto puede indicar prediabetes.';
+      info.recommendation = 'Considere cambios en el estilo de vida como mejorar la dieta, aumentar la actividad física y monitorear regularmente su glucosa.';
+    } else if (glucose <= 180) {
+      info.interpretation = 'Su nivel de glucosa está elevado (126-180 mg/dL). Esto puede indicar hiperglucemia leve.';
+      info.recommendation = 'Consulte a un médico para una evaluación completa. Puede ser necesario realizar pruebas adicionales para descartar diabetes.';
+    } else if (glucose <= 240) {
+      info.interpretation = 'Su nivel de glucosa está muy elevado (181-240 mg/dL). Esto indica hiperglucemia moderada.';
+      info.recommendation = 'Consulte a un médico lo antes posible. Niveles persistentemente altos de glucosa requieren atención médica.';
+    } else {
+      info.interpretation = 'Su nivel de glucosa está extremadamente elevado (>240 mg/dL). Esto indica hiperglucemia severa.';
+      info.recommendation = 'Busque atención médica inmediata. Niveles muy altos de glucosa pueden ser peligrosos y requieren tratamiento urgente.';
     }
   }
 
