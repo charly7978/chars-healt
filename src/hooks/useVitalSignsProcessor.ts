@@ -1,4 +1,3 @@
-
 import { useState, useCallback, useEffect } from 'react';
 import { VitalSignsProcessor } from '../modules/VitalSignsProcessor';
 import { GlucoseProcessor } from '../modules/GlucoseProcessor';
@@ -35,17 +34,15 @@ export const useVitalSignsProcessor = () => {
   }, []);
 
   const processSignal = useCallback((ppgValue: number, rrData?: any) => {
-    const intervals = rrData?.intervals || [];
-    const amplitudes = rrData?.amplitudes || [];
-    
-    console.log('useVitalSignsProcessor: Procesando señal con intervalos:', intervals.length);
+    // Ensure proper console logging of incoming data
+    console.log('useVitalSignsProcessor: Procesando señal con datos:', {
+      ppgValue,
+      rrIntervals: rrData?.intervals?.length || 0,
+      amplitudes: rrData?.amplitudes?.length || 0
+    });
     
     // Process vital signs with PPG signal
-    const vitalSignsResult = processor.processSignal(ppgValue, {
-      intervals: intervals,
-      lastPeakTime: rrData?.lastPeakTime || null,
-      amplitudes: amplitudes
-    });
+    const vitalSignsResult = processor.processSignal(ppgValue, rrData);
     
     // Process glucose data
     const glucoseResult = glucoseProcessor.processSignal(ppgValue);
@@ -57,19 +54,28 @@ export const useVitalSignsProcessor = () => {
     };
     
     // Process arrhythmia detection with RR intervals and amplitudes
-    let arrhythmiaResult = null;
-    if (intervals.length > 0) {
-      // Asegurarse de que las amplitudes estén disponibles para el detector de arritmias
+    let arrhythmiaResult = {
+      detected: false,
+      severity: 0,
+      confidence: 0,
+      type: 'NONE',
+      timestamp: Date.now()
+    };
+    
+    if (rrData && rrData.intervals && rrData.intervals.length > 0) {
+      // Process RR intervals for arrhythmia detection
       console.log('useVitalSignsProcessor: Enviando datos a detector de arritmias:', {
-        intervals: intervals.length,
-        amplitudes: amplitudes.length
+        intervals: rrData.intervals.length,
+        amplitudes: (rrData.amplitudes || []).length
       });
       
-      arrhythmiaResult = arrhythmiaDetector.processRRIntervals(intervals, amplitudes);
+      arrhythmiaResult = arrhythmiaDetector.processRRIntervals(
+        rrData.intervals,
+        rrData.amplitudes || []
+      );
       
       if (arrhythmiaResult.detected) {
-        console.log('useVitalSignsProcessor: Arrhythmia detection update', {
-          detected: arrhythmiaResult.detected,
+        console.log('useVitalSignsProcessor: ¡ARRITMIA DETECTADA!', {
           type: arrhythmiaResult.type,
           severity: arrhythmiaResult.severity,
           confidence: arrhythmiaResult.confidence,
@@ -79,11 +85,14 @@ export const useVitalSignsProcessor = () => {
       }
     }
     
+    // Get arrhythmia status text
+    const arrhythmiaStatus = arrhythmiaDetector.getStatusText();
+    
     // Combine all results
     const combinedResult: VitalSignsResult = {
       ...vitalSignsResult,
       glucose: glucoseData,
-      arrhythmiaStatus: arrhythmiaDetector.getStatusText()
+      arrhythmiaStatus: arrhythmiaStatus
     };
     
     // Add arrhythmia data if available

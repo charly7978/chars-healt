@@ -1,4 +1,3 @@
-
 import { applySMAFilter } from '../utils/signalProcessingUtils';
 import { SpO2Calculator } from './spo2';
 import { BloodPressureCalculator } from './BloodPressureCalculator';
@@ -42,42 +41,6 @@ export class VitalSignsProcessor {
   ) {
     const currentTime = Date.now();
     
-    // Log arrhythmia detector state
-    console.log("VitalSignsProcessor: Estado de aprendizaje del detector:", 
-      this.arrhythmiaDetector.isInLearningPhase());
-
-    // Update RR intervals if available, passing amplitude data if available
-    if (rrData?.intervals && rrData.intervals.length > 0) {
-      // Filter outliers from RR data
-      const validIntervals = rrData.intervals.filter(interval => {
-        return interval >= 380 && interval <= 1700; // Valid for 35-158 BPM
-      });
-      
-      if (validIntervals.length > 0) {
-        // Get the most recent amplitude if available
-        const amplitudes = rrData.amplitudes || [];
-        const peakAmplitude = amplitudes.length > 0 ? 
-          amplitudes[amplitudes.length - 1] : undefined;
-        
-        // Log for debugging
-        if (peakAmplitude !== undefined) {
-          console.log("VitalSignsProcessor: Actualizando intervalos con amplitud:", peakAmplitude);
-        }
-        
-        // Pass all data to arrhythmia detector
-        // Using the available methods on ArrhythmiaDetector
-        if (this.arrhythmiaDetector.addRRInterval) {
-          for (const interval of validIntervals) {
-            this.arrhythmiaDetector.addRRInterval(interval, peakAmplitude);
-          }
-          
-          if (rrData.lastPeakTime && this.arrhythmiaDetector.setLastPeakTime) {
-            this.arrhythmiaDetector.setLastPeakTime(rrData.lastPeakTime);
-          }
-        }
-      }
-    }
-
     // Process PPG signal
     const filtered = this.applySMAFilter(ppgValue);
     this.ppgValues.push(filtered);
@@ -101,50 +64,17 @@ export class VitalSignsProcessor {
       this.spO2Calculator.calibrate();
     }
 
-    // Process arrhythmia detection - using available methods on ArrhythmiaDetector
-    let arrhythmiaResult = { 
-      detected: false, 
-      severity: 0, 
-      confidence: 0, 
-      type: 'NONE' as ArrhythmiaType,
-      timestamp: currentTime
-    };
-
-    // Get arrhythmia result using available methods
-    if (this.arrhythmiaDetector.analyzeRhythm) {
-      arrhythmiaResult = this.arrhythmiaDetector.analyzeRhythm();
-    }
-    
-    // Build arrhythmia status message
-    const arrhythmiaStatus = arrhythmiaResult.detected ? 
-      `ARRITMIA DETECTADA|${Math.round(arrhythmiaResult.severity)}` : 
-      "LATIDO NORMAL|0";
-    
-    // Log arrhythmia results for debugging
-    if (arrhythmiaResult.detected) {
-      console.log("VitalSignsProcessor: Arritmia detectada con confianza:", 
-        arrhythmiaResult.confidence);
-    }
-
-    // Calculate vital signs - utilizando datos reales optimizados
+    // Calculate vital signs
     const spo2 = this.spO2Calculator.calculate(this.ppgValues.slice(-60));
     
     // Calcular presión arterial usando valores reales
     const bp = this.calculateRealBloodPressure(this.ppgValues.slice(-60));
     const pressure = `${bp.systolic}/${bp.diastolic}`;
 
-    // Prepare arrhythmia data if detected
-    const lastArrhythmiaData = arrhythmiaResult.detected ? {
-      timestamp: currentTime,
-      rmssd: arrhythmiaResult.severity,
-      rrVariation: arrhythmiaResult.confidence
-    } : null;
-
     return {
       spo2,
       pressure,
-      arrhythmiaStatus,
-      lastArrhythmiaData
+      arrhythmiaStatus: this.arrhythmiaDetector.getStatusText()
     };
   }
 

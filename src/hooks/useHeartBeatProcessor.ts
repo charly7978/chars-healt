@@ -1,4 +1,3 @@
-
 import { useState, useRef, useCallback } from 'react';
 import { HeartBeatProcessor } from '../modules/HeartBeatProcessor';
 import { HeartBeatResult } from '../types/signal';
@@ -30,56 +29,41 @@ export const useHeartBeatProcessor = () => {
       setConfidence(result.confidence);
       setIsPeak(result.isPeak);
       
-      // Get RR intervals and store amplitude for arrhythmia detection
-      const rrIntervals = processor.getRRIntervals().intervals;
+      // Get RR intervals with amplitudes for arrhythmia detection
+      const rrData = processor.getRRIntervals();
       const lastPeakTime = result.isPeak ? Date.now() : null;
       
-      // Create array of amplitudes for arrhythmia detection
-      // This is critical for the arrhythmia detection algorithm
-      let amplitudes: number[] = [];
-      
-      // Get amplitudes from processor if available
-      const processorAmplitudes = processor.getRRIntervals().amplitudes || [];
-      if (processorAmplitudes && processorAmplitudes.length > 0) {
-        amplitudes = [...processorAmplitudes];
-      }
+      // Ensure we have amplitudes for arrhythmia detection
+      const amplitudes = rrData.amplitudes || [];
       
       // Add current peak amplitude if it's a peak
       if (result.isPeak && result.amplitude !== undefined) {
-        amplitudes.push(result.amplitude);
-        console.log("HeartBeatProcessor: Peak detected with amplitude:", result.amplitude);
-      }
-      
-      // Ensure we have at least one amplitude value for each RR interval
-      if (rrIntervals.length > amplitudes.length) {
-        // Fill missing amplitudes with estimated values
-        const missingCount = rrIntervals.length - amplitudes.length;
-        const estimatedAmplitude = 100 * (confidence / 100);
-        for (let i = 0; i < missingCount; i++) {
-          amplitudes.push(estimatedAmplitude);
+        if (!rrData.amplitudes) {
+          rrData.amplitudes = [];
         }
+        rrData.amplitudes.push(result.amplitude);
+        console.log("HeartBeatProcessor: Peak detected with amplitude:", result.amplitude);
       }
       
       console.log("useHeartBeatProcessor: Processed signal", { 
         bpm: result.bpm, 
         confidence: result.confidence, 
         isPeak: result.isPeak,
-        intervals: rrIntervals.length,
-        amplitudes: amplitudes.length
+        intervals: rrData.intervals.length,
+        amplitudes: amplitudes.length,
+        amplitude: result.amplitude
       });
       
       // Enhanced data structure with all necessary information
-      const rrData = {
-        intervals: rrIntervals,
-        lastPeakTime: lastPeakTime,
-        amplitudes: amplitudes
-      };
-      
       return {
         bpm: result.bpm,
         confidence: result.confidence,
         isPeak: result.isPeak,
-        rrData,
+        rrData: {
+          intervals: rrData.intervals,
+          lastPeakTime: lastPeakTime,
+          amplitudes: rrData.amplitudes
+        },
         amplitude: result.amplitude
       };
     } catch (error) {

@@ -21,7 +21,8 @@ const Index = () => {
     arrhythmiaStatus: "--",
     respiration: { rate: 0, depth: 0, regularity: 0 },
     hasRespirationData: false,
-    glucose: null
+    glucose: null,
+    lastArrhythmiaData: null
   });
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState("--");
@@ -250,8 +251,12 @@ const Index = () => {
       const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
       
       if (vitals) {
-        console.log("Respiration data:", vitals.respiration, "hasData:", vitals.hasRespirationData);
-        console.log("Glucose data:", vitals.glucose);
+        console.log("Vital signs processed:", {
+          spo2: vitals.spo2,
+          pressure: vitals.pressure,
+          arrhythmiaStatus: vitals.arrhythmiaStatus,
+          lastArrhythmiaData: vitals.lastArrhythmiaData
+        });
         
         setVitalSigns(vitals);
         setArrhythmiaCount(vitals.arrhythmiaStatus.split('|')[1] || "--");
@@ -307,6 +312,7 @@ const Index = () => {
               onStartMeasurement={startMonitoring}
               onReset={stopMonitoring}
               arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
+              rawArrhythmiaData={vitalSigns.lastArrhythmiaData}
             />
           </div>
 
