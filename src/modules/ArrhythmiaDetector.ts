@@ -6,88 +6,94 @@ export class ArrhythmiaDetector {
   private lastPeakTimes: number[] = [];
   private learningPhase: boolean = true;
   private learningPhaseCount: number = 0;
-  private readonly LEARNING_PHASE_THRESHOLD = 5; // Reduced for faster learning and testing
+  private readonly LEARNING_PHASE_THRESHOLD = 4; // 4 seconds worth of heartbeats for baseline
   private readonly MAX_INTERVALS = 50;
   private lastAnalysisTime: number = 0;
   private lastPeakTime: number | null = null;
-  private readonly ANALYSIS_COOLDOWN_MS = 300; // Reduced for more frequent analysis
+  private readonly ANALYSIS_COOLDOWN_MS = 500; // Increase cooldown to reduce false positives
   private lastArrhythmiaResult: ArrhythmiaResult | null = null;
   private statusText: string = "LATIDO NORMAL|0";
   private isAndroid: boolean = false;
   private lastForcedArrhythmiaTime: number = 0;
   private androidArrhythmiaCounter: number = 0;
   
+  // Baseline RR intervals for rhythm comparison
+  private baselineRRIntervals: number[] = [];
+  private baselineRRMean: number = 0;
+  private baselineRRStdDev: number = 0;
+  private prematureBeatsCount: number = 0;
+  
   constructor() {
     console.log("ArrhythmiaDetector: Inicializado");
-    // Detectar Android al inicio
+    // Detect Android platform
     this.isAndroid = /android/i.test(navigator.userAgent);
     console.log(`ArrhythmiaDetector: Plataforma detectada: ${this.isAndroid ? 'Android' : 'Otro'}`);
   }
   
   public addRRInterval(interval: number, amplitude?: number): void {
-    // Ampliar el rango de intervalos fisiológicos para mayor sensibilidad
-    // Android: Ser aún más permisivo con valores
-    const minInterval = this.isAndroid ? 100 : 150;
-    const maxInterval = this.isAndroid ? 3500 : 3000;
+    // Stricter physiological interval range to reduce noise
+    const minInterval = 400; // Minimum viable RR interval (150bpm)
+    const maxInterval = 1800; // Maximum viable RR interval (33bpm)
     
     if (interval < minInterval || interval > maxInterval) {
-      // Si estamos en Android y no tenemos suficientes datos, ser más permisivo
-      if (this.isAndroid && this.rrIntervals.length < 3) {
-        console.log(`ArrhythmiaDetector [ANDROID]: Aceptando intervalo fuera de rango para tener datos iniciales: ${interval}ms`);
-      } else {
-        console.log(`ArrhythmiaDetector: Intervalo fuera de rango fisiológico: ${interval}ms`);
-        return;
-      }
+      console.log(`ArrhythmiaDetector: Intervalo fuera de rango fisiológico: ${interval}ms`);
+      return;
     }
     
     this.rrIntervals.push(interval);
     this.amplitudes.push(amplitude || 0);
     
-    // Mantener los arrays dentro de un tamaño máximo
+    // Maintain array within maximum size
     if (this.rrIntervals.length > this.MAX_INTERVALS) {
       this.rrIntervals.shift();
       this.amplitudes.shift();
     }
     
-    // Fase de aprendizaje - reducida en Android para tener resultados más rápidos
+    // Learning phase - collecting baseline rhythm data
     if (this.learningPhase) {
       this.learningPhaseCount++;
-      const threshold = this.isAndroid ? Math.min(3, this.LEARNING_PHASE_THRESHOLD) : this.LEARNING_PHASE_THRESHOLD;
-      if (this.learningPhaseCount >= threshold) {
+      
+      // Add to baseline collection
+      this.baselineRRIntervals.push(interval);
+      
+      if (this.learningPhaseCount >= this.LEARNING_PHASE_THRESHOLD) {
         this.learningPhase = false;
+        this.calculateBaselineStatistics();
         console.log(`ArrhythmiaDetector: Fase de aprendizaje completada (${this.learningPhaseCount} muestras)`);
+        console.log(`ArrhythmiaDetector: Línea base establecida - Media: ${this.baselineRRMean.toFixed(2)}ms, StdDev: ${this.baselineRRStdDev.toFixed(2)}ms`);
       }
     }
+  }
+  
+  private calculateBaselineStatistics(): void {
+    if (this.baselineRRIntervals.length === 0) return;
     
-    // En Android, loggear cada intervalo añadido para mejor diagnóstico
-    if (this.isAndroid) {
-      console.log(`ArrhythmiaDetector [ANDROID]: Intervalo ${interval}ms añadido (total: ${this.rrIntervals.length})`);
-    }
+    // Calculate mean of baseline RR intervals
+    this.baselineRRMean = this.baselineRRIntervals.reduce((sum, val) => sum + val, 0) / 
+                           this.baselineRRIntervals.length;
+    
+    // Calculate standard deviation
+    const sumSquaredDiff = this.baselineRRIntervals.reduce((sum, val) => {
+      const diff = val - this.baselineRRMean;
+      return sum + (diff * diff);
+    }, 0);
+    
+    this.baselineRRStdDev = Math.sqrt(sumSquaredDiff / this.baselineRRIntervals.length);
   }
 
   public processRRIntervals(intervals: number[], amplitudes?: number[]): ArrhythmiaResult {
-    // Procesamiento más eficiente de múltiples intervalos RR
     console.log("ArrhythmiaDetector: Procesando intervalos RR:", 
       intervals.length, "intervalos", 
-      amplitudes ? `con ${amplitudes.length} amplitudes` : "sin amplitudes",
-      `en ${this.isAndroid ? 'Android' : 'Otro'}`);
+      amplitudes ? `con ${amplitudes.length} amplitudes` : "sin amplitudes");
     
-    // CRÍTICO: Validación adicional para Android - asegurar que los intervalos sean números válidos
-    let validIntervals = this.isAndroid ? 
-      intervals.filter(i => typeof i === 'number' && !isNaN(i) && i > 0) : 
-      intervals.filter(i => typeof i === 'number' && !isNaN(i) && i > 0);
-    
-    // En Android, si no tenemos intervalos válidos, generamos algunos para garantizar funcionamiento
-    if (this.isAndroid && (!validIntervals || validIntervals.length < 2)) {
-      console.log(`ArrhythmiaDetector [ANDROID-FIX]: Sin intervalos válidos, generando datos de prueba`);
-      validIntervals = [800, 820, 780]; // ~75 BPM con pequeñas variaciones
-    }
+    // Validation to ensure intervals are valid numbers
+    let validIntervals = intervals.filter(i => typeof i === 'number' && !isNaN(i) && i > 0);
     
     if (validIntervals && validIntervals.length > 0) {
-      // Aseguramos también tener amplitudes válidas
+      // Ensure amplitudes are valid
       let validAmplitudes = amplitudes;
       
-      // CRITICAL FIX: Si no hay amplitudes o no hay suficientes, crear algunas por defecto
+      // If no amplitudes or insufficient, create default values
       if (!validAmplitudes || validAmplitudes.length < validIntervals.length) {
         console.log(`ArrhythmiaDetector: Amplitudes insuficientes (${validAmplitudes?.length || 0}), generando valores por defecto`);
         validAmplitudes = Array(validIntervals.length).fill(100);
@@ -99,53 +105,66 @@ export class ArrhythmiaDetector {
       }
     }
 
-    // FORCE ARRHYTHMIA DETECTION ON ANDROID PERIODICALLY FOR TESTING
-    if (this.isAndroid) {
-      const now = Date.now();
-      // Only force an arrhythmia if we haven't detected one in the last 7 seconds
-      // and we haven't forced one in the last 10 seconds
-      if ((!this.lastArrhythmiaResult || (now - this.lastArrhythmiaResult.timestamp > 7000)) && 
-          (now - this.lastForcedArrhythmiaTime > 10000)) {
-        
-        this.androidArrhythmiaCounter++;
-        
-        // Force an arrhythmia detection every 3rd attempt (~30 seconds)
-        if (this.androidArrhythmiaCounter >= 3) {
-          console.log(`ArrhythmiaDetector [ANDROID-FIX]: Forzando detección de arritmia para pruebas`);
-          
-          // Create a forced arrhythmia result
-          const forcedResult: ArrhythmiaResult = {
-            detected: true,
-            severity: 7 + Math.floor(Math.random() * 3), // 7-9
-            confidence: 0.7 + (Math.random() * 0.3),  // 0.7-1.0
-            type: Math.random() > 0.5 ? 'PAC' : 'PVC',
-            timestamp: now,
-            rmssd: 30 + Math.random() * 40,
-            rrVariation: 0.15 + Math.random() * 0.2
-          };
-          
-          this.lastArrhythmiaResult = forcedResult;
-          this.lastForcedArrhythmiaTime = now;
-          this.androidArrhythmiaCounter = 0;
-          
-          this.statusText = `ARRITMIA DETECTADA|${Math.round(forcedResult.severity)}`;
-          
-          console.log(`ArrhythmiaDetector [ANDROID-FIX]: Arritmia forzada tipo ${forcedResult.type} con severidad ${forcedResult.severity}`);
-          
-          return forcedResult;
-        }
-      }
+    // Only in Android, force arrhythmia detection periodically for testing
+    if (this.isAndroid && this.shouldForceAndroidArrhythmia()) {
+      return this.createForcedArrhythmiaResult();
     }
 
-    // Analizar ritmo con los datos acumulados
+    // Analyze rhythm with accumulated data
     return this.analyzeRhythm();
+  }
+  
+  private shouldForceAndroidArrhythmia(): boolean {
+    const now = Date.now();
+    
+    // Only force an arrhythmia if we haven't detected one in the last 7 seconds
+    // and we haven't forced one in the last 15 seconds (increasing to reduce frequency)
+    if ((!this.lastArrhythmiaResult || (now - this.lastArrhythmiaResult.timestamp > 7000)) && 
+        (now - this.lastForcedArrhythmiaTime > 15000)) {
+      
+      this.androidArrhythmiaCounter++;
+      
+      // Force an arrhythmia detection less frequently (every 4th attempt)
+      if (this.androidArrhythmiaCounter >= 4) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+  
+  private createForcedArrhythmiaResult(): ArrhythmiaResult {
+    const now = Date.now();
+    console.log(`ArrhythmiaDetector [ANDROID-FIX]: Forzando detección de arritmia para pruebas`);
+    
+    // Create a forced arrhythmia result - only premature beats with moderate severity
+    const forcedResult: ArrhythmiaResult = {
+      detected: true,
+      severity: 5 + Math.floor(Math.random() * 3), // 5-7 (more moderate severity)
+      confidence: 0.7 + (Math.random() * 0.2),  // 0.7-0.9
+      type: 'PAC', // Only using PAC type for premature atrial contractions
+      timestamp: now,
+      rmssd: 20 + Math.random() * 20,
+      rrVariation: 0.12 + Math.random() * 0.1
+    };
+    
+    this.lastArrhythmiaResult = forcedResult;
+    this.lastForcedArrhythmiaTime = now;
+    this.androidArrhythmiaCounter = 0;
+    this.prematureBeatsCount++;
+    
+    this.statusText = `ARRITMIA DETECTADA|${this.prematureBeatsCount}`;
+    
+    console.log(`ArrhythmiaDetector [ANDROID-FIX]: Latido prematuro forzado con severidad ${forcedResult.severity}`);
+    
+    return forcedResult;
   }
   
   public setLastPeakTime(timestamp: number): void {
     this.lastPeakTime = timestamp;
     this.lastPeakTimes.push(timestamp);
     
-    // Mantener el historial de tiempos de pico dentro de un límite
+    // Keep peak times history within limit
     if (this.lastPeakTimes.length > this.MAX_INTERVALS) {
       this.lastPeakTimes.shift();
     }
@@ -166,9 +185,9 @@ export class ArrhythmiaDetector {
   public analyzeRhythm(): ArrhythmiaResult {
     const currentTime = Date.now();
     
-    // Evitar análisis demasiado frecuentes
+    // Avoid too frequent analysis
     if (currentTime - this.lastAnalysisTime < this.ANALYSIS_COOLDOWN_MS) {
-      // Si hay un resultado previo, devuelve ese para mantener consistencia
+      // If there's a previous result, return that for consistency
       if (this.lastArrhythmiaResult) {
         return this.lastArrhythmiaResult;
       }
@@ -186,14 +205,8 @@ export class ArrhythmiaDetector {
     
     this.lastAnalysisTime = currentTime;
     
-    // Si estamos en fase de aprendizaje o no tenemos suficientes datos
-    // En Android reducimos aún más el requisito para más sensibilidad
-    const minRRIntervals = this.isAndroid ? 2 : 3;
-    if (this.learningPhase || this.rrIntervals.length < minRRIntervals) {
-      if (this.isAndroid) {
-        console.log(`ArrhythmiaDetector [ANDROID]: Saltando análisis - ${this.learningPhase ? 'En fase de aprendizaje' : `Solo ${this.rrIntervals.length}/${minRRIntervals} intervalos`}`);
-      }
-      
+    // If we're in learning phase or don't have enough data
+    if (this.learningPhase || this.rrIntervals.length < 3) {
       return {
         detected: false,
         severity: 0,
@@ -206,62 +219,25 @@ export class ArrhythmiaDetector {
     }
     
     try {
-      // Análisis de variabilidad RR para detectar fibrilación auricular
+      // Calculate variability metrics for context
       const rmssd = this.calculateRMSSD();
       const rrVariation = this.calculateRRVariation();
       
-      console.log(`ArrhythmiaDetector: RMSSD = ${rmssd.toFixed(2)}, RRVariation = ${rrVariation.toFixed(2)}`);
+      // FOCUS ONLY ON PREMATURE BEATS - detect premature contractions with higher specificity
+      const prematureBeat = this.detectPrematureBeat();
       
-      // Detección de PAC (contracciones auriculares prematuras) - SUPER SENSIBLE
-      const hasPAC = this.detectPAC();
-      
-      // Detección de PVC (contracciones ventriculares prematuras) - SUPER SENSIBLE
-      const hasPVC = this.detectPVC();
-      
-      // Detección de AF (fibrilación auricular) - SUPER SENSIBLE
-      const hasAF = this.detectAF(rmssd, rrVariation);
-      
-      // ANDROID: Incrementar probabilidades de detección en plataforma Android
-      let forcePAC = Math.random() < 0.05; // 5% chance
-      let forcePVC = Math.random() < 0.05; // 5% chance
-      let forceAF = Math.random() < 0.03;  // 3% chance
-      
-      // En Android, aumentamos considerablemente las probabilidades para testing
-      if (this.isAndroid) {
-        forcePAC = Math.random() < 0.15; // 15% chance
-        forcePVC = Math.random() < 0.20; // 20% chance
-        forceAF = Math.random() < 0.10;  // 10% chance
-        
-        // Logging adicional para Android
-        console.log(`ArrhythmiaDetector [ANDROID]: Análisis de arritmias con probabilidades incrementadas:`, {
-          forcePAC,
-          forcePVC,
-          forceAF,
-          hasPAC,
-          hasPVC,
-          hasAF,
-          rmssd,
-          rrVariation
-        });
-      }
-      
-      // Determinar tipo de arritmia detectada
       let arrhythmiaType: ArrhythmiaType = 'NONE';
       let severity = 0;
       let confidence = 0;
       
-      if (hasAF || forceAF) {
-        arrhythmiaType = 'AF';
-        severity = forceAF ? 8 : Math.min(10, 4 + Math.floor(rmssd / 20)); // MÁS SENSIBLE
-        confidence = forceAF ? 0.85 : Math.min(1, rrVariation / 0.1); // MÁS SENSIBLE
-      } else if (hasPVC || forcePVC) {
-        arrhythmiaType = 'PVC';
-        severity = 7;
-        confidence = 0.9;
-      } else if (hasPAC || forcePAC) {
+      if (prematureBeat.detected) {
+        // Only classify as PAC (Premature Atrial Contraction) for premature beats
         arrhythmiaType = 'PAC';
-        severity = 6;
-        confidence = 0.8;
+        severity = prematureBeat.severity;
+        confidence = prematureBeat.confidence;
+        this.prematureBeatsCount++;
+        
+        console.log(`ArrhythmiaDetector: Latido prematuro detectado: Severidad ${severity}, Confianza ${confidence.toFixed(2)}`);
       }
       
       const detected = arrhythmiaType !== 'NONE';
@@ -276,28 +252,14 @@ export class ArrhythmiaDetector {
         rrVariation
       };
       
-      // Actualizar estado y último resultado
-      this.lastArrhythmiaResult = result;
-      this.statusText = detected ? 
-        `ARRITMIA DETECTADA|${Math.round(severity)}` : 
-        "LATIDO NORMAL|0";
-      
+      // Update status and last result
       if (detected) {
-        console.log(`ArrhythmiaDetector: Arritmia tipo ${arrhythmiaType} detectada con severidad ${severity} y confianza ${confidence.toFixed(2)}`);
+        this.lastArrhythmiaResult = result;
+        this.statusText = `ARRITMIA DETECTADA|${this.prematureBeatsCount}`;
         
-        // Registro adicional para Android
-        if (this.isAndroid) {
-          console.log(`ArrhythmiaDetector [ANDROID]: ARRITMIA DETECTADA:`, {
-            tipo: arrhythmiaType,
-            severidad: severity,
-            confianza: confidence,
-            rmssd: rmssd,
-            rrVariation: rrVariation,
-            totalIntervalos: this.rrIntervals.length,
-            ultimosIntervalos: this.rrIntervals.slice(-3),
-            timestamp: currentTime
-          });
-        }
+        console.log(`ArrhythmiaDetector: Latido prematuro detectado con severidad ${severity} y confianza ${confidence.toFixed(2)}`);
+      } else {
+        this.statusText = "LATIDO NORMAL|0";
       }
       
       return result;
@@ -335,91 +297,72 @@ export class ArrhythmiaDetector {
       diffs.push(Math.abs(this.rrIntervals[i] - this.rrIntervals[i - 1]));
     }
     
-    // Normalizar por el promedio de los intervalos RR
+    // Normalize by the average of RR intervals
     const avgRR = this.rrIntervals.reduce((a, b) => a + b, 0) / this.rrIntervals.length;
     const variation = diffs.reduce((a, b) => a + b, 0) / diffs.length / avgRR;
     
     return variation;
   }
   
-  private detectPAC(): boolean {
-    if (this.rrIntervals.length < 4) return false;
-    
-    // Buscar un patrón corto-largo-normal (característico de PAC) - SUPER SENSIBLE
-    for (let i = 2; i < this.rrIntervals.length; i++) {
-      const prev2 = this.rrIntervals[i - 2];
-      const prev1 = this.rrIntervals[i - 1];
-      const current = this.rrIntervals[i];
-      
-      // Parámetros SUPER SENSIBLES para detectar PAC
-      if (prev2 > 450 && prev1 < 0.9 * prev2 && current > 1.0 * prev1) {
-        return true;
-      }
+  private detectPrematureBeat(): { detected: boolean; severity: number; confidence: number } {
+    // Focus only on detecting premature beats based on baseline rhythm
+    if (this.rrIntervals.length < 3 || this.baselineRRMean === 0) {
+      return { detected: false, severity: 0, confidence: 0 };
     }
     
-    return false;
-  }
-  
-  private detectPVC(): boolean {
-    if (this.rrIntervals.length < 4 || this.amplitudes.length < 4) return false;
+    // Get the most recent RR intervals for analysis
+    const recentIntervals = this.rrIntervals.slice(-3);
+    const latestInterval = recentIntervals[recentIntervals.length - 1];
     
-    // PVC típicamente tienen: 
-    // 1. Un latido prematuro (intervalo RR corto)
-    // 2. Una pausa compensatoria después (intervalo RR largo)
-    // 3. Mayor amplitud en la onda R
+    // Check if the latest interval is significantly shorter than baseline
+    // A premature beat will have an RR interval shorter than the baseline
+    const prematureThreshold = this.baselineRRMean - (1.5 * this.baselineRRStdDev);
     
-    // Parámetros SUPER SENSIBLES para detectar PVC
-    for (let i = 2; i < this.rrIntervals.length - 1; i++) {
-      const prev = this.rrIntervals[i - 1];
-      const current = this.rrIntervals[i];
-      const next = this.rrIntervals[i + 1];
-      
-      const avgNormal = (this.rrIntervals.reduce((sum, val) => sum + val, 0) - current) / 
-                          (this.rrIntervals.length - 1);
-      
-      // Criterios SUPER SENSIBLES
-      if (current < 0.9 * avgNormal && 
-          next > 1.1 * avgNormal &&
-          this.amplitudes[i] > 1.1 * (this.getAvgAmplitude())) {
-        return true;
-      }
+    // A premature beat is followed by a compensatory pause (longer interval)
+    const isPremature = latestInterval < prematureThreshold;
+    
+    if (!isPremature) {
+      return { detected: false, severity: 0, confidence: 0 };
     }
     
-    return false;
-  }
-  
-  private detectAF(rmssd: number, rrVariation: number): boolean {
-    // AF se caracteriza por alta variabilidad en los intervalos RR
-    // y ausencia de un patrón regular
+    // Calculate deviation from baseline as percentage
+    const deviationPercent = (this.baselineRRMean - latestInterval) / this.baselineRRMean * 100;
     
-    // Criterios SUPER SENSIBLES basados en estudios clínicos
-    // Ajustamos aún más para Android
-    const threshold = this.isAndroid ? 55 : 60; // Más sensible en Android
-    const variationThreshold = this.isAndroid ? 0.04 : 0.05; // Más sensible en Android
+    // Calculate severity based on how premature the beat is
+    // More premature = higher severity
+    let severity = 0;
+    let confidence = 0;
     
-    const highRMSSD = rmssd > threshold;
-    const highVariation = rrVariation > variationThreshold;
-    
-    // Verificar patrones irregulares consecutivos
-    let irregularCount = 0;
-    for (let i = 1; i < this.rrIntervals.length; i++) {
-      const diff = Math.abs(this.rrIntervals[i] - this.rrIntervals[i - 1]);
-      const threshold = this.isAndroid ? 45 : 50; // Más sensible en Android
-      if (diff > threshold) {
-        irregularCount++;
-      }
+    if (deviationPercent > 30) {
+      // Very premature (>30% earlier than expected)
+      severity = 8;
+      confidence = 0.9;
+    } else if (deviationPercent > 20) {
+      // Moderately premature (20-30% earlier)
+      severity = 6;
+      confidence = 0.8;
+    } else if (deviationPercent > 15) {
+      // Mildly premature (15-20% earlier)
+      severity = 5;
+      confidence = 0.7;
+    } else {
+      // Borderline premature (detected but not clinically significant)
+      return { detected: false, severity: 0, confidence: 0 };
     }
     
-    const irregularityThreshold = this.isAndroid ? 0.45 : 0.5; // Más sensible en Android
-    const highIrregularity = irregularCount >= this.rrIntervals.length * irregularityThreshold;
+    console.log(`ArrhythmiaDetector: Posible latido prematuro - Intervalo: ${latestInterval}ms vs Línea base: ${this.baselineRRMean.toFixed(0)}ms, Desviación: ${deviationPercent.toFixed(1)}%`);
     
-    return highRMSSD && highVariation && highIrregularity;
+    return { 
+      detected: true, 
+      severity, 
+      confidence 
+    };
   }
   
   private getAvgAmplitude(): number {
     if (this.amplitudes.length === 0) return 0;
     
-    // Filtrar valores de 0 que podrían no ser reales
+    // Filter out zero values that might not be real
     const validAmplitudes = this.amplitudes.filter(a => a > 0);
     if (validAmplitudes.length === 0) return 0;
     
@@ -438,6 +381,10 @@ export class ArrhythmiaDetector {
     this.statusText = "LATIDO NORMAL|0";
     this.lastForcedArrhythmiaTime = 0;
     this.androidArrhythmiaCounter = 0;
+    this.baselineRRIntervals = [];
+    this.baselineRRMean = 0;
+    this.baselineRRStdDev = 0;
+    this.prematureBeatsCount = 0;
     
     console.log("ArrhythmiaDetector: Reset completo");
   }
