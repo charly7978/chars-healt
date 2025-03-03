@@ -1,4 +1,3 @@
-
 import { createVitalSignsDataCollector } from "../utils/vitalSignsDataCollector";
 
 export class GlucoseProcessor {
@@ -40,9 +39,9 @@ export class GlucoseProcessor {
       // Always log quality for debugging
       console.log(`Glucose processing - signal quality: ${avgSignalQuality.toFixed(1)}%, samples: ${ppgValues.length}, timeSinceLastCalc: ${currentTime - this.lastCalculationTime}ms`);
       
-      // Exit early if conditions aren't met
-      if (avgSignalQuality < this.MIN_SIGNAL_QUALITY || 
-          ppgValues.length < 30) { // Reduced from 60 to 30 samples
+      // Exit early if conditions aren't met - but make this more permissive
+      if (avgSignalQuality < this.MIN_SIGNAL_QUALITY / 2 || // Reduced quality threshold by half 
+          ppgValues.length < 20) { // Further reduced from 30 to 20 samples
         if (this.lastGlucoseValue > 0) {
           console.log(`Using previous glucose value: ${this.lastGlucoseValue} mg/dL`);
           return {
