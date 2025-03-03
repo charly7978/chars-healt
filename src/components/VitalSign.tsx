@@ -163,76 +163,73 @@ const VitalSign: React.FC<VitalSignProps> = ({
   };
 
   const getArrhythmiaRiskColor = (count: number): string => {
-    if (count === 0) return 'green-500';
-    if (count === 1) return 'yellow-500';
-    if (count < 5) return 'orange-500';
-    return 'red-500';
+    if (count <= 0) return "#000000";
+    if (count <= 3) return "#F2FCE2";
+    if (count <= 6) return "#FEC6A1";
+    if (count <= 8) return "#F97316";
+    return "#DC2626";
   };
 
   const getArrhythmiaRiskLabel = (count: number): string => {
-    if (count === 0) return 'Ritmo normal';
-    if (count === 1) return 'Arritmia detectada';
-    if (count < 5) return 'Arritmias frecuentes';
-    return 'Arritmias múltiples';
+    if (count <= 0) return "";
+    if (count <= 3) return "RIESGO MÍNIMO";
+    if (count <= 6) return "RIESGO BAJO";
+    if (count <= 8) return "RIESGO MODERADO";
+    return "RIESGO ALTO";
   };
 
   const getArrhythmiaDisplay = () => {
-    if (!label.toLowerCase().includes('pulso')) return null;
+    if (!isArrhythmiaDisplay) return { text: value, color: "", label: "" };
     
-    const valueStr = String(value);
+    if (value === "--") {
+      return { 
+        text: "", 
+        color: "#FFFFFF",
+        label: ""
+      };
+    }
     
-    if (valueStr.includes('|')) {
-      const parts = valueStr.split('|');
-      const bpm = parseInt(parts[0]);
-      const arrhythmiaCount = parseInt(parts[1]);
+    const [status, countStr] = String(value).split('|');
+    const count = parseInt(countStr || "0", 10);
+    
+    if (status === "ARRITMIA DETECTADA") {
+      const riskLabel = getArrhythmiaRiskLabel(count);
+      const riskColor = getArrhythmiaRiskColor(count);
       
-      if (!isNaN(bpm) && !isNaN(arrhythmiaCount)) {
-        const riskColor = getArrhythmiaRiskColor(arrhythmiaCount);
-        const riskLabel = getArrhythmiaRiskLabel(arrhythmiaCount);
-        
-        return (
-          <div className="mt-1 flex items-center text-xs">
-            <span className={`text-${riskColor} font-medium`}>
-              {riskLabel}
-            </span>
-            {arrhythmiaCount > 0 && (
-              <span className="text-gray-500 ml-1">
-                ({arrhythmiaCount} {arrhythmiaCount === 1 ? 'evento' : 'eventos'})
-              </span>
-            )}
-          </div>
-        );
-      }
+      return {
+        text: `${count}`,
+        title: "ARRITMIA DETECTADA",
+        color: riskColor,
+        label: riskLabel
+      };
     }
     
-    if (typeof value === 'string' && value.toUpperCase().includes('ARRITMIA')) {
-      return (
-        <div className="mt-1 flex items-center text-xs">
-          <span className="text-red-500 font-medium">
-            Arritmia detectada
-          </span>
-        </div>
-      );
-    }
-    
-    return null;
+    return {
+      text: "LATIDO NORMAL",
+      color: "#0EA5E9",
+      label: ""
+    };
   };
 
   const renderGlucoseTrend = (trend?: string) => {
     if (!trend || trend === 'unknown') return null;
 
     const trendConfig = {
-      'stable': { icon: '⟷', color: 'text-green-500' },
-      'rising': { icon: '↗', color: 'text-yellow-500' },
-      'falling': { icon: '↘', color: 'text-yellow-500' },
-      'rising_rapidly': { icon: '⇑', color: 'text-red-500' },
-      'falling_rapidly': { icon: '⇓', color: 'text-red-500' }
+      'stable': { icon: '⟷', color: 'text-green-500', label: 'Estable' },
+      'rising': { icon: '↗', color: 'text-yellow-500', label: 'Subiendo' },
+      'falling': { icon: '↘', color: 'text-yellow-500', label: 'Bajando' },
+      'rising_rapidly': { icon: '⇑', color: 'text-red-500', label: 'Subiendo rápido' },
+      'falling_rapidly': { icon: '⇓', color: 'text-red-500', label: 'Bajando rápido' }
     };
 
-    const config = trendConfig[trend as keyof typeof trendConfig] || { icon: '•', color: 'text-gray-400' };
+    const config = trendConfig[trend as keyof typeof trendConfig] || { icon: '•', color: 'text-gray-400', label: 'Desconocido' };
 
     return (
-      <span className={`ml-1 ${config.color} text-lg font-bold`}>
+      <span 
+        className={`ml-1 ${config.color} text-lg font-bold`} 
+        title={config.label}
+        aria-label={config.label}
+      >
         {config.icon}
       </span>
     );

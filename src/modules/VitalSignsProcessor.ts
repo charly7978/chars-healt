@@ -31,91 +31,60 @@ export class VitalSignsProcessor {
    */
   public processSignal(
     ppgValue: number,
-    rrData?: { intervals: number[]; lastPeakTime: number | null; amplitudes?: number[] },
-    respData?: { rate: number; pattern: string; confidence: number }
+    rrData?: { intervals: number[]; lastPeakTime: number | null; amplitudes?: number[] }
   ) {
     const currentTime = Date.now();
 
-    // Update RR intervals if available, passing amplitude data if available
+    // Procesar arritmias primero, antes de cualquier otro cálculo
+    let arrhythmiaResult = { detected: false, count: 0, status: 'SIN ARRITMIAS|0', data: null };
+    
     if (rrData?.intervals && rrData.intervals.length > 0) {
-      // Filter outliers from RR data
+      // Filtrar solo outliers extremos
       const validIntervals = rrData.intervals.filter(interval => {
-        return interval >= 380 && interval <= 1700; // Valid for 35-158 BPM
+        return interval >= 300 && interval <= 1800;
       });
       
       if (validIntervals.length > 0) {
-        // Pass peak amplitude if available to the arrhythmia detector
-        const peakAmplitude = rrData.amplitudes && rrData.amplitudes.length > 0 
-          ? rrData.amplitudes[rrData.amplitudes.length - 1] 
-          : undefined;
+        const peakAmplitude = rrData.amplitudes?.[rrData.amplitudes.length - 1];
         
+        // Actualizar intervalos y forzar detección
         this.arrhythmiaDetector.updateIntervals(validIntervals, rrData.lastPeakTime, peakAmplitude);
+        arrhythmiaResult = this.arrhythmiaDetector.detect();
+        
+        if (arrhythmiaResult.detected) {
+          console.log('VitalSignsProcessor: Arritmia detectada:', {
+            status: arrhythmiaResult.status,
+            count: arrhythmiaResult.count,
+            data: arrhythmiaResult.data
+          });
+        }
       }
     }
 
-    // Process PPG signal
+    // Procesar señal PPG
     const filtered = this.applySMAFilter(ppgValue);
     this.ppgValues.push(filtered);
     if (this.ppgValues.length > this.WINDOW_SIZE) {
       this.ppgValues.shift();
     }
 
-    // Check learning phase
-    const isLearning = this.arrhythmiaDetector.isInLearningPhase();
-    
-    // During learning phase, collect values for SpO2 calibration
-    if (isLearning) {
-      if (this.ppgValues.length >= 60) {
-        const tempSpO2 = this.spO2Calculator.calculateRaw(this.ppgValues.slice(-60));
-        if (tempSpO2 > 0) {
-          this.spO2Calculator.addCalibrationValue(tempSpO2);
-        }
-      }
-    } else {
-      // Auto-calibrate SpO2
-      this.spO2Calculator.calibrate();
-    }
-
-    // Process arrhythmia detection - using ONLY the ArrhythmiaDetector module
-    const arrhythmiaResult = this.arrhythmiaDetector.detect();
-
-    // Calculate vital signs - utilizando datos reales optimizados
+    // Calcular otros signos vitales
+    const bp = this.calculateRealBloodPressure(this.ppgValues);
+    const pressure = `${bp.systolic}/${bp.diastolic}`;
     const spo2 = this.spO2Calculator.calculate(this.ppgValues.slice(-60));
     
-    // Calcular presión arterial usando valores reales
-    const bp = this.calculateRealBloodPressure(this.ppgValues.slice(-60));
-    const pressure = `${bp.systolic}/${bp.diastolic}`;
-
-    // Ensure we have the arrhythmia status properly formatted
-    const arrhythmiaStatus = arrhythmiaResult.status;
-
-    // Prepare arrhythmia data with proper timestamp to ensure UI can match it with the signal
-    const lastArrhythmiaData = arrhythmiaResult.detected ? {
+    // Preparar datos de arritmia
+    const lastArrhythmiaData = (arrhythmiaResult.detected || arrhythmiaResult.count > 0) ? {
       timestamp: currentTime,
       rmssd: arrhythmiaResult.data?.rmssd || 0,
-      rrVariation: arrhythmiaResult.data?.rrVariation || 0,
-      prematureBeat: arrhythmiaResult.data?.prematureBeat || false,
-      confidence: arrhythmiaResult.data?.confidence || 0
+      rrVariation: arrhythmiaResult.data?.rrVariation || 0
     } : null;
 
-    // Log detection when it happens (for debugging)
-    if (arrhythmiaResult.detected) {
-      console.log("VitalSignsProcessor: Arritmia detectada", {
-        count: arrhythmiaResult.count,
-        data: lastArrhythmiaData
-      });
-    }
-
-    // Asegurar que el valor de retorno incluya correctamente los datos de arritmia
     return {
       spo2,
       pressure,
-      arrhythmiaStatus,
-      lastArrhythmiaData,
-      // Incluir el resto de propiedades del objeto de retorno
-      respiratoryRate: respData ? respData.rate : 0,
-      respiratoryPattern: respData ? respData.pattern : 'unknown',
-      respiratoryConfidence: respData ? respData.confidence : 0
+      arrhythmiaStatus: arrhythmiaResult.status,
+      lastArrhythmiaData
     };
   }
 
@@ -211,17 +180,15 @@ export class VitalSignsProcessor {
   /**
    * Reset all processors
    */
-  public reset() {
+  public reset(): void {
     this.ppgValues = [];
     this.lastBPM = 0;
-    this.spO2Calculator.reset();
-    this.bpCalculator.reset();
-    this.arrhythmiaDetector.reset();
-    
-    // Reiniciar mediciones reales
     this.lastSystolic = 120;
     this.lastDiastolic = 80;
     this.measurementCount = 0;
+    this.spO2Calculator.reset();
+    this.bpCalculator.reset();
+    this.arrhythmiaDetector = new ArrhythmiaDetector(); // Reiniciar completamente el detector
   }
 
   /**

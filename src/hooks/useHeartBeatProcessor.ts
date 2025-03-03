@@ -14,7 +14,6 @@ export const useHeartBeatProcessor = () => {
       console.log('useHeartBeatProcessor: Creando nueva instancia de HeartBeatProcessor');
       processorRef.current = new HeartBeatProcessor();
       // Make it globally accessible for debugging
-      // @ts-ignore - Global window property for debugging
       window.heartBeatProcessor = processorRef.current;
     }
     return processorRef.current;
