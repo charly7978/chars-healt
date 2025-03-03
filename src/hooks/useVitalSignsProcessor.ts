@@ -1,6 +1,8 @@
+
 import { useState, useCallback, useEffect } from 'react';
 import { VitalSignsProcessor } from '../modules/VitalSignsProcessor';
 import { GlucoseProcessor } from '../modules/GlucoseProcessor';
+import { ArrhythmiaDetector } from '../modules/ArrhythmiaDetector';
 
 type VitalSignsResult = {
   spo2: number;
@@ -21,6 +23,7 @@ type VitalSignsResult = {
 export const useVitalSignsProcessor = () => {
   const [processor] = useState(() => new VitalSignsProcessor());
   const [glucoseProcessor] = useState(() => new GlucoseProcessor());
+  const [arrhythmiaDetector] = useState(() => new ArrhythmiaDetector());
   const [vitalSignsData, setVitalSignsData] = useState<VitalSignsResult | null>(null);
   
   useEffect(() => {
@@ -32,19 +35,17 @@ export const useVitalSignsProcessor = () => {
   }, []);
 
   const processSignal = useCallback((ppgValue: number, rrData?: any) => {
+    const intervals = rrData?.intervals || [];
     const amplitudes = rrData?.amplitudes || [];
-    const amplitude = amplitudes.length > 0 ? amplitudes[0] : null;
     
-    if (amplitude !== null) {
-      console.log("useVitalSignsProcessor: Processing signal with amplitude:", amplitude);
-    }
-    
+    // Process vital signs with PPG signal
     const vitalSignsResult = processor.processSignal(ppgValue, {
-      intervals: rrData?.intervals || [],
+      intervals: intervals,
       lastPeakTime: rrData?.lastPeakTime || null,
-      amplitudes: rrData?.amplitudes || []
+      amplitudes: amplitudes
     });
     
+    // Process glucose data
     const glucoseResult = glucoseProcessor.processSignal(ppgValue);
     
     const glucoseData = {
@@ -53,35 +54,60 @@ export const useVitalSignsProcessor = () => {
       confidence: glucoseResult.confidence || 0
     };
     
-    const combinedResult: VitalSignsResult = {
-      ...vitalSignsResult,
-      glucose: glucoseData
-    };
-    
-    if (vitalSignsResult.lastArrhythmiaData) {
-      combinedResult.lastArrhythmiaData = vitalSignsResult.lastArrhythmiaData;
+    // Process arrhythmia detection with RR intervals and amplitudes
+    let arrhythmiaResult = null;
+    if (intervals.length > 0) {
+      arrhythmiaResult = arrhythmiaDetector.processRRIntervals(intervals, amplitudes);
+      
+      if (arrhythmiaResult.detected) {
+        console.log('useVitalSignsProcessor: Arrhythmia detection update', {
+          detected: arrhythmiaResult.detected,
+          type: arrhythmiaResult.type,
+          severity: arrhythmiaResult.severity,
+          confidence: arrhythmiaResult.confidence,
+          rmssd: arrhythmiaResult.rmssd,
+          rrVariation: arrhythmiaResult.rrVariation
+        });
+      }
     }
     
-    combinedResult.arrhythmiaStatus = vitalSignsResult.arrhythmiaStatus;
+    // Combine all results
+    const combinedResult: VitalSignsResult = {
+      ...vitalSignsResult,
+      glucose: glucoseData,
+      arrhythmiaStatus: arrhythmiaDetector.getStatusText()
+    };
     
-    if (vitalSignsResult.arrhythmiaStatus?.includes('ARRITMIA DETECTADA')) {
+    // Add arrhythmia data if available
+    const lastArrhythmia = arrhythmiaDetector.getLastArrhythmia();
+    if (lastArrhythmia && lastArrhythmia.detected) {
+      combinedResult.lastArrhythmiaData = {
+        timestamp: lastArrhythmia.timestamp,
+        rmssd: lastArrhythmia.rmssd || 0,
+        rrVariation: lastArrhythmia.rrVariation || 0
+      };
+    }
+    
+    // Log if arrhythmia is detected
+    if (combinedResult.arrhythmiaStatus.includes('ARRITMIA DETECTADA')) {
       console.log('useVitalSignsProcessor: ¡ARRITMIA DETECTADA!', {
-        status: vitalSignsResult.arrhythmiaStatus,
-        data: vitalSignsResult.lastArrhythmiaData,
-        amplitude
+        status: combinedResult.arrhythmiaStatus,
+        data: combinedResult.lastArrhythmiaData,
+        type: lastArrhythmia?.type
       });
     }
     
     setVitalSignsData(combinedResult);
     return combinedResult;
-  }, [processor, glucoseProcessor]);
+  }, [processor, glucoseProcessor, arrhythmiaDetector]);
 
   const reset = useCallback(() => {
     processor.reset();
     glucoseProcessor.reset();
+    arrhythmiaDetector.reset();
     setVitalSignsData(null);
     console.log('Procesadores reiniciados');
-  }, [processor, glucoseProcessor]);
+  }, [processor, glucoseProcessor, arrhythmiaDetector]);
 
   const getCurrentRespiratoryData = useCallback(() => {
     return null;
@@ -101,13 +127,14 @@ export const useVitalSignsProcessor = () => {
     
     processor.reset();
     glucoseProcessor.reset();
+    arrhythmiaDetector.reset();
     
     setVitalSignsData(null);
     
     console.log('useVitalSignsProcessor: Memoria liberada');
     
     return true;
-  }, [processor, glucoseProcessor]);
+  }, [processor, glucoseProcessor, arrhythmiaDetector]);
 
   return {
     vitalSignsData,

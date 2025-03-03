@@ -1,5 +1,6 @@
 
 import { HeartBeatProcessor } from '../modules/HeartBeatProcessor';
+import { ArrhythmiaDetector } from '../modules/ArrhythmiaDetector';
 
 export interface ProcessedSignal {
   timestamp: number;
@@ -51,6 +52,18 @@ export interface HeartBeatResult {
   filteredValue: number;
   arrhythmiaCount: number;
   amplitude?: number;
+}
+
+export type ArrhythmiaType = 'NONE' | 'PAC' | 'PVC' | 'AF' | 'UNKNOWN';
+
+export interface ArrhythmiaResult {
+  detected: boolean;
+  severity: number;  // 0-10 scale
+  confidence: number; // 0-1 scale
+  type: ArrhythmiaType;
+  rmssd?: number;
+  rrVariation?: number;
+  timestamp: number;
 }
 
 declare global {

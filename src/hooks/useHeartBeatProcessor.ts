@@ -1,3 +1,4 @@
+
 import { useState, useRef, useCallback } from 'react';
 import { HeartBeatProcessor } from '../modules/HeartBeatProcessor';
 import { HeartBeatResult } from '../types/signal';
@@ -30,17 +31,29 @@ export const useHeartBeatProcessor = () => {
       setIsPeak(result.isPeak);
       
       // Get RR intervals and store amplitude for arrhythmia detection
-      const rrData = {
-        intervals: processor.getRRIntervals().intervals,
-        lastPeakTime: result.isPeak ? Date.now() : null,
-        amplitudes: []
-      };
+      const rrIntervals = processor.getRRIntervals().intervals;
+      const lastPeakTime = result.isPeak ? Date.now() : null;
+      
+      // Create array of amplitudes for arrhythmia detection
+      // This is critical for the new arrhythmia detection algorithm
+      const amplitudes: number[] = [];
       
       // Add peak amplitude for arrhythmia detection
       if (result.isPeak && result.amplitude !== undefined) {
-        rrData.amplitudes = [result.amplitude];
+        amplitudes.push(result.amplitude);
         console.log("HeartBeatProcessor: Peak detected with amplitude:", result.amplitude);
+      } else if (rrIntervals.length > 0 && amplitudes.length === 0) {
+        // Fallback amplitude estimation if we have RR intervals but no amplitude
+        const estimatedAmplitude = 100 * (confidence / 100);
+        amplitudes.push(estimatedAmplitude);
       }
+      
+      // Enhanced data structure with all necessary information
+      const rrData = {
+        intervals: rrIntervals,
+        lastPeakTime: lastPeakTime,
+        amplitudes: amplitudes
+      };
       
       return {
         bpm: result.bpm,
