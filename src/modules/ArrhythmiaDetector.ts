@@ -103,7 +103,7 @@ export class ArrhythmiaDetector {
     if (!intervals || intervals.length === 0) {
       return;
     }
-
+    
     const currentTime = Date.now();
     
     // Actualizar intervalos RR
@@ -167,7 +167,7 @@ export class ArrhythmiaDetector {
       }
     }
   }
-
+  
   /**
    * Calcular línea base de intervalos RR y variabilidad normal
    */
