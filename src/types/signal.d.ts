@@ -1,4 +1,3 @@
-
 import { HeartBeatProcessor } from '../modules/HeartBeatProcessor';
 import { ArrhythmiaDetector } from '../modules/ArrhythmiaDetector';
 
@@ -64,6 +63,7 @@ export interface ArrhythmiaResult {
   rmssd?: number;      // Add rmssd property
   rrVariation?: number; // Add rrVariation property
   timestamp: number;
+  prematureBeat?: boolean; // Indica si es un latido prematuro
 }
 
 declare global {

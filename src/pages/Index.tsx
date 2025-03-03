@@ -567,7 +567,7 @@ const Index = () => {
     if (vitals) {
       console.log("Index: Actualización de signos vitales recibida:", {
         arrhythmiaStatus: vitals.arrhythmiaStatus,
-        lastArrhythmiaData: vitals.lastArrhythmiaData || "No hay datos de arritmia"
+        lastArrhythmiaData: vitals.lastArrhythmiaData ? "Datos de arritmia disponibles" : "No hay datos"
       });
       
       setVitalSigns(current => ({
@@ -583,7 +583,7 @@ const Index = () => {
       
       const storedGlucoseValue = sessionStorage.getItem('lastGlucoseValue');
       if (storedGlucoseValue && parseInt(storedGlucoseValue) > 0) {
-        console.log("Procesando datos de glucosa almacenados:", storedGlucoseValue);
+        console.log("Index: Procesando datos de glucosa almacenados:", storedGlucoseValue);
         
         const storedTrend = sessionStorage.getItem('glucoseTrend') || 'unknown';
         const validTrend = (storedTrend === 'stable' || 
@@ -622,17 +622,26 @@ const Index = () => {
       }
       
       if (vitals.lastArrhythmiaData) {
-        console.log("Index: Datos de arritmia recibidos:", vitals.lastArrhythmiaData);
+        console.log("Index: Datos de arritmia recibidos:", {
+          timestamp: vitals.lastArrhythmiaData.timestamp,
+          prematureBeat: vitals.lastArrhythmiaData.prematureBeat,
+          confidence: vitals.lastArrhythmiaData.confidence
+        });
         
         setLastArrhythmiaData(vitals.lastArrhythmiaData);
         
-        const [status, count] = vitals.arrhythmiaStatus.split('|');
-        setArrhythmiaCount(count || "0");
+        const parts = vitals.arrhythmiaStatus.split('|');
+        const arrhythmiaType = parts[0];
+        const count = parts[1] || "0";
         
-        if (vitals.lastArrhythmiaData.confidence && 
-            vitals.lastArrhythmiaData.confidence > 80 && 
-            status.includes("ARRITMIA")) {
-          toast.warning(`Arritmia detectada: ${status.replace("ARRITMIA DETECTADA: ", "")}`, {
+        setArrhythmiaCount(count);
+        
+        if (vitals.lastArrhythmiaData.prematureBeat && 
+            vitals.lastArrhythmiaData.confidence && 
+            vitals.lastArrhythmiaData.confidence > 75 && 
+            arrhythmiaType.includes("PREMATURA")) {
+          
+          toast.warning("¡Latido prematuro detectado!", {
             position: "top-center",
             duration: 3000
           });
@@ -712,10 +721,12 @@ const Index = () => {
         />
       </div>
 
-      <div className="absolute inset-0 z-10">
-        <PPGSignalMeter 
+      <div 
+        className="w-full row-start-1 md:col-span-2 relative overflow-hidden h-80 md:h-96 pt-4 rounded-xl bg-black/5 dark:bg-white/5 border border-border"
+      >
+        <PPGSignalMeter
           value={isMonitoring ? lastSignal?.filteredValue || 0 : 0}
-          quality={isMonitoring ? lastSignal?.quality || 0 : 0}
+          quality={isMonitoring ? signalQuality : 0}
           isFingerDetected={isMonitoring ? lastSignal?.fingerDetected || false : false}
           onStartMeasurement={startMonitoring}
           onReset={handleReset}

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useCallback } from 'react';
+import { toast } from 'sonner';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
 
@@ -13,6 +14,8 @@ interface PPGSignalMeterProps {
     timestamp: number;
     rmssd: number;
     rrVariation: number;
+    prematureBeat?: boolean;
+    confidence?: number;
   } | null;
 }
 
@@ -33,6 +36,7 @@ const PPGSignalMeter = ({
   const lastRenderTimeRef = useRef<number>(0);
   const lastArrhythmiaTime = useRef<number>(0);
   const arrhythmiaCountRef = useRef<number>(0);
+  const lastToastTime = useRef<number>(0);
   
   const WINDOW_WIDTH_MS = 4000;
   const CANVAS_WIDTH = 450;
@@ -66,6 +70,17 @@ const PPGSignalMeter = ({
         arrhythmiaCountRef.current += 1;
         
         lastArrhythmiaTime.current = Date.now();
+        
+        try {
+          if ((window as any).toast) {
+            (window as any).toast.warning("¡Latido prematuro detectado!", {
+              position: "top-center",
+              duration: 3000
+            });
+          }
+        } catch (e) {
+          console.error("Error mostrando notificación:", e);
+        }
       }
     }
   }, [arrhythmiaStatus, rawArrhythmiaData]);
@@ -260,7 +275,7 @@ const PPGSignalMeter = ({
         if (point.isArrhythmia) {
           ctx.font = 'bold 10px Inter';
           ctx.fillStyle = '#FF6B6B';
-          ctx.fillText("LATIDO PREMATURO", x, y - 25);
+          ctx.fillText("PREMATURO", x, y - 25);
         }
       }
     }
@@ -302,18 +317,37 @@ const PPGSignalMeter = ({
     const scaledValue = normalizedValue * verticalScale;
     
     let isArrhythmia = false;
-    if (
-      (arrhythmiaStatus && (
+    if (arrhythmiaStatus) {
+      const isPrematureBeat =
         arrhythmiaStatus.includes("CONTRACCIÓN PREMATURA") || 
-        arrhythmiaStatus.includes("PREMATURA")
-      )) 
-    ) {
-      isArrhythmia = true;
-      arrhythmiaCountRef.current += 1;
-      lastArrhythmiaTime.current = now;
-      console.log("PPGSignalMeter: Visualizando latido prematuro en gráfico");
+        arrhythmiaStatus.includes("PREMATURA");
+        
+      // Check if we have rawArrhythmiaData with prematureBeat flag
+      const hasRawPrematureData = rawArrhythmiaData && 
+                                  rawArrhythmiaData.prematureBeat === true;
+      
+      if (isPrematureBeat || hasRawPrematureData) {
+        isArrhythmia = true;
+        lastArrhythmiaTime.current = now;
+        console.log("PPGSignalMeter: Visualizando latido prematuro en gráfico", {
+          fromStatus: isPrematureBeat,
+          fromRawData: hasRawPrematureData,
+          confidence: rawArrhythmiaData?.confidence
+        });
+        
+        // Only show toast for newly detected arrythmias with confidence
+        if (hasRawPrematureData && 
+            (rawArrhythmiaData?.confidence || 0) > 70 && 
+            now - lastToastTime.current > 3000) {
+          toast.warning("¡Latido prematuro detectado!", {
+            position: "top-center",
+            duration: 3000
+          });
+          lastToastTime.current = now;
+        }
+      }
     }
-
+    
     const showingRecentArrhythmia = now - lastArrhythmiaTime.current < 3000;
     
     dataBufferRef.current.push({
