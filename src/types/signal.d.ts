@@ -36,6 +36,11 @@ export interface RespirationData {
   regularity: number; // Regularidad (0-100)
 }
 
+export interface GlucoseData {
+  value: number;     // Valor de glucosa en mg/dL
+  trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
+}
+
 export interface HeartBeatResult {
   bpm: number;
   confidence: number;

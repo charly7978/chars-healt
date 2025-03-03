@@ -10,6 +10,7 @@ interface VitalSignProps {
   isFinalReading?: boolean;
   secondaryValue?: string | number;
   secondaryUnit?: string;
+  trend?: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
 }
 
 const VitalSign: React.FC<VitalSignProps> = ({ 
@@ -18,12 +19,14 @@ const VitalSign: React.FC<VitalSignProps> = ({
   unit, 
   isFinalReading = false,
   secondaryValue,
-  secondaryUnit 
+  secondaryUnit,
+  trend
 }) => {
   const [showDetail, setShowDetail] = useState(false);
   const isArrhythmiaDisplay = label === "ARRITMIAS";
   const isBloodPressure = label === "PRESIÓN ARTERIAL";
   const isRespiration = label === "RESPIRACIÓN";
+  const isGlucose = label === "GLUCOSA";
 
   // Helper function to check if blood pressure value is unrealistic
   const isBloodPressureUnrealistic = (bpString: string): boolean => {
@@ -101,6 +104,16 @@ const VitalSign: React.FC<VitalSignProps> = ({
         return getRespirationRiskDisplay(value);
       }
     }
+    
+    // For glucose values
+    if (isGlucose) {
+      if (value === "--" || value === 0) {
+        return { color: '#000000', label: '' };
+      }
+      if (typeof value === 'number') {
+        return getGlucoseRiskDisplay(value, trend);
+      }
+    }
 
     // For blood pressure, show real value without checking risk if no measurement
     if (label === "PRESIÓN ARTERIAL") {
@@ -127,6 +140,46 @@ const VitalSign: React.FC<VitalSignProps> = ({
     if (rate <= 20) return { color: '#22C55E', label: 'NORMAL' };
     if (rate <= 25) return { color: '#F97316', label: 'LEVE TAQUIPNEA' };
     return { color: '#DC2626', label: 'TAQUIPNEA' };
+  };
+  
+  // Nueva función para evaluar riesgo de glucosa
+  const getGlucoseRiskDisplay = (
+    value: number, 
+    trend?: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown'
+  ) => {
+    // Valores basados en directrices médicas de la Asociación Americana de Diabetes
+    let riskColor = '';
+    let riskLabel = '';
+    
+    // Evaluación del nivel de glucosa
+    if (value < 70) {
+      riskColor = '#DC2626';  // Rojo para hipoglucemia
+      riskLabel = 'HIPOGLUCEMIA';
+    } else if (value < 100) {
+      riskColor = '#22C55E';  // Verde para normal
+      riskLabel = 'NORMAL';
+    } else if (value < 126) {
+      riskColor = '#F97316';  // Naranja para prediabetes
+      riskLabel = 'PREDIABETES';
+    } else if (value < 180) {
+      riskColor = '#EF4444';  // Rojo claro para diabetes
+      riskLabel = 'DIABETES';
+    } else if (value < 250) {
+      riskColor = '#DC2626';  // Rojo para hiperglucemia
+      riskLabel = 'HIPERGLUCEMIA';
+    } else {
+      riskColor = '#991B1B';  // Rojo oscuro para hiperglucemia severa
+      riskLabel = 'HIPERGLUCEMIA SEVERA';
+    }
+    
+    // Si hay una tendencia rápida, modificar el etiquetado para advertir
+    if (trend === 'rising_rapidly' && value > 180) {
+      riskLabel = 'HIPERGLUCEMIA CRECIENTE';
+    } else if (trend === 'falling_rapidly' && value < 90) {
+      riskLabel = 'HIPOGLUCEMIA DECRECIENTE';
+    }
+    
+    return { color: riskColor, label: riskLabel };
   };
   
   const getArrhythmiaRiskColor = (count: number): string => {
@@ -185,6 +238,39 @@ const VitalSign: React.FC<VitalSignProps> = ({
       label: ""
     };
   };
+  
+  // Renderizado especial para la glucosa con tendencia
+  const renderGlucoseTrend = (trend?: string) => {
+    if (!trend || trend === 'unknown' || trend === 'stable') return null;
+    
+    let icon = '';
+    let color = '';
+    
+    switch (trend) {
+      case 'rising':
+        icon = '↗';
+        color = '#F97316'; // Naranja
+        break;
+      case 'falling':
+        icon = '↘';
+        color = '#3B82F6'; // Azul
+        break;
+      case 'rising_rapidly':
+        icon = '⇑';
+        color = '#DC2626'; // Rojo
+        break;
+      case 'falling_rapidly':
+        icon = '⇓';
+        color = '#DC2626'; // Rojo
+        break;
+    }
+    
+    return (
+      <span className="text-lg font-bold ml-1" style={{ color }}>
+        {icon}
+      </span>
+    );
+  };
 
   // Get the risk info based on the medically valid display value 
   const { text, title, color, label: riskLabel } = isArrhythmiaDisplay ? 
@@ -210,6 +296,7 @@ const VitalSign: React.FC<VitalSignProps> = ({
     if (label === "PRESIÓN ARTERIAL") return "bloodPressure";
     if (label === "ARRITMIAS") return "arrhythmia";
     if (label === "RESPIRACIÓN") return "respiration";
+    if (label === "GLUCOSA") return "glucose";
     return "heartRate"; // Default
   };
 
@@ -240,6 +327,7 @@ const VitalSign: React.FC<VitalSignProps> = ({
               {!isArrhythmiaDisplay && unit && (
                 <span className="text-white text-xs">{unit}</span>
               )}
+              {isGlucose && renderGlucoseTrend(trend)}
             </div>
             
             {/* Mostrar valor secundario si está disponible */}
@@ -288,6 +376,7 @@ const VitalSign: React.FC<VitalSignProps> = ({
           onBack={() => setShowDetail(false)}
           secondaryValue={secondaryValue as string | number}
           secondaryUnit={secondaryUnit}
+          trend={isGlucose ? trend : undefined}
         />
       )}
     </>

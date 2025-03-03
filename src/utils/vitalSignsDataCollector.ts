@@ -7,6 +7,7 @@ export const createVitalSignsDataCollector = () => {
   const bpValues: string[] = [];
   const respirationRates: number[] = [];
   const respirationDepths: number[] = [];
+  const glucoseValues: number[] = [];
   
   return {
     /**
@@ -53,6 +54,18 @@ export const createVitalSignsDataCollector = () => {
         respirationDepths.push(value);
         if (respirationDepths.length > 10) {
           respirationDepths.shift();
+        }
+      }
+    },
+    
+    /**
+     * Add glucose value to collection
+     */
+    addGlucose: (value: number) => {
+      if (value >= 40 && value <= 400) {
+        glucoseValues.push(value);
+        if (glucoseValues.length > 10) {
+          glucoseValues.shift();
         }
       }
     },
@@ -113,6 +126,35 @@ export const createVitalSignsDataCollector = () => {
     },
     
     /**
+     * Get average glucose from collected values
+     */
+    getAverageGlucose: (): number => {
+      if (glucoseValues.length === 0) return 0;
+      const sum = glucoseValues.reduce((acc, val) => acc + val, 0);
+      return Math.round(sum / glucoseValues.length);
+    },
+    
+    /**
+     * Get glucose trend based on recent values
+     */
+    getGlucoseTrend: (): 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown' => {
+      if (glucoseValues.length < 3) return 'unknown';
+      
+      // Analizar los últimos valores para determinar tendencia
+      const recentValues = [...glucoseValues].slice(-3);
+      const firstValue = recentValues[0];
+      const lastValue = recentValues[recentValues.length - 1];
+      const difference = lastValue - firstValue;
+      
+      // Determinar tendencia basada en la diferencia de valores
+      if (Math.abs(difference) < 5) return 'stable';
+      if (difference > 20) return 'rising_rapidly';
+      if (difference < -20) return 'falling_rapidly';
+      if (difference > 0) return 'rising';
+      return 'falling';
+    },
+    
+    /**
      * Reset all collected data
      */
     reset: () => {
@@ -120,6 +162,7 @@ export const createVitalSignsDataCollector = () => {
       bpValues.length = 0;
       respirationRates.length = 0;
       respirationDepths.length = 0;
+      glucoseValues.length = 0;
     }
   };
 };
