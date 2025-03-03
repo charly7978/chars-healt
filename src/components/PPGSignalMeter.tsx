@@ -41,13 +41,13 @@ const PPGSignalMeter = ({
   const CANVAS_HEIGHT = 900; // Increased from 900px to 1100px for much better vertical detail
   const GRID_SIZE_X = 100; // Grid cell width
   const GRID_SIZE_Y = 15; // Grid cell height
-  const VERTICAL_SCALE = 52.0; // Signal amplification factor
+  const VERTICAL_SCALE = 25.0; // Signal amplification factor
   const SMOOTHING_FACTOR = 1.8; // Wave smoothing factor
   const TARGET_FPS = 60;
   const FRAME_TIME = 1000 / TARGET_FPS; // Optimized frame time calculation
   const BUFFER_SIZE = 650; // Signal history buffer size
   const INVERT_SIGNAL = false;
-  const PEAK_MIN_VALUE = 8.0; // Minimum threshold for peak detection
+  const PEAK_MIN_VALUE = 12.0; // Minimum threshold for peak detection
   const PEAK_DISTANCE_MS = 300; // Minimum time between peaks in milliseconds
 
   useEffect(() => {
