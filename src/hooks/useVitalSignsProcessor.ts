@@ -1,6 +1,7 @@
+
 import { useState, useCallback, useRef } from 'react';
 import { VitalSignsProcessor } from '../modules/VitalSignsProcessor';
-import { ArrhythmiaDetector } from '../modules/ArrhythmiaDetector';
+import { useArrhythmiaAnalyzer } from './useArrhythmiaAnalyzer';
 import { createBloodPressureStabilizer } from '../utils/bloodPressureStabilizer';
 import { createVitalSignsDataCollector } from '../utils/vitalSignsDataCollector';
 import { useSignalHistory } from './useSignalHistory';
@@ -11,35 +12,20 @@ export const useVitalSignsProcessor = () => {
   const processorRef = useRef<VitalSignsProcessor | null>(null);
   
   // Specialized modules
-  const arrhythmiaDetectorRef = useRef<ArrhythmiaDetector | null>(null);
+  const arrhythmiaAnalyzer = useArrhythmiaAnalyzer();
   const bloodPressureStabilizer = useRef(createBloodPressureStabilizer());
   const dataCollector = useRef(createVitalSignsDataCollector());
   const signalHistory = useSignalHistory();
   
-  // Estado para el contador de arritmias
-  const [arrhythmiaCounter, setArrhythmiaCounter] = useState(0);
-  
   /**
-   * Lazy initialization of the VitalSignsProcessor and ArrhythmiaDetector
+   * Lazy initialization of the VitalSignsProcessor
    */
   const getProcessor = useCallback(() => {
     if (!processorRef.current) {
-      console.log('useVitalSignsProcessor: Creando nueva instancia de procesador');
+      console.log('useVitalSignsProcessor: Creando nueva instancia');
       processorRef.current = new VitalSignsProcessor();
     }
     return processorRef.current;
-  }, []);
-  
-  const getArrhythmiaDetector = useCallback(() => {
-    if (!arrhythmiaDetectorRef.current) {
-      console.log('useVitalSignsProcessor: Creando nueva instancia de detector de arritmias');
-      arrhythmiaDetectorRef.current = new ArrhythmiaDetector();
-      
-      // Fix for TypeScript error - use type assertion to avoid the error
-      // This safely tells TypeScript that we know what we're doing
-      (window as any).arrhythmiaDetector = arrhythmiaDetectorRef.current;
-    }
-    return arrhythmiaDetectorRef.current;
   }, []);
   
   /**
@@ -47,13 +33,11 @@ export const useVitalSignsProcessor = () => {
    */
   const processSignal = useCallback((value: number, rrData?: { intervals: number[], lastPeakTime: number | null, amplitudes?: number[] }) => {
     const processor = getProcessor();
-    const arrhythmiaDetector = getArrhythmiaDetector();
     const currentTime = Date.now();
     
     // Store data for analysis
     signalHistory.addSignal(value);
     
-    // MEJORADO: Procesamiento de datos para detección de arritmias
     if (rrData) {
       signalHistory.addRRData(rrData);
       
@@ -70,32 +54,6 @@ export const useVitalSignsProcessor = () => {
         if (rrData.intervals.length > 0 && smoothedBPM > 0) {
           const newInterval = Math.round(60000 / smoothedBPM);
           rrData.intervals[0] = newInterval;
-        }
-      }
-      
-      // CRUCIAL: Verificar y pasar los datos de amplitud explícitamente
-      if (rrData.intervals && rrData.intervals.length > 0) {
-        // Verificar si tenemos datos de amplitud
-        const hasAmplitudes = rrData.amplitudes && rrData.amplitudes.length > 0;
-        
-        if (hasAmplitudes) {
-          console.log('Actualizando detector con datos completos:', {
-            intervalCount: rrData.intervals.length,
-            amplitudeCount: rrData.amplitudes?.length || 0,
-            lastAmplitude: rrData.amplitudes?.[rrData.amplitudes.length - 1],
-            lastPeakTime: rrData.lastPeakTime
-          });
-          
-          // Actualizar con datos completos de intervalos y amplitudes
-          arrhythmiaDetector.updateIntervals(
-            rrData.intervals, 
-            rrData.lastPeakTime, 
-            rrData.amplitudes[rrData.amplitudes.length - 1]
-          );
-        } else {
-          console.log('Actualizando detector solo con intervalos (sin amplitudes)');
-          // Si no hay amplitudes, actualizar solo con intervalos
-          arrhythmiaDetector.updateIntervals(rrData.intervals, rrData.lastPeakTime);
         }
       }
     }
@@ -116,36 +74,36 @@ export const useVitalSignsProcessor = () => {
       dataCollector.current.addBloodPressure(stabilizedBP);
     }
     
-    // CRUCIAL: Usar exclusivamente ArrhythmiaDetector para la detección de arritmias
-    const arrhythmiaResult = arrhythmiaDetector.detect();
-    
-    // IMPORTANTE: Log detallado de detección para ver cuando se detectan arritmias
-    if (arrhythmiaResult.detected) {
-      console.log('¡¡¡ARRITMIA DETECTADA!!!', {
-        contador: arrhythmiaResult.count,
-        confianza: arrhythmiaResult.data?.confidence,
-        prematureBeat: arrhythmiaResult.data?.prematureBeat
-      });
+    // Advanced arrhythmia analysis - asegurarse de pasar los datos de amplitud si están disponibles
+    if (rrData?.intervals && rrData.intervals.length >= 4) {
+      // Asegurarse de pasar los datos de amplitud al analizador de arritmias si están disponibles
+      const arrhythmiaResult = arrhythmiaAnalyzer.processArrhythmia(rrData);
+      
+      if (arrhythmiaResult.detected) {
+        return {
+          spo2: result.spo2,
+          pressure: stabilizedBP,
+          arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus,
+          lastArrhythmiaData: arrhythmiaResult.lastArrhythmiaData
+        };
+      }
+      
+      return {
+        spo2: result.spo2,
+        pressure: stabilizedBP,
+        arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus
+      };
     }
     
-    // Actualizar el contador si se detectó una nueva arritmia
-    if (arrhythmiaResult.count !== arrhythmiaCounter) {
-      setArrhythmiaCounter(arrhythmiaResult.count);
-    }
+    // Si ya analizamos arritmias antes, usar el último estado
+    const arrhythmiaStatus = `SIN ARRITMIAS|${arrhythmiaAnalyzer.arrhythmiaCounter}`;
     
     return {
       spo2: result.spo2,
       pressure: stabilizedBP,
-      arrhythmiaStatus: arrhythmiaResult.status,
-      lastArrhythmiaData: arrhythmiaResult.detected ? {
-        timestamp: currentTime,
-        rmssd: arrhythmiaResult.data?.rmssd || 0,
-        rrVariation: arrhythmiaResult.data?.rrVariation || 0,
-        isPrematureBeat: arrhythmiaResult.data?.prematureBeat || false,
-        confidence: arrhythmiaResult.data?.confidence || 0
-      } : null
+      arrhythmiaStatus
     };
-  }, [getProcessor, getArrhythmiaDetector, arrhythmiaCounter, signalHistory]);
+  }, [getProcessor, arrhythmiaAnalyzer, signalHistory]);
 
   /**
    * Reset all processors and data
@@ -156,18 +114,14 @@ export const useVitalSignsProcessor = () => {
     }
     
     // Reset all specialized modules
-    if (arrhythmiaDetectorRef.current) {
-      arrhythmiaDetectorRef.current.reset();
-    }
-    
-    setArrhythmiaCounter(0);
+    arrhythmiaAnalyzer.reset();
     bloodPressureStabilizer.current.reset();
     dataCollector.current.reset();
     signalHistory.reset();
     VitalSignsRisk.resetHistory();
     
     console.log("Reseteo de detección de arritmias y presión arterial");
-  }, [signalHistory]);
+  }, [arrhythmiaAnalyzer, signalHistory]);
   
   /**
    * Aggressive memory cleanup
@@ -181,13 +135,8 @@ export const useVitalSignsProcessor = () => {
       processorRef.current = new VitalSignsProcessor();
     }
     
-    // Reset arrhythmia detector
-    if (arrhythmiaDetectorRef.current) {
-      arrhythmiaDetectorRef.current.cleanMemory();
-      arrhythmiaDetectorRef.current = new ArrhythmiaDetector();
-    }
-    
-    setArrhythmiaCounter(0);
+    // Reset all specialized modules
+    arrhythmiaAnalyzer.reset();
     bloodPressureStabilizer.current.reset();
     dataCollector.current.reset();
     signalHistory.reset();
@@ -201,13 +150,13 @@ export const useVitalSignsProcessor = () => {
         console.log("GC no disponible en este entorno");
       }
     }
-  }, [signalHistory]);
+  }, [arrhythmiaAnalyzer, signalHistory]);
 
   return {
     processSignal,
     reset,
     cleanMemory,
-    arrhythmiaCounter,
+    arrhythmiaCounter: arrhythmiaAnalyzer.arrhythmiaCounter,
     dataCollector: dataCollector.current
   };
 };

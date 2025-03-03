@@ -1,7 +1,6 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
-import { Button } from '@/components/ui/button';
 
 interface PPGSignalMeterProps {
   value: number;
@@ -10,19 +9,12 @@ interface PPGSignalMeterProps {
   onStartMeasurement: () => void;
   onReset: () => void;
   arrhythmiaStatus?: string;
-  respirationRate?: number;
   rawArrhythmiaData?: {
     timestamp: number;
     rmssd: number;
     rrVariation: number;
-    isPrematureBeat?: boolean;
-    confidence?: number;
   } | null;
 }
-
-// Duración máxima del historial en milisegundos (7 segundos)
-const MAX_HISTORY_DURATION = 7000;
-const MAX_BUFFER_SIZE = 800;
 
 const PPGSignalMeter = ({ 
   value, 
@@ -31,316 +23,384 @@ const PPGSignalMeter = ({
   onStartMeasurement,
   onReset,
   arrhythmiaStatus,
-  respirationRate,
   rawArrhythmiaData
 }: PPGSignalMeterProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const bufferRef = useRef<CircularBuffer>(new CircularBuffer(MAX_BUFFER_SIZE));
-  const [showArrhythmiaAlert, setShowArrhythmiaAlert] = useState(false);
-  const lastDrawTimeRef = useRef<number>(0);
-  const respirationBufferRef = useRef<number[]>([]);
-  const [arrhythmiaCount, setArrhythmiaCount] = useState(0);
+  const dataBufferRef = useRef<CircularBuffer | null>(null);
+  const baselineRef = useRef<number | null>(null);
+  const lastValueRef = useRef<number | null>(null);
+  const animationFrameRef = useRef<number>();
+  const lastRenderTimeRef = useRef<number>(0);
+  const lastArrhythmiaTime = useRef<number>(0);
+  const arrhythmiaCountRef = useRef<number>(0);
+  
+  const WINDOW_WIDTH_MS = 4000;
+  const CANVAS_WIDTH = 450;
+  const CANVAS_HEIGHT = 450;
+  const GRID_SIZE_X = 10;
+  const GRID_SIZE_Y = 10;
+  const verticalScale = 25.0;
+  const SMOOTHING_FACTOR = 0.7;
+  const TARGET_FPS = 60;
+  const FRAME_TIME = 1000 / TARGET_FPS;
+  const BUFFER_SIZE = 200;
 
-  // Efecto para detectar y actualizar arritmias
   useEffect(() => {
-    if (arrhythmiaStatus) {
-      const parts = arrhythmiaStatus.split('|');
-      if (parts.length === 2) {
-        const count = parseInt(parts[1], 10);
-        if (!isNaN(count) && count !== arrhythmiaCount) {
-          setArrhythmiaCount(count);
-          if (count > 0) {
-            setShowArrhythmiaAlert(true);
-            setTimeout(() => setShowArrhythmiaAlert(false), 2000);
+    if (!dataBufferRef.current) {
+      dataBufferRef.current = new CircularBuffer(BUFFER_SIZE);
+    }
+  }, []);
+
+  const getQualityColor = useCallback((q: number) => {
+    if (!isFingerDetected) return 'from-gray-400 to-gray-500';
+    if (q > 75) return 'from-green-500 to-emerald-500';
+    if (q > 50) return 'from-yellow-500 to-orange-500';
+    if (q > 30) return 'from-orange-500 to-red-500';
+    return 'from-red-500 to-rose-500';
+  }, [isFingerDetected]);
+
+  const getQualityText = useCallback((q: number) => {
+    if (!isFingerDetected) return 'Sin detección';
+    if (q > 75) return 'Señal óptima';
+    if (q > 50) return 'Señal aceptable';
+    if (q > 30) return 'Señal débil';
+    return 'Señal muy débil';
+  }, [isFingerDetected]);
+
+  const smoothValue = useCallback((currentValue: number, previousValue: number | null): number => {
+    if (previousValue === null) return currentValue;
+    return previousValue + SMOOTHING_FACTOR * (currentValue - previousValue);
+  }, []);
+
+  const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
+    ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    
+    ctx.fillStyle = '#f3f3f3';
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(0, 180, 120, 0.15)';
+    ctx.lineWidth = 0.5;
+
+    for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X) {
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, CANVAS_HEIGHT);
+      if (x % (GRID_SIZE_X * 4) === 0) {
+        ctx.fillStyle = 'rgba(0, 150, 100, 0.9)';
+        ctx.font = '10px Inter';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${x / 10}ms`, x, CANVAS_HEIGHT - 5);
+      }
+    }
+
+    for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y) {
+      ctx.moveTo(0, y);
+      ctx.lineTo(CANVAS_WIDTH, y);
+      if (y % (GRID_SIZE_Y * 4) === 0) {
+        const amplitude = ((CANVAS_HEIGHT / 2) - y) / verticalScale;
+        ctx.fillStyle = 'rgba(0, 150, 100, 0.9)';
+        ctx.font = '10px Inter';
+        ctx.textAlign = 'right';
+        ctx.fillText(amplitude.toFixed(1), 25, y + 4);
+      }
+    }
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(0, 150, 100, 0.25)';
+    ctx.lineWidth = 1;
+
+    for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X * 4) {
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, CANVAS_HEIGHT);
+    }
+
+    for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y * 4) {
+      ctx.moveTo(0, y);
+      ctx.lineTo(CANVAS_WIDTH, y);
+    }
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(0, 150, 100, 0.35)';
+    ctx.lineWidth = 1.5;
+    ctx.moveTo(0, CANVAS_HEIGHT * 0.6);
+    ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT * 0.6);
+    ctx.stroke();
+  }, []);
+
+  const renderSignal = useCallback(() => {
+    if (!canvasRef.current || !dataBufferRef.current) {
+      animationFrameRef.current = requestAnimationFrame(renderSignal);
+      return;
+    }
+
+    const currentTime = performance.now();
+    const timeSinceLastRender = currentTime - lastRenderTimeRef.current;
+
+    if (timeSinceLastRender < FRAME_TIME) {
+      animationFrameRef.current = requestAnimationFrame(renderSignal);
+      return;
+    }
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d', { alpha: true, desynchronized: true });
+    if (!ctx) {
+      animationFrameRef.current = requestAnimationFrame(renderSignal);
+      return;
+    }
+
+    const now = Date.now();
+    
+    if (baselineRef.current === null) {
+      baselineRef.current = value;
+    } else {
+      baselineRef.current = baselineRef.current * 0.95 + value * 0.05;
+    }
+
+    const smoothedValue = smoothValue(value, lastValueRef.current);
+    lastValueRef.current = smoothedValue;
+
+    const normalizedValue = smoothedValue - (baselineRef.current || 0);
+    const scaledValue = normalizedValue * verticalScale;
+    
+    let isArrhythmia = false;
+    if (rawArrhythmiaData && 
+        arrhythmiaStatus?.includes("ARRITMIA") && 
+        now - rawArrhythmiaData.timestamp < 1000) {
+      isArrhythmia = true;
+      lastArrhythmiaTime.current = now;
+      
+      arrhythmiaCountRef.current++;
+    }
+
+    const dataPoint: PPGDataPoint = {
+      time: now,
+      value: scaledValue,
+      isArrhythmia
+    };
+    
+    dataBufferRef.current.push(dataPoint);
+
+    drawGrid(ctx);
+
+    const points = dataBufferRef.current.getPoints();
+    if (points.length > 1) {
+      const visiblePoints = points.filter(
+        point => (now - point.time) <= WINDOW_WIDTH_MS
+      );
+      
+      if (visiblePoints.length > 1) {
+        ctx.beginPath();
+        ctx.strokeStyle = '#0EA5E9';
+        ctx.lineWidth = 2;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        
+        let firstPoint = true;
+        
+        for (let i = 0; i < visiblePoints.length; i++) {
+          const point = visiblePoints[i];
+          const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
+          const y = canvas.height * 0.6 - point.value;
+          
+          if (firstPoint) {
+            ctx.moveTo(x, y);
+            firstPoint = false;
+          } else {
+            ctx.lineTo(x, y);
+          }
+          
+          if (point.isArrhythmia && i < visiblePoints.length - 1) {
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.strokeStyle = '#DC2626';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([3, 2]);
+            ctx.moveTo(x, y);
+            
+            const nextPoint = visiblePoints[i + 1];
+            const nextX = canvas.width - ((now - nextPoint.time) * canvas.width / WINDOW_WIDTH_MS);
+            const nextY = canvas.height * 0.6 - nextPoint.value;
+            ctx.lineTo(nextX, nextY);
+            ctx.stroke();
+            
+            ctx.beginPath();
+            ctx.strokeStyle = '#0EA5E9';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([]);
+            ctx.moveTo(nextX, nextY);
+            firstPoint = false;
+          }
+        }
+        
+        ctx.stroke();
+      }
+
+      const maxPeakIndices: number[] = [];
+      
+      for (let i = 2; i < visiblePoints.length - 2; i++) {
+        const point = visiblePoints[i];
+        const prevPoint1 = visiblePoints[i - 1];
+        const prevPoint2 = visiblePoints[i - 2];
+        const nextPoint1 = visiblePoints[i + 1];
+        const nextPoint2 = visiblePoints[i + 2];
+        
+        if (point.value > prevPoint1.value && 
+            point.value > prevPoint2.value && 
+            point.value > nextPoint1.value && 
+            point.value > nextPoint2.value) {
+          
+          const peakAmplitude = Math.abs(point.value);
+          
+          if (peakAmplitude > 7.0) {
+            const peakTime = point.time;
+            const hasPeakNearby = maxPeakIndices.some(idx => {
+              const existingPeakTime = visiblePoints[idx].time;
+              return Math.abs(existingPeakTime - peakTime) < 250;
+            });
+            
+            if (!hasPeakNearby) {
+              maxPeakIndices.push(i);
+            }
           }
         }
       }
-    }
-  }, [arrhythmiaStatus, arrhythmiaCount]);
-
-  // Efecto para procesar la señal
-  useEffect(() => {
-    if (!isFingerDetected || !value) return;
-
-    const now = Date.now();
-    const isArrhythmia = rawArrhythmiaData?.isPrematureBeat || false;
-    
-    bufferRef.current.push({
-      time: now,
-      value,
-      isArrhythmia
-    });
-
-    // Actualizar buffer de respiración
-    if (respirationRate) {
-      respirationBufferRef.current.push(respirationRate);
-      if (respirationBufferRef.current.length > 60) { // 2 segundos a 30fps
-        respirationBufferRef.current.shift();
-      }
-    }
-
-    // Limitar velocidad de renderizado
-    const currentTime = performance.now();
-    if (currentTime - lastDrawTimeRef.current > 16) { // ~60 FPS
-      drawWaveform();
-      lastDrawTimeRef.current = currentTime;
-    }
-  }, [value, isFingerDetected, rawArrhythmiaData, respirationRate]);
-
-  // Limpiar buffers cuando cambia la detección del dedo
-  useEffect(() => {
-    if (!isFingerDetected) {
-      bufferRef.current.clear();
-      respirationBufferRef.current = [];
-      const canvas = canvasRef.current;
-      if (canvas) {
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-        }
-      }
-    }
-  }, [isFingerDetected]);
-
-  // Función mejorada para dibujar la forma de onda
-  const drawWaveform = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    // Ajustar tamaño del canvas
-    if (canvas.width !== canvas.clientWidth || canvas.height !== canvas.clientHeight) {
-      canvas.width = canvas.clientWidth;
-      canvas.height = canvas.clientHeight;
-    }
-
-    // Limpiar canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Dibujar fondo con gradiente
-    const gradientBg = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    gradientBg.addColorStop(0, 'rgba(0, 0, 0, 0.9)');
-    gradientBg.addColorStop(1, 'rgba(0, 0, 0, 0.95)');
-    ctx.fillStyle = gradientBg;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Dibujar cuadrícula
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-    ctx.lineWidth = 1;
-
-    // Líneas verticales
-    for (let x = 0; x < canvas.width; x += 50) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, canvas.height);
-      ctx.stroke();
-    }
-
-    // Líneas horizontales
-    for (let y = 0; y < canvas.height; y += 50) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(canvas.width, y);
-      ctx.stroke();
-    }
-
-    const points = bufferRef.current.getPoints();
-    if (points.length < 2) return;
-
-    // Filtrar puntos por tiempo
-    const now = Date.now();
-    const timeFiltered = points.filter(p => now - p.time < MAX_HISTORY_DURATION);
-    if (timeFiltered.length < 2) return;
-
-    // Encontrar min y max para escalar
-    let minValue = Number.MAX_VALUE;
-    let maxValue = Number.MIN_VALUE;
-    for (const point of timeFiltered) {
-      if (point.value < minValue) minValue = point.value;
-      if (point.value > maxValue) maxValue = point.value;
-    }
-
-    // Añadir margen
-    const range = maxValue - minValue;
-    minValue -= range * 0.2;
-    maxValue += range * 0.2;
-
-    // Dibujar línea de referencia
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(0, canvas.height / 2);
-    ctx.lineTo(canvas.width, canvas.height / 2);
-    ctx.stroke();
-
-    // Función para obtener color basado en calidad
-    const getQualityColor = (quality: number) => {
-      if (quality < 30) return 'rgba(255, 0, 0, 0.8)';
-      if (quality < 60) return 'rgba(255, 165, 0, 0.8)';
-      return 'rgba(0, 255, 0, 0.8)';
-    };
-
-    // Dibujar señal PPG con efecto de sombra
-    ctx.shadowBlur = 5;
-    ctx.shadowColor = getQualityColor(quality);
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = getQualityColor(quality);
-    ctx.beginPath();
-
-    let lastX = 0;
-    let lastY = 0;
-    let firstPoint = true;
-
-    timeFiltered.forEach((point, index) => {
-      const x = canvas.width - ((now - point.time) / MAX_HISTORY_DURATION) * canvas.width;
-      const normalizedValue = (point.value - minValue) / (maxValue - minValue);
-      const y = canvas.height - (normalizedValue * canvas.height * 0.8 + canvas.height * 0.1);
-
-      if (firstPoint) {
-        ctx.moveTo(x, y);
-        firstPoint = false;
-      } else {
-        // Curva suave entre puntos
-        const cp1x = (lastX + x) / 2;
-        const cp1y = lastY;
-        const cp2x = (lastX + x) / 2;
-        const cp2y = y;
-        ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, x, y);
-
-        // Marcar arritmias
-        if (point.isArrhythmia) {
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.arc(x, y, 4, 0, Math.PI * 2);
-          ctx.fillStyle = 'rgba(255, 0, 0, 0.9)';
-          ctx.fill();
-          ctx.beginPath();
-          ctx.moveTo(x, y);
-        }
-      }
       
-      lastX = x;
-      lastY = y;
-    });
-
-    ctx.stroke();
-
-    // Dibujar tasa respiratoria si está disponible
-    if (respirationBufferRef.current.length > 1) {
-      ctx.beginPath();
-      ctx.strokeStyle = 'rgba(0, 255, 255, 0.4)';
-      ctx.lineWidth = 1;
-      
-      const respPoints = respirationBufferRef.current;
-      const respHeight = canvas.height * 0.2; // 20% de la altura para la respiración
-      
-      respPoints.forEach((rate, index) => {
-        const x = (index / respPoints.length) * canvas.width;
-        const y = canvas.height - (rate / 30) * respHeight; // Normalizar a 30 resp/min max
+      for (let idx of maxPeakIndices) {
+        const point = visiblePoints[idx];
+        const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
+        const y = canvas.height * 0.6 - point.value;
         
-        if (index === 0) {
-          ctx.moveTo(x, y);
-        } else {
-          ctx.lineTo(x, y);
+        ctx.beginPath();
+        ctx.arc(x, y, point.isArrhythmia ? 5 : 4, 0, Math.PI * 2);
+        ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
+        ctx.fill();
+
+        ctx.font = 'bold 12px Inter';
+        ctx.fillStyle = '#666666';
+        ctx.textAlign = 'center';
+        ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 20);
+        
+        if (point.isArrhythmia) {
+          ctx.beginPath();
+          ctx.arc(x, y, 9, 0, Math.PI * 2);
+          ctx.strokeStyle = '#FFFF00';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          
+          ctx.beginPath();
+          ctx.arc(x, y, 14, 0, Math.PI * 2);
+          ctx.strokeStyle = '#FF6B6B';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([2, 2]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          
+          ctx.font = 'bold 10px Inter';
+          ctx.fillStyle = '#FF6B6B';
+          ctx.fillText("LATIDO PREMATURO", x, y - 35);
+          
+          ctx.beginPath();
+          ctx.setLineDash([2, 2]);
+          ctx.strokeStyle = 'rgba(255, 107, 107, 0.6)';
+          ctx.lineWidth = 1;
+          
+          if (idx > 0) {
+            const prevX = canvas.width - ((now - visiblePoints[idx-1].time) * canvas.width / WINDOW_WIDTH_MS);
+            const prevY = canvas.height * 0.6 - visiblePoints[idx-1].value;
+            
+            ctx.moveTo(prevX, prevY - 15);
+            ctx.lineTo(x, y - 15);
+            ctx.stroke();
+          }
+          
+          if (idx < visiblePoints.length - 1) {
+            const nextX = canvas.width - ((now - visiblePoints[idx+1].time) * canvas.width / WINDOW_WIDTH_MS);
+            const nextY = canvas.height * 0.6 - visiblePoints[idx+1].value;
+            
+            ctx.moveTo(x, y - 15);
+            ctx.lineTo(nextX, nextY - 15);
+            ctx.stroke();
+          }
+          
+          ctx.setLineDash([]);
         }
-      });
-      
-      ctx.stroke();
+      }
     }
 
-  }, [quality]);
+    lastRenderTimeRef.current = currentTime;
+    animationFrameRef.current = requestAnimationFrame(renderSignal);
+  }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus, drawGrid, smoothValue]);
 
-  // Botón de control
-  const getActionButton = () => {
-    if (!isFingerDetected) {
-      return (
-        <Button 
-          onClick={onStartMeasurement}
-          className="bg-blue-500 hover:bg-blue-600 text-white font-bold"
-        >
-          Iniciar Medición
-        </Button>
-      );
-    }
-    
-    return (
-      <Button 
-        onClick={onReset}
-        variant="destructive"
-        className="bg-red-500 hover:bg-red-600 text-white font-bold"
-      >
-        Detener
-      </Button>
-    );
-  };
+  useEffect(() => {
+    renderSignal();
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [renderSignal]);
 
   return (
-    <div className="relative rounded-xl shadow-xl overflow-hidden border border-gray-800 bg-gray-900">
-      <div className="relative h-44 w-full">
-        <canvas 
-          ref={canvasRef} 
-          className="absolute inset-0 w-full h-full"
-        />
-        
-        {/* Indicadores de estado */}
-        <div className="absolute inset-x-0 top-2 flex items-center justify-between px-4">
-          <div className="flex items-center space-x-2">
-            <div 
-              className={`h-3 w-3 rounded-full ${isFingerDetected ? 'bg-green-500' : 'bg-red-500'}`}
+    <>
+      <div className="absolute top-0 right-1 z-30 flex items-center gap-2 rounded-lg p-2"
+           style={{ top: '5px', right: '5px' }}>
+        <div className="w-[190px]">
+          <div className={`h-1.5 w-full rounded-full bg-gradient-to-r ${getQualityColor(quality)} transition-all duration-1000 ease-in-out`}>
+            <div
+              className="h-full rounded-full bg-white/20 animate-pulse transition-all duration-1000"
+              style={{ width: `${isFingerDetected ? quality : 0}%` }}
             />
-            <span className="text-xs font-medium text-white">
-              {isFingerDetected ? 'Dedo detectado' : 'Coloque su dedo en la cámara'}
-            </span>
           </div>
-          
-          {/* Indicador de calidad */}
-          <div className="flex items-center bg-black/30 px-2 py-1 rounded-full">
-            <div className="w-16 h-2 bg-gray-700 rounded-full overflow-hidden">
-              <div 
-                className={`h-full rounded-full transition-all duration-300 ${
-                  quality > 70 ? 'bg-green-500' : 
-                  quality > 40 ? 'bg-orange-500' : 
-                  'bg-red-500'
-                }`}
-                style={{ width: `${quality}%` }}
-              />
-            </div>
-            <span className="text-xs font-medium text-white ml-2">{quality}%</span>
-          </div>
+          <span className="text-[9px] text-center mt-0.5 font-medium transition-colors duration-700 block text-white" 
+                style={{ 
+                  color: quality > 75 ? '#0EA5E9' : 
+                         quality > 50 ? '#F59E0B' : 
+                         quality > 30 ? '#DC2626' : '#FF4136' 
+                }}>
+            {getQualityText(quality)}
+          </span>
         </div>
-        
-        {/* Alerta de arritmia */}
-        {showArrhythmiaAlert && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="bg-red-500/80 text-white px-4 py-2 rounded-lg shadow-lg animate-pulse">
-              ¡Arritmia Detectada!
-            </div>
-          </div>
-        )}
-        
-        {/* Contador de arritmias */}
-        {arrhythmiaCount > 0 && (
-          <div className="absolute bottom-4 right-4 bg-red-500/80 text-white px-3 py-1 rounded-full text-sm font-bold">
-            Arritmias: {arrhythmiaCount}
-          </div>
-        )}
-        
-        {/* Tasa respiratoria */}
-        {respirationRate && respirationRate > 0 && (
-          <div className="absolute bottom-4 left-4 bg-cyan-500/80 text-white px-3 py-1 rounded-full text-sm font-bold">
-            Resp: {Math.round(respirationRate)} /min
-          </div>
-        )}
+
+        <div className="flex flex-col items-center">
+          <Fingerprint
+            className={`h-12 w-12 transition-colors duration-300 ${
+              !isFingerDetected ? 'text-gray-400' :
+              quality > 75 ? 'text-green-500' :
+              quality > 50 ? 'text-yellow-500' :
+              quality > 30 ? 'text-orange-500' :
+              'text-red-500'
+            }`}
+            strokeWidth={1.5}
+          />
+          <span className={`text-[9px] text-center mt-0.5 font-medium ${
+            !isFingerDetected ? 'text-gray-400' : 
+            quality > 50 ? 'text-green-500' : 'text-yellow-500'
+          }`}>
+            {isFingerDetected ? "Dedo detectado" : "Ubique su dedo en la Lente"}
+          </span>
+        </div>
+      </div>
+
+      <div className="absolute inset-0 w-full" style={{ height: '50vh', top: 0 }}>
+        <canvas
+          ref={canvasRef}
+          width={CANVAS_WIDTH}
+          height={CANVAS_HEIGHT}
+          className="w-full h-full"
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 }}
+        />
       </div>
       
-      {/* Botones de acción */}
-      <div className="p-3 bg-black/50 flex justify-center">
-        {getActionButton()}
+      <div className="absolute" style={{ top: 'calc(50vh + 5px)', left: 0, right: 0, textAlign: 'center', zIndex: 30 }}>
+        <h1 className="text-xl font-bold">
+          <span className="text-white">Chars</span>
+          <span className="text-[#ea384c]">Healt</span>
+        </h1>
       </div>
-    </div>
+    </>
   );
 };
 
-export default React.memo(PPGSignalMeter);
+export default PPGSignalMeter;

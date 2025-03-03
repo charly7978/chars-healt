@@ -1,6 +1,8 @@
+
 import { applySMAFilter } from '../utils/signalProcessingUtils';
 import { SpO2Calculator } from './spo2';
 import { BloodPressureCalculator } from './BloodPressureCalculator';
+import { ArrhythmiaDetector } from './ArrhythmiaDetector';
 
 export class VitalSignsProcessor {
   private readonly WINDOW_SIZE = 300;
@@ -12,6 +14,7 @@ export class VitalSignsProcessor {
   // Specialized modules for each vital sign
   private spO2Calculator: SpO2Calculator;
   private bpCalculator: BloodPressureCalculator;
+  private arrhythmiaDetector: ArrhythmiaDetector;
   
   // Variables para medición real - valores iniciales basados en estadísticas médicas reales
   private lastSystolic: number = 120;
@@ -21,6 +24,7 @@ export class VitalSignsProcessor {
   constructor() {
     this.spO2Calculator = new SpO2Calculator();
     this.bpCalculator = new BloodPressureCalculator();
+    this.arrhythmiaDetector = new ArrhythmiaDetector();
   }
 
   /**
@@ -32,6 +36,23 @@ export class VitalSignsProcessor {
   ) {
     const currentTime = Date.now();
 
+    // Update RR intervals if available, passing amplitude data if available
+    if (rrData?.intervals && rrData.intervals.length > 0) {
+      // Filter outliers from RR data
+      const validIntervals = rrData.intervals.filter(interval => {
+        return interval >= 380 && interval <= 1700; // Valid for 35-158 BPM
+      });
+      
+      if (validIntervals.length > 0) {
+        // Pass peak amplitude if available to the arrhythmia detector
+        const peakAmplitude = rrData.amplitudes && rrData.amplitudes.length > 0 
+          ? rrData.amplitudes[rrData.amplitudes.length - 1] 
+          : undefined;
+        
+        this.arrhythmiaDetector.updateIntervals(validIntervals, rrData.lastPeakTime, peakAmplitude);
+      }
+    }
+
     // Process PPG signal
     const filtered = this.applySMAFilter(ppgValue);
     this.ppgValues.push(filtered);
@@ -39,11 +60,11 @@ export class VitalSignsProcessor {
       this.ppgValues.shift();
     }
 
-    // Check if we have enough data for SpO2 calculation
-    const isDataCollectionPhase = this.ppgValues.length < 60;
+    // Check learning phase
+    const isLearning = this.arrhythmiaDetector.isInLearningPhase();
     
-    // During collection phase, collect values for SpO2 calibration
-    if (isDataCollectionPhase) {
+    // During learning phase, collect values for SpO2 calibration
+    if (isLearning) {
       if (this.ppgValues.length >= 60) {
         const tempSpO2 = this.spO2Calculator.calculateRaw(this.ppgValues.slice(-60));
         if (tempSpO2 > 0) {
@@ -55,6 +76,9 @@ export class VitalSignsProcessor {
       this.spO2Calculator.calibrate();
     }
 
+    // Process arrhythmia detection - using ONLY the ArrhythmiaDetector module
+    const arrhythmiaResult = this.arrhythmiaDetector.detect();
+
     // Calculate vital signs - utilizando datos reales optimizados
     const spo2 = this.spO2Calculator.calculate(this.ppgValues.slice(-60));
     
@@ -62,9 +86,18 @@ export class VitalSignsProcessor {
     const bp = this.calculateRealBloodPressure(this.ppgValues.slice(-60));
     const pressure = `${bp.systolic}/${bp.diastolic}`;
 
+    // Prepare arrhythmia data if detected
+    const lastArrhythmiaData = arrhythmiaResult.detected ? {
+      timestamp: currentTime,
+      rmssd: arrhythmiaResult.data?.rmssd || 0,
+      rrVariation: arrhythmiaResult.data?.rrVariation || 0
+    } : null;
+
     return {
       spo2,
-      pressure
+      pressure,
+      arrhythmiaStatus: arrhythmiaResult.status,
+      lastArrhythmiaData
     };
   }
 
@@ -165,6 +198,7 @@ export class VitalSignsProcessor {
     this.lastBPM = 0;
     this.spO2Calculator.reset();
     this.bpCalculator.reset();
+    this.arrhythmiaDetector.reset();
     
     // Reiniciar mediciones reales
     this.lastSystolic = 120;
