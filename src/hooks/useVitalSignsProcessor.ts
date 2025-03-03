@@ -7,6 +7,7 @@ import { useSignalHistory } from './useSignalHistory';
 import { VitalSignsRisk } from '../utils/vitalSignsRisk';
 import { RespirationProcessor } from '../modules/RespirationProcessor';
 import { GlucoseData } from '../types/signal';
+import { GlucoseProcessor } from '../modules/GlucoseProcessor';
 
 // Constantes para el algoritmo de detección de glucosa
 const BASELINE_R_VALUE = 0.92; // Valor R de referencia para el cálculo
@@ -40,6 +41,10 @@ export const useVitalSignsProcessor = () => {
   const valleyValuesRef = useRef<number[]>([]);
   const rValueSequenceRef = useRef<number[]>([]);
   const lastGlucoseCalibrationTimestampRef = useRef<number>(0);
+  
+  // Glucose processor
+  const [glucoseProcessor] = useState(() => new GlucoseProcessor());
+  const [vitalSignsData, setVitalSignsData] = useState(null);
   
   // Inicialización del procesador
   const getProcessor = useCallback(() => {
@@ -386,12 +391,24 @@ export const useVitalSignsProcessor = () => {
     }
   }, [arrhythmiaAnalyzer, signalHistory]);
 
+  const getCurrentRespiratoryData = useCallback(() => {
+    if (!vitalSignsData) return null;
+
+    return {
+      rate: vitalSignsData.respiratoryRate,
+      pattern: vitalSignsData.respiratoryPattern,
+      confidence: vitalSignsData.respiratoryConfidence
+    };
+  }, [vitalSignsData]);
+
   return {
+    vitalSignsData,
     processSignal,
     reset,
     cleanMemory,
     calibrateGlucose,
     arrhythmiaCounter: arrhythmiaAnalyzer.arrhythmiaCounter,
-    dataCollector: dataCollector.current
+    dataCollector: dataCollector.current,
+    getCurrentRespiratoryData
   };
 };

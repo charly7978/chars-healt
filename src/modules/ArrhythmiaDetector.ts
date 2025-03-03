@@ -78,9 +78,9 @@ export class ArrhythmiaDetector {
     this.expectedNextBeatTime = 0;
     this.consecutiveNormalBeats = 0;
     
-    console.log("ArrhythmiaDetector: Reset completo");
+      console.log("ArrhythmiaDetector: Reset completo");
   }
-
+  
   /**
    * Check if in learning phase
    */
@@ -88,7 +88,7 @@ export class ArrhythmiaDetector {
     const timeSinceStart = Date.now() - this.measurementStartTime;
     return timeSinceStart <= this.ARRHYTHMIA_LEARNING_PERIOD;
   }
-
+  
   /**
    * Update learning phase status
    */
@@ -141,7 +141,7 @@ export class ArrhythmiaDetector {
       }
     }
   }
-
+  
   /**
    * NUEVO: Aprender el patrón rítmico basado en los intervalos RR
    */
@@ -167,7 +167,7 @@ export class ArrhythmiaDetector {
       }
     }
   }
-
+  
   /**
    * Update RR intervals and peak amplitudes with new data
    */
@@ -176,7 +176,7 @@ export class ArrhythmiaDetector {
     if (!intervals || intervals.length === 0) {
       return;
     }
-
+    
     const currentTime = Date.now();
     this.rrIntervals = intervals;
     this.lastPeakTime = lastPeakTime;
@@ -215,16 +215,16 @@ export class ArrhythmiaDetector {
           
           // Clasificar como normal si está cerca o por encima del promedio normal
           if (ratio >= this.NORMAL_PEAK_MIN_THRESHOLD) {
-            peakType = 'normal';
-            this.consecutiveNormalBeats++;
-          } 
+        peakType = 'normal';
+        this.consecutiveNormalBeats++;
+      } 
           // Clasificar como prematuro si es significativamente más pequeño
           else if (ratio <= this.AMPLITUDE_RATIO_THRESHOLD) {
-            peakType = 'premature';
-            this.consecutiveNormalBeats = 0;
+        peakType = 'premature';
+        this.consecutiveNormalBeats = 0;
           } else {
-            this.consecutiveNormalBeats = 0;
-          }
+          this.consecutiveNormalBeats = 0;
+        }
         }
         
         this.peakSequence.push({
@@ -397,7 +397,7 @@ export class ArrhythmiaDetector {
       
       if (this.DEBUG_MODE) {
         console.log('ArrhythmiaDetector - NUEVA ARRITMIA CONTABILIZADA:', {
-          count: this.arrhythmiaCount,
+        count: this.arrhythmiaCount,
           timestamp: currentTime,
           confidence: detectionConfidence,
           amplitudes: this.amplitudes.slice(-5),
