@@ -1,7 +1,4 @@
 
-// This file doesn't exist in the provided code, but we need to update it to include glucose processing
-// Creating a minimal version based on references in other files
-
 import { GlucoseEstimator } from './GlucoseEstimator';
 import { BloodGlucoseData } from '../types/signal';
 
@@ -10,6 +7,8 @@ export class VitalSignsProcessor {
   private spo2History: number[] = [];
   private glucoseEstimator: GlucoseEstimator;
   private isFingerDetected = false;
+  private lastProcessTime = 0;
+  private processingInterval = 50; // Process every 50ms to avoid excessive calculations
 
   constructor() {
     this.glucoseEstimator = new GlucoseEstimator();
@@ -33,8 +32,24 @@ export class VitalSignsProcessor {
       amplitudes?: number[] 
     }
   ) {
-    // Calculate if finger is detected
+    // Throttle processing to avoid excessive calculations
+    const currentTime = Date.now();
+    if (currentTime - this.lastProcessTime < this.processingInterval) {
+      return null; // Skip processing if called too frequently
+    }
+    this.lastProcessTime = currentTime;
+    
+    // Calculate if finger is detected - more strict threshold
     this.isFingerDetected = Math.abs(value) > 0.5;
+    
+    // Only process when finger is detected to avoid false readings
+    if (!this.isFingerDetected) {
+      return {
+        spo2: 0,
+        pressure: "--/--",
+        glucose: null
+      };
+    }
     
     // Process blood glucose estimation directly from PPG signal
     this.glucoseEstimator.processPpg(value, this.isFingerDetected);
@@ -110,5 +125,6 @@ export class VitalSignsProcessor {
     this.spo2History = [];
     this.glucoseEstimator.reset();
     this.isFingerDetected = false;
+    this.lastProcessTime = 0;
   }
 }

@@ -20,6 +20,10 @@ export const useVitalSignsProcessor = () => {
   const signalHistory = useSignalHistory();
   const respirationProcessorRef = useRef<RespirationProcessor | null>(null);
   
+  // Add throttling to prevent excessive processing
+  const lastProcessTimeRef = useRef<number>(0);
+  const throttleInterval = 50; // ms
+  
   /**
    * Lazy initialization of the VitalSignsProcessor
    */
@@ -46,9 +50,15 @@ export const useVitalSignsProcessor = () => {
    * Process a new signal value and update all vitals
    */
   const processSignal = useCallback((value: number, rrData?: { intervals: number[], lastPeakTime: number | null, amplitudes?: number[] }) => {
+    // Add throttling to prevent excessive processing
+    const currentTime = Date.now();
+    if (currentTime - lastProcessTimeRef.current < throttleInterval) {
+      return null; // Skip processing if called too frequently
+    }
+    lastProcessTimeRef.current = currentTime;
+    
     const processor = getProcessor();
     const respirationProcessor = getRespirationProcessor();
-    const currentTime = Date.now();
     
     // Store data for analysis
     signalHistory.addSignal(value);
@@ -82,6 +92,9 @@ export const useVitalSignsProcessor = () => {
     
     // Get base results from the core processor
     const result = processor.processSignal(value, rrData);
+    
+    // If result is null (throttled), return previous state
+    if (!result) return null;
     
     // Procesar datos respiratorios
     const respirationResult = respirationProcessor.processSignal(value, peakAmplitude);
@@ -181,6 +194,7 @@ export const useVitalSignsProcessor = () => {
     }
     
     VitalSignsRisk.resetHistory();
+    lastProcessTimeRef.current = 0;
     
     console.log("Reseteo de detección de arritmias, presión arterial y respiración");
   }, [arrhythmiaAnalyzer, signalHistory]);
@@ -209,6 +223,7 @@ export const useVitalSignsProcessor = () => {
     }
     
     VitalSignsRisk.resetHistory();
+    lastProcessTimeRef.current = 0;
     
     // Force garbage collection if available
     if (window.gc) {
