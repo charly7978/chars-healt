@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
-import { CircularBuffer, PPGBuffer, PPGDataPoint } from '../utils/CircularBuffer';
+import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
 
 interface PPGSignalMeterProps {
   value: number;
@@ -26,7 +26,7 @@ const PPGSignalMeter = ({
   rawArrhythmiaData
 }: PPGSignalMeterProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const dataBufferRef = useRef<PPGBuffer | null>(null);
+  const dataBufferRef = useRef<CircularBuffer | null>(null);
   const baselineRef = useRef<number | null>(null);
   const lastValueRef = useRef<number | null>(null);
   const animationFrameRef = useRef<number>();
@@ -47,7 +47,7 @@ const PPGSignalMeter = ({
 
   useEffect(() => {
     if (!dataBufferRef.current) {
-      dataBufferRef.current = new PPGBuffer(BUFFER_SIZE);
+      dataBufferRef.current = new CircularBuffer(BUFFER_SIZE);
     }
   }, []);
 

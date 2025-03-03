@@ -20,33 +20,13 @@ export const useVitalSignsProcessor = () => {
   const signalHistory = useSignalHistory();
   const respirationProcessorRef = useRef<RespirationProcessor | null>(null);
   
-  // Add throttling to prevent excessive processing
-  const lastProcessTimeRef = useRef<number>(0);
-  const throttleInterval = 100; // Increased to 100ms
-  
-  // Track initialization status
-  const initializedRef = useRef<boolean>(false);
-  const consecutiveErrorsRef = useRef<number>(0);
-  
   /**
    * Lazy initialization of the VitalSignsProcessor
    */
   const getProcessor = useCallback(() => {
     if (!processorRef.current) {
-      console.log('useVitalSignsProcessor: Creating new instance');
-      try {
-        processorRef.current = new VitalSignsProcessor();
-        initializedRef.current = true;
-        consecutiveErrorsRef.current = 0;
-      } catch (error) {
-        console.error('useVitalSignsProcessor: Error creating processor:', error);
-        consecutiveErrorsRef.current++;
-        // If we've had multiple consecutive errors, force a complete reset
-        if (consecutiveErrorsRef.current > 3) {
-          reset();
-          return null;
-        }
-      }
+      console.log('useVitalSignsProcessor: Creando nueva instancia');
+      processorRef.current = new VitalSignsProcessor();
     }
     return processorRef.current;
   }, []);
@@ -56,13 +36,8 @@ export const useVitalSignsProcessor = () => {
    */
   const getRespirationProcessor = useCallback(() => {
     if (!respirationProcessorRef.current) {
-      console.log('useVitalSignsProcessor: Creating RespirationProcessor instance');
-      try {
-        respirationProcessorRef.current = new RespirationProcessor();
-      } catch (error) {
-        console.error('useVitalSignsProcessor: Error creating respiration processor:', error);
-        return null;
-      }
+      console.log('useVitalSignsProcessor: Creando instancia de RespirationProcessor');
+      respirationProcessorRef.current = new RespirationProcessor();
     }
     return respirationProcessorRef.current;
   }, []);
@@ -71,321 +46,172 @@ export const useVitalSignsProcessor = () => {
    * Process a new signal value and update all vitals
    */
   const processSignal = useCallback((value: number, rrData?: { intervals: number[], lastPeakTime: number | null, amplitudes?: number[] }) => {
-    // Add throttling to prevent excessive processing
+    const processor = getProcessor();
+    const respirationProcessor = getRespirationProcessor();
     const currentTime = Date.now();
-    if (currentTime - lastProcessTimeRef.current < throttleInterval) {
-      return null; // Skip processing if called too frequently
+    
+    // Store data for analysis
+    signalHistory.addSignal(value);
+    
+    let peakAmplitude: number | undefined;
+    
+    if (rrData) {
+      signalHistory.addRRData(rrData);
+      
+      // Obtener amplitud del pico si está disponible para análisis respiratorio
+      if (rrData.amplitudes && rrData.amplitudes.length > 0) {
+        peakAmplitude = rrData.amplitudes[rrData.amplitudes.length - 1];
+      }
+      
+      // Smoothing BPM here
+      if (rrData.intervals && rrData.intervals.length > 0) {
+        // Calculate raw BPM from intervals
+        const avgInterval = rrData.intervals.reduce((sum, val) => sum + val, 0) / rrData.intervals.length;
+        const rawBPM = Math.round(60000 / avgInterval);
+        
+        // Apply smoothing through processor
+        const smoothedBPM = processor.smoothBPM(rawBPM);
+        
+        // Replace first interval with smoothed value to propagate to heart rate display
+        if (rrData.intervals.length > 0 && smoothedBPM > 0) {
+          const newInterval = Math.round(60000 / smoothedBPM);
+          rrData.intervals[0] = newInterval;
+        }
+      }
     }
     
-    try {
-      if (!initializedRef.current) {
-        getProcessor(); // Ensure processor is initialized
-        // If initialization failed, return null
-        if (!processorRef.current) {
-          console.error('useVitalSignsProcessor: Processor initialization failed');
-          return null;
-        }
-      }
+    // Get base results from the core processor
+    const result = processor.processSignal(value, rrData);
+    
+    // Procesar datos respiratorios
+    const respirationResult = respirationProcessor.processSignal(value, peakAmplitude);
+    
+    // Stabilize blood pressure
+    const signalQuality = signalHistory.getSignalQuality();
+    const stabilizedBP = bloodPressureStabilizer.current.stabilizeBloodPressure(result.pressure, signalQuality);
+    
+    // Collect data for final averages
+    if (result.spo2 > 0) {
+      dataCollector.current.addSpO2(result.spo2);
+    }
+    
+    if (stabilizedBP !== "--/--" && stabilizedBP !== "0/0") {
+      dataCollector.current.addBloodPressure(stabilizedBP);
+    }
+    
+    if (respirationResult.rate > 0) {
+      dataCollector.current.addRespirationRate(respirationResult.rate);
+    }
+    
+    if (respirationResult.depth > 0) {
+      dataCollector.current.addRespirationDepth(respirationResult.depth);
+    }
+    
+    // Add glucose data to collector
+    if (result.glucose && result.glucose.value > 0) {
+      dataCollector.current.addBloodGlucose(result.glucose);
+    }
+    
+    // Advanced arrhythmia analysis - asegurarse de pasar los datos de amplitud si están disponibles
+    if (rrData?.intervals && rrData.intervals.length >= 4) {
+      // Asegurarse de pasar los datos de amplitud al analizador de arritmias si están disponibles
+      const arrhythmiaResult = arrhythmiaAnalyzer.processArrhythmia(rrData);
       
-      lastProcessTimeRef.current = currentTime;
-      
-      const processor = getProcessor();
-      if (!processor) {
-        console.error('useVitalSignsProcessor: Failed to get processor');
-        return null;
-      }
-      
-      const respirationProcessor = getRespirationProcessor();
-      if (!respirationProcessor) {
-        console.warn('useVitalSignsProcessor: Failed to get respiration processor');
-        // Continue anyway as respiration is not critical
-      }
-      
-      // Validate signal value
-      if (isNaN(value) || !isFinite(value)) {
-        console.error('useVitalSignsProcessor: Invalid signal value received:', value);
-        return null;
-      }
-      
-      // Store data for analysis
-      signalHistory.addSignal(value);
-      
-      let peakAmplitude: number | undefined;
-      
-      if (rrData) {
-        // Validate RR data
-        if (rrData.intervals && Array.isArray(rrData.intervals)) {
-          signalHistory.addRRData(rrData);
-          
-          // Get peak amplitude if available for respiratory analysis
-          if (rrData.amplitudes && rrData.amplitudes.length > 0) {
-            peakAmplitude = rrData.amplitudes[rrData.amplitudes.length - 1];
-          }
-          
-          // Smoothing BPM here
-          if (rrData.intervals.length > 0) {
-            // Calculate raw BPM from intervals
-            const validIntervals = rrData.intervals.filter(i => i > 200 && i < 2000);
-            if (validIntervals.length > 0) {
-              const avgInterval = validIntervals.reduce((sum, val) => sum + val, 0) / validIntervals.length;
-              const rawBPM = Math.round(60000 / avgInterval);
-              
-              // Apply smoothing through processor
-              if (rawBPM > 40 && rawBPM < 200) {
-                const smoothedBPM = processor.smoothBPM(rawBPM);
-                
-                // Replace first interval with smoothed value to propagate to heart rate display
-                if (smoothedBPM > 0 && validIntervals.length > 0) {
-                  const newInterval = Math.round(60000 / smoothedBPM);
-                  validIntervals[0] = newInterval;
-                }
-              }
-            }
-          }
-        } else {
-          console.warn('useVitalSignsProcessor: Invalid RR data:', rrData);
-        }
-      }
-      
-      // Get base results from the core processor
-      const result = processor.processSignal(value, rrData);
-      
-      // If result is null (throttled), return previous state
-      if (!result) {
-        return null;
-      }
-      
-      // Process respiratory data if processor exists
-      let respirationResult = { rate: 0, depth: 0, regularity: 0 };
-      if (respirationProcessor) {
-        try {
-          respirationResult = respirationProcessor.processSignal(value, peakAmplitude);
-        } catch (error) {
-          console.error('useVitalSignsProcessor: Error processing respiration:', error);
-          respirationResult = { rate: 0, depth: 0, regularity: 0 };
-        }
-      }
-      
-      // Stabilize blood pressure
-      const signalQuality = signalHistory.getSignalQuality();
-      const stabilizedBP = bloodPressureStabilizer.current.stabilizeBloodPressure(result.pressure, signalQuality);
-      
-      // Collect data for final averages
-      if (result.spo2 > 0) {
-        dataCollector.current.addSpO2(result.spo2);
-      }
-      
-      if (stabilizedBP !== "--/--" && stabilizedBP !== "0/0") {
-        dataCollector.current.addBloodPressure(stabilizedBP);
-      }
-      
-      if (respirationResult.rate > 0) {
-        dataCollector.current.addRespirationRate(respirationResult.rate);
-      }
-      
-      if (respirationResult.depth > 0) {
-        dataCollector.current.addRespirationDepth(respirationResult.depth);
-      }
-      
-      // Add glucose data to collector
-      if (result.glucose && result.glucose.value > 0) {
-        dataCollector.current.addBloodGlucose(result.glucose);
-      }
-      
-      // Advanced arrhythmia analysis - ensure amplitude data is passed if available
-      if (rrData?.intervals && rrData.intervals.length >= 4) {
-        // Pass amplitude data to arrhythmia analyzer if available
-        const arrhythmiaResult = arrhythmiaAnalyzer.processArrhythmia(rrData);
-        
-        const glucoseValue = result.glucose?.value || 0;
-        const glucoseTrend = result.glucose?.trend || 'stable';
-        const glucoseConfidence = result.glucose?.confidence || 0;
-        
-        const hasRespirationData = respirationProcessor?.hasValidData() || false;
-        
-        if (arrhythmiaResult.detected) {
-          return {
-            spo2: result.spo2,
-            pressure: stabilizedBP,
-            arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus,
-            lastArrhythmiaData: arrhythmiaResult.lastArrhythmiaData,
-            respiration: respirationResult,
-            hasRespirationData,
-            glucose: glucoseValue,
-            glucoseTrend,
-            glucoseConfidence
-          };
-        }
-        
+      if (arrhythmiaResult.detected) {
         return {
           spo2: result.spo2,
           pressure: stabilizedBP,
           arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus,
+          lastArrhythmiaData: arrhythmiaResult.lastArrhythmiaData,
           respiration: respirationResult,
-          hasRespirationData,
-          glucose: glucoseValue,
-          glucoseTrend,
-          glucoseConfidence
+          hasRespirationData: respirationProcessor.hasValidData(),
+          glucose: result.glucose?.value || 0,
+          glucoseTrend: result.glucose?.trend || 'stable',
+          glucoseConfidence: result.glucose?.confidence || 0
         };
       }
-      
-      // If we've already analyzed arrhythmias before, use the last status
-      const arrhythmiaStatus = `SIN ARRITMIAS|${arrhythmiaAnalyzer.arrhythmiaCounter}`;
-      const hasRespirationData = respirationProcessor?.hasValidData() || false;
       
       return {
         spo2: result.spo2,
         pressure: stabilizedBP,
-        arrhythmiaStatus,
+        arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus,
         respiration: respirationResult,
-        hasRespirationData,
+        hasRespirationData: respirationProcessor.hasValidData(),
         glucose: result.glucose?.value || 0,
         glucoseTrend: result.glucose?.trend || 'stable',
         glucoseConfidence: result.glucose?.confidence || 0
       };
-    } catch (error) {
-      console.error('useVitalSignsProcessor: Error processing signal:', error);
-      consecutiveErrorsRef.current++;
-      
-      // If we have too many consecutive errors, force a reset
-      if (consecutiveErrorsRef.current > 5) {
-        console.warn('useVitalSignsProcessor: Too many consecutive errors, forcing reset');
-        reset();
-      }
-      
-      return null;
     }
+    
+    // Si ya analizamos arritmias antes, usar el último estado
+    const arrhythmiaStatus = `SIN ARRITMIAS|${arrhythmiaAnalyzer.arrhythmiaCounter}`;
+    
+    return {
+      spo2: result.spo2,
+      pressure: stabilizedBP,
+      arrhythmiaStatus,
+      respiration: respirationResult,
+      hasRespirationData: respirationProcessor.hasValidData(),
+      glucose: result.glucose?.value || 0,
+      glucoseTrend: result.glucose?.trend || 'stable',
+      glucoseConfidence: result.glucose?.confidence || 0
+    };
   }, [getProcessor, getRespirationProcessor, arrhythmiaAnalyzer, signalHistory]);
 
   /**
    * Reset all processors
    */
   const reset = useCallback(() => {
-    console.log('useVitalSignsProcessor: Resetting all processors');
     if (processorRef.current) {
-      try {
-        processorRef.current.reset();
-      } catch (error) {
-        console.error('useVitalSignsProcessor: Error resetting processor:', error);
-        processorRef.current = null;
-      }
+      processorRef.current.reset();
     }
-    
-    if (!processorRef.current) {
-      try {
-        processorRef.current = new VitalSignsProcessor();
-      } catch (error) {
-        console.error('useVitalSignsProcessor: Error creating processor during reset:', error);
-      }
-    }
-    
-    initializedRef.current = processorRef.current !== null;
-    consecutiveErrorsRef.current = 0;
     
     // Reset all specialized modules
-    try {
-      arrhythmiaAnalyzer.reset();
-    } catch (error) {
-      console.error('useVitalSignsProcessor: Error resetting arrhythmia analyzer:', error);
-    }
-    
-    try {
-      bloodPressureStabilizer.current.reset();
-    } catch (error) {
-      console.error('useVitalSignsProcessor: Error resetting blood pressure stabilizer:', error);
-    }
-    
-    try {
-      dataCollector.current.reset();
-    } catch (error) {
-      console.error('useVitalSignsProcessor: Error resetting data collector:', error);
-    }
-    
-    try {
-      signalHistory.reset();
-    } catch (error) {
-      console.error('useVitalSignsProcessor: Error resetting signal history:', error);
-    }
+    arrhythmiaAnalyzer.reset();
+    bloodPressureStabilizer.current.reset();
+    dataCollector.current.reset();
+    signalHistory.reset();
     
     if (respirationProcessorRef.current) {
-      try {
-        respirationProcessorRef.current.reset();
-      } catch (error) {
-        console.error('useVitalSignsProcessor: Error resetting respiration processor:', error);
-        respirationProcessorRef.current = null;
-      }
+      respirationProcessorRef.current.reset();
     }
     
-    if (!respirationProcessorRef.current) {
-      try {
-        respirationProcessorRef.current = new RespirationProcessor();
-      } catch (error) {
-        console.error('useVitalSignsProcessor: Error creating respiration processor during reset:', error);
-      }
-    }
+    VitalSignsRisk.resetHistory();
     
-    try {
-      VitalSignsRisk.resetHistory();
-    } catch (error) {
-      console.error('useVitalSignsProcessor: Error resetting VitalSignsRisk:', error);
-    }
-    
-    lastProcessTimeRef.current = 0;
-    
-    console.log("Reset of arrhythmia detection, blood pressure, and respiration complete");
+    console.log("Reseteo de detección de arritmias, presión arterial y respiración");
   }, [arrhythmiaAnalyzer, signalHistory]);
   
   /**
    * Aggressive memory cleanup
    */
   const cleanMemory = useCallback(() => {
-    console.log("useVitalSignsProcessor: Aggressive memory cleanup");
+    console.log("useVitalSignsProcessor: Limpieza agresiva de memoria");
     
     // Destroy current processor and create a new one
     if (processorRef.current) {
-      try {
-        processorRef.current.reset();
-      } catch (error) {
-        console.error('useVitalSignsProcessor: Error resetting processor during cleanup:', error);
-      }
-      processorRef.current = null;
+      processorRef.current.reset();
+      processorRef.current = new VitalSignsProcessor();
     }
-    initializedRef.current = false;
-    consecutiveErrorsRef.current = 0;
     
     // Reset all specialized modules
-    try {
-      arrhythmiaAnalyzer.reset();
-      bloodPressureStabilizer.current.reset();
-      dataCollector.current.reset();
-      signalHistory.reset();
-    } catch (error) {
-      console.error('useVitalSignsProcessor: Error resetting modules during cleanup:', error);
-    }
+    arrhythmiaAnalyzer.reset();
+    bloodPressureStabilizer.current.reset();
+    dataCollector.current.reset();
+    signalHistory.reset();
     
     if (respirationProcessorRef.current) {
-      try {
-        respirationProcessorRef.current.reset();
-      } catch (error) {
-        console.error('useVitalSignsProcessor: Error resetting respiration processor during cleanup:', error);
-      }
+      respirationProcessorRef.current.reset();
       respirationProcessorRef.current = null;
     }
     
-    try {
-      VitalSignsRisk.resetHistory();
-    } catch (error) {
-      console.error('useVitalSignsProcessor: Error resetting VitalSignsRisk during cleanup:', error);
-    }
-    
-    lastProcessTimeRef.current = 0;
+    VitalSignsRisk.resetHistory();
     
     // Force garbage collection if available
     if (window.gc) {
       try {
         window.gc();
       } catch (e) {
-        console.log("GC not available in this environment");
+        console.log("GC no disponible en este entorno");
       }
     }
   }, [arrhythmiaAnalyzer, signalHistory]);

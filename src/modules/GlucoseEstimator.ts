@@ -28,7 +28,6 @@ export class GlucoseEstimator {
   private personalBaseline: number = 0;
   private personalVariability: number = 0;
   private dailyPattern: Map<number, number> = new Map(); // Hour -> avg glucose
-  private hasValidData = false;
   
   // Parameters for glucose estimation model
   private readonly BASE_GLUCOSE = 95; // mg/dL
@@ -104,18 +103,8 @@ export class GlucoseEstimator {
   /**
    * Process a PPG value and update the model
    */
-  public processPpg(ppgValue: number, isFingerDetected: boolean): void {
-    if (!isFingerDetected) {
-      this.hasValidData = false;
-      return;
-    }
-    
+  public processPpg(ppgValue: number): void {
     this.ppgBuffer.push(ppgValue);
-    
-    // Only mark as having valid data if we have enough signal samples
-    if (this.ppgBuffer.size() >= 100) {
-      this.hasValidData = true;
-    }
   }
   
   /**
@@ -161,23 +150,10 @@ export class GlucoseEstimator {
   }
   
   /**
-   * Check if there's enough data to estimate glucose
-   */
-  public hasValidGlucoseData(): boolean {
-    return this.hasValidData && this.ppgBuffer.size() >= 100;
-  }
-  
-  /**
    * Estimate current blood glucose level
    */
-  public estimateGlucose(respirationRate?: number, respirationDepth?: number): BloodGlucoseData | null {
+  public estimateGlucose(respirationRate?: number, respirationDepth?: number): BloodGlucoseData {
     const currentTime = Date.now();
-    
-    // Return null if there's not enough data
-    if (!this.hasValidData || this.ppgBuffer.size() < 100) {
-      return null;
-    }
-    
     const hourOfDay = new Date().getHours();
     
     // Get baseline from daily pattern
@@ -233,19 +209,21 @@ export class GlucoseEstimator {
     
     // PPG signal features - analyze waveform characteristics
     let ppgFactor = 0;
-    const ppgValues = this.ppgBuffer.getValues();
-    
-    // Calculate amplitude variation
-    const max = Math.max(...ppgValues);
-    const min = Math.min(...ppgValues);
-    const amplitude = max - min;
-    
-    // Calculate area under curve (simplified)
-    const mean = ppgValues.reduce((sum, val) => sum + val, 0) / ppgValues.length;
-    const areaFactor = (mean / 100) * 5;
-    
-    // PPG morphology factor
-    ppgFactor = (amplitude / 200) * 8 + areaFactor;
+    if (this.ppgBuffer.size() > 50) {
+      const ppgValues = this.ppgBuffer.getValues();
+      
+      // Calculate amplitude variation
+      const max = Math.max(...ppgValues);
+      const min = Math.min(...ppgValues);
+      const amplitude = max - min;
+      
+      // Calculate area under curve (simplified)
+      const mean = ppgValues.reduce((sum, val) => sum + val, 0) / ppgValues.length;
+      const areaFactor = (mean / 100) * 5;
+      
+      // PPG morphology factor
+      ppgFactor = (amplitude / 200) * 8 + areaFactor;
+    }
     
     // Combine all factors
     let glucoseEstimate = timeBaseline + 
@@ -311,7 +289,6 @@ export class GlucoseEstimator {
     this.lastBpms = [];
     this.glucoseHistory = [];
     this.lastMealTime = Date.now() - 7200000; // 2 hours ago
-    this.hasValidData = false;
     this.initializePersonalBaseline();
   }
 }
