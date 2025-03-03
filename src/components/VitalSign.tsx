@@ -24,7 +24,6 @@ const VitalSign: React.FC<VitalSignProps> = ({
   const isArrhythmiaDisplay = label === "ARRITMIAS";
   const isBloodPressure = label === "PRESIÓN ARTERIAL";
   const isRespiration = label === "RESPIRACIÓN";
-  const isGlucose = label === "GLUCOSA";
 
   // Helper function to check if blood pressure value is unrealistic
   const isBloodPressureUnrealistic = (bpString: string): boolean => {
@@ -93,16 +92,6 @@ const VitalSign: React.FC<VitalSignProps> = ({
       }
     }
 
-    // For glucose, show real value and check risk level
-    if (isGlucose) {
-      if (value === "--" || value === 0) {
-        return { color: '#000000', label: '' };
-      }
-      if (typeof value === 'number') {
-        return getGlucoseRiskDisplay(value);
-      }
-    }
-
     // For respiration rate
     if (isRespiration) {
       if (value === "--" || value === 0) {
@@ -138,17 +127,6 @@ const VitalSign: React.FC<VitalSignProps> = ({
     if (rate <= 20) return { color: '#22C55E', label: 'NORMAL' };
     if (rate <= 25) return { color: '#F97316', label: 'LEVE TAQUIPNEA' };
     return { color: '#DC2626', label: 'TAQUIPNEA' };
-  };
-
-  // Nueva función para evaluar riesgo de glucosa
-  const getGlucoseRiskDisplay = (glucose: number) => {
-    // Valores basados en directrices médicas estándar
-    if (glucose < 70) return { color: '#DC2626', label: 'HIPOGLUCEMIA' };
-    if (glucose <= 100) return { color: '#22C55E', label: 'NORMAL' };
-    if (glucose <= 125) return { color: '#F97316', label: 'PREDIABETES' };
-    if (glucose <= 180) return { color: '#F97316', label: 'HIPERGLUCEMIA LEVE' };
-    if (glucose <= 240) return { color: '#DC2626', label: 'HIPERGLUCEMIA MODERADA' };
-    return { color: '#7C3AED', label: 'HIPERGLUCEMIA SEVERA' };
   };
   
   const getArrhythmiaRiskColor = (count: number): string => {
@@ -232,7 +210,6 @@ const VitalSign: React.FC<VitalSignProps> = ({
     if (label === "PRESIÓN ARTERIAL") return "bloodPressure";
     if (label === "ARRITMIAS") return "arrhythmia";
     if (label === "RESPIRACIÓN") return "respiration";
-    if (label === "GLUCOSA") return "glucose";
     return "heartRate"; // Default
   };
 

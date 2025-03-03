@@ -45,13 +45,6 @@ export interface HeartBeatResult {
   amplitude?: number;
 }
 
-export interface BloodGlucoseData {
-  value: number;     // mg/dL
-  trend: 'rising' | 'falling' | 'stable';
-  timestamp: number;
-  confidence: number; // 0-1 confidence level
-}
-
 declare global {
   interface Window {
     heartBeatProcessor: HeartBeatProcessor;

@@ -3,8 +3,6 @@ import { applySMAFilter } from '../utils/signalProcessingUtils';
 import { SpO2Calculator } from './spo2';
 import { BloodPressureCalculator } from './BloodPressureCalculator';
 import { ArrhythmiaDetector } from './ArrhythmiaDetector';
-import { GlucoseEstimator } from './GlucoseEstimator';
-import { BloodGlucoseData } from '../types/signal';
 
 export class VitalSignsProcessor {
   private readonly WINDOW_SIZE = 300;
@@ -17,7 +15,6 @@ export class VitalSignsProcessor {
   private spO2Calculator: SpO2Calculator;
   private bpCalculator: BloodPressureCalculator;
   private arrhythmiaDetector: ArrhythmiaDetector;
-  private glucoseEstimator: GlucoseEstimator;
   
   // Variables para medición real - valores iniciales basados en estadísticas médicas reales
   private lastSystolic: number = 120;
@@ -28,7 +25,6 @@ export class VitalSignsProcessor {
     this.spO2Calculator = new SpO2Calculator();
     this.bpCalculator = new BloodPressureCalculator();
     this.arrhythmiaDetector = new ArrhythmiaDetector();
-    this.glucoseEstimator = new GlucoseEstimator();
   }
 
   /**
@@ -63,9 +59,6 @@ export class VitalSignsProcessor {
     if (this.ppgValues.length > this.WINDOW_SIZE) {
       this.ppgValues.shift();
     }
-    
-    // Update glucose estimator with PPG data
-    this.glucoseEstimator.processPpg(filtered);
 
     // Check learning phase
     const isLearning = this.arrhythmiaDetector.isInLearningPhase();
@@ -85,35 +78,13 @@ export class VitalSignsProcessor {
 
     // Process arrhythmia detection - using ONLY the ArrhythmiaDetector module
     const arrhythmiaResult = this.arrhythmiaDetector.detect();
-    
-    // Update glucose estimator with HRV data if available
-    if (arrhythmiaResult.data?.rmssd) {
-      this.glucoseEstimator.updateHrv(arrhythmiaResult.data.rmssd);
-    }
 
     // Calculate vital signs - utilizando datos reales optimizados
     const spo2 = this.spO2Calculator.calculate(this.ppgValues.slice(-60));
     
-    // Update glucose estimator with SPO2
-    if (spo2 > 0) {
-      this.glucoseEstimator.updateSpo2(spo2);
-    }
-    
     // Calcular presión arterial usando valores reales
     const bp = this.calculateRealBloodPressure(this.ppgValues.slice(-60));
     const pressure = `${bp.systolic}/${bp.diastolic}`;
-    
-    // Calculate heart rate from RR intervals if available
-    let currentBpm = 0;
-    if (rrData?.intervals && rrData.intervals.length > 0) {
-      const avgInterval = rrData.intervals.reduce((sum, val) => sum + val, 0) / rrData.intervals.length;
-      currentBpm = Math.round(60000 / avgInterval);
-      
-      // Update glucose estimator with heart rate
-      if (currentBpm > 0) {
-        this.glucoseEstimator.updateHeartRate(currentBpm);
-      }
-    }
 
     // Prepare arrhythmia data if detected
     const lastArrhythmiaData = arrhythmiaResult.detected ? {
@@ -121,16 +92,12 @@ export class VitalSignsProcessor {
       rmssd: arrhythmiaResult.data?.rmssd || 0,
       rrVariation: arrhythmiaResult.data?.rrVariation || 0
     } : null;
-    
-    // Estimate blood glucose using biometric data
-    const glucoseData = this.glucoseEstimator.estimateGlucose();
 
     return {
       spo2,
       pressure,
       arrhythmiaStatus: arrhythmiaResult.status,
-      lastArrhythmiaData,
-      glucose: glucoseData
+      lastArrhythmiaData
     };
   }
 
@@ -232,7 +199,6 @@ export class VitalSignsProcessor {
     this.spO2Calculator.reset();
     this.bpCalculator.reset();
     this.arrhythmiaDetector.reset();
-    this.glucoseEstimator.reset();
     
     // Reiniciar mediciones reales
     this.lastSystolic = 120;
