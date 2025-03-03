@@ -1,27 +1,29 @@
-
 export class HeartBeatProcessor {
   // ────────── CONFIGURACIONES PRINCIPALES ──────────
   private readonly SAMPLE_RATE = 30;
   private readonly WINDOW_SIZE = 60;
   private readonly MIN_BPM = 40;
   private readonly MAX_BPM = 200; // Se mantiene amplio para no perder picos fuera de rango
-  private readonly SIGNAL_THRESHOLD = 0.45; // Increased from 0.40 for better peak detection
-  private readonly MIN_CONFIDENCE = 0.65; // Increased from 0.60 for higher certainty
-  private readonly DERIVATIVE_THRESHOLD = -0.04; // Changed from -0.03 for better sensitivity
+  
+  // CALIBRACIÓN MEJORADA: Ajustados umbrales para detección más precisa
+  private readonly SIGNAL_THRESHOLD = 0.35;   // Reducido para mayor sensibilidad
+  private readonly MIN_CONFIDENCE = 0.55;     // Ajustado para mejor detección
+  private readonly DERIVATIVE_THRESHOLD = 0.045; // Aumentado para mejor detección de pendiente 
+  
   private readonly MIN_PEAK_TIME_MS = 400; 
   private readonly WARMUP_TIME_MS = 3000; 
 
   // Parámetros de filtrado
   private readonly MEDIAN_FILTER_WINDOW = 3; 
-  private readonly MOVING_AVERAGE_WINDOW = 5; // Increased from 3 to reduce noise
-  private readonly EMA_ALPHA = 0.4; 
-  private readonly BASELINE_FACTOR = 1.0; 
+  private readonly MOVING_AVERAGE_WINDOW = 4; // Increased from 3 to reduce noise
+  private readonly EMA_ALPHA = 0.35; 
+  private readonly BASELINE_FACTOR = 0.98; 
 
   // Parámetros de beep
   private readonly BEEP_PRIMARY_FREQUENCY = 880; 
   private readonly BEEP_SECONDARY_FREQUENCY = 440; 
   private readonly BEEP_DURATION = 80; 
-  private readonly BEEP_VOLUME = 0.9; 
+  private readonly BEEP_VOLUME = 0.7; 
   private readonly MIN_BEEP_INTERVAL_MS = 300;
 
   // ────────── AUTO-RESET SI LA SEÑAL ES MUY BAJA ──────────
@@ -49,20 +51,54 @@ export class HeartBeatProcessor {
   private readonly BPM_ALPHA = 0.2;
   private peakCandidateIndex: number | null = null;
   private peakCandidateValue: number = 0;
+  
+  // NUEVO: Para calibración mejorada de picos
+  private derivativeBuffer: number[] = [];
+  private readonly DERIVATIVE_BUFFER_SIZE = 5;
+  private isRisingEdge: boolean = false;
+  private risingEdgeStartTime: number = 0;
+  private peakAmplitudes: number[] = [];
+  private readonly MAX_AMPLITUDE_HISTORY = 20;
+  private averagePeakHeight: number = 0;
+  private readonly PEAK_HEIGHT_SMOOTHING = 0.3;
 
+  // NUEVO: Parámetros para detección de respiración
+  private readonly RESP_WINDOW_SIZE = 300;  // 10 segundos a 30fps
+  private readonly RESP_MIN_AMPLITUDE = 0.1;
+  private readonly RESP_FILTER_ALPHA = 0.15;
+  
+  // Buffers y estado
+  private respirationBuffer: number[] = [];
+  private lastPeakAmplitudes: number[] = [];
+  
   constructor() {
     this.initAudio();
     this.startTime = Date.now();
+    this.loadBeepSound();
   }
 
   private async initAudio() {
     try {
-      this.audioContext = new AudioContext();
+      this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
       await this.audioContext.resume();
       await this.playBeep(0.01);
       console.log("HeartBeatProcessor: Audio Context Initialized");
     } catch (error) {
       console.error("HeartBeatProcessor: Error initializing audio", error);
+    }
+  }
+
+  private async loadBeepSound() {
+    try {
+      const response = await fetch('https://raw.githubusercontent.com/medical-devices/sounds/main/cardiac-monitor-beep.mp3');
+      const arrayBuffer = await response.arrayBuffer();
+      if (this.audioContext) {
+        this.beepBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+      }
+    } catch (error) {
+      console.error('Error cargando sonido:', error);
+      // Fallback a beep generado si falla la carga
+      this.generateFallbackBeep();
     }
   }
 
@@ -73,61 +109,45 @@ export class HeartBeatProcessor {
     if (now - this.lastBeepTime < this.MIN_BEEP_INTERVAL_MS) return;
 
     try {
-      const primaryOscillator = this.audioContext.createOscillator();
-      const primaryGain = this.audioContext.createGain();
-
-      const secondaryOscillator = this.audioContext.createOscillator();
-      const secondaryGain = this.audioContext.createGain();
-
-      primaryOscillator.type = "sine";
-      primaryOscillator.frequency.setValueAtTime(
-        this.BEEP_PRIMARY_FREQUENCY,
-        this.audioContext.currentTime
-      );
-
-      secondaryOscillator.type = "sine";
-      secondaryOscillator.frequency.setValueAtTime(
-        this.BEEP_SECONDARY_FREQUENCY,
-        this.audioContext.currentTime
-      );
-
-      // Envelope del sonido principal
-      primaryGain.gain.setValueAtTime(0, this.audioContext.currentTime);
-      primaryGain.gain.linearRampToValueAtTime(
-        volume,
-        this.audioContext.currentTime + 0.01
-      );
-      primaryGain.gain.exponentialRampToValueAtTime(
-        0.01,
-        this.audioContext.currentTime + this.BEEP_DURATION / 1000
-      );
-
-      // Envelope del sonido secundario
-      secondaryGain.gain.setValueAtTime(0, this.audioContext.currentTime);
-      secondaryGain.gain.linearRampToValueAtTime(
-        volume * 0.3,
-        this.audioContext.currentTime + 0.01
-      );
-      secondaryGain.gain.exponentialRampToValueAtTime(
-        0.01,
-        this.audioContext.currentTime + this.BEEP_DURATION / 1000
-      );
-
-      primaryOscillator.connect(primaryGain);
-      secondaryOscillator.connect(secondaryGain);
-      primaryGain.connect(this.audioContext.destination);
-      secondaryGain.connect(this.audioContext.destination);
-
-      primaryOscillator.start();
-      secondaryOscillator.start();
-
-      primaryOscillator.stop(this.audioContext.currentTime + this.BEEP_DURATION / 1000 + 0.05);
-      secondaryOscillator.stop(this.audioContext.currentTime + this.BEEP_DURATION / 1000 + 0.05);
-
-      this.lastBeepTime = now;
+      if (this.beepBuffer) {
+        // Usar sonido cargado
+        const source = this.audioContext.createBufferSource();
+        const gainNode = this.audioContext.createGain();
+        
+        source.buffer = this.beepBuffer;
+        gainNode.gain.value = volume;
+        
+        source.connect(gainNode);
+        gainNode.connect(this.audioContext.destination);
+        
+        source.start();
+      } else {
+        // Fallback a beep generado
+        this.generateFallbackBeep();
+      }
     } catch (error) {
-      console.error("HeartBeatProcessor: Error playing beep", error);
+      console.error('Error reproduciendo beep:', error);
     }
+  }
+
+  private generateFallbackBeep() {
+    if (!this.audioContext) return;
+    
+    const oscillator = this.audioContext.createOscillator();
+    const gainNode = this.audioContext.createGain();
+    
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(880, this.audioContext.currentTime);
+    
+    gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
+    gainNode.gain.linearRampToValueAtTime(this.BEEP_VOLUME, this.audioContext.currentTime + 0.01);
+    gainNode.gain.linearRampToValueAtTime(0, this.audioContext.currentTime + 0.08);
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(this.audioContext.destination);
+    
+    oscillator.start();
+    oscillator.stop(this.audioContext.currentTime + 0.08);
   }
 
   private isInWarmup(): boolean {
@@ -163,6 +183,7 @@ export class HeartBeatProcessor {
     confidence: number;
     isPeak: boolean;
     filteredValue: number;
+    respirationRate: number;
     arrhythmiaCount: number;
   } {
     // Filtros sucesivos para mejorar la señal
@@ -175,37 +196,42 @@ export class HeartBeatProcessor {
       this.signalBuffer.shift();
     }
 
+    // Actualizar buffer de respiración
+    this.updateRespirationBuffer(smoothed);
+
     if (this.signalBuffer.length < 30) {
       return {
         bpm: 0,
         confidence: 0,
         isPeak: false,
         filteredValue: smoothed,
+        respirationRate: 0,
         arrhythmiaCount: 0
       };
     }
 
-    this.baseline =
-      this.baseline * this.BASELINE_FACTOR + smoothed * (1 - this.BASELINE_FACTOR);
-
+    this.baseline = this.baseline * this.BASELINE_FACTOR + smoothed * (1 - this.BASELINE_FACTOR);
     const normalizedValue = smoothed - this.baseline;
+    
+    // Verificar señal baja
     this.autoResetIfSignalIsLow(Math.abs(normalizedValue));
 
+    // Detección mejorada de picos
     this.values.push(smoothed);
     if (this.values.length > 3) {
       this.values.shift();
     }
 
-    let smoothDerivative = smoothed - this.lastValue;
+    // Calcular derivada suavizada
+    let derivative = 0;
     if (this.values.length === 3) {
-      smoothDerivative = (this.values[2] - this.values[0]) / 2;
+      derivative = (this.values[2] - this.values[0]) / 2;
     }
-    this.lastValue = smoothed;
 
-    // Mejorado - Mayor precisión en la detección de picos
-    const { isPeak, confidence } = this.detectPeak(normalizedValue, smoothDerivative);
+    // Detección de picos mejorada
+    const { isPeak, confidence, isRisingEdge } = this.detectPeak(normalizedValue, derivative);
     
-    // Confirmación de picos más rigurosa
+    // Confirmación de picos más precisa
     const isConfirmedPeak = this.confirmPeak(isPeak, normalizedValue, confidence);
 
     if (isConfirmedPeak && !this.isInWarmup()) {
@@ -217,16 +243,29 @@ export class HeartBeatProcessor {
       if (timeSinceLastPeak >= this.MIN_PEAK_TIME_MS) {
         this.previousPeakTime = this.lastPeakTime;
         this.lastPeakTime = now;
-        this.playBeep(0.12); // Suena beep cuando se confirma pico
+        
+        // Almacenar amplitud del pico
+        this.lastPeakAmplitudes.push(Math.abs(normalizedValue));
+        if (this.lastPeakAmplitudes.length > 10) {
+          this.lastPeakAmplitudes.shift();
+        }
+        
+        // Reproducir beep solo en picos confirmados
+        this.playBeep(Math.min(1.0, Math.abs(normalizedValue) * 2));
+        
         this.updateBPM();
       }
     }
+
+    // Actualizar tasa respiratoria
+    this.updateRespirationRate();
 
     return {
       bpm: Math.round(this.getSmoothBPM()),
       confidence,
       isPeak: isConfirmedPeak && !this.isInWarmup(),
       filteredValue: smoothed,
+      respirationRate: Math.round(this.respirationRate),
       arrhythmiaCount: 0
     };
   }
@@ -250,42 +289,48 @@ export class HeartBeatProcessor {
     this.peakCandidateValue = 0;
     this.peakConfirmationBuffer = [];
     this.values = [];
+    this.derivativeBuffer = [];
+    this.isRisingEdge = false;
+    this.peakAmplitudes = [];
     console.log("HeartBeatProcessor: auto-reset detection states (low signal).");
   }
 
+  // CALIBRACIÓN MEJORADA: Mejor detección de subida y picos
   private detectPeak(normalizedValue: number, derivative: number): {
     isPeak: boolean;
     confidence: number;
+    isRisingEdge: boolean;
   } {
-    const now = Date.now();
-    const timeSinceLastPeak = this.lastPeakTime
-      ? now - this.lastPeakTime
-      : Number.MAX_VALUE;
-
-    if (timeSinceLastPeak < this.MIN_PEAK_TIME_MS) {
-      return { isPeak: false, confidence: 0 };
+    // Mejorar detección de picos usando derivada y amplitud
+    const isRising = derivative > this.DERIVATIVE_THRESHOLD;
+    const isFalling = derivative < -this.DERIVATIVE_THRESHOLD;
+    
+    // Calcular umbral adaptativo basado en picos anteriores
+    let adaptiveThreshold = this.SIGNAL_THRESHOLD;
+    if (this.lastPeakAmplitudes.length > 0) {
+      const avgPeakAmplitude = this.lastPeakAmplitudes.reduce((sum, amp) => sum + amp, 0) / 
+                              this.lastPeakAmplitudes.length;
+      adaptiveThreshold = avgPeakAmplitude * 0.6;
     }
-
-    // Ajuste para mayor robustez en la detección de picos
-    const isOverThreshold =
-      derivative < this.DERIVATIVE_THRESHOLD &&
-      normalizedValue > this.SIGNAL_THRESHOLD &&
-      this.lastValue > this.baseline * 0.98;
-
-    // Refinamiento del cálculo de confianza
-    const amplitudeConfidence = Math.min(
-      Math.max(Math.abs(normalizedValue) / (this.SIGNAL_THRESHOLD * 1.5), 0),
-      1
-    );
-    const derivativeConfidence = Math.min(
-      Math.max(Math.abs(derivative) / Math.abs(this.DERIVATIVE_THRESHOLD * 0.9), 0),
-      1
-    );
-
-    // Cálculo de confianza mejorado
-    const confidence = (amplitudeConfidence * 0.6 + derivativeConfidence * 0.4);
-
-    return { isPeak: isOverThreshold, confidence };
+    
+    // Detectar pico cuando la señal cambia de subida a bajada
+    const isPeak = normalizedValue > adaptiveThreshold && 
+                  this.peakConfirmationBuffer.length >= this.PEAK_CONFIRMATION_WINDOW &&
+                  isRising;
+    
+    // Calcular confianza basada en múltiples factores
+    let confidence = 0;
+    if (isPeak) {
+      const amplitudeConfidence = Math.min(1, normalizedValue / (adaptiveThreshold * 2));
+      const derivativeConfidence = Math.min(1, Math.abs(derivative) / (this.DERIVATIVE_THRESHOLD * 2));
+      confidence = (amplitudeConfidence * 0.7 + derivativeConfidence * 0.3);
+    }
+    
+    return {
+      isPeak,
+      confidence,
+      isRisingEdge: isRising
+    };
   }
 
   private confirmPeak(
@@ -385,20 +430,67 @@ export class HeartBeatProcessor {
     this.peakCandidateIndex = null;
     this.peakCandidateValue = 0;
     this.lowSignalCount = 0;
+    this.derivativeBuffer = [];
+    this.isRisingEdge = false;
+    this.peakAmplitudes = [];
+    this.averagePeakHeight = 0;
+    this.respirationBuffer = [];
+    this.lastPeakAmplitudes = [];
   }
 
-  public getRRIntervals(): { intervals: number[]; lastPeakTime: number | null; amplitudes?: number[] } {
-    // Critical fix: Pass amplitude data derived from RR intervals
-    // This ensures arrhythmia detection has amplitude data to work with
-    const amplitudes = this.bpmHistory.map(bpm => {
-      // Higher BPM (shorter RR) typically means lower amplitude for premature beats
-      return 100 / (bpm || 800) * (this.calculateCurrentBPM() / 100);
-    });
-    
+  public getRRIntervals(): { 
+    intervals: number[]; 
+    lastPeakTime: number | null; 
+    amplitudes?: number[];
+    respirationRate?: number;
+  } {
     return {
-      intervals: [...this.bpmHistory],
+      intervals: this.bpmHistory.map(bpm => Math.round(60000 / bpm)),
       lastPeakTime: this.lastPeakTime,
-      amplitudes: amplitudes
+      amplitudes: this.lastPeakAmplitudes,
+      respirationRate: this.respirationRate
     };
+  }
+
+  // NUEVO: Actualizar buffer de respiración
+  private updateRespirationBuffer(value: number) {
+    this.respirationBuffer.push(value);
+    if (this.respirationBuffer.length > this.RESP_WINDOW_SIZE) {
+      this.respirationBuffer.shift();
+    }
+    
+    // Actualizar línea base de respiración
+    if (this.respirationBuffer.length > 0) {
+      const avg = this.respirationBuffer.reduce((sum, val) => sum + val, 0) / this.respirationBuffer.length;
+      this.respBaseline = this.respBaseline * (1 - this.RESP_FILTER_ALPHA) + avg * this.RESP_FILTER_ALPHA;
+    }
+  }
+
+  // NUEVO: Calcular tasa respiratoria
+  private updateRespirationRate() {
+    if (this.respirationBuffer.length < this.RESP_WINDOW_SIZE) return;
+    
+    // Detectar ciclos respiratorios usando análisis de cruce por cero
+    let crossings = 0;
+    let lastWasAbove = false;
+    
+    for (let i = 0; i < this.respirationBuffer.length; i++) {
+      const value = this.respirationBuffer[i] - this.respBaseline;
+      const isAbove = value > 0;
+      
+      if (i > 0 && isAbove !== lastWasAbove) {
+        crossings++;
+      }
+      
+      lastWasAbove = isAbove;
+    }
+    
+    // Calcular tasa respiratoria (respiraciones por minuto)
+    const windowDurationMinutes = this.RESP_WINDOW_SIZE / (this.SAMPLE_RATE * 60);
+    const cycles = crossings / 2; // Cada ciclo completo tiene 2 cruces
+    this.respirationRate = cycles / windowDurationMinutes;
+    
+    // Limitar a rango fisiológico (8-30 respiraciones por minuto)
+    this.respirationRate = Math.max(8, Math.min(30, this.respirationRate));
   }
 }
