@@ -1,4 +1,3 @@
-
 import { useState, useCallback, useRef } from 'react';
 import { VitalSignsProcessor } from '../modules/VitalSignsProcessor';
 import { ArrhythmiaDetector } from '../modules/ArrhythmiaDetector';
@@ -11,7 +10,7 @@ export const useVitalSignsProcessor = () => {
   // Core processor
   const processorRef = useRef<VitalSignsProcessor | null>(null);
   
-  // Specialized modules - IMPORTANTE: Ahora usamos directamente ArrhythmiaDetector
+  // Specialized modules
   const arrhythmiaDetectorRef = useRef<ArrhythmiaDetector | null>(null);
   const bloodPressureStabilizer = useRef(createBloodPressureStabilizer());
   const dataCollector = useRef(createVitalSignsDataCollector());
@@ -54,6 +53,7 @@ export const useVitalSignsProcessor = () => {
     // Store data for analysis
     signalHistory.addSignal(value);
     
+    // MEJORADO: Procesamiento de datos para detección de arritmias
     if (rrData) {
       signalHistory.addRRData(rrData);
       
@@ -73,20 +73,30 @@ export const useVitalSignsProcessor = () => {
         }
       }
       
-      // IMPORTANTE: Actualizar los intervalos en el detector de arritmias
+      // CRUCIAL: Verificar y pasar los datos de amplitud explícitamente
       if (rrData.intervals && rrData.intervals.length > 0) {
-        const peakAmplitude = rrData.amplitudes && rrData.amplitudes.length > 0 
-          ? rrData.amplitudes[rrData.amplitudes.length - 1] 
-          : undefined;
+        // Verificar si tenemos datos de amplitud
+        const hasAmplitudes = rrData.amplitudes && rrData.amplitudes.length > 0;
         
-        // Asegurar que se pasan las amplitudes completas para mejor detección
-        console.log('Enviando datos al detector de arritmias:', {
-          intervals: rrData.intervals.length,
-          lastPeakTime: rrData.lastPeakTime,
-          peakAmplitude: peakAmplitude
-        });
-        
-        arrhythmiaDetector.updateIntervals(rrData.intervals, rrData.lastPeakTime, peakAmplitude);
+        if (hasAmplitudes) {
+          console.log('Actualizando detector con datos completos:', {
+            intervalCount: rrData.intervals.length,
+            amplitudeCount: rrData.amplitudes?.length || 0,
+            lastAmplitude: rrData.amplitudes?.[rrData.amplitudes.length - 1],
+            lastPeakTime: rrData.lastPeakTime
+          });
+          
+          // Actualizar con datos completos de intervalos y amplitudes
+          arrhythmiaDetector.updateIntervals(
+            rrData.intervals, 
+            rrData.lastPeakTime, 
+            rrData.amplitudes[rrData.amplitudes.length - 1]
+          );
+        } else {
+          console.log('Actualizando detector solo con intervalos (sin amplitudes)');
+          // Si no hay amplitudes, actualizar solo con intervalos
+          arrhythmiaDetector.updateIntervals(rrData.intervals, rrData.lastPeakTime);
+        }
       }
     }
     
@@ -106,13 +116,12 @@ export const useVitalSignsProcessor = () => {
       dataCollector.current.addBloodPressure(stabilizedBP);
     }
     
-    // IMPORTANTE: Usar exclusivamente ArrhythmiaDetector para la detección de arritmias
+    // CRUCIAL: Usar exclusivamente ArrhythmiaDetector para la detección de arritmias
     const arrhythmiaResult = arrhythmiaDetector.detect();
     
-    // Log de detección para debugging
+    // IMPORTANTE: Log detallado de detección para ver cuando se detectan arritmias
     if (arrhythmiaResult.detected) {
-      console.log('Detección de arritmia en useVitalSignsProcessor:', {
-        detectado: arrhythmiaResult.detected,
+      console.log('¡¡¡ARRITMIA DETECTADA!!!', {
         contador: arrhythmiaResult.count,
         confianza: arrhythmiaResult.data?.confidence,
         prematureBeat: arrhythmiaResult.data?.prematureBeat
@@ -120,7 +129,7 @@ export const useVitalSignsProcessor = () => {
     }
     
     // Actualizar el contador si se detectó una nueva arritmia
-    if (arrhythmiaResult.detected && arrhythmiaResult.count !== arrhythmiaCounter) {
+    if (arrhythmiaResult.count !== arrhythmiaCounter) {
       setArrhythmiaCounter(arrhythmiaResult.count);
     }
     
