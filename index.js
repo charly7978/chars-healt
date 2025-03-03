@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -87,17 +86,14 @@ const Index = () => {
     };
   }, []);
 
-  // Function to completely reset all state and processors
   const fullReset = () => {
     console.log("Performing full reset of all components");
     
-    // Stop all timers
     if (measurementTimerRef.current) {
       clearInterval(measurementTimerRef.current);
       measurementTimerRef.current = null;
     }
     
-    // Reset all state
     setIsMonitoring(false);
     setIsCameraOn(false);
     setElapsedTime(0);
@@ -115,12 +111,10 @@ const Index = () => {
     setArrhythmiaCount("--");
     setSignalQuality(0);
     
-    // Reset all processors
     resetHeartBeat();
     resetVitalSigns();
     stopProcessing();
     
-    // Reset refs
     startTimeRef.current = 0;
     isProcessingFrameRef.current = false;
   };
@@ -131,7 +125,6 @@ const Index = () => {
       return;
     }
     
-    // Prevent multiple calls during transition
     if (isTransitioning) {
       console.log("Ya hay una transición en curso, ignorando");
       return;
@@ -139,12 +132,11 @@ const Index = () => {
     
     setIsTransitioning(true);
     
-    // If we're already monitoring, stop first to ensure clean state
     if (isMonitoring) {
       await stopMonitoring();
       setTimeout(() => {
         doStartMonitoring();
-      }, 300);
+      }, 500);
     } else {
       doStartMonitoring();
     }
@@ -154,17 +146,13 @@ const Index = () => {
     console.log("Iniciando monitorización");
     
     try {
-      // Ensure we're starting from a clean state
       fullReset();
       
-      // Enter fullscreen and start camera first
       await enterFullScreen();
       setIsCameraOn(true);
       
-      // Short delay to ensure camera is ready
-      await new Promise(resolve => setTimeout(resolve, 300));
+      await new Promise(resolve => setTimeout(resolve, 500));
       
-      // Start signal processing
       const success = await startProcessing();
       if (!success) {
         console.error("Error al iniciar el procesamiento de señal");
@@ -173,7 +161,6 @@ const Index = () => {
         return;
       }
       
-      // Now mark as monitoring and start timer
       setIsMonitoring(true);
       startTimeRef.current = Date.now();
       setElapsedTime(0);
@@ -212,7 +199,6 @@ const Index = () => {
     console.log("Deteniendo monitorización");
     
     try {
-      // Stop in the correct order
       if (measurementTimerRef.current) {
         clearInterval(measurementTimerRef.current);
         measurementTimerRef.current = null;
@@ -221,11 +207,9 @@ const Index = () => {
       setIsMonitoring(false);
       await stopProcessing();
       
-      // Short delay before turning off camera
       await new Promise(resolve => setTimeout(resolve, 100));
       setIsCameraOn(false);
       
-      // Reset all processors and state
       resetVitalSigns();
       resetHeartBeat();
       
@@ -254,23 +238,28 @@ const Index = () => {
   };
 
   const handleStreamReady = (stream) => {
-    if (!isCameraOn) return;
+    console.log("Stream ready, isMonitoring:", isMonitoring, "isCameraOn:", isCameraOn);
+    
+    if (!isCameraOn) {
+      console.log("Stream ready but camera is off, ignoring");
+      return;
+    }
     
     try {
-      console.log("Stream listo, configurando captura de frames");
+      console.log("Stream ready, setting up frame capture");
       const videoTrack = stream.getVideoTracks()[0];
       const imageCapture = new ImageCapture(videoTrack);
       
       if (videoTrack.getCapabilities()?.torch) {
         videoTrack.applyConstraints({
           advanced: [{ torch: true }]
-        }).catch(err => console.error("Error activando linterna:", err));
+        }).catch(err => console.error("Error activating torch:", err));
       }
       
       const tempCanvas = document.createElement('canvas');
       const tempCtx = tempCanvas.getContext('2d');
       if (!tempCtx) {
-        console.error("No se pudo obtener el contexto 2D");
+        console.error("Could not get 2D context");
         return;
       }
       
@@ -291,18 +280,22 @@ const Index = () => {
             requestAnimationFrame(processImage);
           }
         } catch (error) {
-          console.error("Error capturando frame:", error);
+          console.error("Error capturing frame:", error);
           isProcessingFrameRef.current = false;
           
           if (isCameraOn) {
-            setTimeout(() => requestAnimationFrame(processImage), 100); // Con un pequeño retardo para recuperarse
+            setTimeout(() => requestAnimationFrame(processImage), 200);
           }
         }
       };
 
-      processImage();
+      setTimeout(() => {
+        if (isCameraOn) {
+          processImage();
+        }
+      }, 300);
     } catch (error) {
-      console.error("Error en handleStreamReady:", error);
+      console.error("Error in handleStreamReady:", error);
     }
   };
 
@@ -313,11 +306,9 @@ const Index = () => {
         if (heartBeatResult && heartBeatResult.bpm > 0) {
           setHeartRate(heartBeatResult.bpm);
           
-          // Pass the heart beat result to the vital signs processor
           const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
           
           if (vitals) {
-            // Log respiration data to debug
             console.log("Respiration data:", vitals.respiration, "hasData:", vitals.hasRespirationData);
             
             setVitalSigns(vitals);
@@ -327,12 +318,11 @@ const Index = () => {
           setSignalQuality(lastSignal.quality);
         }
       } catch (error) {
-        console.error("Error procesando señal:", error);
+        console.error("Error processing signal:", error);
       }
     }
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       console.log("Index component unmounting, cleaning up");
@@ -416,7 +406,6 @@ const Index = () => {
             </div>
           </div>
 
-          {/* Debugging Info */}
           {isMonitoring && (
             <div className="absolute bottom-[150px] left-0 right-0 text-center z-30 text-xs text-gray-400">
               <span>Resp Data: {vitalSigns.hasRespirationData ? 'Disponible' : 'No disponible'} | 
@@ -463,7 +452,6 @@ const Index = () => {
             </div>
           )}
           
-          {/* Estado de monitorización para depuración */}
           <div className="absolute top-2 right-2 z-50 text-xs bg-black/70 p-1 rounded text-white">
             {isMonitoring ? 'MONITOR: ON' : 'MONITOR: OFF'} | 
             {isCameraOn ? 'CAM: ON' : 'CAM: OFF'} |
