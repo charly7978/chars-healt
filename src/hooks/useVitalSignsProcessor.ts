@@ -14,6 +14,12 @@ type VitalSignsResult = {
     rmssd: number;
     rrVariation: number;
   } | null;
+  // Add missing properties to fix type errors
+  glucose?: {
+    value: number;
+    trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
+    confidence: number;
+  };
 };
 
 export const useVitalSignsProcessor = () => {
