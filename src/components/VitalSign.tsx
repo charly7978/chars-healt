@@ -195,14 +195,19 @@ const VitalSign: React.FC<VitalSignProps> = ({
         const riskLabel = getArrhythmiaRiskLabel(count);
         const riskColor = getArrhythmiaRiskColor(count);
         
-        const isFirstDetection = count === 1;
-        
-        return {
-          text: `${count}`,
-          title: isFirstDetection ? "ARRITMIA DETECTADA" : "",
-          color: riskColor,
-          label: riskLabel
-        };
+        if (count === 1) {
+          return {
+            text: "ARRITMIA DETECTADA",
+            color: riskColor,
+            label: riskLabel
+          };
+        } else {
+          return {
+            text: `${count}`,
+            color: riskColor,
+            label: riskLabel
+          };
+        }
       }
     }
     
