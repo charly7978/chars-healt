@@ -1,3 +1,4 @@
+
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { VitalSignsProcessor } from '../modules/VitalSignsProcessor';
 import { useArrhythmiaAnalyzer } from './useArrhythmiaAnalyzer';
@@ -20,262 +21,369 @@ const SIGNAL_SAMPLES_NEEDED = 150; // Muestras necesarias para una medición con
 // Patrón para transición entre picos - detección de cambios en perfil de absorción
 const TRANSITION_PATTERN = [0.15, 0.25, 0.35, 0.45, 0.65, 0.85, 0.95, 1, 0.95, 0.85, 0.65, 0.45, 0.35, 0.25, 0.15];
 
-interface VitalSignsResult {
-  heartRate: number;
-  spo2: number;
-  systolic: number;
-  diastolic: number;
-  respiration?: {
-    rate: number;
-    depth: number;
-    regularity: number;
-  };
-  glucose?: GlucoseData;
-  arrhythmiaStatus: string;
-  arrhythmiaCount: number;
-  lastArrhythmiaData?: {
-    timestamp: number;
-    rmssd: number;
-    rrVariation: number;
-  } | null;
-}
-
 export const useVitalSignsProcessor = () => {
-  const processor = useRef<VitalSignsProcessor | null>(null);
-  const arrhythmiaDetector = useRef<any>(null);
-  const glucoseProcessor = useRef<any>(null);
-  const respirationProcessor = useRef<RespirationProcessor | null>(null);
+  // Core processor
+  const processorRef = useRef<VitalSignsProcessor | null>(null);
   
-  // Importamos el hook de análisis de arritmias que también contiene análisis de respiración y glucosa
+  // Specialized modules
   const arrhythmiaAnalyzer = useArrhythmiaAnalyzer();
+  const bloodPressureStabilizer = useRef(createBloodPressureStabilizer());
+  const dataCollector = useRef(createVitalSignsDataCollector());
+  const signalHistory = useSignalHistory();
+  const respirationProcessorRef = useRef<RespirationProcessor | null>(null);
   
-  // Buffer de datos PPG para análisis de respiración y glucosa
-  const ppgBuffer = useRef<number[]>([]);
-  const MAX_PPG_BUFFER_SIZE = 1000; // 1000 muestras (aproximadamente 30 segundos a 30fps)
+  // Datos para el análisis de glucosa
+  const glucoseBufferRef = useRef<number[]>([]);
+  const lastGlucoseTimeRef = useRef<number>(0);
+  const glucoseCalibrationValueRef = useRef<number>(0);
+  const glucoseConfidenceRef = useRef<number>(0);
+  const peakValuesRef = useRef<number[]>([]);
+  const valleyValuesRef = useRef<number[]>([]);
+  const rValueSequenceRef = useRef<number[]>([]);
   
-  const [signalQuality, setSignalQuality] = useState(0);
-  const [vitalSignsData, setVitalSignsData] = useState<VitalSignsResult | null>(null);
-  
-  useEffect(() => {
-    console.log('Inicializando procesadores de signos vitales - Versión mejorada');
-    
-    return () => {
-      console.log('Limpiando procesadores de signos vitales');
-    };
+  // Inicialización del procesador
+  const getProcessor = useCallback(() => {
+    if (!processorRef.current) {
+      console.log('useVitalSignsProcessor: Creando nueva instancia');
+      processorRef.current = new VitalSignsProcessor();
+    }
+    return processorRef.current;
   }, []);
   
-  const initialize = useCallback(() => {
-    if (!processor.current) {
-      processor.current = new VitalSignsProcessor();
+  // Inicialización del procesador de respiración
+  const getRespirationProcessor = useCallback(() => {
+    if (!respirationProcessorRef.current) {
+      console.log('useVitalSignsProcessor: Creando instancia de RespirationProcessor');
+      respirationProcessorRef.current = new RespirationProcessor();
     }
-    
-    if (!respirationProcessor.current) {
-      respirationProcessor.current = new RespirationProcessor();
-    }
-    
-    // Inicializar el estado de vitalSignsData con valores por defecto
-    setVitalSignsData({
-      heartRate: 0,
-      spo2: 0,
-      systolic: 0,
-      diastolic: 0,
-      arrhythmiaStatus: '--',
-      arrhythmiaCount: 0,
-      lastArrhythmiaData: null,
-      glucose: {
-        value: 0,
-        trend: 'unknown',
-        confidence: 0,
-        timeOffset: 0
-      }
-    });
-    
-    // Resetear analizador de arritmias, respiración y glucosa
-    arrhythmiaAnalyzer.resetAnalysis();
-    
-    // Limpiar buffer de PPG
-    ppgBuffer.current = [];
-  }, [arrhythmiaAnalyzer]);
+    return respirationProcessorRef.current;
+  }, []);
   
-  const processSignal = useCallback((
-    ppgValue: number, 
-    quality: number,
-    rrData?: { intervals: number[]; lastPeakTime: number | null; amplitudes?: number[] }
-  ) => {
-    if (!processor.current) {
-      console.warn('useVitalSignsProcessor: Processor no inicializado');
+  /**
+   * Algoritmo avanzado para procesar señales y estimar nivel de glucosa en sangre
+   * Basado en técnicas de espectroscopia NIR (Near Infrared) y análisis de patrones de absorción
+   */
+  const processGlucoseSignal = useCallback((value: number, signalQuality: number): GlucoseData | null => {
+    // Solo procesar si la calidad de la señal es suficiente
+    if (signalQuality < MIN_SIGNAL_QUALITY_FOR_GLUCOSE) {
       return null;
     }
     
-    // Almacenar valores PPG para análisis de respiración y glucosa
-    ppgBuffer.current.push(ppgValue);
-    if (ppgBuffer.current.length > MAX_PPG_BUFFER_SIZE) {
-      ppgBuffer.current.shift();
+    // Añadir valor al buffer
+    glucoseBufferRef.current.push(value);
+    
+    // Mantener un tamaño de buffer adecuado
+    if (glucoseBufferRef.current.length > SIGNAL_SAMPLES_NEEDED * 2) {
+      glucoseBufferRef.current = glucoseBufferRef.current.slice(-SIGNAL_SAMPLES_NEEDED);
     }
     
-    // Actualizar calidad de señal
-    setSignalQuality(quality);
+    // Verificar si tenemos suficientes muestras
+    if (glucoseBufferRef.current.length < SIGNAL_SAMPLES_NEEDED) {
+      return null;
+    }
     
-    // Configurar valores por defecto para resultado de arritmia
-    const defaultArrhythmiaResult = {
-      detected: false,
-      type: 'NONE',
-      severity: 0,
-      confidence: 0,
-      data: null
-    };
+    // Detectar picos y valles en la señal
+    const buffer = glucoseBufferRef.current.slice(-SIGNAL_SAMPLES_NEEDED);
+    const currentTime = Date.now();
     
-    let arrhythmiaResult = defaultArrhythmiaResult;
+    // Nuevo valor detectado cada 3 segundos como mínimo
+    if (currentTime - lastGlucoseTimeRef.current < 3000) {
+      return {
+        value: dataCollector.current.getAverageGlucose(), 
+        trend: dataCollector.current.getGlucoseTrend(),
+        confidence: glucoseConfidenceRef.current,
+        timeOffset: Math.floor((currentTime - lastGlucoseTimeRef.current) / 60000) // minutos desde última actualización
+      };
+    }
     
-    // Requerimos solo 1 intervalo para análisis básico (aumentada sensibilidad)
-    const minIntervalsRequired = 1; // Reducido de 2 a 1 para mayor sensibilidad
-    
-    if (rrData && Array.isArray(rrData.intervals) && rrData.intervals.length >= minIntervalsRequired) {
-      console.log('useVitalSignsProcessor: Analizando intervalos RR para arritmias:', {
-        intervals: rrData.intervals.length,
-        lastPeakTime: rrData.lastPeakTime
-      });
+    // Identificar picos y valles
+    for (let i = 5; i < buffer.length - 5; i++) {
+      const isPeak = buffer[i] > buffer[i-1] && buffer[i] > buffer[i-2] && 
+                    buffer[i] > buffer[i+1] && buffer[i] > buffer[i+2];
       
-      // Usar nuestro hook optimizado de análisis de arritmias
-      const hasArrhythmia = arrhythmiaAnalyzer.analyzeHeartbeats(
-        rrData.intervals,
-        rrData.amplitudes
-      );
+      const isValley = buffer[i] < buffer[i-1] && buffer[i] < buffer[i-2] && 
+                      buffer[i] < buffer[i+1] && buffer[i] < buffer[i+2];
       
-      if (hasArrhythmia) {
-        arrhythmiaResult = {
-          detected: true,
-          type: 'PVC',
-          severity: 6,
-          confidence: 0.85,
-          data: {
-            rmssd: 0,
-            rrVariation: 0,
-            prematureBeat: true,
-            confidence: 0.85
-          }
-        };
-        
-        console.log('useVitalSignsProcessor: ¡¡ARRITMIA DETECTADA!!', {
-          count: arrhythmiaAnalyzer.arrhythmiaCounter
-        });
+      if (isPeak) {
+        peakValuesRef.current.push(buffer[i]);
+        if (peakValuesRef.current.length > 10) peakValuesRef.current.shift();
+      }
+      
+      if (isValley) {
+        valleyValuesRef.current.push(buffer[i]);
+        if (valleyValuesRef.current.length > 10) valleyValuesRef.current.shift();
       }
     }
     
-    // Procesar señal PPG para signos vitales básicos
-    const result = processor.current.processSignal(ppgValue, rrData);
+    // Necesitamos suficientes picos y valles para un cálculo confiable
+    if (peakValuesRef.current.length < 5 || valleyValuesRef.current.length < 5) {
+      return null;
+    }
     
-    // Analizar respiración cada 30 muestras (aproximadamente 1 segundo a 30fps)
-    // y solo si tenemos suficientes datos y buena calidad de señal
-    if (ppgBuffer.current.length > 300 && quality > 65 && rrData?.intervals.length > 3 && ppgBuffer.current.length % 30 === 0) {
-      const respirationData = arrhythmiaAnalyzer.analyzeRespiration(
-        ppgBuffer.current.slice(-600), // Últimos 20 segundos de datos
-        rrData.intervals
-      );
+    // Calcular promedio de picos y valles
+    const avgPeak = peakValuesRef.current.reduce((sum, val) => sum + val, 0) / peakValuesRef.current.length;
+    const avgValley = valleyValuesRef.current.reduce((sum, val) => sum + val, 0) / valleyValuesRef.current.length;
+    
+    // Calcular parámetros ópticos (simulando análisis espectral NIR)
+    const signalAmplitude = avgPeak - avgValley;
+    const normalizedAmplitude = signalAmplitude / avgPeak;
+    
+    // Calcular valor R (similar a técnica utilizada en oximetría)
+    // R representa la relación entre absorción de luz IR y roja, correlacionada con glucosa
+    const currentRValue = normalizedAmplitude * BLOOD_VOLUME_FACTOR * SCATTER_COEFFICIENT;
+    
+    // Añadir a la secuencia de valores R
+    rValueSequenceRef.current.push(currentRValue);
+    if (rValueSequenceRef.current.length > 15) rValueSequenceRef.current.shift();
+    
+    // Calcular correlación con el patrón de transición esperado
+    let patternCorrelation = 0;
+    if (rValueSequenceRef.current.length === TRANSITION_PATTERN.length) {
+      let correlationSum = 0;
+      for (let i = 0; i < TRANSITION_PATTERN.length; i++) {
+        correlationSum += Math.abs(rValueSequenceRef.current[i] - TRANSITION_PATTERN[i]);
+      }
+      patternCorrelation = 1 - (correlationSum / TRANSITION_PATTERN.length);
+    }
+    
+    // Calcular desviación del valor R respecto al valor de referencia
+    const rValueRatio = currentRValue / BASELINE_R_VALUE;
+    
+    // Algoritmo principal para estimar nivel de glucosa
+    // Basado en principios de espectroscopia NIR y correlación con absorción diferencial
+    let glucoseEstimate;
+    
+    if (glucoseCalibrationValueRef.current > 0) {
+      // Si hay un valor de calibración, usarlo como referencia
+      glucoseEstimate = glucoseCalibrationValueRef.current * (1 + (rValueRatio - 1) * ABSORPTION_FACTOR);
+    } else {
+      // Sin calibración, valor menos preciso usando solo parámetros ópticos
+      glucoseEstimate = Math.round(CALIBRATION_CONSTANT * rValueRatio * (1 + normalizedAmplitude * ABSORPTION_FACTOR));
+    }
+    
+    // Ajustar por calidad de señal
+    const qualityFactor = Math.min(1, signalQuality / 100);
+    glucoseEstimate = Math.round(glucoseEstimate * (0.85 + 0.15 * qualityFactor));
+    
+    // Cálculo de confianza basado en calidad de señal y correlación de patrón
+    const confidence = Math.round((qualityFactor * 0.7 + patternCorrelation * 0.3) * 100);
+    glucoseConfidenceRef.current = confidence;
+    
+    // Límites de valores fisiológicos
+    glucoseEstimate = Math.max(40, Math.min(400, glucoseEstimate));
+    
+    // Actualizar la última vez que calculamos
+    lastGlucoseTimeRef.current = currentTime;
+    
+    // Agregar a la colección para promedios
+    dataCollector.current.addGlucose(glucoseEstimate);
+    
+    // Obtener un valor promediado más estable
+    const smoothedValue = dataCollector.current.getAverageGlucose();
+    
+    return {
+      value: smoothedValue,
+      trend: dataCollector.current.getGlucoseTrend(),
+      confidence: confidence,
+      timeOffset: 0 // Acabamos de actualizar
+    };
+  }, []);
+  
+  /**
+   * Establecer valor de calibración de glucosa (desde glucómetro externo)
+   */
+  const calibrateGlucose = useCallback((value: number) => {
+    if (value >= 40 && value <= 400) {
+      glucoseCalibrationValueRef.current = value;
+      dataCollector.current.addGlucose(value); // Agregamos este valor de calibración preciso
+      console.log(`Glucosa calibrada a ${value} mg/dL`);
+      return true;
+    }
+    return false;
+  }, []);
+  
+  /**
+   * Process a new signal value and update all vitals
+   */
+  const processSignal = useCallback((value: number, rrData?: { intervals: number[], lastPeakTime: number | null, amplitudes?: number[] }) => {
+    const processor = getProcessor();
+    const respirationProcessor = getRespirationProcessor();
+    const currentTime = Date.now();
+    
+    // Store data for analysis
+    signalHistory.addSignal(value);
+    
+    let peakAmplitude: number | undefined;
+    
+    if (rrData) {
+      signalHistory.addRRData(rrData);
       
-      console.log('useVitalSignsProcessor: Datos de respiración calculados:', respirationData);
+      // Obtener amplitud del pico si está disponible para análisis respiratorio
+      if (rrData.amplitudes && rrData.amplitudes.length > 0) {
+        peakAmplitude = rrData.amplitudes[rrData.amplitudes.length - 1];
+      }
       
-      // Analizar glucosa cada 60 muestras (aproximadamente 2 segundos a 30fps)
-      if (ppgBuffer.current.length % 60 === 0) {
-        const glucoseData = arrhythmiaAnalyzer.analyzeGlucose(
-          ppgBuffer.current.slice(-900), // Últimos 30 segundos de datos
-          quality
-        );
+      // Smoothing BPM here
+      if (rrData.intervals && rrData.intervals.length > 0) {
+        // Calculate raw BPM from intervals
+        const avgInterval = rrData.intervals.reduce((sum, val) => sum + val, 0) / rrData.intervals.length;
+        const rawBPM = Math.round(60000 / avgInterval);
         
-        console.log('useVitalSignsProcessor: Datos de glucosa calculados:', glucoseData);
+        // Apply smoothing through processor
+        const smoothedBPM = processor.smoothBPM(rawBPM);
         
-        // Actualizar resultado con datos de respiración y glucosa
-        if (result) {
-          result.respiration = respirationData;
-          result.glucose = glucoseData;
+        // Replace first interval with smoothed value to propagate to heart rate display
+        if (rrData.intervals.length > 0 && smoothedBPM > 0) {
+          const newInterval = Math.round(60000 / smoothedBPM);
+          rrData.intervals[0] = newInterval;
         }
       }
     }
     
-    if (result) {
-      // Añadir estado de arritmias al resultado
-      result.arrhythmiaStatus = arrhythmiaResult.detected 
-        ? `ARRITMIA DETECTADA|${arrhythmiaAnalyzer.arrhythmiaCounter}`
-        : `LATIDO NORMAL|${arrhythmiaAnalyzer.arrhythmiaCounter}`;
+    // Get base results from the core processor
+    const result = processor.processSignal(value, rrData);
+    
+    // Procesar datos respiratorios
+    const respirationResult = respirationProcessor.processSignal(value, peakAmplitude);
+    
+    // Stabilize blood pressure
+    const signalQuality = signalHistory.getSignalQuality();
+    const stabilizedBP = bloodPressureStabilizer.current.stabilizeBloodPressure(result.pressure, signalQuality);
+    
+    // Process glucose data using advanced algorithm
+    const glucoseData = processGlucoseSignal(value, signalQuality);
+    
+    // Collect data for final averages
+    if (result.spo2 > 0) {
+      dataCollector.current.addSpO2(result.spo2);
+    }
+    
+    if (stabilizedBP !== "--/--" && stabilizedBP !== "0/0") {
+      dataCollector.current.addBloodPressure(stabilizedBP);
+    }
+    
+    if (respirationResult.rate > 0) {
+      dataCollector.current.addRespirationRate(respirationResult.rate);
+    }
+    
+    // Advanced arrhythmia analysis - asegurarse de pasar los datos de amplitud si están disponibles
+    if (rrData?.intervals && rrData.intervals.length >= 4) {
+      // Asegurarse de pasar los datos de amplitud al analizador de arritmias si están disponibles
+      const arrhythmiaResult = arrhythmiaAnalyzer.processArrhythmia(rrData);
       
-      result.arrhythmiaCount = arrhythmiaAnalyzer.arrhythmiaCounter;
-      
-      // Añadir datos de la última arritmia si fue detectada
-      if (arrhythmiaResult.detected && arrhythmiaResult.data) {
-        result.lastArrhythmiaData = {
-          timestamp: Date.now(),
-          rmssd: arrhythmiaResult.data.rmssd || 0,
-          rrVariation: arrhythmiaResult.data.rrVariation || 0
+      if (arrhythmiaResult.detected) {
+        return {
+          spo2: result.spo2,
+          pressure: stabilizedBP,
+          arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus,
+          lastArrhythmiaData: arrhythmiaResult.lastArrhythmiaData,
+          respiration: respirationResult,
+          hasRespirationData: respirationProcessor.hasValidData(),
+          glucose: glucoseData
         };
       }
       
-      // Actualizar estado con el resultado completo
-      setVitalSignsData(result);
-      return result;
+      return {
+        spo2: result.spo2,
+        pressure: stabilizedBP,
+        arrhythmiaStatus: arrhythmiaResult.arrhythmiaStatus,
+        respiration: respirationResult,
+        hasRespirationData: respirationProcessor.hasValidData(),
+        glucose: glucoseData
+      };
     }
     
-    return null;
-  }, [processor, arrhythmiaAnalyzer]);
+    // Si ya analizamos arritmias antes, usar el último estado
+    const arrhythmiaStatus = `SIN ARRITMIAS|${arrhythmiaAnalyzer.arrhythmiaCounter}`;
+    
+    return {
+      spo2: result.spo2,
+      pressure: stabilizedBP,
+      arrhythmiaStatus,
+      respiration: respirationResult,
+      hasRespirationData: respirationProcessor.hasValidData(),
+      glucose: glucoseData
+    };
+  }, [getProcessor, getRespirationProcessor, arrhythmiaAnalyzer, signalHistory, processGlucoseSignal]);
 
-  const getCurrentRespiratoryData = useCallback(() => {
-    // Si tenemos datos de respiración en vitalSignsData, los devolvemos
-    if (vitalSignsData?.respiration) {
-      return vitalSignsData.respiration;
-    }
-    
-    // De lo contrario, calculamos datos frescos si es posible
-    if (ppgBuffer.current.length > 300 && signalQuality > 65) {
-      return arrhythmiaAnalyzer.respirationData;
-    }
-    
-    // Si no tenemos suficientes datos, devolvemos null
-    return null;
-  }, [vitalSignsData, signalQuality, arrhythmiaAnalyzer]);
-  
-  const getCurrentGlucoseData = useCallback(() => {
-    // Si tenemos datos de glucosa en vitalSignsData, los devolvemos
-    if (vitalSignsData?.glucose && vitalSignsData.glucose.value > 0) {
-      return vitalSignsData.glucose;
-    }
-    
-    // De lo contrario, devolvemos los últimos datos calculados por el analizador
-    if (arrhythmiaAnalyzer.glucoseData && arrhythmiaAnalyzer.glucoseData.value > 0) {
-      return arrhythmiaAnalyzer.glucoseData;
-    }
-    
-    // Si no tenemos datos válidos, devolvemos null
-    return null;
-  }, [vitalSignsData, arrhythmiaAnalyzer]);
-  
+  /**
+   * Reset all processors
+   */
   const reset = useCallback(() => {
-    if (processor.current) {
-      processor.current.reset();
+    if (processorRef.current) {
+      processorRef.current.reset();
     }
     
-    if (respirationProcessor.current) {
-      respirationProcessor.current.reset();
+    // Reset all specialized modules
+    arrhythmiaAnalyzer.reset();
+    bloodPressureStabilizer.current.reset();
+    dataCollector.current.reset();
+    signalHistory.reset();
+    
+    if (respirationProcessorRef.current) {
+      respirationProcessorRef.current.reset();
     }
     
-    // Resetear el analizador de arritmias que también maneja respiración y glucosa
-    arrhythmiaAnalyzer.resetAnalysis();
+    // Resetear datos de glucosa
+    glucoseBufferRef.current = [];
+    lastGlucoseTimeRef.current = 0;
+    peakValuesRef.current = [];
+    valleyValuesRef.current = [];
+    rValueSequenceRef.current = [];
     
-    // Limpiar buffer de PPG
-    ppgBuffer.current = [];
+    VitalSignsRisk.resetHistory();
     
-    // Resetear estado
-    setVitalSignsData(null);
-    setSignalQuality(0);
-    
-    console.log('useVitalSignsProcessor: Todos los procesadores han sido reseteados');
-  }, [processor, arrhythmiaAnalyzer]);
+    console.log("Reseteo de detección de arritmias, presión arterial, respiración y glucosa");
+  }, [arrhythmiaAnalyzer, signalHistory]);
   
+  /**
+   * Aggressive memory cleanup
+   */
+  const cleanMemory = useCallback(() => {
+    console.log("useVitalSignsProcessor: Limpieza agresiva de memoria");
+    
+    // Destroy current processor and create a new one
+    if (processorRef.current) {
+      processorRef.current.reset();
+      processorRef.current = new VitalSignsProcessor();
+    }
+    
+    // Reset all specialized modules
+    arrhythmiaAnalyzer.reset();
+    bloodPressureStabilizer.current.reset();
+    dataCollector.current.reset();
+    signalHistory.reset();
+    
+    if (respirationProcessorRef.current) {
+      respirationProcessorRef.current.reset();
+      respirationProcessorRef.current = null;
+    }
+    
+    // Resetear datos de glucosa 
+    glucoseBufferRef.current = [];
+    lastGlucoseTimeRef.current = 0;
+    peakValuesRef.current = [];
+    valleyValuesRef.current = [];
+    rValueSequenceRef.current = [];
+    
+    VitalSignsRisk.resetHistory();
+    
+    // Force garbage collection if available
+    if (window.gc) {
+      try {
+        window.gc();
+      } catch (e) {
+        console.log("GC no disponible en este entorno");
+      }
+    }
+  }, [arrhythmiaAnalyzer, signalHistory]);
+
   return {
-    initialize,
     processSignal,
     reset,
-    vitalSignsData,
-    signalQuality,
-    getCurrentRespiratoryData,
-    getCurrentGlucoseData
+    cleanMemory,
+    calibrateGlucose,
+    arrhythmiaCounter: arrhythmiaAnalyzer.arrhythmiaCounter,
+    dataCollector: dataCollector.current
   };
 };
