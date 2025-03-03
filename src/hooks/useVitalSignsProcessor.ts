@@ -1,4 +1,3 @@
-
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { VitalSignsProcessor } from '../modules/VitalSignsProcessor';
 import { useArrhythmiaAnalyzer } from './useArrhythmiaAnalyzer';
@@ -40,6 +39,7 @@ export const useVitalSignsProcessor = () => {
   const peakValuesRef = useRef<number[]>([]);
   const valleyValuesRef = useRef<number[]>([]);
   const rValueSequenceRef = useRef<number[]>([]);
+  const lastGlucoseCalibrationTimestampRef = useRef<number>(0);
   
   // Inicialización del procesador
   const getProcessor = useCallback(() => {
@@ -92,7 +92,7 @@ export const useVitalSignsProcessor = () => {
         value: dataCollector.current.getAverageGlucose(), 
         trend: dataCollector.current.getGlucoseTrend(),
         confidence: glucoseConfidenceRef.current,
-        timeOffset: Math.floor((currentTime - lastGlucoseTimeRef.current) / 60000) // minutos desde última actualización
+        timeOffset: Math.floor((currentTime - lastGlucoseCalibrationTimestampRef.current) / 60000)
       };
     }
     
@@ -185,7 +185,8 @@ export const useVitalSignsProcessor = () => {
       value: smoothedValue,
       trend: dataCollector.current.getGlucoseTrend(),
       confidence: confidence,
-      timeOffset: 0 // Acabamos de actualizar
+      timeOffset: Math.floor((currentTime - lastGlucoseCalibrationTimestampRef.current) / 60000),
+      lastCalibration: lastGlucoseCalibrationTimestampRef.current || null
     };
   }, []);
   
@@ -195,7 +196,12 @@ export const useVitalSignsProcessor = () => {
   const calibrateGlucose = useCallback((value: number) => {
     if (value >= 40 && value <= 400) {
       glucoseCalibrationValueRef.current = value;
-      dataCollector.current.addGlucose(value); // Agregamos este valor de calibración preciso
+      lastGlucoseCalibrationTimestampRef.current = Date.now();
+      glucoseBufferRef.current = [];
+      peakValuesRef.current = [];
+      valleyValuesRef.current = [];
+      rValueSequenceRef.current = [];
+      dataCollector.current.addGlucose(value);
       console.log(`Glucosa calibrada a ${value} mg/dL`);
       return true;
     }
@@ -252,6 +258,8 @@ export const useVitalSignsProcessor = () => {
     
     // Process glucose data using advanced algorithm
     const glucoseData = processGlucoseSignal(value, signalQuality);
+    
+    console.log("Glucose data:", glucoseData);
     
     // Collect data for final averages
     if (result.spo2 > 0) {

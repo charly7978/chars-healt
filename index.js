@@ -7,6 +7,10 @@ import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import PermissionsHandler from "@/components/PermissionsHandler";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { toast } from "@/components/ui/use-toast";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -17,17 +21,20 @@ const Index = () => {
     pressure: "--/--",
     arrhythmiaStatus: "--",
     respiration: { rate: 0, depth: 0, regularity: 0 },
-    hasRespirationData: false
+    hasRespirationData: false,
+    glucose: null
   });
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState("--");
   const [elapsedTime, setElapsedTime] = useState(0);
   const [permissionsGranted, setPermissionsGranted] = useState(false);
+  const [isCalibrationOpen, setIsCalibrationOpen] = useState(false);
+  const [glucoseValue, setGlucoseValue] = useState("");
   const measurementTimerRef = useRef(null);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
-  const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
+  const { processSignal: processVitalSigns, reset: resetVitalSigns, calibrateGlucose } = useVitalSignsProcessor();
 
   const handlePermissionsGranted = () => {
     console.log("Permisos concedidos correctamente");
@@ -119,7 +126,8 @@ const Index = () => {
       pressure: "--/--",
       arrhythmiaStatus: "--",
       respiration: { rate: 0, depth: 0, regularity: 0 },
-      hasRespirationData: false
+      hasRespirationData: false,
+      glucose: null
     });
     setArrhythmiaCount("--");
     setSignalQuality(0);
@@ -128,6 +136,37 @@ const Index = () => {
       clearInterval(measurementTimerRef.current);
       measurementTimerRef.current = null;
     }
+  };
+
+  const handleCalibrateGlucose = () => {
+    setIsCalibrationOpen(true);
+  };
+
+  const submitGlucoseCalibration = () => {
+    const glucoseLevel = parseInt(glucoseValue);
+    if (!isNaN(glucoseLevel) && glucoseLevel >= 40 && glucoseLevel <= 400) {
+      const success = calibrateGlucose(glucoseLevel);
+      if (success) {
+        toast({
+          title: "Calibración exitosa",
+          description: `Nivel de glucosa calibrado a ${glucoseLevel} mg/dL.`,
+        });
+      } else {
+        toast({
+          title: "Error de calibración",
+          description: "No se pudo calibrar el nivel de glucosa. Inténtelo de nuevo.",
+          variant: "destructive",
+        });
+      }
+    } else {
+      toast({
+        title: "Valor inválido",
+        description: "Por favor ingrese un valor entre 40 y 400 mg/dL.",
+        variant: "destructive",
+      });
+    }
+    setGlucoseValue("");
+    setIsCalibrationOpen(false);
   };
 
   const handleStreamReady = (stream) => {
@@ -183,8 +222,9 @@ const Index = () => {
       const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
       
       if (vitals) {
-        // Log respiration data to debug
+        // Log respiration and glucose data for debugging
         console.log("Respiration data:", vitals.respiration, "hasData:", vitals.hasRespirationData);
+        console.log("Glucose data:", vitals.glucose);
         
         setVitalSigns(vitals);
         setArrhythmiaCount(vitals.arrhythmiaStatus.split('|')[1] || "--");
@@ -193,6 +233,17 @@ const Index = () => {
       setSignalQuality(lastSignal.quality);
     }
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
+
+  const getTrendIcon = (trend) => {
+    if (!trend) return "";
+    switch (trend) {
+      case 'rising': return "↑";
+      case 'falling': return "↓";
+      case 'rising_rapidly': return "↑↑";
+      case 'falling_rapidly': return "↓↓";
+      default: return "→";
+    }
+  };
 
   return (
     <div 
@@ -233,7 +284,7 @@ const Index = () => {
           </div>
 
           <div className="absolute bottom-[200px] left-0 right-0 px-4 z-30">
-            <div className="grid grid-cols-5 gap-2">
+            <div className="grid grid-cols-6 gap-2">
               <VitalSign 
                 label="FRECUENCIA CARDÍACA"
                 value={heartRate || "--"}
@@ -265,6 +316,15 @@ const Index = () => {
                 secondaryUnit="Prof."
                 isFinalReading={vitalSigns.hasRespirationData && elapsedTime >= 15}
               />
+              <VitalSign 
+                label="GLUCOSA"
+                value={vitalSigns.glucose ? vitalSigns.glucose.value : "--"}
+                unit="mg/dL"
+                secondaryValue={vitalSigns.glucose ? getTrendIcon(vitalSigns.glucose.trend) : ""}
+                secondaryLabel={vitalSigns.glucose ? `Conf: ${vitalSigns.glucose.confidence}%` : ""}
+                isFinalReading={vitalSigns.glucose && vitalSigns.glucose.value > 0 && elapsedTime >= 15}
+                onClick={handleCalibrateGlucose}
+              />
             </div>
           </div>
 
@@ -272,7 +332,8 @@ const Index = () => {
           {isMonitoring && (
             <div className="absolute bottom-[150px] left-0 right-0 text-center z-30 text-xs text-gray-400">
               <span>Resp Data: {vitalSigns.hasRespirationData ? 'Disponible' : 'No disponible'} | 
-              Rate: {vitalSigns.respiration.rate} RPM | Depth: {vitalSigns.respiration.depth}</span>
+              Rate: {vitalSigns.respiration.rate} RPM | 
+              Glucosa: {vitalSigns.glucose ? `${vitalSigns.glucose.value} mg/dL (${vitalSigns.glucose.confidence}%)` : 'No disponible'}</span>
             </div>
           )}
 
@@ -282,7 +343,7 @@ const Index = () => {
             </div>
           )}
 
-          <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 mt-auto relative z-30">
+          <div className="h-[80px] grid grid-cols-3 gap-px bg-gray-900 mt-auto relative z-30">
             <button 
               onClick={startMonitoring}
               className={`w-full h-full text-2xl font-bold text-white active:bg-gray-800 ${!permissionsGranted ? 'bg-gray-600' : 'bg-black/80'}`}
@@ -296,6 +357,12 @@ const Index = () => {
             >
               RESET
             </button>
+            <button 
+              onClick={handleCalibrateGlucose}
+              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
+            >
+              CALIBRAR GLUCOSA
+            </button>
           </div>
           
           {!permissionsGranted && (
@@ -307,6 +374,42 @@ const Index = () => {
           )}
         </div>
       </div>
+
+      {/* Diálogo de calibración de glucosa */}
+      <Dialog open={isCalibrationOpen} onOpenChange={setIsCalibrationOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Calibrar Medición de Glucosa</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="flex flex-col gap-2">
+              <label htmlFor="glucose" className="text-sm font-medium">
+                Ingrese el valor de glucosa de referencia (mg/dL):
+              </label>
+              <Input
+                id="glucose"
+                type="number"
+                value={glucoseValue}
+                onChange={(e) => setGlucoseValue(e.target.value)}
+                placeholder="Por ejemplo: 120"
+                min="40"
+                max="400"
+              />
+              <span className="text-xs text-gray-500">
+                Ingrese un valor entre 40 y 400 mg/dL para calibrar el algoritmo
+              </span>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setIsCalibrationOpen(false)}>
+              Cancelar
+            </Button>
+            <Button type="button" onClick={submitGlucoseCalibration}>
+              Calibrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

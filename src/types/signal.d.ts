@@ -41,6 +41,7 @@ export interface GlucoseData {
   trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
   confidence: number; // Nivel de confianza de la medición (0-100)
   timeOffset: number; // Tiempo desde la última calibración (minutos)
+  lastCalibration?: number; // Timestamp de la última calibración realizada
 }
 
 export interface HeartBeatResult {
