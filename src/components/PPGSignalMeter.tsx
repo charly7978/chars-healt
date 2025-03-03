@@ -38,16 +38,16 @@ const PPGSignalMeter = ({
   const lastArrhythmiaTime = useRef<number>(0);
   const arrhythmiaCountRef = useRef<number>(0);
   
-  const WINDOW_WIDTH_MS = 3500;
-  const CANVAS_WIDTH = 900;
-  const CANVAS_HEIGHT = 250;
-  const GRID_SIZE_X = 300;
-  const GRID_SIZE_Y = 300;
+  const WINDOW_WIDTH_MS = 4000;
+  const CANVAS_WIDTH = 450;
+  const CANVAS_HEIGHT = 450;
+  const GRID_SIZE_X = 10;
+  const GRID_SIZE_Y = 10;
   const verticalScale = 25.0;
-  const SMOOTHING_FACTOR = 0.49;
+  const SMOOTHING_FACTOR = 0.7;
   const TARGET_FPS = 60;
-  const FRAME_TIME = 100 / TARGET_FPS;
-  const BUFFER_SIZE = 500;
+  const FRAME_TIME = 1000 / TARGET_FPS;
+  const BUFFER_SIZE = 200;
 
   const respirationBufferRef = useRef<number[]>([]);
   const respirationPhaseRef = useRef<number>(0);
@@ -83,7 +83,7 @@ const PPGSignalMeter = ({
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     
-    ctx.fillStyle = '#000000';
+    ctx.fillStyle = '#f3f3f3';
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
     ctx.beginPath();
