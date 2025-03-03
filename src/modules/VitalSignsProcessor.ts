@@ -27,8 +27,7 @@ export class VitalSignsProcessor {
   }
 
   /**
-   * Procesar señales PPG entrantes y calcular signos vitales
-   * Asegurar que las detecciones de arritmias se pasen correctamente
+   * Process incoming PPG signal and calculate vital signs
    */
   public processSignal(
     ppgValue: number,
@@ -36,75 +35,57 @@ export class VitalSignsProcessor {
   ) {
     const currentTime = Date.now();
 
-    // MEJORADO: Filtrar solo outliers extremos para permitir más detecciones
+    // Procesar arritmias primero, antes de cualquier otro cálculo
+    let arrhythmiaResult = { detected: false, count: 0, status: 'SIN ARRITMIAS|0', data: null };
+    
     if (rrData?.intervals && rrData.intervals.length > 0) {
+      // Filtrar solo outliers extremos
       const validIntervals = rrData.intervals.filter(interval => {
-        return interval >= 300 && interval <= 1800; // Ampliado de 400-1500 a 300-1800 ms
+        return interval >= 300 && interval <= 1800;
       });
       
       if (validIntervals.length > 0) {
-        // Usar amplitud si está disponible
-        const peakAmplitude = rrData.amplitudes && rrData.amplitudes.length > 0 
-          ? rrData.amplitudes[rrData.amplitudes.length - 1] 
-          : undefined;
+        const peakAmplitude = rrData.amplitudes?.[rrData.amplitudes.length - 1];
         
+        // Actualizar intervalos y forzar detección
         this.arrhythmiaDetector.updateIntervals(validIntervals, rrData.lastPeakTime, peakAmplitude);
+        arrhythmiaResult = this.arrhythmiaDetector.detect();
         
-        // DEBUGGING: Verificar que se están pasando los datos
-        console.log("VitalSignsProcessor: RR intervals actualizados:", validIntervals.length);
+        if (arrhythmiaResult.detected) {
+          console.log('VitalSignsProcessor: Arritmia detectada:', {
+            status: arrhythmiaResult.status,
+            count: arrhythmiaResult.count,
+            data: arrhythmiaResult.data
+          });
+        }
       }
     }
 
-    // Resto del procesamiento normal...
+    // Procesar señal PPG
     const filtered = this.applySMAFilter(ppgValue);
     this.ppgValues.push(filtered);
     if (this.ppgValues.length > this.WINDOW_SIZE) {
       this.ppgValues.shift();
     }
 
-    // Verificar fase de aprendizaje
-    const isLearning = this.arrhythmiaDetector.isInLearningPhase();
-    
-    // IMPORTANTE: Forzar detección de arritmias en cada frame
-    // para asegurar que no se pierdan detecciones
-    const arrhythmiaResult = this.arrhythmiaDetector.detect();
-    
-    // DEBUGGING: Verificar el resultado de la detección
-    if (arrhythmiaResult.detected) {
-      console.log("VitalSignsProcessor: Arritmia detectada:", arrhythmiaResult);
-    }
-
-    // Calcular presión arterial y otros signos
+    // Calcular otros signos vitales
     const bp = this.calculateRealBloodPressure(this.ppgValues);
     const pressure = `${bp.systolic}/${bp.diastolic}`;
     const spo2 = this.spO2Calculator.calculate(this.ppgValues.slice(-60));
     
-    // MEJORADO: Preparar datos de arritmia si se detectó o hay una cuenta > 0
+    // Preparar datos de arritmia
     const lastArrhythmiaData = (arrhythmiaResult.detected || arrhythmiaResult.count > 0) ? {
       timestamp: currentTime,
       rmssd: arrhythmiaResult.data?.rmssd || 0,
       rrVariation: arrhythmiaResult.data?.rrVariation || 0
     } : null;
 
-    this.measurementCount++;
-
-    // DEBUGGING: Verificar qué se está devolviendo
-    const result = {
+    return {
       spo2,
       pressure,
       arrhythmiaStatus: arrhythmiaResult.status,
       lastArrhythmiaData
     };
-    
-    // Solo para debug, no imprimir en cada frame para no saturar la consola
-    if (arrhythmiaResult.detected || Math.random() < 0.01) {
-      console.log("VitalSignsProcessor: Resultado procesado:", {
-        arrhythmiaStatus: result.arrhythmiaStatus,
-        hasData: result.lastArrhythmiaData !== null
-      });
-    }
-    
-    return result;
   }
 
   /**
@@ -199,17 +180,15 @@ export class VitalSignsProcessor {
   /**
    * Reset all processors
    */
-  public reset() {
+  public reset(): void {
     this.ppgValues = [];
     this.lastBPM = 0;
-    this.spO2Calculator.reset();
-    this.bpCalculator.reset();
-    this.arrhythmiaDetector.reset();
-    
-    // Reiniciar mediciones reales
     this.lastSystolic = 120;
     this.lastDiastolic = 80;
     this.measurementCount = 0;
+    this.spO2Calculator.reset();
+    this.bpCalculator.reset();
+    this.arrhythmiaDetector = new ArrhythmiaDetector(); // Reiniciar completamente el detector
   }
 
   /**
