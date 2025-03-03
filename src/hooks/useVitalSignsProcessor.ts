@@ -1,9 +1,8 @@
-
 import { useState, useCallback, useEffect } from 'react';
 import { VitalSignsProcessor } from '../modules/VitalSignsProcessor';
 import { GlucoseProcessor } from '../modules/GlucoseProcessor';
 import { ArrhythmiaDetector } from '../modules/ArrhythmiaDetector';
-import { ArrhythmiaResult } from '../types/signal';
+import { ArrhythmiaResult, ArrhythmiaType } from '../types/signal';
 
 type VitalSignsResult = {
   spo2: number;
@@ -13,8 +12,13 @@ type VitalSignsResult = {
     timestamp: number;
     rmssd: number;
     rrVariation: number;
+    prematureBeat?: boolean;
+    confidence?: number;
   } | null;
-  // Add missing properties to fix type errors
+  respiratoryRate?: number;
+  respiratoryPattern?: string;
+  respiratoryConfidence?: number;
+  // Mantenemos la propiedad glucose para compatibilidad
   glucose?: {
     value: number;
     trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
@@ -35,7 +39,7 @@ export const useVitalSignsProcessor = () => {
       console.log('Limpiando procesadores de signos vitales');
     };
   }, []);
-
+  
   const processSignal = useCallback((ppgValue: number, rrData?: any) => {
     console.log('useVitalSignsProcessor: Procesando señal con datos:', {
       ppgValue,
@@ -53,24 +57,19 @@ export const useVitalSignsProcessor = () => {
       confidence: glucoseResult.confidence || 0
     };
     
-    // Define arrhythmiaResult con valores predeterminados explícitamente tipados como ArrhythmiaResult
-    const defaultArrhythmiaResult: ArrhythmiaResult = {
+    // Procesar arritmias si tenemos datos RR
+    let arrhythmiaResult: ArrhythmiaResult = {
       detected: false,
       severity: 0,
       confidence: 0,
-      type: 'NONE',
-      timestamp: Date.now(),
-      rmssd: 0,
-      rrVariation: 0
+      type: "NONE" as ArrhythmiaType,
+      timestamp: Date.now()
     };
     
-    let arrhythmiaResult: ArrhythmiaResult = defaultArrhythmiaResult;
-    
-    // Requerimos solo 1 intervalo para análisis básico (aumentada sensibilidad)
-    const minIntervalsRequired = 1; // Reducido de 2 a 1 para mayor sensibilidad
-    
-    if (rrData && Array.isArray(rrData.intervals) && rrData.intervals.length >= minIntervalsRequired) {
-      console.log('useVitalSignsProcessor: Analizando intervalos RR para arritmias:', {
+    if (rrData && Array.isArray(rrData.intervals) && rrData.intervals.length > 0) {
+      const minIntervalsRequired = 4; // Mínimo para detección básica
+      
+      console.log('useVitalSignsProcessor: Procesando arritmias con datos:', {
         intervals: rrData.intervals.length,
         amplitudes: Array.isArray(rrData.amplitudes) ? rrData.amplitudes.length : 0
       });
@@ -118,45 +117,28 @@ export const useVitalSignsProcessor = () => {
         // Mantener el valor predeterminado en caso de error
       }
     } else {
-      console.log('useVitalSignsProcessor: Datos RR insuficientes para análisis de arritmias', {
-        intervalos: rrData?.intervals?.length || 0,
-        requeridos: minIntervalsRequired
-      });
+      console.log('useVitalSignsProcessor: No hay intervalos RR para procesar');
     }
     
-    const arrhythmiaStatus = arrhythmiaDetector.getStatusText();
-    
-    const combinedResult: VitalSignsResult = {
-      ...vitalSignsResult,
-      glucose: glucoseData,
-      arrhythmiaStatus: arrhythmiaStatus
+    // Construir el resultado final
+    const result: VitalSignsResult = {
+      spo2: vitalSignsResult.spo2,
+      pressure: vitalSignsResult.pressure,
+      arrhythmiaStatus: vitalSignsResult.arrhythmiaStatus,
+      lastArrhythmiaData: arrhythmiaResult.detected ? {
+        timestamp: arrhythmiaResult.timestamp,
+        rmssd: arrhythmiaResult.rmssd || 0,
+        rrVariation: arrhythmiaResult.rrVariation || 0,
+        prematureBeat: false,
+        confidence: arrhythmiaResult.confidence
+      } : null,
+      respiratoryRate: vitalSignsResult.respiratoryRate,
+      respiratoryPattern: vitalSignsResult.respiratoryPattern,
+      respiratoryConfidence: vitalSignsResult.respiratoryConfidence
     };
     
-    // Verificación adicional para dispositivos Android
-    const lastArrhythmia = arrhythmiaDetector.getLastArrhythmia();
-    
-    if (lastArrhythmia && lastArrhythmia.detected) {
-      // Asegurarse de que siempre tenemos valores para rmssd y rrVariation
-      combinedResult.lastArrhythmiaData = {
-        timestamp: lastArrhythmia.timestamp,
-        rmssd: lastArrhythmia.rmssd || 0,
-        rrVariation: lastArrhythmia.rrVariation || 0
-      };
-      
-      console.log('useVitalSignsProcessor: Datos de arritmia agregados:', 
-        JSON.stringify(combinedResult.lastArrhythmiaData));
-    }
-    
-    if (combinedResult.arrhythmiaStatus.includes("ARRITMIA DETECTADA")) {
-      console.log('useVitalSignsProcessor: ¡ARRITMIA DETECTADA EN RESULTADO FINAL!', {
-        status: combinedResult.arrhythmiaStatus,
-        data: combinedResult.lastArrhythmiaData ? JSON.stringify(combinedResult.lastArrhythmiaData) : 'null',
-        type: lastArrhythmia?.type || 'desconocido'
-      });
-    }
-    
-    setVitalSignsData(combinedResult);
-    return combinedResult;
+    setVitalSignsData(result);
+    return result;
   }, [processor, glucoseProcessor, arrhythmiaDetector]);
 
   const reset = useCallback(() => {

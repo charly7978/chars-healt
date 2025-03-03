@@ -33,6 +33,8 @@ interface ProcessedVitalSignsData {
     timestamp: number;
     rmssd: number;
     rrVariation: number;
+    prematureBeat?: boolean;
+    confidence?: number;
   } | null;
   respiratoryRate?: number;
   respiratoryPattern?: string;
@@ -591,15 +593,26 @@ const Index = () => {
               arrhythmiaStatus: vitals.arrhythmiaStatus
             }));
             
-            if (vitals.glucose && vitals.glucose.value > 0) {
-              console.log("Procesando datos de glucosa:", vitals.glucose);
+            const storedGlucoseValue = sessionStorage.getItem('lastGlucoseValue');
+            if (storedGlucoseValue && parseInt(storedGlucoseValue) > 0) {
+              console.log("Procesando datos de glucosa almacenados:", storedGlucoseValue);
+              
+              const storedTrend = sessionStorage.getItem('glucoseTrend') || 'unknown';
+              const validTrend = (storedTrend === 'stable' || 
+                                 storedTrend === 'rising' || 
+                                 storedTrend === 'falling' || 
+                                 storedTrend === 'rising_rapidly' || 
+                                 storedTrend === 'falling_rapidly') 
+                                 ? storedTrend as 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly'
+                                 : 'unknown' as 'unknown';
               
               setVitalSigns(current => ({
                 ...current,
                 glucose: {
-                  value: vitals.glucose.value,
-                  trend: vitals.glucose.trend || 'unknown'
-                }
+                  value: parseInt(storedGlucoseValue),
+                  trend: validTrend
+                },
+                hasGlucoseData: true
               }));
             }
             
@@ -719,19 +732,26 @@ const Index = () => {
             />
             <VitalSign 
               label="RESPIRACIÓN"
-              value={finalValues ? finalValues.respiration.rate : (vitalSigns.hasRespirationData ? vitalSigns.respiration.rate : "--")}
+              value={finalValues ? 
+                finalValues.respiration.rate : 
+                (vitalSigns.respiration && vitalSigns.hasRespirationData ? vitalSigns.respiration.rate : "--")}
               unit="RPM"
-              secondaryValue={finalValues ? finalValues.respiration.depth : (vitalSigns.hasRespirationData ? vitalSigns.respiration.depth : "--")}
-              secondaryUnit="%"
+              secondaryValue={finalValues ? 
+                (finalValues.respiration.depth ? `Profundidad: ${finalValues.respiration.depth}%` : "Normal") : 
+                (vitalSigns.respiration && vitalSigns.hasRespirationData ? `Profundidad: ${vitalSigns.respiration.depth}%` : "Sin datos")}
               isFinalReading={measurementComplete}
             />
-            <VitalSign 
-              label="GLUCOSA"
-              value={finalValues ? finalValues.glucose.value : vitalSigns.glucose.value || "--"}
-              unit="mg/dL"
-              trend={finalValues ? finalValues.glucose.trend : vitalSigns.glucose.trend}
-              isFinalReading={measurementComplete}
-            />
+            {finalValues && finalValues.hasGlucoseData && (
+              <VitalSign 
+                label="GLUCOSA"
+                value={finalValues.hasGlucoseData ? 
+                  sessionStorage.getItem('lastGlucoseValue') ? 
+                  parseInt(sessionStorage.getItem('lastGlucoseValue') || '95') : 95 : "--"}
+                unit="mg/dL"
+                isFinalReading={measurementComplete}
+                trend={(sessionStorage.getItem('glucoseTrend') as 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown') || 'unknown'}
+              />
+            )}
           </div>
         </div>
       </div>

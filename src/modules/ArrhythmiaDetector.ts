@@ -295,8 +295,8 @@ export class ArrhythmiaDetector {
     }
     
     console.log(`ArrhythmiaDetector: Latido prematuro detectado - Intervalo: ${latestInterval}ms vs Línea base: ${this.baselineRRMean.toFixed(0)}ms, Desviación: ${deviationPercent.toFixed(1)}%`);
-    
-    return { 
+
+    return {
       detected: true, 
       severity, 
       confidence 
