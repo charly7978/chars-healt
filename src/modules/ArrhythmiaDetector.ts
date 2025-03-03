@@ -12,15 +12,15 @@ export class ArrhythmiaDetector {
   private readonly ARRHYTHMIA_LEARNING_PERIOD = 2800; // Aumentado de 2500ms a 2800ms para mejor aprendizaje
   
   // Enfoque mejorado para detectar SOLO latidos prematuros fuera del patrón rítmico
-  private readonly PREMATURE_BEAT_THRESHOLD = 0.73; // Ajustado de 0.70 a 0.73 para ser más estricto
-  private readonly AMPLITUDE_RATIO_THRESHOLD = 0.68; // Aumentado de 0.65 a 0.68 para mayor exigencia
-  private readonly NORMAL_PEAK_MIN_THRESHOLD = 0.88; // Aumentado de 0.85 a 0.88 para mayor seguridad
+  private readonly PREMATURE_BEAT_THRESHOLD = 0.70;  // Reducido para mayor sensibilidad
+  private readonly AMPLITUDE_RATIO_THRESHOLD = 0.65; // Reducido para detectar amplitudes menores
+  private readonly NORMAL_PEAK_MIN_THRESHOLD = 0.85; // Reducido para ser menos exigente
   
   // NUEVO: Umbral para detectar latidos fuera del patrón rítmico aprendido
-  private readonly RHYTHM_DEVIATION_THRESHOLD = 0.33; // Aumentado de 0.30 a 0.33 para mayor precisión
+  private readonly RHYTHM_DEVIATION_THRESHOLD = 0.30; // Reducido para mayor sensibilidad
   
   // NUEVO: Umbral de confianza mínima para contabilizar una arritmia
-  private readonly MIN_CONFIDENCE_THRESHOLD = 0.82; // Aumentado de 0.75 a 0.82 para mayor precisión
+  private readonly MIN_CONFIDENCE_THRESHOLD = 0.75; // Reducido para aceptar más detecciones
 
   // State variables
   private rrIntervals: number[] = [];
