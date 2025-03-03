@@ -31,7 +31,8 @@ export class VitalSignsProcessor {
    */
   public processSignal(
     ppgValue: number,
-    rrData?: { intervals: number[]; lastPeakTime: number | null; amplitude?: number }
+    rrData?: { intervals: number[]; lastPeakTime: number | null; amplitudes?: number[] },
+    respData?: { rate: number; pattern: string; confidence: number }
   ) {
     const currentTime = Date.now();
 
@@ -44,7 +45,9 @@ export class VitalSignsProcessor {
       
       if (validIntervals.length > 0) {
         // Pass peak amplitude if available to the arrhythmia detector
-        const peakAmplitude = rrData.amplitude;
+        const peakAmplitude = rrData.amplitudes && rrData.amplitudes.length > 0 
+          ? rrData.amplitudes[rrData.amplitudes.length - 1] 
+          : undefined;
         
         this.arrhythmiaDetector.updateIntervals(validIntervals, rrData.lastPeakTime, peakAmplitude);
       }
@@ -83,18 +86,36 @@ export class VitalSignsProcessor {
     const bp = this.calculateRealBloodPressure(this.ppgValues.slice(-60));
     const pressure = `${bp.systolic}/${bp.diastolic}`;
 
-    // Prepare arrhythmia data if detected
+    // Ensure we have the arrhythmia status properly formatted
+    const arrhythmiaStatus = arrhythmiaResult.status;
+
+    // Prepare arrhythmia data with proper timestamp to ensure UI can match it with the signal
     const lastArrhythmiaData = arrhythmiaResult.detected ? {
       timestamp: currentTime,
       rmssd: arrhythmiaResult.data?.rmssd || 0,
-      rrVariation: arrhythmiaResult.data?.rrVariation || 0
+      rrVariation: arrhythmiaResult.data?.rrVariation || 0,
+      prematureBeat: arrhythmiaResult.data?.prematureBeat || false,
+      confidence: arrhythmiaResult.data?.confidence || 0
     } : null;
 
+    // Log detection when it happens (for debugging)
+    if (arrhythmiaResult.detected) {
+      console.log("VitalSignsProcessor: Arritmia detectada", {
+        count: arrhythmiaResult.count,
+        data: lastArrhythmiaData
+      });
+    }
+
+    // Asegurar que el valor de retorno incluya correctamente los datos de arritmia
     return {
       spo2,
       pressure,
-      arrhythmiaStatus: arrhythmiaResult.status,
-      lastArrhythmiaData
+      arrhythmiaStatus,
+      lastArrhythmiaData,
+      // Incluir el resto de propiedades del objeto de retorno
+      respiratoryRate: respData ? respData.rate : 0,
+      respiratoryPattern: respData ? respData.pattern : 'unknown',
+      respiratoryConfidence: respData ? respData.confidence : 0
     };
   }
 

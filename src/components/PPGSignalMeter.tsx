@@ -327,6 +327,37 @@ const PPGSignalMeter = ({
           ctx.setLineDash([]);
         }
       }
+
+      // Mark arrhythmia points with improved visibility
+      points.forEach((point, index) => {
+        if (point.isArrhythmia) {
+          const xStep = canvas.width / (points.length - 1);
+          const x = index * xStep;
+          const y = canvas.height * 0.6 - point.value;
+          
+          // Implementar un efecto pulsante más visible para los puntos de arritmia
+          const pulseSize = Math.sin(now / 300) * 2 + 5; // Efecto pulsante más suave
+          
+          // Capa externa (halo pulsante)
+          ctx.beginPath();
+          ctx.arc(x, y, pulseSize, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(220, 38, 38, 0.25)'; // Rojo suave para el halo
+          ctx.fill();
+          
+          // Capa interna (punto principal)
+          ctx.beginPath();
+          ctx.arc(x, y, 3, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(220, 38, 38, 0.9)'; // Rojo más intenso para el punto central
+          ctx.fill();
+          
+          // Añadir un signo de exclamación (!) en algunos puntos (no en todos para no saturar)
+          if (index % 4 === 0) { // Solo en algunos puntos espaciados
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            ctx.font = '9px Arial';
+            ctx.fillText('!', x - 2, y - 8);
+          }
+        }
+      });
     }
 
     lastRenderTimeRef.current = currentTime;
@@ -341,6 +372,33 @@ const PPGSignalMeter = ({
       }
     };
   }, [renderSignal]);
+
+  useEffect(() => {
+    if (value !== 0) {
+      const now = Date.now();
+      
+      // Mejorar la detección de arritmias para el buffer
+      // Ampliamos la ventana de tiempo para detectar arritmias correctamente
+      const isArrhythmiaEvent = isFingerDetected && 
+                              rawArrhythmiaData && 
+                              Math.abs(now - rawArrhythmiaData.timestamp) < 600; // Aumentado a 600ms
+      
+      // Registrar para depuración si se detectó arritmia
+      if (isArrhythmiaEvent) {
+        console.log('PPGSignalMeter: Arritmia detectada y marcada en el gráfico', {
+          timestamp: rawArrhythmiaData?.timestamp,
+          now: now
+        });
+      }
+      
+      // Actualizar buffer con el nuevo punto, marcándolo como arritmia si corresponde
+      dataBufferRef.current?.push({
+        time: now,
+        value: value,
+        isArrhythmia: isArrhythmiaEvent
+      });
+    }
+  }, [value, isFingerDetected, rawArrhythmiaData]);
 
   return (
     <>

@@ -1,135 +1,74 @@
-
 import { useState, useCallback, useEffect } from 'react';
 import { VitalSignsProcessor } from '../modules/VitalSignsProcessor';
-import { GlucoseProcessor } from '../modules/GlucoseProcessor';
-
-// Tipo para los datos devueltos por el procesador
-type VitalSignsResult = {
-  spo2: number;
-  pressure: string;
-  arrhythmiaStatus: string;
-  lastArrhythmiaData?: {
-    timestamp: number;
-    rmssd: number;
-    rrVariation: number;
-  } | null;
-  glucose?: {
-    value: number;
-    trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
-    confidence: number;
-  };
-};
 
 export const useVitalSignsProcessor = () => {
   const [processor] = useState(() => new VitalSignsProcessor());
-  const [glucoseProcessor] = useState(() => new GlucoseProcessor());
-  const [vitalSignsData, setVitalSignsData] = useState<VitalSignsResult | null>(null);
+  const [vitalSignsData, setVitalSignsData] = useState<any>(null);
   
-  // Asegurar que los procesadores se inicialicen correctamente
+  // Inicializar procesador al montar componente
   useEffect(() => {
-    console.log('Inicializando procesadores de signos vitales');
-    
+    console.log('Inicializando procesador de signos vitales');
     return () => {
-      console.log('Limpiando procesadores de signos vitales');
+      processor.reset();
+      console.log('Limpiando procesador de signos vitales');
     };
-  }, []);
+  }, [processor]);
 
+  // Procesar señal PPG y actualizar datos vitales
   const processSignal = useCallback((ppgValue: number, rrData?: any) => {
-    // Ensure we always pass the amplitude data to VitalSignsProcessor for arrhythmia detection
-    // This is critical for ultra-sensitive arrhythmia detection
-    const amplitude = rrData?.amplitude || null;
+    if (!processor) return null;
     
-    // Procesar la señal principal con el procesador original
-    // Este procesador ahora tiene el algoritmo ultra-sensible de arritmias
-    const vitalSignsResult = processor.processSignal(ppgValue, {
-      intervals: rrData?.intervals || [],
-      lastPeakTime: rrData?.lastPeakTime || null,
-      amplitude: amplitude
-    });
-    
-    // Procesar datos de glucosa como paso separado
-    const glucoseResult = glucoseProcessor.processSignal(ppgValue);
-    
-    // Preparar datos de glucosa
-    const glucoseData = {
-      value: glucoseResult.value || 0,
-      trend: glucoseResult.trend || 'unknown',
-      confidence: glucoseResult.confidence || 0
-    };
-    
-    // Combinar resultados manteniendo el formato esperado por el display
-    const combinedResult: VitalSignsResult = {
-      ...vitalSignsResult,
-      glucose: glucoseData
-    };
-    
-    // Asegurarse de que lastArrhythmiaData se preserve exactamente
-    if (vitalSignsResult.lastArrhythmiaData) {
-      combinedResult.lastArrhythmiaData = vitalSignsResult.lastArrhythmiaData;
+    try {
+      // Procesar la señal a través del VitalSignsProcessor
+      const result = processor.processSignal(ppgValue, rrData);
+      
+      // Actualizar estado con los nuevos datos
+      setVitalSignsData(result);
+      
+      return result;
+    } catch (error) {
+      console.error('Error procesando señal vital:', error);
+      return null;
     }
-    
-    // Asegurarse de que arrhythmiaStatus se preserve exactamente
-    combinedResult.arrhythmiaStatus = vitalSignsResult.arrhythmiaStatus;
-    
-    // Guardar datos combinados en estado
-    setVitalSignsData(combinedResult);
-    
-    // Log para debugging de arritmias (más detallado para la versión ultra-sensible)
-    if (vitalSignsResult.arrhythmiaStatus && vitalSignsResult.arrhythmiaStatus.includes('ARRITMIA DETECTADA')) {
-      console.log('¡ARRITMIA DETECTADA!', { 
-        status: vitalSignsResult.arrhythmiaStatus,
-        data: vitalSignsResult.lastArrhythmiaData,
-        amplitude: amplitude 
-      });
-    }
-    
-    return combinedResult;
-  }, [processor, glucoseProcessor]);
+  }, [processor]);
 
+  // Reiniciar procesador y datos
   const reset = useCallback(() => {
+    if (!processor) return;
+    
     processor.reset();
-    glucoseProcessor.reset();
     setVitalSignsData(null);
-    console.log('Procesadores reiniciados');
-  }, [processor, glucoseProcessor]);
+    console.log('Procesador de signos vitales reiniciado');
+  }, [processor]);
 
+  // Obtener datos respiratorios actuales (si existen)
   const getCurrentRespiratoryData = useCallback(() => {
-    // Por ahora, retornamos null ya que no tenemos datos respiratorios directos
-    return null;
-  }, []);
+    if (!vitalSignsData) return null;
+    
+    return {
+      rate: vitalSignsData.respiratoryRate || 0,
+      pattern: vitalSignsData.respiratoryPattern || 'unknown',
+      confidence: vitalSignsData.respiratoryConfidence || 0
+    };
+  }, [vitalSignsData]);
   
-  // Función para calibrar el medidor de glucosa
-  const calibrateGlucose = useCallback((referenceValue: number) => {
-    if (glucoseProcessor && typeof referenceValue === 'number' && referenceValue > 0) {
-      glucoseProcessor.calibrateWithReference(referenceValue);
-      console.log('Glucosa calibrada con valor de referencia:', referenceValue);
-      return true;
-    }
-    return false;
-  }, [glucoseProcessor]);
-
-  // Método cleanMemory para liberar recursos
-  const cleanMemory = useCallback(() => {
-    console.log('useVitalSignsProcessor: Realizando limpieza de memoria');
+  // Obtener datos de arritmias actuales (si existen)
+  const getArrhythmiaData = useCallback(() => {
+    if (!vitalSignsData || !vitalSignsData.lastArrhythmiaData) return null;
     
-    // Reiniciar procesadores
-    processor.reset();
-    glucoseProcessor.reset();
-    
-    // Limpiar el estado
-    setVitalSignsData(null);
-    
-    console.log('useVitalSignsProcessor: Memoria liberada');
-    
-    return true;
-  }, [processor, glucoseProcessor]);
+    return {
+      detected: !!vitalSignsData.lastArrhythmiaData,
+      count: vitalSignsData.arrhythmiaCount || 0,
+      status: vitalSignsData.arrhythmiaStatus || '',
+      data: vitalSignsData.lastArrhythmiaData
+    };
+  }, [vitalSignsData]);
 
   return {
     vitalSignsData,
     processSignal,
     reset,
     getCurrentRespiratoryData,
-    calibrateGlucose,
-    cleanMemory
+    getArrhythmiaData
   };
 };
