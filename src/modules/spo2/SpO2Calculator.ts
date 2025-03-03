@@ -11,15 +11,19 @@ export class SpO2Calculator {
   private calibration: SpO2Calibration;
   private processor: SpO2Processor;
   private lastCalculationTime: number = 0;
-  private calculationThrottleMs: number = 100; // Increased throttle to further reduce CPU usage
+  private calculationThrottleMs: number = 75; // Reduced throttle for smoother display updates
   private signalCache: number[] = [];
   private cacheMean: number = 0;
   private bufferFull: boolean = false;
+  private previousResults: number[] = [];
+  private resultIndex: number = 0;
+  private readonly RESULT_BUFFER_SIZE = 3; // Store recent results for display smoothing
 
   constructor() {
     this.calibration = new SpO2Calibration();
     this.processor = new SpO2Processor();
     this.lastCalculationTime = 0;
+    this.previousResults = new Array(this.RESULT_BUFFER_SIZE).fill(0);
   }
 
   /**
@@ -32,6 +36,8 @@ export class SpO2Calculator {
     this.signalCache = [];
     this.cacheMean = 0;
     this.bufferFull = false;
+    this.previousResults = new Array(this.RESULT_BUFFER_SIZE).fill(0);
+    this.resultIndex = 0;
   }
 
   /**
@@ -40,7 +46,7 @@ export class SpO2Calculator {
   calculateRaw(values: number[]): number {
     if (values.length < 20) return 0;
 
-    // More aggressive throttling to avoid excessive CPU usage
+    // More balanced throttling for smoother display values
     const now = performance.now();
     if (now - this.lastCalculationTime < this.calculationThrottleMs) {
       return this.processor.getLastValue();
@@ -50,7 +56,7 @@ export class SpO2Calculator {
     try {
       // Only recalculate signal variance periodically to improve performance
       const cacheUpdateNeeded = this.signalCache.length === 0 || 
-                               (now % 500 < this.calculationThrottleMs);
+                               (now % 400 < this.calculationThrottleMs);
       
       let signalVariance: number;
       let signalMean: number;
@@ -148,7 +154,19 @@ export class SpO2Calculator {
       calibratedSpO2 = Math.max(calibratedSpO2, 90);
       
       // Process and filter the SpO2 value
-      const finalSpO2 = this.processor.processValue(calibratedSpO2);
+      const processedSpO2 = this.processor.processValue(calibratedSpO2);
+      
+      // Apply additional smoothing for display purposes
+      this.previousResults[this.resultIndex] = processedSpO2;
+      this.resultIndex = (this.resultIndex + 1) % this.RESULT_BUFFER_SIZE;
+      
+      // Simple rolling average for display stability
+      const sum = this.previousResults.reduce((acc, val) => acc + val, 0);
+      const count = this.previousResults.filter(val => val > 0).length;
+      
+      const finalSpO2 = count > 0 ? 
+                        Math.round(sum / count) : 
+                        processedSpO2;
       
       return finalSpO2;
     } catch (err) {

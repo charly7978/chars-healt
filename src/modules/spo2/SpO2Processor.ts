@@ -10,6 +10,7 @@ export class SpO2Processor {
   private lastSpo2Value: number = 0;
   private frameSkipCounter: number = 0;
   private medianCache: number[] = new Array(5).fill(0);
+  private renderQualityMode: boolean = true; // Enable high quality rendering
 
   /**
    * Reset processor state
@@ -33,8 +34,8 @@ export class SpO2Processor {
    * Add a raw SpO2 value to the buffer
    */
   addRawValue(value: number): void {
-    // Skip every third frame to reduce processing load
-    this.frameSkipCounter = (this.frameSkipCounter + 1) % 3;
+    // Use a more consistent frame processing approach for smoother visuals
+    this.frameSkipCounter = (this.frameSkipCounter + 1) % (this.renderQualityMode ? 2 : 3);
     if (this.frameSkipCounter !== 0) return;
     
     if (value < 90 || value > 100) return; // Prevent physiologically impossible values
@@ -103,11 +104,16 @@ export class SpO2Processor {
       const sum = valuesToProcess[1] + valuesToProcess[2] + valuesToProcess[3];
       const avg = Math.round(sum / 3);
       
-      // Apply exponential smoothing with previous value to prevent abrupt changes
+      // Apply smoother exponential smoothing for high quality mode
       if (this.lastSpo2Value > 0) {
+        // Use a different alpha for high quality rendering
+        const alpha = this.renderQualityMode ? 
+                      SPO2_CONSTANTS.MOVING_AVERAGE_ALPHA * 0.8 : // Smoother for display values
+                      SPO2_CONSTANTS.MOVING_AVERAGE_ALPHA;
+                      
         filteredSpO2 = Math.round(
-          SPO2_CONSTANTS.MOVING_AVERAGE_ALPHA * avg + 
-          (1 - SPO2_CONSTANTS.MOVING_AVERAGE_ALPHA) * this.lastSpo2Value
+          alpha * avg + 
+          (1 - alpha) * this.lastSpo2Value
         );
       } else {
         filteredSpO2 = avg;
