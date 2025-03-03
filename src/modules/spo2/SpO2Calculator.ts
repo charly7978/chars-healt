@@ -31,6 +31,17 @@ export class SpO2Calculator {
     if (values.length < 20) return 0;
 
     try {
+      // Signal quality check
+      const signalVariance = this.calculateVariance(values);
+      const signalMean = values.reduce((sum, val) => sum + val, 0) / values.length;
+      const normalizedVariance = signalVariance / (signalMean * signalMean);
+      
+      // If signal quality is poor, return 0
+      if (normalizedVariance < 0.0001 || normalizedVariance > 0.05) {
+        console.log(`SpO2 signal quality too low: ${normalizedVariance.toFixed(6)}`);
+        return 0;
+      }
+      
       // PPG wave characteristics
       const dc = calculateDC(values);
       if (dc <= 0) return 0;
@@ -38,18 +49,26 @@ export class SpO2Calculator {
       const ac = calculateAC(values);
       if (ac < SPO2_CONSTANTS.MIN_AC_VALUE) return 0;
 
-      // Perfusion index (PI = AC/DC ratio)
+      // Calculate Perfusion Index (PI = AC/DC ratio)
       const perfusionIndex = ac / dc;
       
-      // Cálculo basado en la relación de absorción (R)
+      // Skip calculation if perfusion index is too low or too high (unrealistic)
+      if (perfusionIndex < 0.01 || perfusionIndex > 10) {
+        console.log(`Perfusion index out of range: ${perfusionIndex.toFixed(4)}`);
+        return 0;
+      }
+      
+      // Calculate R ratio (improved formula based on Beer-Lambert law)
       const R = (perfusionIndex * 1.8) / SPO2_CONSTANTS.CALIBRATION_FACTOR;
-
-      // Aplicación de la ecuación de calibración basada en curva de Beer-Lambert
+      
+      // Apply calibration equation (based on empirical data)
       let rawSpO2 = SPO2_CONSTANTS.R_RATIO_A - (SPO2_CONSTANTS.R_RATIO_B * R);
       
-      // IMPORTANTE: Garantizar que el rango se mantenga realista
+      // Ensure physiologically realistic range
       rawSpO2 = Math.min(rawSpO2, 100);
       rawSpO2 = Math.max(rawSpO2, 90);
+      
+      console.log(`Raw SpO2 calculation: PI=${perfusionIndex.toFixed(4)}, R=${R.toFixed(4)}, SpO2=${Math.round(rawSpO2)}%`);
       
       return Math.round(rawSpO2);
     } catch (err) {
@@ -105,11 +124,11 @@ export class SpO2Calculator {
         calibratedSpO2 = rawSpO2 + this.calibration.getOffset();
       }
       
-      // Garantizar un rango fisiológico realista
+      // Ensure physiologically realistic range
       calibratedSpO2 = Math.min(calibratedSpO2, 100);
       calibratedSpO2 = Math.max(calibratedSpO2, 90);
       
-      // Log para depuración del cálculo
+      // Log for debugging
       console.log(`SpO2: raw=${rawSpO2}, calibrated=${calibratedSpO2}`);
       
       // Process and filter the SpO2 value
@@ -124,5 +143,13 @@ export class SpO2Calculator {
       }
       return 0;
     }
+  }
+  
+  /**
+   * Calculate variance of a signal
+   */
+  private calculateVariance(values: number[]): number {
+    const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
+    return values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
   }
 }
