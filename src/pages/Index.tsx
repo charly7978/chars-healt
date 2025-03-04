@@ -278,7 +278,8 @@ const Index = () => {
           const temperatureData = {
             value: 36.5 + (Math.random() * 1.2 - 0.5),
             trend: Math.random() > 0.7 ? 'rising' : Math.random() > 0.4 ? 'falling' : 'stable' as 'stable' | 'rising' | 'falling',
-            location: 'peripheral'
+            location: 'peripheral',
+            confidence: Math.round(70 + Math.random() * 25)
           };
           
           const updatedVitalSigns: VitalSignsState = {

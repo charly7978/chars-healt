@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { ArrowDown, ArrowRight, ArrowUp, Heart } from 'lucide-react';
+import { ArrowDown, ArrowRight, ArrowUp, Heart, Thermometer, Activity } from 'lucide-react';
 
 interface CholesterolData {
   totalCholesterol: number;
@@ -71,6 +71,13 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
       return <ArrowRight className="inline text-gray-400 ml-1" size={18} />;
     }
   };
+
+  // Helper function for temperature status color
+  const getTemperatureColor = (value: number) => {
+    if (value > 38) return 'text-red-500';
+    if (value < 36) return 'text-blue-500';
+    return 'text-white';
+  };
   
   return (
     <div className="w-full h-full relative">
@@ -106,20 +113,27 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
       
       {/* Display cholesterol data if available */}
       {cholesterol && cholesterol.totalCholesterol > 0 && (
-        <div className="absolute top-4 right-4 bg-black/80 p-4 rounded-md shadow-lg border border-gray-700">
-          <div className="text-xl font-semibold text-white mb-2 border-b border-gray-700 pb-1">Cholesterol</div>
-          <div className="flex flex-col gap-2">
-            <div className={`${getCholesterolColor(cholesterol.totalCholesterol, 'total')} font-medium text-base`}>
-              Total: {cholesterol.totalCholesterol} mg/dL
+        <div className="absolute top-4 right-4 bg-black/90 p-4 rounded-md shadow-lg border border-gray-700">
+          <div className="flex items-center justify-between text-xl font-semibold text-white mb-3 border-b border-gray-700 pb-2">
+            <span>Cholesterol</span>
+            <Activity size={20} className="text-yellow-500" />
+          </div>
+          <div className="flex flex-col gap-3">
+            <div className={`flex justify-between ${getCholesterolColor(cholesterol.totalCholesterol, 'total')} font-medium text-lg`}>
+              <span>Total:</span>
+              <span className="font-bold">{cholesterol.totalCholesterol} mg/dL</span>
             </div>
-            <div className={`${getCholesterolColor(cholesterol.hdl, 'hdl')} text-base`}>
-              HDL: {cholesterol.hdl} mg/dL
+            <div className={`flex justify-between ${getCholesterolColor(cholesterol.hdl, 'hdl')} text-base`}>
+              <span>HDL:</span>
+              <span className="font-medium">{cholesterol.hdl} mg/dL</span>
             </div>
-            <div className={`${getCholesterolColor(cholesterol.ldl, 'ldl')} text-base`}>
-              LDL: {cholesterol.ldl} mg/dL
+            <div className={`flex justify-between ${getCholesterolColor(cholesterol.ldl, 'ldl')} text-base`}>
+              <span>LDL:</span>
+              <span className="font-medium">{cholesterol.ldl} mg/dL</span>
             </div>
-            <div className={`${getCholesterolColor(cholesterol.triglycerides, 'triglycerides')} text-base`}>
-              Triglycerides: {cholesterol.triglycerides} mg/dL
+            <div className={`flex justify-between ${getCholesterolColor(cholesterol.triglycerides, 'triglycerides')} text-base`}>
+              <span>Triglycerides:</span>
+              <span className="font-medium">{cholesterol.triglycerides} mg/dL</span>
             </div>
           </div>
         </div>
@@ -127,21 +141,29 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
       
       {/* Display temperature data if available */}
       {temperature && temperature.value > 0 && (
-        <div className="absolute top-4 left-4 bg-black/80 p-4 rounded-md shadow-lg border border-gray-700">
-          <div className="text-xl font-semibold text-white mb-2 border-b border-gray-700 pb-1">Temperature</div>
-          <div className={`text-2xl font-medium ${
-            temperature.value > 38 ? 'text-red-500' : 
-            temperature.value < 36 ? 'text-blue-500' : 
-            'text-white'
-          }`}>
+        <div className="absolute top-4 left-4 bg-black/90 p-4 rounded-md shadow-lg border border-gray-700">
+          <div className="flex items-center justify-between text-xl font-semibold text-white mb-3 border-b border-gray-700 pb-2">
+            <span>Temperature</span>
+            <Thermometer size={20} className={temperature.value > 38 ? "text-red-500" : temperature.value < 36 ? "text-blue-500" : "text-yellow-500"} />
+          </div>
+          <div className={`text-3xl font-bold ${getTemperatureColor(temperature.value)} flex items-center`}>
             {temperature.value.toFixed(1)}°C {getTempTrendIcon()}
           </div>
-          <div className="text-gray-300 text-sm mt-1">Location: {temperature.location}</div>
-          {temperature.trend === 'rising' && <div className="text-red-400 text-sm mt-2 font-medium">Temperature increasing</div>}
-          {temperature.trend === 'falling' && <div className="text-blue-400 text-sm mt-2 font-medium">Temperature decreasing</div>}
+          <div className="text-gray-300 text-sm mt-2">Location: {temperature.location}</div>
+          {temperature.trend === 'rising' && (
+            <div className="text-red-400 text-sm mt-2 font-medium flex items-center gap-1">
+              <ArrowUp size={14} /> Temperature increasing
+            </div>
+          )}
+          {temperature.trend === 'falling' && (
+            <div className="text-blue-400 text-sm mt-2 font-medium flex items-center gap-1">
+              <ArrowDown size={14} /> Temperature decreasing
+            </div>
+          )}
           {temperature.confidence && (
-            <div className="mt-2 text-xs text-gray-400">
-              Confidence: {temperature.confidence}%
+            <div className="mt-2 text-sm text-gray-400 flex justify-between">
+              <span>Confidence:</span>
+              <span className="font-medium">{temperature.confidence}%</span>
             </div>
           )}
         </div>
