@@ -164,8 +164,6 @@ export class HeartBeatProcessor {
     filteredValue: number;
     arrhythmiaCount: number;
     amplitude?: number;
-    perfusionIndex?: number;
-    pulsePressure?: number;
   } {
     // Filtros sucesivos para mejorar la señal
     const medVal = this.medianFilter(value);
@@ -230,9 +228,7 @@ export class HeartBeatProcessor {
       isPeak: isConfirmedPeak && !this.isInWarmup(),
       filteredValue: smoothed,
       arrhythmiaCount: 0,
-      amplitude: Math.abs(normalizedValue), // Adding amplitude for respiration monitoring
-      perfusionIndex: this.calculateCurrentBPM(),
-      pulsePressure: this.calculateCurrentBPM()
+      amplitude: Math.abs(normalizedValue) // Adding amplitude for respiration monitoring
     };
   }
 

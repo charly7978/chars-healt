@@ -1,153 +1,346 @@
-import React from 'react';
-import { Badge } from './ui/badge';
-import { Card } from './ui/card';
+import React, { memo, useMemo, useState } from 'react';
+import { VitalSignsRisk } from '../utils/vitalSignsRisk';
+import VitalSignDetail from './VitalSignDetail';
 
-export interface VitalSignProps {
+interface VitalSignProps {
   label: string;
   value: string | number;
-  unit: string;
-  trend?: 'rising' | 'falling' | 'stable' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
+  unit?: string;
   isFinalReading?: boolean;
   secondaryValue?: string | number;
   secondaryUnit?: string;
-  cholesterolData?: {
-    hdl: number;
-    ldl: number;
-    triglycerides: number;
-    confidence?: number;
-  };
+  trend?: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
 }
 
-/**
- * Component for displaying vital sign with trend and quality indication
- * 100% REAL MEASUREMENTS - NO SIMULATION ALLOWED
- */
-const VitalSign: React.FC<VitalSignProps> = ({
-  label,
-  value,
-  unit,
-  trend = 'stable',
+const VitalSign: React.FC<VitalSignProps> = ({ 
+  label, 
+  value, 
+  unit, 
   isFinalReading = false,
   secondaryValue,
   secondaryUnit,
-  cholesterolData
+  trend
 }) => {
-  const getTrendIcon = () => {
-    switch(trend) {
-      case 'rising':
-        return '↗️';
-      case 'falling':
-        return '↘️';
-      case 'rising_rapidly':
-        return '⬆️';
-      case 'falling_rapidly':
-        return '⬇️';
-      case 'stable':
-        return '➡️';
-      default:
-        return '•';
-    }
+  const [showDetail, setShowDetail] = useState(false);
+  const isArrhythmiaDisplay = label === "ARRITMIAS";
+  const isBloodPressure = label === "PRESIÓN ARTERIAL";
+  const isRespiration = label === "RESPIRACIÓN";
+  const isGlucose = label === "GLUCOSA";
+
+  const isBloodPressureUnrealistic = (bpString: string): boolean => {
+    if (!isBloodPressure || bpString === "--/--" || bpString === "0/0") return false;
+    
+    const [systolic, diastolic] = bpString.split('/').map(Number);
+    
+    if (isNaN(systolic) || isNaN(diastolic)) return true;
+    
+    if (systolic > 300 || systolic < 60) return true;
+    if (diastolic > 200 || diastolic < 30) return true;
+    if (systolic <= diastolic) return true;
+    
+    return false;
   };
 
-  const getTrendColor = () => {
-    switch(trend) {
-      case 'rising':
-        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
-      case 'falling':
-        return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
-      case 'rising_rapidly':
-        return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200';
-      case 'falling_rapidly':
-        return 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200';
-      case 'stable':
-        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-      default:
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200';
+  const displayValueCache = new Map<string, string | number>();
+  
+  const processedDisplayValue = useMemo(() => {
+    const cacheKey = `${label}-${value}`;
+    if (displayValueCache.has(cacheKey)) {
+      return displayValueCache.get(cacheKey);
     }
+    
+    let result = value;
+    if (isBloodPressure && typeof value === 'string') {
+      if (value === "--/--" || value === "0/0") {
+        result = value;
+      } else if (isBloodPressureUnrealistic(value)) {
+        result = "--/--";
+      }
+    }
+    
+    displayValueCache.set(cacheKey, result);
+    return result;
+  }, [value, isBloodPressure, label]);
+
+  const getRiskInfo = () => {
+    if (isArrhythmiaDisplay) {
+      return getArrhythmiaDisplay();
+    }
+
+    if (label === "FRECUENCIA CARDÍACA") {
+      if (value === "--" || value === 0) {
+        return { color: '#000000', label: '' };
+      }
+      if (typeof value === 'number') {
+        return VitalSignsRisk.getBPMRisk(value, isFinalReading);
+      }
+    }
+
+    if (label === "SPO2") {
+      if (value === "--" || value === 0) {
+        return { color: '#000000', label: '' };
+      }
+      if (typeof value === 'number') {
+        return VitalSignsRisk.getSPO2Risk(value, isFinalReading);
+      }
+    }
+
+    if (isRespiration) {
+      if (value === "--" || value === 0) {
+        return { color: '#000000', label: '' };
+      }
+      if (typeof value === 'number') {
+        return getRespirationRiskDisplay(value);
+      }
+    }
+    
+    if (isGlucose) {
+      if (value === "--" || value === 0) {
+        return { color: '#000000', label: '' };
+      }
+      if (typeof value === 'number') {
+        return getGlucoseRiskDisplay(value, trend);
+      }
+    }
+
+    if (label === "PRESIÓN ARTERIAL") {
+      if (value === "--/--" || value === "0/0") {
+        return { color: '#000000', label: '' };
+      }
+      
+      if (typeof value === 'string' && !isBloodPressureUnrealistic(value)) {
+        return VitalSignsRisk.getBPRisk(value, isFinalReading);
+      }
+      
+      return { color: '#000000', label: '' };
+    }
+
+    return { color: '#000000', label: '' };
   };
 
-  const getLipidRiskColor = (type: 'hdl' | 'ldl' | 'tg', value: number) => {
-    if (type === 'hdl') {
-      if (value >= 60) return 'text-emerald-400';
-      if (value >= 40) return 'text-blue-400';
-      return 'text-red-400';
-    }
-    if (type === 'ldl') {
-      if (value < 100) return 'text-emerald-400';
-      if (value < 130) return 'text-blue-400';
-      if (value < 160) return 'text-yellow-400';
-      return 'text-red-400';
-    }
-    // Triglicéridos
-    if (value < 150) return 'text-emerald-400';
-    if (value < 200) return 'text-blue-400';
-    if (value < 500) return 'text-yellow-400';
-    return 'text-red-400';
+  const getRespirationRiskDisplay = (rate: number) => {
+    if (rate < 8) return { color: '#DC2626', label: 'BRADIPNEA' };
+    if (rate < 12) return { color: '#F97316', label: 'LEVE BRADIPNEA' };
+    if (rate <= 20) return { color: '#22C55E', label: 'NORMAL' };
+    if (rate <= 25) return { color: '#F97316', label: 'LEVE TAQUIPNEA' };
+    return { color: '#DC2626', label: 'TAQUIPNEA' };
   };
+
+  const getGlucoseRiskDisplay = (
+    value: number, 
+    trend?: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown'
+  ) => {
+    let riskColor = '';
+    let riskLabel = '';
+    
+    if (value < 70) {
+      riskColor = '#DC2626';
+      riskLabel = 'HIPOGLUCEMIA';
+    } else if (value < 100) {
+      riskColor = '#22C55E';
+      riskLabel = 'NORMAL';
+    } else if (value < 126) {
+      riskColor = '#F97316';
+      riskLabel = 'PREDIABETES';
+    } else if (value < 180) {
+      riskColor = '#EF4444';
+      riskLabel = 'DIABETES';
+    } else if (value < 250) {
+      riskColor = '#DC2626';
+      riskLabel = 'HIPERGLUCEMIA';
+    } else {
+      riskColor = '#991B1B';
+      riskLabel = 'HIPERGLUCEMIA SEVERA';
+    }
+    
+    if (trend === 'rising_rapidly' && value > 180) {
+      riskLabel = 'HIPERGLUCEMIA CRECIENTE';
+    } else if (trend === 'falling_rapidly' && value < 90) {
+      riskLabel = 'HIPOGLUCEMIA DECRECIENTE';
+    }
+    
+    return { color: riskColor, label: riskLabel };
+  };
+
+  const getArrhythmiaRiskColor = (count: number): string => {
+    if (count <= 0) return "#000000";
+    if (count <= 4) return "#FEC6A1";
+    if (count <= 7) return "#F97316";
+    return "#DC2626";
+  };
+
+  const getArrhythmiaRiskLabel = (count: number): string => {
+    if (count <= 0) return "";
+    if (count <= 4) return "ARRITMIA LEVE";
+    if (count <= 7) return "ARRITMIA MODERADA";
+    return "ARRITMIA SEVERA";
+  };
+
+  const getArrhythmiaDisplay = () => {
+    if (!isArrhythmiaDisplay) return { text: value, color: "", label: "" };
+    
+    if (value === "--") {
+      return { 
+        text: "", 
+        color: "#FFFFFF",
+        label: ""
+      };
+    }
+    
+    if (typeof value === 'string' && value.includes('|')) {
+      const [status, countStr] = value.split('|');
+      const count = parseInt(countStr || "0", 10);
+      
+      if (status === "ARRITMIA DETECTADA") {
+        const riskLabel = getArrhythmiaRiskLabel(count);
+        const riskColor = getArrhythmiaRiskColor(count);
+        
+        const isFirstDetection = count === 1;
+        
+        return {
+          text: `${count}`,
+          title: isFirstDetection ? "ARRITMIA DETECTADA" : "",
+          color: riskColor,
+          label: riskLabel
+        };
+      }
+    }
+    
+    return {
+      text: "LATIDO NORMAL",
+      color: "#0EA5E9",
+      label: ""
+    };
+  };
+
+  const renderGlucoseTrend = (trend?: string) => {
+    if (!trend || trend === 'unknown') return null;
+
+    const trendConfig = {
+      'stable': { icon: '⟷', color: 'text-green-500', label: 'Estable' },
+      'rising': { icon: '↗', color: 'text-yellow-500', label: 'Subiendo' },
+      'falling': { icon: '↘', color: 'text-yellow-500', label: 'Bajando' },
+      'rising_rapidly': { icon: '⇑', color: 'text-red-500', label: 'Subiendo rápido' },
+      'falling_rapidly': { icon: '⇓', color: 'text-red-500', label: 'Bajando rápido' }
+    };
+
+    const config = trendConfig[trend as keyof typeof trendConfig] || { icon: '•', color: 'text-gray-400', label: 'Desconocido' };
+
+    return (
+      <span 
+        className={`ml-1 ${config.color} text-lg font-bold`} 
+        title={config.label}
+        aria-label={config.label}
+      >
+        {config.icon}
+      </span>
+    );
+  };
+
+  const handleCardClick = () => {
+    if (
+      (value === "--" || value === 0 || value === "--/--" || value === "0/0") ||
+      !isFinalReading
+    ) {
+      return;
+    }
+    
+    setShowDetail(true);
+  };
+
+  const getVitalSignType = () => {
+    if (label === "FRECUENCIA CARDÍACA") return "heartRate";
+    if (label === "SPO2") return "spo2";
+    if (label === "PRESIÓN ARTERIAL") return "bloodPressure";
+    if (label === "ARRITMIAS") return "arrhythmia";
+    if (label === "RESPIRACIÓN") return "respiration";
+    if (label === "GLUCOSA") return "glucose";
+    return "heartRate";
+  };
+
+  const { text, title, color, label: riskLabel } = isArrhythmiaDisplay ? 
+    getArrhythmiaDisplay() : 
+    { text: processedDisplayValue, title: undefined, ...getRiskInfo() };
 
   return (
-    <Card className="p-1.5 flex flex-col space-y-0.5 h-[90px] shadow-sm border border-blue-500/20 hover:border-blue-400/30 transition-colors bg-blue-950/40 backdrop-blur-sm">
-      <div className="flex justify-between items-start">
-        <h3 className="text-[8px] font-semibold text-blue-300/90">{label}</h3>
-        {trend && trend !== 'stable' && (
-          <Badge variant="outline" className={`text-[7px] px-0.5 py-0 ${getTrendColor()}`}>
-            {getTrendIcon()} {trend.replace('_', ' ')}
-          </Badge>
+    <>
+      <div 
+        className={`relative overflow-hidden rounded-xl bg-black shadow-lg ${
+          isFinalReading ? 'active:scale-95 transition-transform cursor-pointer' : ''
+        }`}
+        onClick={isFinalReading ? handleCardClick : undefined}
+      >
+        <div className="relative z-10 p-4">
+          <h3 className="text-white text-xs font-medium tracking-wider mb-2">{label}</h3>
+          <div className="flex flex-col items-center gap-1">
+            {isArrhythmiaDisplay && title && (
+              <span className="text-sm font-bold tracking-wider" style={{ color: color || '#FFFFFF' }}>
+                {title}
+              </span>
+            )}
+            <div className="flex items-baseline gap-1 justify-center">
+              <span 
+                className={`${isArrhythmiaDisplay ? 'text-xl' : 'text-xl'} font-bold transition-colors duration-300 text-white`}
+                style={{ color: color || '#000000' }}
+              >
+                {text}
+              </span>
+              {!isArrhythmiaDisplay && unit && (
+                <span className="text-white text-xs">{unit}</span>
+              )}
+              {isGlucose && renderGlucoseTrend(trend)}
+            </div>
+            
+            {secondaryValue !== undefined && (
+              <div className="flex items-baseline gap-1 justify-center mt-1">
+                <span className="text-sm font-medium text-white/80">
+                  {secondaryValue}
+                </span>
+                {secondaryUnit && (
+                  <span className="text-white/70 text-[10px]">{secondaryUnit}</span>
+                )}
+              </div>
+            )}
+            
+            {riskLabel && (
+              <span 
+                className="text-[10px] font-semibold tracking-wider mt-1 text-white"
+                style={{ color: color || '#000000' }}
+              >
+                {riskLabel}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {isFinalReading && (
+          <div className="absolute inset-0 bg-white/5 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="bg-white/10 rounded-full p-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/70">
+                  <path d="M9 18l6-6-6-6"/>
+                </svg>
+              </div>
+            </div>
+          </div>
         )}
       </div>
 
-      {cholesterolData ? (
-        // Vista especial para perfil lipídico
-        <div className="flex-1 grid grid-cols-3 gap-0.5 mt-0.5">
-          <div className="flex flex-col items-center">
-            <span className="text-[7px] text-blue-300/70">HDL</span>
-            <span className={`text-[10px] font-bold ${getLipidRiskColor('hdl', cholesterolData.hdl)}`}>
-              {cholesterolData.hdl}
-            </span>
-          </div>
-          <div className="flex flex-col items-center">
-            <span className="text-[7px] text-blue-300/70">LDL</span>
-            <span className={`text-[10px] font-bold ${getLipidRiskColor('ldl', cholesterolData.ldl)}`}>
-              {cholesterolData.ldl}
-            </span>
-          </div>
-          <div className="flex flex-col items-center">
-            <span className="text-[7px] text-blue-300/70">TG</span>
-            <span className={`text-[10px] font-bold ${getLipidRiskColor('tg', cholesterolData.triglycerides)}`}>
-              {cholesterolData.triglycerides}
-            </span>
-          </div>
-          <div className="col-span-3 flex justify-center items-baseline mt-0.5">
-            <span className="text-base font-bold tracking-tighter text-white">{value}</span>
-            <span className="text-[8px] text-blue-300/70 ml-1">{unit}</span>
-          </div>
-          {cholesterolData.confidence && (
-            <div className="col-span-3 flex justify-center">
-              <span className="text-[7px] text-blue-300/70">
-                Confianza: {Math.round(cholesterolData.confidence)}%
-              </span>
-            </div>
-          )}
-        </div>
-      ) : (
-        // Vista normal para otros signos vitales
-        <div className="flex-1 flex flex-col justify-center">
-          <div className="flex items-baseline space-x-1 justify-center">
-            <span className="text-base font-bold tracking-tighter text-white">{value}</span>
-            <span className="text-[8px] text-blue-300/70">{unit}</span>
-          </div>
-          {secondaryValue && secondaryUnit && (
-            <div className="flex items-baseline space-x-1 justify-center">
-              <span className="text-xs font-medium tracking-tighter text-blue-200/90">
-                {secondaryValue}
-              </span>
-              <span className="text-[7px] text-blue-300/70">{secondaryUnit}</span>
-            </div>
-          )}
-        </div>
+      {showDetail && (
+        <VitalSignDetail
+          title={label}
+          value={text as string | number}
+          unit={unit}
+          riskLevel={riskLabel}
+          type={getVitalSignType()}
+          onBack={() => setShowDetail(false)}
+          secondaryValue={secondaryValue as string | number}
+          secondaryUnit={secondaryUnit}
+          trend={isGlucose ? trend : undefined}
+        />
       )}
-    </Card>
+    </>
   );
 };
 
-export default VitalSign;
+export default memo(VitalSign);

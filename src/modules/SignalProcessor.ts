@@ -155,13 +155,14 @@ export class PPGSignalProcessor implements SignalProcessor {
 
       const { isFingerDetected, quality } = this.analyzeSignal(filtered, redValue);
 
-      console.log("PPGSignalProcessor: Analysis", {
-        redValue,
-        filtered,
-        isFingerDetected,
-        quality,
-        stableFrames: this.stableFrameCount
-      });
+      // Add more detailed logging
+      if (quality > 50) {
+        console.log("PPGSignalProcessor: Good quality signal detected", {
+          redValue,
+          filtered,
+          quality
+        });
+      }
 
       const processedSignal: ProcessedSignal = {
         timestamp: Date.now(),
