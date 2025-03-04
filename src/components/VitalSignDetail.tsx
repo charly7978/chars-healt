@@ -6,7 +6,7 @@ interface VitalSignDetailProps {
   value: string | number;
   unit?: string;
   riskLevel?: string;
-  type: 'heartRate' | 'spo2' | 'bloodPressure' | 'arrhythmia' | 'respiration' | 'glucose' | 'lipids';
+  type: "heartRate" | "spo2" | "bloodPressure" | "arrhythmia" | "respiration" | "glucose" | "lipids";
   onBack: () => void;
   secondaryValue?: string | number;
   secondaryUnit?: string;

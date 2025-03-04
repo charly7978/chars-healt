@@ -1,4 +1,3 @@
-
 import { applySMAFilter, applySMAFilterSingle } from '../utils/signalProcessingUtils';
 import { SpO2Calculator } from './spo2';
 import { BloodPressureCalculator } from './BloodPressureCalculator';
