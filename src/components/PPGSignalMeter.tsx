@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -14,6 +15,12 @@ interface PPGSignalMeterProps {
     rmssd: number;
     rrVariation: number;
   } | null;
+  lipidData?: {
+    totalCholesterol: number;
+    hdl: number;
+    ldl: number;
+    triglycerides: number;
+  } | null;
 }
 
 const PPGSignalMeter = ({ 
@@ -23,7 +30,8 @@ const PPGSignalMeter = ({
   onStartMeasurement,
   onReset,
   arrhythmiaStatus,
-  rawArrhythmiaData
+  rawArrhythmiaData,
+  lipidData
 }: PPGSignalMeterProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dataBufferRef = useRef<CircularBuffer | null>(null);
@@ -49,11 +57,11 @@ const PPGSignalMeter = ({
   const PEAK_DISTANCE_MS = 200;
   
   const COLORS = {
-    BACKGROUND: '#0A1929',
-    GRID_MAIN: 'rgba(255, 255, 255, 0.3)',
-    GRID_MINOR: 'rgba(255, 255, 255, 0.1)',
+    BACKGROUND: '#F6F6F7', // Cambiado a gris claro
+    GRID_MAIN: 'rgba(128, 128, 128, 0.3)',
+    GRID_MINOR: 'rgba(128, 128, 128, 0.1)',
     ZERO_LINE: 'rgba(0, 255, 150, 0.9)',
-    AXIS_TEXT: 'rgba(230, 255, 230, 1.0)',
+    AXIS_TEXT: 'rgba(50, 50, 50, 1.0)',
     SIGNAL_LINE: '#FFFFFF',
     ARRHYTHMIA_LINE: '#EF4444',
     PEAK_NORMAL: '#FFFFFF',
@@ -129,7 +137,7 @@ const PPGSignalMeter = ({
       if (x >= 0) {
         const timeMs = (x / CANVAS_WIDTH) * WINDOW_WIDTH_MS;
         ctx.fillStyle = COLORS.AXIS_TEXT;
-        ctx.font = '18px "Inter", sans-serif';
+        ctx.font = '22px "Inter", sans-serif'; // Aumentado tamaño de texto
         ctx.textAlign = 'center';
         ctx.fillText(`${Math.round(timeMs)}ms`, x, CANVAS_HEIGHT - 10);
       }
@@ -142,7 +150,7 @@ const PPGSignalMeter = ({
       if (y % (GRID_SIZE_Y * 4) === 0) {
         const amplitude = ((zeroY - y) / VERTICAL_SCALE).toFixed(1);
         ctx.fillStyle = COLORS.AXIS_TEXT;
-        ctx.font = '18px "Inter", sans-serif';
+        ctx.font = '22px "Inter", sans-serif'; // Aumentado tamaño de texto
         ctx.textAlign = 'right';
         ctx.fillText(amplitude, 32, y + 6);
       }
@@ -150,7 +158,7 @@ const PPGSignalMeter = ({
     ctx.stroke();
 
     ctx.fillStyle = COLORS.AXIS_TEXT;
-    ctx.font = 'bold 20px "Inter", sans-serif';
+    ctx.font = 'bold 24px "Inter", sans-serif'; // Aumentado tamaño de texto
     
     ctx.textAlign = 'center';
     ctx.fillText('Tiempo (ms)', CANVAS_WIDTH / 2, CANVAS_HEIGHT - 30);
@@ -161,7 +169,7 @@ const PPGSignalMeter = ({
     ctx.fillText('Amplitud', 0, 0);
     ctx.restore();
     
-    ctx.font = '14px "Inter", sans-serif';
+    ctx.font = '18px "Inter", sans-serif'; // Aumentado tamaño de texto
     ctx.fillText('(0,0)', 40, zeroY + 20);
   }, []);
 
@@ -422,6 +430,30 @@ const PPGSignalMeter = ({
           }}
         />
       </div>
+      
+      {lipidData && (
+        <div className="absolute left-2 top-20 p-4 z-30 bg-black/50 backdrop-blur-sm rounded-lg">
+          <h3 className="text-white text-lg font-bold mb-2">Lípidos en Sangre</h3>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+            <div className="text-white">
+              <p className="text-sm font-semibold">Colesterol Total</p>
+              <p className="text-xl font-bold">{lipidData.totalCholesterol} <span className="text-sm">mg/dL</span></p>
+            </div>
+            <div className="text-white">
+              <p className="text-sm font-semibold">HDL</p>
+              <p className="text-xl font-bold">{lipidData.hdl} <span className="text-sm">mg/dL</span></p>
+            </div>
+            <div className="text-white">
+              <p className="text-sm font-semibold">LDL</p>
+              <p className="text-xl font-bold">{lipidData.ldl} <span className="text-sm">mg/dL</span></p>
+            </div>
+            <div className="text-white">
+              <p className="text-sm font-semibold">Triglicéridos</p>
+              <p className="text-xl font-bold">{lipidData.triglycerides} <span className="text-sm">mg/dL</span></p>
+            </div>
+          </div>
+        </div>
+      )}
       
       <div className="absolute" style={{ top: 'calc(65vh + 5px)', left: 0, right: 0, textAlign: 'center', zIndex: 30 }}>
         <h1 className="text-xl font-bold">

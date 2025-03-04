@@ -22,6 +22,12 @@ interface VitalSigns {
     value: number;
     trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
   };
+  lipids: {
+    totalCholesterol: number;
+    hdl: number;
+    ldl: number;
+    triglycerides: number;
+  } | null;
   lastArrhythmiaData: {
     timestamp: number;
     rmssd: number;
@@ -40,6 +46,7 @@ const Index = () => {
     respiration: { rate: 0, depth: 0, regularity: 0 },
     hasRespirationData: false,
     glucose: { value: 0, trend: 'unknown' },
+    lipids: null,
     lastArrhythmiaData: null
   });
   const [heartRate, setHeartRate] = useState(0);
@@ -63,7 +70,13 @@ const Index = () => {
     glucose: {
       value: number;
       trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
-    }
+    },
+    lipids: {
+      totalCholesterol: number;
+      hdl: number;
+      ldl: number;
+      triglycerides: number;
+    } | null
   } | null>(null);
   const [permissionsGranted, setPermissionsGranted] = useState(false);
   const measurementTimerRef = useRef<number | null>(null);
@@ -75,6 +88,17 @@ const Index = () => {
   const allRespirationRateValuesRef = useRef<number[]>([]);
   const allRespirationDepthValuesRef = useRef<number[]>([]);
   const allGlucoseValuesRef = useRef<number[]>([]);
+  const allLipidValuesRef = useRef<{
+    totalCholesterol: number[];
+    hdl: number[];
+    ldl: number[];
+    triglycerides: number[];
+  }>({
+    totalCholesterol: [],
+    hdl: [],
+    ldl: [],
+    triglycerides: []
+  });
   
   const hasValidValuesRef = useRef(false);
   
@@ -103,6 +127,7 @@ const Index = () => {
       const validRespRates = allRespirationRateValuesRef.current.filter(v => v > 0);
       const validRespDepths = allRespirationDepthValuesRef.current.filter(v => v > 0);
       const validGlucoseValues = allGlucoseValuesRef.current.filter(v => v > 0);
+      const validLipidValues = allLipidValuesRef.current.totalCholesterol.filter(v => v > 0);
       
       console.log("Valores acumulados para promedios:", {
         heartRateValues: validHeartRates.length,
@@ -111,7 +136,8 @@ const Index = () => {
         diastolicValues: validDiastolicValues.length,
         respirationRates: validRespRates.length,
         respirationDepths: validRespDepths.length,
-        glucoseValues: validGlucoseValues.length
+        glucoseValues: validGlucoseValues.length,
+        lipidValues: validLipidValues.length
       });
       
       let avgHeartRate = 0;
@@ -156,12 +182,45 @@ const Index = () => {
         avgGlucose = vitalSigns.glucose.value;
       }
       
+      let finalLipids = null;
+      if (allLipidValuesRef.current.totalCholesterol.length > 0) {
+        const avgTotalCholesterol = Math.round(
+          allLipidValuesRef.current.totalCholesterol.reduce((a, b) => a + b, 0) / 
+          allLipidValuesRef.current.totalCholesterol.length
+        );
+        
+        const avgHDL = Math.round(
+          allLipidValuesRef.current.hdl.reduce((a, b) => a + b, 0) / 
+          allLipidValuesRef.current.hdl.length
+        );
+        
+        const avgLDL = Math.round(
+          allLipidValuesRef.current.ldl.reduce((a, b) => a + b, 0) / 
+          allLipidValuesRef.current.ldl.length
+        );
+        
+        const avgTriglycerides = Math.round(
+          allLipidValuesRef.current.triglycerides.reduce((a, b) => a + b, 0) / 
+          allLipidValuesRef.current.triglycerides.length
+        );
+        
+        finalLipids = {
+          totalCholesterol: avgTotalCholesterol,
+          hdl: avgHDL,
+          ldl: avgLDL,
+          triglycerides: avgTriglycerides
+        };
+      } else {
+        finalLipids = vitalSigns.lipids;
+      }
+      
       console.log("PROMEDIOS REALES calculados:", {
         heartRate: avgHeartRate,
         spo2: avgSpo2,
         pressure: finalBPString,
         respiration: { rate: avgRespRate, depth: avgRespDepth },
-        glucose: avgGlucose
+        glucose: avgGlucose,
+        lipids: finalLipids
       });
       
       let glucoseTrend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown' = 'unknown';
@@ -199,7 +258,8 @@ const Index = () => {
         glucose: {
           value: avgGlucose > 0 ? avgGlucose : vitalSigns.glucose.value,
           trend: glucoseTrend
-        }
+        },
+        lipids: finalLipids
       });
         
       hasValidValuesRef.current = true;
@@ -211,6 +271,12 @@ const Index = () => {
       allRespirationRateValuesRef.current = [];
       allRespirationDepthValuesRef.current = [];
       allGlucoseValuesRef.current = [];
+      allLipidValuesRef.current = {
+        totalCholesterol: [],
+        hdl: [],
+        ldl: [],
+        triglycerides: []
+      };
     } catch (error) {
       console.error("Error en calculateFinalValues:", error);
       setFinalValues({
@@ -218,7 +284,8 @@ const Index = () => {
         spo2: vitalSigns.spo2,
         pressure: vitalSigns.pressure,
         respiration: vitalSigns.respiration,
-        glucose: vitalSigns.glucose
+        glucose: vitalSigns.glucose,
+        lipids: vitalSigns.lipids
       });
       hasValidValuesRef.current = true;
     }
@@ -253,6 +320,12 @@ const Index = () => {
       allRespirationRateValuesRef.current = [];
       allRespirationDepthValuesRef.current = [];
       allGlucoseValuesRef.current = [];
+      allLipidValuesRef.current = {
+        totalCholesterol: [],
+        hdl: [],
+        ldl: [],
+        triglycerides: []
+      };
       
       if (measurementTimerRef.current) {
         clearInterval(measurementTimerRef.current);
@@ -351,6 +424,7 @@ const Index = () => {
       respiration: { rate: 0, depth: 0, regularity: 0 },
       hasRespirationData: false,
       glucose: { value: 0, trend: 'unknown' },
+      lipids: null,
       lastArrhythmiaData: null
     });
     setArrhythmiaCount("--");
@@ -372,6 +446,12 @@ const Index = () => {
     allRespirationRateValuesRef.current = [];
     allRespirationDepthValuesRef.current = [];
     allGlucoseValuesRef.current = [];
+    allLipidValuesRef.current = {
+      totalCholesterol: [],
+      hdl: [],
+      ldl: [],
+      triglycerides: []
+    };
   };
 
   const handleStreamReady = (stream: MediaStream) => {
@@ -612,6 +692,27 @@ const Index = () => {
               allGlucoseValuesRef.current.push(vitals.glucose.value);
             }
             
+            if (vitals.lipids) {
+              console.log("Actualizando UI con datos de lípidos:", vitals.lipids);
+              setVitalSigns(current => ({
+                ...current,
+                lipids: vitals.lipids
+              }));
+              
+              if (vitals.lipids.totalCholesterol > 0) {
+                allLipidValuesRef.current.totalCholesterol.push(vitals.lipids.totalCholesterol);
+              }
+              if (vitals.lipids.hdl > 0) {
+                allLipidValuesRef.current.hdl.push(vitals.lipids.hdl);
+              }
+              if (vitals.lipids.ldl > 0) {
+                allLipidValuesRef.current.ldl.push(vitals.lipids.ldl);
+              }
+              if (vitals.lipids.triglycerides > 0) {
+                allLipidValuesRef.current.triglycerides.push(vitals.lipids.triglycerides);
+              }
+            }
+            
             if (vitals.lastArrhythmiaData) {
               setLastArrhythmiaData(vitals.lastArrhythmiaData);
               setVitalSigns(current => ({
@@ -688,6 +789,7 @@ const Index = () => {
           onReset={handleReset}
           arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
           rawArrhythmiaData={lastArrhythmiaData}
+          lipidData={vitalSigns.lipids}
         />
       </div>
       
@@ -726,10 +828,10 @@ const Index = () => {
               isFinalReading={measurementComplete}
             />
             <VitalSign 
-              label="GLUCOSA"
-              value={finalValues ? finalValues.glucose.value : (vitalSigns.glucose ? vitalSigns.glucose.value : "--")}
+              label="LÍPIDOS"
+              value={vitalSigns.lipids ? vitalSigns.lipids.totalCholesterol : "--"}
               unit="mg/dL"
-              trend={finalValues ? finalValues.glucose.trend : (vitalSigns.glucose ? vitalSigns.glucose.trend : "unknown")}
+              secondaryValue={vitalSigns.lipids ? `HDL: ${vitalSigns.lipids.hdl}` : "--"}
               isFinalReading={measurementComplete}
             />
           </div>

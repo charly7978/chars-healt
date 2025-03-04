@@ -1,4 +1,3 @@
-
 import React, { memo, useMemo, useState } from 'react';
 import { VitalSignsRisk } from '../utils/vitalSignsRisk';
 import VitalSignDetail from './VitalSignDetail';
@@ -27,6 +26,7 @@ const VitalSign: React.FC<VitalSignProps> = ({
   const isBloodPressure = label === "PRESIÓN ARTERIAL";
   const isRespiration = label === "RESPIRACIÓN";
   const isGlucose = label === "GLUCOSA";
+  const isLipids = label === "LÍPIDOS";
 
   const isBloodPressureUnrealistic = (bpString: string): boolean => {
     if (!isBloodPressure || bpString === "--/--" || bpString === "0/0") return false;
@@ -103,6 +103,15 @@ const VitalSign: React.FC<VitalSignProps> = ({
         return getGlucoseRiskDisplay(value, trend);
       }
     }
+    
+    if (isLipids) {
+      if (value === "--" || value === 0) {
+        return { color: '#000000', label: '' };
+      }
+      if (typeof value === 'number') {
+        return getLipidRiskDisplay(value);
+      }
+    }
 
     if (label === "PRESIÓN ARTERIAL") {
       if (value === "--/--" || value === "0/0") {
@@ -158,6 +167,27 @@ const VitalSign: React.FC<VitalSignProps> = ({
       riskLabel = 'HIPERGLUCEMIA CRECIENTE';
     } else if (trend === 'falling_rapidly' && value < 90) {
       riskLabel = 'HIPOGLUCEMIA DECRECIENTE';
+    }
+    
+    return { color: riskColor, label: riskLabel };
+  };
+
+  const getLipidRiskDisplay = (totalCholesterol: number) => {
+    let riskColor = '';
+    let riskLabel = '';
+    
+    if (totalCholesterol < 150) {
+      riskColor = '#22C55E';
+      riskLabel = 'ÓPTIMO';
+    } else if (totalCholesterol < 200) {
+      riskColor = '#84CC16';
+      riskLabel = 'DESEABLE';
+    } else if (totalCholesterol < 240) {
+      riskColor = '#F97316';
+      riskLabel = 'LÍMITE ALTO';
+    } else {
+      riskColor = '#DC2626';
+      riskLabel = 'ELEVADO';
     }
     
     return { color: riskColor, label: riskLabel };
@@ -262,6 +292,7 @@ const VitalSign: React.FC<VitalSignProps> = ({
     if (label === "ARRITMIAS") return "arrhythmia";
     if (label === "RESPIRACIÓN") return "respiration";
     if (label === "GLUCOSA") return "glucose";
+    if (label === "LÍPIDOS") return "lipids";
     return "heartRate";
   };
 
@@ -305,8 +336,8 @@ const VitalSign: React.FC<VitalSignProps> = ({
                 </span>
                 {secondaryUnit && (
                   <span className="text-white/70 text-[10px]">{secondaryUnit}</span>
-        )}
-      </div>
+                )}
+              </div>
             )}
             
             {riskLabel && (
