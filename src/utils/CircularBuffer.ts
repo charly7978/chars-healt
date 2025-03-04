@@ -9,11 +9,12 @@ interface PPGDataPoint {
 export class CircularBuffer {
   private buffer: PPGDataPoint[];
   private maxSize: number;
-  private fingerDetectionThreshold: number = 0.01; // MODIFICACIÓN: Umbral extremadamente bajo
+  private fingerDetectionThreshold: number = 0.00001; // MODIFICACIÓN: Umbral casi nulo
   private lastDetectionTime: number = 0;
-  private detectionHysteresis: number = 0.02; // MODIFICACIÓN: Histéresis reducida
-  private persistenceTime: number = 30000; // NUEVA: Duración extrema de 30 segundos de persistencia
-  private detectionCounter: number = 0; // Nuevo contador de detección continua
+  private detectionHysteresis: number = 0.00001; // MODIFICACIÓN: Histéresis mínima
+  private persistenceTime: number = 60000; // NUEVA: Duración de 60 segundos de persistencia
+  private detectionCounter: number = 0; // Contador de detección continua
+  private isCurrentlyDetected: boolean = false; // Estado de detección
 
   constructor(size: number) {
     this.buffer = [];
@@ -25,6 +26,11 @@ export class CircularBuffer {
     if (this.buffer.length > this.maxSize) {
       this.buffer.shift();
     }
+    
+    // Revisar detección inmediatamente al recibir datos
+    if (this.buffer.length > 3) {
+      this.isCurrentlyDetected = this.checkFingerDetection();
+    }
   }
 
   getPoints(): PPGDataPoint[] {
@@ -35,70 +41,85 @@ export class CircularBuffer {
     this.buffer = [];
     this.lastDetectionTime = 0;
     this.detectionCounter = 0;
+    this.isCurrentlyDetected = false;
   }
 
-  // Reescrita completamente para mantener detección casi permanente
-  isFingerDetected(recentPoints: number = 5): boolean {
-    // Si no hay suficientes puntos, no podemos detectar nada
-    if (this.buffer.length < 3) return false;
+  // Método principal de detección
+  isFingerDetected(): boolean {
+    // Si no hay suficientes puntos, pero ya teníamos detección, mantener
+    if (this.buffer.length < 3) {
+      return this.isCurrentlyDetected || false;
+    }
     
+    // Verificar si estamos dentro del período de persistencia
     const currentTime = Date.now();
+    if (currentTime - this.lastDetectionTime < this.persistenceTime) {
+      this.isCurrentlyDetected = true;
+      return true;
+    }
     
-    // Verificar si ya estábamos en modo de detección
-    const wasDetected = currentTime - this.lastDetectionTime < this.persistenceTime;
+    // Si el contador de detección es alto, devolver true automáticamente
+    if (this.detectionCounter > 5) {
+      this.isCurrentlyDetected = true;
+      return true;
+    }
     
-    // Siempre detectar después de acumular algunos puntos (casi inmediato)
-    if (this.buffer.length >= 5 && this.detectionCounter < 10) {
-      this.detectionCounter++;
+    // Verificar con los algoritmos de detección
+    const detected = this.checkFingerDetection();
+    
+    // Actualizar el estado y el contador según el resultado
+    if (detected) {
+      this.isCurrentlyDetected = true;
       this.lastDetectionTime = currentTime;
+      this.detectionCounter = Math.min(20, this.detectionCounter + 1);
+    } else {
+      this.detectionCounter = Math.max(0, this.detectionCounter - 0.1);
+      // Solo cambiar a no detectado si el contador llega a cero
+      if (this.detectionCounter <= 0) {
+        this.isCurrentlyDetected = false;
+      }
+    }
+    
+    return this.isCurrentlyDetected;
+  }
+  
+  // Comprobación exhaustiva de detección usando múltiples algoritmos
+  private checkFingerDetection(): boolean {
+    // 1. Detectar cualquier cambio mínimo entre puntos
+    if (this.detectAnyChange()) {
       return true;
     }
     
-    // Tomar los últimos puntos para análisis
-    const latestPoints = this.buffer.slice(-Math.min(recentPoints, this.buffer.length));
-    
-    // 1. Detector por varianza (extremadamente sensible)
-    const signalVariance = this.calculateVariance(latestPoints.map(p => p.value));
-    if (signalVariance > 0.0001) { // Umbral ultra sensible
-      this.lastDetectionTime = currentTime;
-      this.detectionCounter += 5;
+    // 2. Detectar por promedio absoluto (cualquier señal no nula)
+    if (this.hasNonZeroSignal()) {
       return true;
     }
     
-    // 2. Detector por cambios entre puntos (aún más sensible)
-    if (this.detectMinimalChanges(latestPoints)) {
-      this.lastDetectionTime = currentTime;
-      this.detectionCounter += 3;
+    // 3. Detectar por varianza (cualquier variabilidad)
+    if (this.hasMinimalVariance()) {
       return true;
     }
     
-    // 3. Detector por amplitud absoluta (prácticamente cualquier señal no plana)
-    if (this.hasMinimalAmplitude(latestPoints)) {
-      this.lastDetectionTime = currentTime;
-      this.detectionCounter += 2;
+    // 4. Detectar por pendiente (cualquier tendencia)
+    if (this.hasMinimalSlope()) {
       return true;
     }
     
-    // 4. Persistencia extremadamente larga (30 segundos)
-    if (wasDetected) {
-      // Decrementar contador pero mantener detección
-      this.detectionCounter = Math.max(0, this.detectionCounter - 1);
+    // 5. Último recurso: detectar si hay más de X puntos con valores absolutos mayores a Y
+    if (this.hasSignificantPoints()) {
       return true;
     }
     
-    // Reiniciar contador si no se detecta nada
-    this.detectionCounter = 0;
     return false;
   }
 
-  // Modificado para detectar cambios mínimos entre puntos consecutivos
-  private detectMinimalChanges(points: PPGDataPoint[]): boolean {
-    if (points.length < 2) return false;
+  // Detecta CUALQUIER cambio entre puntos consecutivos
+  private detectAnyChange(): boolean {
+    const recentPoints = this.buffer.slice(-Math.min(5, this.buffer.length));
     
-    // Detectar cualquier cambio mayor a 0.001 entre puntos consecutivos
-    for (let i = 1; i < points.length; i++) {
-      const diff = Math.abs(points[i].value - points[i-1].value);
-      if (diff > 0.001) { // Umbral extremadamente bajo
+    for (let i = 1; i < recentPoints.length; i++) {
+      const diff = Math.abs(recentPoints[i].value - recentPoints[i-1].value);
+      if (diff > 0.00001) { // Umbral extremadamente bajo
         return true;
       }
     }
@@ -106,24 +127,48 @@ export class CircularBuffer {
     return false;
   }
   
-  // Modificado para detectar cualquier mínima variación de amplitud
-  private hasMinimalAmplitude(points: PPGDataPoint[]): boolean {
-    if (points.length < 2) return false;
+  // Detecta si la señal no es nula
+  private hasNonZeroSignal(): boolean {
+    const recentPoints = this.buffer.slice(-Math.min(10, this.buffer.length));
     
-    // Encontrar valor mínimo y máximo
-    let min = Number.MAX_VALUE;
-    let max = -Number.MAX_VALUE;
+    const avgSignal = recentPoints.reduce((sum, p) => sum + Math.abs(p.value), 0) / recentPoints.length;
+    return avgSignal > 0.00001; // Umbral extremadamente bajo
+  }
+  
+  // Detecta variabilidad mínima
+  private hasMinimalVariance(): boolean {
+    const recentPoints = this.buffer.slice(-Math.min(15, this.buffer.length));
+    const values = recentPoints.map(p => p.value);
     
-    for (const point of points) {
-      min = Math.min(min, point.value);
-      max = Math.max(max, point.value);
+    const variance = this.calculateVariance(values);
+    return variance > 0.0000001; // Umbral extremadamente bajo
+  }
+  
+  // Detecta pendiente mínima (tendencia)
+  private hasMinimalSlope(): boolean {
+    const recentPoints = this.buffer.slice(-Math.min(20, this.buffer.length));
+    
+    if (recentPoints.length < 3) return false;
+    
+    let sumSlope = 0;
+    for (let i = 1; i < recentPoints.length; i++) {
+      sumSlope += Math.abs(recentPoints[i].value - recentPoints[i-1].value);
     }
     
-    // Cualquier diferencia mayor a 0.005 se considera señal válida
-    return (max - min) > 0.005;
+    const avgSlope = sumSlope / (recentPoints.length - 1);
+    return avgSlope > 0.000001; // Umbral extremadamente bajo
+  }
+  
+  // Detecta si hay puntos significativos
+  private hasSignificantPoints(): boolean {
+    const recentPoints = this.buffer.slice(-Math.min(30, this.buffer.length));
+    
+    // Contar cuántos puntos tienen un valor absoluto mayor al umbral
+    const significantPoints = recentPoints.filter(p => Math.abs(p.value) > 0.001);
+    return significantPoints.length > 2; // Solo necesitamos unos pocos puntos
   }
 
-  // Método auxiliar para calcular la varianza de la señal
+  // Método para calcular la varianza
   private calculateVariance(values: number[]): number {
     if (values.length < 2) return 0;
     
