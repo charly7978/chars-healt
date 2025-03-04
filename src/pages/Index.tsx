@@ -30,6 +30,18 @@ interface VitalSigns {
     rmssd: number;
     rrVariation: number;
   } | null;
+  cholesterol: {
+    totalCholesterol: number;
+    hdl: number;
+    ldl: number;
+    triglycerides: number;
+  };
+  temperature: {
+    value: number;
+    location: 'finger' | 'wrist' | 'forehead';
+    trend: 'stable' | 'rising' | 'falling';
+    confidence: number;
+  };
 }
 
 const Index = () => {
@@ -44,7 +56,19 @@ const Index = () => {
     hasRespirationData: false,
     glucose: { value: 0, trend: 'unknown' },
     hemoglobin: null,
-    lastArrhythmiaData: null
+    lastArrhythmiaData: null,
+    cholesterol: {
+      totalCholesterol: 0,
+      hdl: 0,
+      ldl: 0,
+      triglycerides: 0
+    },
+    temperature: {
+      value: 0,
+      location: 'finger',
+      trend: 'stable',
+      confidence: 0
+    }
   });
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState<string | number>("--");
@@ -380,7 +404,19 @@ const Index = () => {
       hasRespirationData: false,
       glucose: { value: 0, trend: 'unknown' },
       hemoglobin: null,
-      lastArrhythmiaData: null
+      lastArrhythmiaData: null,
+      cholesterol: {
+        totalCholesterol: 0,
+        hdl: 0,
+        ldl: 0,
+        triglycerides: 0
+      },
+      temperature: {
+        value: 0,
+        location: 'finger',
+        trend: 'stable',
+        confidence: 0
+      }
     });
     setArrhythmiaCount("--");
     setLastArrhythmiaData(null);
@@ -732,51 +768,70 @@ const Index = () => {
       
       <div className="absolute z-20" style={{ bottom: '65px', left: 0, right: 0, padding: '0 10px' }}>
         <div className="p-1 rounded-lg">
-          <div className="grid grid-cols-3 gap-1 sm:grid-cols-7">
+          <div className="grid grid-cols-9 gap-2">
             <VitalSign 
-              label="FRECUENCIA CARDÍACA"
-              value={finalValues ? finalValues.heartRate : heartRate || "--"}
+              label="HEART RATE"
+              value={heartRate || "--"}
               unit="BPM"
-              isFinalReading={measurementComplete}
+              isFinalReading={heartRate > 0 && elapsedTime >= 15}
             />
             <VitalSign 
               label="SPO2"
-              value={finalValues ? finalValues.spo2 : vitalSigns.spo2 || "--"}
+              value={vitalSigns.spo2 || "--"}
               unit="%"
-              isFinalReading={measurementComplete}
+              isFinalReading={vitalSigns.spo2 > 0 && elapsedTime >= 15}
             />
             <VitalSign 
-              label="PRESIÓN ARTERIAL"
-              value={finalValues ? finalValues.pressure : vitalSigns.pressure}
+              label="BLOOD PRESSURE"
+              value={vitalSigns.pressure}
               unit="mmHg"
-              isFinalReading={measurementComplete}
+              isFinalReading={vitalSigns.pressure !== "--/--" && elapsedTime >= 15}
             />
             <VitalSign 
-              label="ARRITMIAS"
+              label="ARRHYTHMIAS"
               value={vitalSigns.arrhythmiaStatus}
               unit=""
-              isFinalReading={measurementComplete}
+              isFinalReading={heartRate > 0 && elapsedTime >= 15}
             />
             <VitalSign 
-              label="RESPIRACIÓN"
-              value={finalValues ? finalValues.respiration.rate : (vitalSigns.hasRespirationData ? vitalSigns.respiration.rate : "--")}
+              label="RESPIRATION"
+              value={vitalSigns.hasRespirationData ? vitalSigns.respiration.rate : "--"}
               unit="RPM"
-              secondaryValue={finalValues ? finalValues.respiration.depth : (vitalSigns.hasRespirationData ? vitalSigns.respiration.depth : "--")}
-              secondaryUnit="%"
-              isFinalReading={measurementComplete}
+              secondaryValue={vitalSigns.hasRespirationData ? vitalSigns.respiration.depth : "--"}
+              secondaryUnit="Depth"
+              isFinalReading={vitalSigns.hasRespirationData && elapsedTime >= 15}
             />
             <VitalSign 
-              label="GLUCOSA"
-              value={finalValues ? finalValues.glucose.value : (vitalSigns.glucose ? vitalSigns.glucose.value : "--")}
+              label="GLUCOSE"
+              value={vitalSigns.glucose ? vitalSigns.glucose.value : "--"}
               unit="mg/dL"
-              trend={finalValues ? finalValues.glucose.trend : (vitalSigns.glucose ? vitalSigns.glucose.trend : "unknown")}
-              isFinalReading={measurementComplete}
+              trend={vitalSigns.glucose ? vitalSigns.glucose.trend : undefined}
+              isFinalReading={vitalSigns.glucose && vitalSigns.glucose.value > 0 && elapsedTime >= 15}
             />
             <VitalSign 
-              label="HEMOGLOBINA"
-              value={finalValues ? finalValues.hemoglobin : vitalSigns.hemoglobin || "--"}
+              label="HEMOGLOBIN"
+              value={vitalSigns.hemoglobin || "--"}
               unit="g/dL"
-              isFinalReading={measurementComplete}
+              isFinalReading={vitalSigns.hemoglobin && vitalSigns.hemoglobin > 0 && elapsedTime >= 15}
+            />
+            <VitalSign 
+              label="CHOLESTEROL"
+              value={vitalSigns.cholesterol ? vitalSigns.cholesterol.totalCholesterol || "--" : "--"}
+              unit="mg/dL"
+              cholesterolData={vitalSigns.cholesterol ? {
+                hdl: vitalSigns.cholesterol.hdl,
+                ldl: vitalSigns.cholesterol.ldl,
+                triglycerides: vitalSigns.cholesterol.triglycerides
+              } : undefined}
+              isFinalReading={vitalSigns.cholesterol && vitalSigns.cholesterol.totalCholesterol > 0 && elapsedTime >= 15}
+            />
+            <VitalSign 
+              label="TEMPERATURE"
+              value={vitalSigns.temperature ? vitalSigns.temperature.value || "--" : "--"}
+              unit="°C"
+              temperatureLocation={vitalSigns.temperature ? vitalSigns.temperature.location as 'finger' | 'wrist' | 'forehead' : 'finger'}
+              temperatureTrend={vitalSigns.temperature ? vitalSigns.temperature.trend as 'rising' | 'falling' | 'stable' : 'stable'}
+              isFinalReading={vitalSigns.temperature && vitalSigns.temperature.value > 0 && elapsedTime >= 15}
             />
           </div>
         </div>
