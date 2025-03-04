@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -16,6 +17,17 @@ interface PPGSignalMeterProps {
     rmssd: number;
     rrVariation: number;
   } | null;
+  cholesterolData?: {
+    totalCholesterol: number;
+    hdl: number;
+    ldl: number;
+    triglycerides?: number;
+  } | null;
+  temperatureData?: {
+    value: number;
+    trend: 'rising' | 'falling' | 'stable';
+    location: string;
+  } | null;
 }
 
 const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({ 
@@ -25,7 +37,9 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
   onStartMeasurement,
   onReset,
   arrhythmiaStatus,
-  rawArrhythmiaData
+  rawArrhythmiaData,
+  cholesterolData,
+  temperatureData
 }: PPGSignalMeterProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dataBufferRef = useRef<CircularBuffer | null>(null);
@@ -433,6 +447,45 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
           <span className="text-[#ea384c]">Healt</span>
         </h1>
       </div>
+
+      {/* Nuevos indicadores para colesterol y temperatura */}
+      {cholesterolData && cholesterolData.totalCholesterol > 0 && (
+        <div className="absolute left-2 top-2 z-30 bg-black/30 backdrop-blur-sm rounded p-2 text-xs">
+          <div className="text-cyan-400 font-bold mb-1">Colesterol</div>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+            <span className="text-white">Total:</span>
+            <span className="text-cyan-300 font-medium">{cholesterolData.totalCholesterol} mg/dL</span>
+            <span className="text-white">HDL:</span>
+            <span className="text-cyan-300 font-medium">{cholesterolData.hdl} mg/dL</span>
+            <span className="text-white">LDL:</span>
+            <span className="text-cyan-300 font-medium">{cholesterolData.ldl} mg/dL</span>
+            {cholesterolData.triglycerides && (
+              <>
+                <span className="text-white">Triglicéridos:</span>
+                <span className="text-cyan-300 font-medium">{cholesterolData.triglycerides} mg/dL</span>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+      
+      {temperatureData && temperatureData.value > 0 && (
+        <div className="absolute left-2 top-[120px] z-30 bg-black/30 backdrop-blur-sm rounded p-2 text-xs">
+          <div className="text-yellow-400 font-bold mb-1">Temperatura</div>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+            <span className="text-white">Valor:</span>
+            <span className="text-yellow-300 font-medium">{temperatureData.value.toFixed(1)}°C</span>
+            <span className="text-white">Localización:</span>
+            <span className="text-yellow-300 font-medium">{temperatureData.location || 'dedo'}</span>
+            <span className="text-white">Tendencia:</span>
+            <span className="text-yellow-300 font-medium">
+              {temperatureData.trend === 'rising' ? '↗️ Subiendo' : 
+               temperatureData.trend === 'falling' ? '↘️ Bajando' : 
+               '→ Estable'}
+            </span>
+          </div>
+        </div>
+      )}
     </>
   );
 };
