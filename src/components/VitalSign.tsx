@@ -28,6 +28,7 @@ const VitalSign: React.FC<VitalSignProps> = ({
   const isBloodPressure = label === "PRESIÓN ARTERIAL";
   const isRespiration = label === "RESPIRACIÓN";
   const isGlucose = label === "GLUCOSA";
+  const isHemoglobin = label === "HEMOGLOBINA";
 
   const isBloodPressureUnrealistic = (bpString: string): boolean => {
     if (!isBloodPressure || bpString === "--/--" || bpString === "0/0") return false;
@@ -105,6 +106,15 @@ const VitalSign: React.FC<VitalSignProps> = ({
       }
     }
 
+    if (isHemoglobin) {
+      if (value === "--" || value === 0 || value === null) {
+        return { color: '#000000', label: '' };
+      }
+      if (typeof value === 'number') {
+        return getHemoglobinRiskDisplay(value);
+      }
+    }
+
     if (label === "PRESIÓN ARTERIAL") {
       if (value === "--/--" || value === "0/0") {
         return { color: '#000000', label: '' };
@@ -162,6 +172,15 @@ const VitalSign: React.FC<VitalSignProps> = ({
     }
     
     return { color: riskColor, label: riskLabel };
+  };
+
+  const getHemoglobinRiskDisplay = (value: number) => {
+    if (value < 8) return { color: '#DC2626', label: 'ANEMIA SEVERA' };
+    if (value < 10) return { color: '#EF4444', label: 'ANEMIA MODERADA' };
+    if (value < 12) return { color: '#F97316', label: 'ANEMIA LEVE' };
+    if (value <= 16.5) return { color: '#22C55E', label: 'NORMAL' };
+    if (value <= 18) return { color: '#F97316', label: 'ELEVADA' };
+    return { color: '#DC2626', label: 'MUY ELEVADA' };
   };
 
   const getArrhythmiaRiskColor = (count: number): string => {
@@ -263,6 +282,7 @@ const VitalSign: React.FC<VitalSignProps> = ({
     if (label === "ARRITMIAS") return "arrhythmia";
     if (label === "RESPIRACIÓN") return "respiration";
     if (label === "GLUCOSA") return "glucose";
+    if (label === "HEMOGLOBINA") return "hemoglobin";
     return "heartRate";
   };
 

@@ -191,55 +191,54 @@ export const calculateAmplitude = (
 /**
  * Calcula el valor estimado de hemoglobina basado en señales PPG
  */
-export const calculateHemoglobin = (redSignal: number[], irSignal: number[]): number => {
+export function calculateHemoglobin(redSignal: number[], irSignal: number[]): number {
   if (redSignal.length < 50 || irSignal.length < 50) {
+    console.log("Not enough signal data for hemoglobin calculation");
     return 0;
   }
-
+  
   try {
-    // Asegurar misma longitud en ambas señales
-    const minLength = Math.min(redSignal.length, irSignal.length);
-    const normRedSignal = redSignal.slice(-minLength);
-    const normIrSignal = irSignal.slice(-minLength);
-
-    // Calcular proporción entre señal roja e IR
-    let validPoints = 0;
-    let ratioSum = 0;
-
-    for (let i = 0; i < minLength; i++) {
-      if (normRedSignal[i] > 0.1 && normIrSignal[i] > 0.1) {
-        const ratio = Math.log(normRedSignal[i]) / Math.log(normIrSignal[i]);
-        if (!isNaN(ratio) && isFinite(ratio)) {
-          ratioSum += ratio;
-          validPoints++;
-        }
-      }
-    }
-
-    if (validPoints < 10) {
+    // Ensure we have the same number of samples
+    const sampleSize = Math.min(redSignal.length, irSignal.length);
+    const red = redSignal.slice(-sampleSize);
+    const ir = irSignal.slice(-sampleSize);
+    
+    // Calculate the ratio between red and IR signal strengths
+    const redAvg = red.reduce((sum, val) => sum + val, 0) / red.length;
+    const irAvg = ir.reduce((sum, val) => sum + val, 0) / ir.length;
+    
+    if (redAvg <= 0 || irAvg <= 0) {
       return 0;
     }
-
-    const avgRatio = ratioSum / validPoints;
     
-    // Coeficientes mejorados para la estimación de hemoglobina
-    const baseHemoglobin = 14.5;
-    const coefficientA = 2.7;
-    const coefficientB = 0.8;
+    // Calculate pulsatile component (AC) for both signals
+    let redAC = 0;
+    let irAC = 0;
     
-    // Estimación basada en la correlación entre ratio y hemoglobina
-    let hemoglobin = baseHemoglobin - (coefficientA * avgRatio) + coefficientB;
+    for (let i = 1; i < sampleSize; i++) {
+      redAC += Math.abs(red[i] - red[i-1]);
+      irAC += Math.abs(ir[i] - ir[i-1]);
+    }
     
-    // Añadir pequeña variación para simular medición real
-    const variation = (Math.random() * 0.6) - 0.3;
-    hemoglobin += variation;
+    redAC /= (sampleSize - 1);
+    irAC /= (sampleSize - 1);
     
-    // Establecer límites razonables
-    hemoglobin = Math.max(9.0, Math.min(18.0, hemoglobin));
+    // Calculate DC components
+    const redDC = redAvg;
+    const irDC = irAvg;
     
-    return Math.round(hemoglobin * 10) / 10; // Redondear a 1 decimal
-  } catch (err) {
-    console.error("Error calculando hemoglobina:", err);
+    // Calculate R value (similar to SpO2 calculation)
+    const R = (redAC / redDC) / (irAC / irDC);
+    
+    // Convert R to hemoglobin based on empirical formula
+    // This is a simplified model - in reality, more complex algorithms are used
+    const baseHemoglobin = 15.0; // Base value for normal hemoglobin
+    const hemoglobinValue = baseHemoglobin - ((R - 0.8) * 8);
+    
+    // Ensure we get realistic values
+    return Math.max(8.0, Math.min(18.0, hemoglobinValue));
+  } catch (error) {
+    console.error("Error calculating hemoglobin:", error);
     return 0;
   }
-};
+}

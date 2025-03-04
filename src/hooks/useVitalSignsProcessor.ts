@@ -629,29 +629,9 @@ export const useVitalSignsProcessor = () => {
     }
     
     // Add hemoglobin data to collector if value is valid
-    if (hemoglobinValue > 0) {
-      if (!dataCollector.current.addHemoglobin) {
-        // Add the method if it doesn't exist
-        dataCollector.current.addHemoglobin = function(value) {
-          if (!this.hemoglobinValues) {
-            this.hemoglobinValues = [];
-          }
-          this.hemoglobinValues.push(value);
-          if (this.hemoglobinValues.length > 10) {
-            this.hemoglobinValues.shift();
-          }
-        };
-        
-        dataCollector.current.getAverageHemoglobin = function() {
-          if (!this.hemoglobinValues || this.hemoglobinValues.length === 0) {
-            return 0;
-          }
-          const sum = this.hemoglobinValues.reduce((acc, val) => acc + val, 0);
-          return Math.round((sum / this.hemoglobinValues.length) * 10) / 10;
-        };
-      }
-      
-      dataCollector.current.addHemoglobin(hemoglobinValue);
+    if (result.hemoglobin && result.hemoglobin.value > 0) {
+      console.log(`Processing hemoglobin value: ${result.hemoglobin.value} g/dL`);
+      dataCollector.current.addHemoglobin(result.hemoglobin.value);
     }
     
     // Advanced arrhythmia analysis - ensure amplitude data is passed if available
@@ -673,7 +653,7 @@ export const useVitalSignsProcessor = () => {
       spo2: result.spo2,
       pressure: stabilizedBP,
       arrhythmiaStatus,
-      respiration: respirationResult,
+      respiration: respirationProcessor.getRespirationData(),
       hasRespirationData: respirationProcessor.hasValidData(),
       glucose: glucoseData,
       hemoglobin: {
@@ -693,10 +673,43 @@ export const useVitalSignsProcessor = () => {
     
     if (vitalsData.hemoglobin.value > 0) {
       console.log(`Hemoglobin value: ${vitalsData.hemoglobin.value} g/dL (confidence: ${vitalsData.hemoglobin.confidence}%)`);
+    } else {
+      console.log("No hemoglobin data available in this reading");
     }
     
     return vitalsData;
   }, [getProcessor, getRespirationProcessor, getGlucoseProcessor, arrhythmiaAnalyzer, signalHistory, processGlucoseSignal]);
+
+  useEffect(() => {
+    if (dataCollector.current) {
+      // Add hemoglobin methods if they don't exist
+      if (!dataCollector.current.hemoglobinValues) {
+        dataCollector.current.hemoglobinValues = [];
+      }
+      
+      if (!dataCollector.current.addHemoglobin) {
+        dataCollector.current.addHemoglobin = function(value) {
+          if (!this.hemoglobinValues) {
+            this.hemoglobinValues = [];
+          }
+          this.hemoglobinValues.push(value);
+          if (this.hemoglobinValues.length > 10) {
+            this.hemoglobinValues.shift();
+          }
+        };
+      }
+      
+      if (!dataCollector.current.getAverageHemoglobin) {
+        dataCollector.current.getAverageHemoglobin = function() {
+          if (!this.hemoglobinValues || this.hemoglobinValues.length === 0) {
+            return 0;
+          }
+          const sum = this.hemoglobinValues.reduce((acc, val) => acc + val, 0);
+          return Math.round((sum / this.hemoglobinValues.length) * 10) / 10;
+        };
+      }
+    }
+  }, []);
 
   /**
    * Reset all processors
@@ -714,10 +727,12 @@ export const useVitalSignsProcessor = () => {
     
     if (respirationProcessorRef.current) {
       respirationProcessorRef.current.reset();
+      respirationProcessorRef.current = null;
     }
     
     if (glucoseProcessorRef.current) {
       glucoseProcessorRef.current.reset();
+      glucoseProcessorRef.current = null;
     }
     
     // Reset glucose data

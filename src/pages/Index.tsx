@@ -8,6 +8,7 @@ import PPGSignalMeter from "@/components/PPGSignalMeter";
 import PermissionsHandler from "@/components/PermissionsHandler";
 import { VitalSignsRisk } from '@/utils/vitalSignsRisk';
 import { toast } from "sonner";
+import { HemoglobinData } from "@/types/signal";
 
 interface VitalSigns {
   spo2: number;
@@ -641,13 +642,13 @@ const Index = () => {
               allGlucoseValuesRef.current.push(vitals.glucose.value);
             }
 
-            if (vitals.hemoglobin && vitals.hemoglobin > 0) {
-              console.log(`Hemoglobin data received: ${vitals.hemoglobin} g/dL`);
+            if (vitals.hemoglobin && vitals.hemoglobin.value > 0) {
+              console.log(`Hemoglobin data received: ${vitals.hemoglobin.value} g/dL (confidence: ${vitals.hemoglobin.confidence}%)`);
               setVitalSigns(current => ({
                 ...current,
-                hemoglobin: vitals.hemoglobin
+                hemoglobin: vitals.hemoglobin.value
               }));
-              allHemoglobinValuesRef.current.push(vitals.hemoglobin);
+              allHemoglobinValuesRef.current.push(vitals.hemoglobin.value);
             }
             
             if (vitals.lastArrhythmiaData) {

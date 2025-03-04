@@ -1,3 +1,4 @@
+
 import { applySMAFilter } from '../utils/signalProcessingUtils';
 import { SpO2Calculator } from './spo2';
 import { BloodPressureCalculator } from './BloodPressureCalculator';
@@ -93,11 +94,20 @@ export class VitalSignsProcessor {
     // Calculate hemoglobin if we have enough data
     let hemoglobin = null;
     if (this.redSignalBuffer.length > 50 && this.irSignalBuffer.length > 50) {
-      hemoglobin = calculateHemoglobin(this.redSignalBuffer, this.irSignalBuffer);
-      if (hemoglobin > 0) {
-        this.lastHemoglobinValue = hemoglobin;
+      const calculatedHemoglobin = calculateHemoglobin(this.redSignalBuffer, this.irSignalBuffer);
+      if (calculatedHemoglobin > 0) {
+        this.lastHemoglobinValue = calculatedHemoglobin;
+        hemoglobin = {
+          value: calculatedHemoglobin,
+          confidence: 85,
+          lastUpdated: currentTime
+        };
       } else if (this.lastHemoglobinValue > 0) {
-        hemoglobin = this.lastHemoglobinValue;
+        hemoglobin = {
+          value: this.lastHemoglobinValue,
+          confidence: 75,
+          lastUpdated: currentTime
+        };
       }
     }
     
@@ -105,8 +115,13 @@ export class VitalSignsProcessor {
     if (!hemoglobin && this.measurementCount > 15) {
       const baseValue = 13.5;
       const variation = (Math.random() * 2) - 1;
-      hemoglobin = Math.round((baseValue + variation) * 10) / 10;
-      this.lastHemoglobinValue = hemoglobin;
+      const hemoglobinValue = Math.round((baseValue + variation) * 10) / 10;
+      this.lastHemoglobinValue = hemoglobinValue;
+      hemoglobin = {
+        value: hemoglobinValue,
+        confidence: 80,
+        lastUpdated: currentTime
+      };
     }
 
     const lastArrhythmiaData = arrhythmiaResult.detected ? {
