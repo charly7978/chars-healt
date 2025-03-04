@@ -41,42 +41,59 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
   temperatureData
 }: PPGSignalMeterProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const dataBufferRef = useRef<CircularBuffer>(new CircularBuffer(300));
+  const dataBufferRef = useRef<CircularBuffer>(new CircularBuffer(600));
   const baselineRef = useRef<number | null>(null);
   const lastValueRef = useRef<number>(0);
   const lastArrhythmiaTime = useRef<number>(0);
   
-  const WINDOW_WIDTH_MS = 2500;  // 2.5 segundos de ventana
-  const CANVAS_WIDTH = 1200;
-  const CANVAS_HEIGHT = 400;
-  const verticalScale = 65.0;  // Aumentado para mejor visualización
+  const WINDOW_WIDTH_MS = 2500;
+  const CANVAS_WIDTH = 2400;
+  const CANVAS_HEIGHT = 600;
+  const verticalScale = 85.0;
   const GRID_COLOR = '#1e40af';
   const WAVE_COLOR = '#0ea5e9';
   const ARRHYTHMIA_COLOR = '#ef4444';
+
+  const getRiskColor = (value: number, type: 'cholesterol' | 'temperature' | 'rmssd'): string => {
+    switch(type) {
+      case 'cholesterol':
+        if (value < 200) return 'text-emerald-400';
+        if (value < 240) return 'text-yellow-400';
+        return 'text-red-400';
+      case 'temperature':
+        if (value >= 36.5 && value <= 37.2) return 'text-emerald-400';
+        if (value > 37.2 && value <= 38) return 'text-yellow-400';
+        return 'text-red-400';
+      case 'rmssd':
+        if (value >= 20 && value <= 50) return 'text-emerald-400';
+        if (value > 50) return 'text-yellow-400';
+        return 'text-red-400';
+      default:
+        return 'text-white';
+    }
+  };
 
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
     ctx.fillStyle = '#0A1628';
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    // Cuadrícula menor
     ctx.strokeStyle = 'rgba(30, 64, 175, 0.15)';
     ctx.lineWidth = 0.5;
     
-    for (let x = 0; x < CANVAS_WIDTH; x += 25) {
+    for (let x = 0; x < CANVAS_WIDTH; x += 20) {
       ctx.beginPath();
       ctx.moveTo(x, 0);
       ctx.lineTo(x, CANVAS_HEIGHT);
       ctx.stroke();
     }
     
-    for (let y = 0; y < CANVAS_HEIGHT; y += 25) {
+    for (let y = 0; y < CANVAS_HEIGHT; y += 20) {
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(CANVAS_WIDTH, y);
       ctx.stroke();
     }
 
-    // Cuadrícula mayor
     ctx.strokeStyle = 'rgba(30, 64, 175, 0.3)';
     ctx.lineWidth = 1;
     
@@ -88,8 +105,8 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
       
       if (x % 200 === 0) {
         ctx.fillStyle = 'rgba(148, 163, 184, 0.8)';
-        ctx.font = '10px Inter';
-        ctx.fillText(`${x/10}ms`, x, CANVAS_HEIGHT - 5);
+        ctx.font = '12px Inter';
+        ctx.fillText(`${x/20}ms`, x, CANVAS_HEIGHT - 5);
       }
     }
     
@@ -102,14 +119,13 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
       if (y % 100 === 0) {
         const amplitude = ((CANVAS_HEIGHT * 0.45) - y) / verticalScale;
         ctx.fillStyle = 'rgba(148, 163, 184, 0.8)';
-        ctx.font = '10px Inter';
-        ctx.fillText(amplitude.toFixed(1), 5, y + 10);
+        ctx.font = '12px Inter';
+        ctx.fillText(amplitude.toFixed(2), 5, y + 10);
       }
     }
 
-    // Línea central
     ctx.strokeStyle = 'rgba(30, 64, 175, 0.5)';
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 1.5;
     ctx.setLineDash([5, 5]);
     ctx.beginPath();
     ctx.moveTo(0, CANVAS_HEIGHT * 0.45);
@@ -135,7 +151,6 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
 
     const normalizedValue = (value - (baselineRef.current || 0)) * verticalScale;
     
-    // Detectar arritmia
     const isArrhythmia = rawArrhythmiaData && 
                         arrhythmiaStatus?.includes("ARRITMIA") && 
                         now - rawArrhythmiaData.timestamp < 1000;
@@ -158,7 +173,6 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
     );
 
     if (points.length > 1) {
-      // Dibujar línea principal
       ctx.beginPath();
       ctx.strokeStyle = WAVE_COLOR;
       ctx.lineWidth = 2;
@@ -176,7 +190,6 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
           ctx.moveTo(x, y);
           firstPoint = false;
         } else {
-          // Suavizado de línea
           const cpx = (lastX + x) / 2;
           const cpy = (lastY + y) / 2;
           ctx.quadraticCurveTo(lastX, lastY, cpx, cpy);
@@ -185,7 +198,6 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
         lastX = x;
         lastY = y;
 
-        // Marcar arritmias
         if (point.isArrhythmia) {
           ctx.stroke();
           ctx.beginPath();
@@ -204,20 +216,17 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
           ctx.stroke();
           ctx.setLineDash([]);
           
-          // Marcar punto de arritmia
           ctx.beginPath();
           ctx.arc(x, y, 5, 0, Math.PI * 2);
           ctx.fillStyle = ARRHYTHMIA_COLOR;
           ctx.fill();
           
-          // Círculo de alerta
           ctx.beginPath();
           ctx.arc(x, y, 10, 0, Math.PI * 2);
           ctx.strokeStyle = '#fbbf24';
           ctx.lineWidth = 2;
           ctx.stroke();
           
-          // Etiqueta de arritmia
           ctx.font = 'bold 12px Inter';
           ctx.fillStyle = ARRHYTHMIA_COLOR;
           ctx.textAlign = 'center';
@@ -232,27 +241,23 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
       
       ctx.stroke();
 
-      // Marcar picos y valles
       points.forEach((point, i) => {
         if (i > 0 && i < points.length - 1) {
           const x = CANVAS_WIDTH - ((now - point.time) * CANVAS_WIDTH / WINDOW_WIDTH_MS);
           const y = CANVAS_HEIGHT * 0.45 - point.value;
           
-          // Detectar picos
           if (point.value > points[i-1].value && point.value > points[i+1].value) {
             ctx.beginPath();
             ctx.arc(x, y, 3, 0, Math.PI * 2);
             ctx.fillStyle = '#60A5FA';
             ctx.fill();
             
-            // Valor del pico
             ctx.font = '10px Inter';
             ctx.fillStyle = '#60A5FA';
             ctx.textAlign = 'center';
             ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 10);
           }
           
-          // Detectar valles
           if (point.value < points[i-1].value && point.value < points[i+1].value) {
             ctx.beginPath();
             ctx.arc(x, y, 2, 0, Math.PI * 2);
@@ -275,7 +280,7 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
   }, [renderSignal]);
 
   const handleReset = useCallback(() => {
-    dataBufferRef.current = new CircularBuffer(300);
+    dataBufferRef.current = new CircularBuffer(600);
     baselineRef.current = null;
     lastValueRef.current = 0;
     lastArrhythmiaTime.current = 0;
@@ -317,21 +322,24 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
         </div>
       </div>
 
-      <canvas
-        ref={canvasRef}
-        width={CANVAS_WIDTH}
-        height={CANVAS_HEIGHT}
-        className="w-full h-[calc(100vh-14rem)]"
-      />
+      <div className="relative w-full h-[calc(100vh-16rem)] overflow-hidden">
+        <canvas
+          ref={canvasRef}
+          width={CANVAS_WIDTH}
+          height={CANVAS_HEIGHT}
+          className="absolute top-0 left-0 w-full h-full scale-[0.8] origin-top"
+          style={{ imageRendering: 'crisp-edges' }}
+        />
+      </div>
 
       {/* Displays médicos */}
-      <div className="absolute bottom-16 left-0 right-0 grid grid-cols-3 gap-4 px-4 pb-2">
+      <div className="fixed bottom-16 left-0 right-0 grid grid-cols-3 gap-4 px-4">
         {arrhythmiaStatus && (
-          <div className="bg-[#0A1628]/80 backdrop-blur-sm rounded-lg p-4 border border-blue-900/30">
-            <h3 className="text-sm font-semibold text-blue-400 mb-2">Estado Cardíaco</h3>
+          <div className="bg-[#0A1628]/90 backdrop-blur-sm rounded-lg p-4 border border-blue-900/30">
+            <h3 className="text-sm font-semibold text-white mb-2">Estado Cardíaco</h3>
             <div className="grid gap-y-2 text-sm">
               <span className={`font-medium ${
-                arrhythmiaStatus.includes("ARRITMIA") ? 'text-red-500' : 'text-emerald-500'
+                arrhythmiaStatus.includes("ARRITMIA") ? 'text-red-400' : 'text-emerald-400'
               }`}>
                 {arrhythmiaStatus}
               </span>
@@ -339,11 +347,15 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
                 <>
                   <div className="grid grid-cols-2 gap-1">
                     <span className="text-gray-400">RMSSD:</span>
-                    <span className="text-white">{rawArrhythmiaData.rmssd.toFixed(1)}ms</span>
+                    <span className={getRiskColor(rawArrhythmiaData.rmssd, 'rmssd')}>
+                      {rawArrhythmiaData.rmssd.toFixed(1)}ms
+                    </span>
                   </div>
                   <div className="grid grid-cols-2 gap-1">
                     <span className="text-gray-400">Variación RR:</span>
-                    <span className="text-white">{rawArrhythmiaData.rrVariation.toFixed(1)}%</span>
+                    <span className={rawArrhythmiaData.rrVariation > 20 ? 'text-red-400' : 'text-emerald-400'}>
+                      {rawArrhythmiaData.rrVariation.toFixed(1)}%
+                    </span>
                   </div>
                 </>
               )}
@@ -352,19 +364,27 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
         )}
 
         {cholesterolData && (
-          <div className="bg-[#0A1628]/80 backdrop-blur-sm rounded-lg p-4 border border-blue-900/30">
-            <h3 className="text-sm font-semibold text-blue-400 mb-2">Colesterol</h3>
+          <div className="bg-[#0A1628]/90 backdrop-blur-sm rounded-lg p-4 border border-blue-900/30">
+            <h3 className="text-sm font-semibold text-white mb-2">Colesterol</h3>
             <div className="grid grid-cols-2 gap-y-2 text-sm">
               <span className="text-gray-400">Total:</span>
-              <span className="text-white font-medium">{cholesterolData.totalCholesterol} mg/dL</span>
+              <span className={getRiskColor(cholesterolData.totalCholesterol, 'cholesterol')}>
+                {cholesterolData.totalCholesterol} mg/dL
+              </span>
               <span className="text-gray-400">HDL:</span>
-              <span className="text-white font-medium">{cholesterolData.hdl} mg/dL</span>
+              <span className={cholesterolData.hdl >= 40 ? 'text-emerald-400' : 'text-yellow-400'}>
+                {cholesterolData.hdl} mg/dL
+              </span>
               <span className="text-gray-400">LDL:</span>
-              <span className="text-white font-medium">{cholesterolData.ldl} mg/dL</span>
+              <span className={cholesterolData.ldl < 130 ? 'text-emerald-400' : 'text-red-400'}>
+                {cholesterolData.ldl} mg/dL
+              </span>
               {cholesterolData.triglycerides && (
                 <>
                   <span className="text-gray-400">Triglicéridos:</span>
-                  <span className="text-white font-medium">{cholesterolData.triglycerides} mg/dL</span>
+                  <span className={cholesterolData.triglycerides < 150 ? 'text-emerald-400' : 'text-red-400'}>
+                    {cholesterolData.triglycerides} mg/dL
+                  </span>
                 </>
               )}
             </div>
@@ -372,15 +392,21 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
         )}
 
         {temperatureData && (
-          <div className="bg-[#0A1628]/80 backdrop-blur-sm rounded-lg p-4 border border-blue-900/30">
-            <h3 className="text-sm font-semibold text-blue-400 mb-2">Temperatura</h3>
+          <div className="bg-[#0A1628]/90 backdrop-blur-sm rounded-lg p-4 border border-blue-900/30">
+            <h3 className="text-sm font-semibold text-white mb-2">Temperatura</h3>
             <div className="grid grid-cols-2 gap-y-2 text-sm">
               <span className="text-gray-400">Valor:</span>
-              <span className="text-white font-medium">{temperatureData.value.toFixed(1)}°C</span>
+              <span className={getRiskColor(temperatureData.value, 'temperature')}>
+                {temperatureData.value.toFixed(1)}°C
+              </span>
               <span className="text-gray-400">Ubicación:</span>
-              <span className="text-white font-medium">{temperatureData.location}</span>
+              <span className="text-white">{temperatureData.location}</span>
               <span className="text-gray-400">Tendencia:</span>
-              <span className="text-white font-medium">
+              <span className={`text-white ${
+                temperatureData.trend === 'rising' ? 'text-yellow-400' :
+                temperatureData.trend === 'falling' ? 'text-blue-400' :
+                'text-emerald-400'
+              }`}>
                 {temperatureData.trend === 'rising' ? '↗ Subiendo' :
                  temperatureData.trend === 'falling' ? '↘ Bajando' :
                  '→ Estable'}
@@ -390,7 +416,7 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
         )}
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 h-14 grid grid-cols-2 gap-px bg-[#0A1628]/80 backdrop-blur-sm border-t border-blue-900/30">
+      <div className="fixed bottom-0 left-0 right-0 h-14 grid grid-cols-2 gap-px bg-[#0A1628]/90 backdrop-blur-sm border-t border-blue-900/30">
         <button 
           onClick={onStartMeasurement}
           className="text-white text-lg font-semibold bg-blue-500/10 hover:bg-blue-500/20 transition-colors"
