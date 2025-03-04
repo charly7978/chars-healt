@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { ArrowDown, ArrowRight, ArrowUp, Heart } from 'lucide-react';
 
 interface CholesterolData {
   totalCholesterol: number;
@@ -42,6 +43,35 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
   const graphHeight = 80;
   const signalHeight = Math.min(Math.abs(value * 40), graphHeight);
   
+  // Helper function to determine color for cholesterol values
+  const getCholesterolColor = (value: number, type: 'total' | 'hdl' | 'ldl' | 'triglycerides') => {
+    switch (type) {
+      case 'total':
+        return value > 240 ? 'text-red-500' : value > 200 ? 'text-yellow-500' : 'text-green-500';
+      case 'hdl':
+        return value < 40 ? 'text-red-500' : value < 60 ? 'text-yellow-500' : 'text-green-500';
+      case 'ldl':
+        return value > 160 ? 'text-red-500' : value > 130 ? 'text-yellow-500' : 'text-green-500';
+      case 'triglycerides':
+        return value > 200 ? 'text-red-500' : value > 150 ? 'text-yellow-500' : 'text-green-500';
+      default:
+        return 'text-white';
+    }
+  };
+
+  // Helper function for temperature trend icon
+  const getTempTrendIcon = () => {
+    if (!temperature) return null;
+    
+    if (temperature.trend === 'rising') {
+      return <ArrowUp className="inline text-red-400 ml-1" size={18} />;
+    } else if (temperature.trend === 'falling') {
+      return <ArrowDown className="inline text-blue-400 ml-1" size={18} />;
+    } else {
+      return <ArrowRight className="inline text-gray-400 ml-1" size={18} />;
+    }
+  };
+  
   return (
     <div className="w-full h-full relative">
       {/* Always show the signal display and graph regardless of finger detection */}
@@ -56,7 +86,8 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
           {isFingerDetected ? 'Finger Detected' : 'Place finger on camera'}
         </div>
         {arrhythmiaStatus && arrhythmiaStatus !== "--" && (
-          <div className="mt-2 text-sm text-amber-400">
+          <div className="mt-2 text-sm text-amber-400 flex items-center gap-1">
+            <Heart size={16} className="text-red-400" />
             Arrhythmia: {arrhythmiaStatus}
           </div>
         )}
@@ -75,31 +106,44 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
       
       {/* Display cholesterol data if available */}
       {cholesterol && cholesterol.totalCholesterol > 0 && (
-        <div className="absolute top-4 right-4 bg-black/60 p-3 rounded-md shadow-lg border border-gray-700">
-          <div className="text-lg font-semibold text-white mb-1">Cholesterol</div>
-          <div className="flex flex-col gap-1">
-            <div className="text-green-400 font-medium">Total: {cholesterol.totalCholesterol} mg/dL</div>
-            <div className="text-blue-400">HDL: {cholesterol.hdl} mg/dL</div>
-            <div className="text-yellow-400">LDL: {cholesterol.ldl} mg/dL</div>
-            <div className="text-orange-400">Triglycerides: {cholesterol.triglycerides} mg/dL</div>
+        <div className="absolute top-4 right-4 bg-black/80 p-4 rounded-md shadow-lg border border-gray-700">
+          <div className="text-xl font-semibold text-white mb-2 border-b border-gray-700 pb-1">Cholesterol</div>
+          <div className="flex flex-col gap-2">
+            <div className={`${getCholesterolColor(cholesterol.totalCholesterol, 'total')} font-medium text-base`}>
+              Total: {cholesterol.totalCholesterol} mg/dL
+            </div>
+            <div className={`${getCholesterolColor(cholesterol.hdl, 'hdl')} text-base`}>
+              HDL: {cholesterol.hdl} mg/dL
+            </div>
+            <div className={`${getCholesterolColor(cholesterol.ldl, 'ldl')} text-base`}>
+              LDL: {cholesterol.ldl} mg/dL
+            </div>
+            <div className={`${getCholesterolColor(cholesterol.triglycerides, 'triglycerides')} text-base`}>
+              Triglycerides: {cholesterol.triglycerides} mg/dL
+            </div>
           </div>
         </div>
       )}
       
       {/* Display temperature data if available */}
       {temperature && temperature.value > 0 && (
-        <div className="absolute top-4 left-4 bg-black/60 p-3 rounded-md shadow-lg border border-gray-700">
-          <div className="text-lg font-semibold text-white mb-1">Temperature</div>
-          <div className={`text-xl font-medium ${
-            temperature.trend === 'rising' ? 'text-red-400' : 
-            temperature.trend === 'falling' ? 'text-blue-400' : 
+        <div className="absolute top-4 left-4 bg-black/80 p-4 rounded-md shadow-lg border border-gray-700">
+          <div className="text-xl font-semibold text-white mb-2 border-b border-gray-700 pb-1">Temperature</div>
+          <div className={`text-2xl font-medium ${
+            temperature.value > 38 ? 'text-red-500' : 
+            temperature.value < 36 ? 'text-blue-500' : 
             'text-white'
           }`}>
-            {temperature.value.toFixed(1)}°C {temperature.trend === 'rising' ? '↑' : temperature.trend === 'falling' ? '↓' : '→'}
+            {temperature.value.toFixed(1)}°C {getTempTrendIcon()}
           </div>
-          <div className="text-gray-300 text-sm">Location: {temperature.location}</div>
-          {temperature.trend === 'rising' && <div className="text-red-400 text-sm mt-1">Temperature increasing</div>}
-          {temperature.trend === 'falling' && <div className="text-blue-400 text-sm mt-1">Temperature decreasing</div>}
+          <div className="text-gray-300 text-sm mt-1">Location: {temperature.location}</div>
+          {temperature.trend === 'rising' && <div className="text-red-400 text-sm mt-2 font-medium">Temperature increasing</div>}
+          {temperature.trend === 'falling' && <div className="text-blue-400 text-sm mt-2 font-medium">Temperature decreasing</div>}
+          {temperature.confidence && (
+            <div className="mt-2 text-xs text-gray-400">
+              Confidence: {temperature.confidence}%
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -23,12 +22,6 @@ interface TemperatureData {
   confidence?: number;
 }
 
-interface HemoglobinData {
-  value: number;
-  confidence: number;
-  lastUpdated: number;
-}
-
 interface VitalSignsState {
   spo2: number;
   pressure: string;
@@ -40,7 +33,7 @@ interface VitalSignsState {
   };
   hasRespirationData: boolean;
   glucose: any;
-  hemoglobin: HemoglobinData | null;
+  hemoglobin: { value: number; confidence: number; lastUpdated: number; } | null;
   isoCompliant: boolean;
   calibrationStatus: string;
   motionScore: number;
