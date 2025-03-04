@@ -13,6 +13,12 @@ export interface ProcessedSignal {
     width: number;
     height: number;
   };
+  rawPixelData?: {
+    r: number;
+    g: number;
+    b: number;
+    ir?: number;
+  };
 }
 
 export interface ProcessingError {
@@ -56,6 +62,7 @@ export interface HeartBeatResult {
 declare global {
   interface Window {
     heartBeatProcessor: HeartBeatProcessor;
+    vitalSignsProcessor: any; // Add this to make it available globally
     gc?: () => void; // Añadir definición para garbage collector
   }
 }

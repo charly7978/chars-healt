@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { PPGSignalProcessor } from '../modules/SignalProcessor';
 import { ProcessedSignal, ProcessingError } from '../types/signal';
@@ -18,6 +19,20 @@ export const useSignalProcessor = () => {
         quality: signal.quality,
         filteredValue: signal.filteredValue
       });
+      
+      // Extract red and ir values from RGB components if available
+      // This is important for hemoglobin calculation
+      if (signal.rawPixelData) {
+        // Use the data for hemoglobin calculation in the VitalSignsProcessor
+        const vitalSignsProcessor = window.vitalSignsProcessor;
+        if (vitalSignsProcessor) {
+          const redValue = signal.rawPixelData.r || 0;
+          const irValue = signal.rawPixelData.ir || signal.rawPixelData.g || 0;
+          console.log(`Signal processor: Updating buffers - Red: ${redValue}, IR: ${irValue}`);
+          vitalSignsProcessor.updateSignalBuffers(redValue, irValue);
+        }
+      }
+      
       setLastSignal(signal);
       setError(null);
     };
