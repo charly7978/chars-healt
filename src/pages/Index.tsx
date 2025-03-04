@@ -8,6 +8,19 @@ import PPGSignalMeter from "@/components/PPGSignalMeter";
 import PermissionsHandler from "@/components/PermissionsHandler";
 import { toast } from "sonner";
 
+interface CholesterolData {
+  totalCholesterol: number;
+  hdl: number;
+  ldl: number;
+  triglycerides: number;
+}
+
+interface TemperatureData {
+  value: number;
+  trend: 'stable' | 'rising' | 'falling';
+  location: string;
+}
+
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
@@ -31,7 +44,7 @@ const Index = () => {
     },
     temperature: {
       value: 0,
-      trend: 'stable',
+      trend: 'stable' as const,
       location: 'peripheral'
     }
   });
@@ -53,17 +66,8 @@ const Index = () => {
       trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
     },
     hemoglobin: number | null,
-    cholesterol: {
-      totalCholesterol: number;
-      hdl: number;
-      ldl: number;
-      triglycerides?: number;
-    } | null,
-    temperature: {
-      value: number;
-      trend: 'rising' | 'falling' | 'stable';
-      location: string;
-    } | null
+    cholesterol: CholesterolData | null,
+    temperature: TemperatureData | null
   } | null>(null);
   const measurementTimerRef = useRef(null);
   
@@ -175,7 +179,7 @@ const Index = () => {
       },
       temperature: {
         value: 0,
-        trend: 'stable',
+        trend: 'stable' as const,
         location: 'peripheral'
       }
     });
@@ -255,8 +259,11 @@ const Index = () => {
             temperature: vitals.temperature ? `${vitals.temperature.value}°C (${vitals.temperature.trend})` : 'No data'
           });
           
-          setVitalSigns({
+          const updatedVitalSigns = {
             ...vitals,
+            isoCompliant: vitals.isoCompliant || false,
+            calibrationStatus: vitals.calibrationStatus || 'uncalibrated',
+            motionScore: vitals.motionScore || 0,
             cholesterol: vitals.cholesterol || {
               totalCholesterol: 0,
               hdl: 0,
@@ -265,22 +272,27 @@ const Index = () => {
             },
             temperature: vitals.temperature || {
               value: 0,
-              trend: 'stable',
+              trend: 'stable' as const,
               location: 'peripheral'
             }
-          });
+          };
+          
+          setVitalSigns(updatedVitalSigns);
           
           setArrhythmiaCount(vitals.arrhythmiaStatus.split('|')[1] || "--");
           
-          // When 15 seconds have passed, capture final readings
           if (elapsedTime >= 15 && !finalValues) {
             setFinalValues({
               heartRate: heartBeatResult.bpm,
               spo2: vitals.spo2,
               pressure: vitals.pressure,
               respiration: vitals.respiration,
-              glucose: vitals.glucose || { value: 0, trend: 'unknown' },
-              hemoglobin: vitals.hemoglobin,
+              glucose: vitals.glucose || { value: 0, trend: 'unknown' as const },
+              hemoglobin: vitals.hemoglobin ? (
+                typeof vitals.hemoglobin === 'number' ? 
+                vitals.hemoglobin : 
+                vitals.hemoglobin.value || 0
+              ) : null,
               cholesterol: vitals.cholesterol,
               temperature: vitals.temperature
             });
@@ -295,8 +307,11 @@ const Index = () => {
             console.log(`Glucose data received: ${vitals.glucose.value} mg/dL, trend: ${vitals.glucose.trend}`);
           }
           
-          if (vitals.hemoglobin && vitals.hemoglobin > 0) {
-            console.log(`Hemoglobin data received: ${vitals.hemoglobin} g/dL`);
+          if (vitals.hemoglobin) {
+            const hemoglobinValue = typeof vitals.hemoglobin === 'number' ? 
+              vitals.hemoglobin : 
+              vitals.hemoglobin.value;
+            console.log(`Hemoglobin data received: ${hemoglobinValue} g/dL`);
           }
           
           if (vitals.cholesterol) {
@@ -399,9 +414,17 @@ const Index = () => {
               />
               <VitalSign 
                 label="HEMOGLOBIN"
-                value={vitalSigns.hemoglobin || "--"}
+                value={vitalSigns.hemoglobin ? (
+                  typeof vitalSigns.hemoglobin === 'number' ? 
+                  vitalSigns.hemoglobin : 
+                  vitalSigns.hemoglobin.value
+                ) : "--"}
                 unit="g/dL"
-                isFinalReading={vitalSigns.hemoglobin && vitalSigns.hemoglobin > 0 && elapsedTime >= 15}
+                isFinalReading={vitalSigns.hemoglobin && (
+                  typeof vitalSigns.hemoglobin === 'number' ? 
+                  vitalSigns.hemoglobin > 0 : 
+                  vitalSigns.hemoglobin.value > 0
+                ) && elapsedTime >= 15}
               />
               <VitalSign 
                 label="CHOLESTEROL"
@@ -426,7 +449,11 @@ const Index = () => {
                 Resp Data: {vitalSigns.hasRespirationData ? 'Available' : 'Not available'} | 
                 Rate: {vitalSigns.respiration.rate} RPM | Depth: {vitalSigns.respiration.depth} | 
                 Glucose: {vitalSigns.glucose ? `${vitalSigns.glucose.value} mg/dL (${vitalSigns.glucose.trend || 'unknown'})` : 'Not available'} |
-                Hemoglobin: {vitalSigns.hemoglobin ? `${vitalSigns.hemoglobin} g/dL` : 'Not available'} |
+                Hemoglobin: {vitalSigns.hemoglobin ? (
+                  typeof vitalSigns.hemoglobin === 'number' ? 
+                  `${vitalSigns.hemoglobin} g/dL` : 
+                  `${vitalSigns.hemoglobin.value} g/dL`
+                ) : 'Not available'} |
                 ISO Compliant: {vitalSigns.isoCompliant ? 'Yes' : 'No'} |
                 Motion Score: {vitalSigns.motionScore || 0} |
                 Cholesterol: {vitalSigns.cholesterol ? `Total: ${vitalSigns.cholesterol.totalCholesterol}, HDL: ${vitalSigns.cholesterol.hdl}` : 'Not available'} |
