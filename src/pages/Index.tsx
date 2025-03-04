@@ -7,6 +7,7 @@ import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import PermissionsHandler from "@/components/PermissionsHandler";
 import { VitalSignsRisk } from '@/utils/vitalSignsRisk';
+import { toast } from "sonner";
 
 interface VitalSigns {
   spo2: number;
@@ -232,6 +233,9 @@ const Index = () => {
     
     if (!isMonitoring && lastSignal?.quality < 50) {
       console.log("Señal insuficiente para iniciar medición", lastSignal?.quality);
+      toast.warning("Calidad de señal insuficiente. Posicione bien su dedo en la cámara.", {
+        duration: 3000,
+      });
       return;
     }
     
@@ -691,6 +695,15 @@ const Index = () => {
         />
       </div>
       
+      {isMonitoring && (
+        <div className="absolute z-30 text-sm bg-black/50 backdrop-blur-sm px-3 py-1 rounded-lg" 
+          style={{ top: '35%', left: '50%', transform: 'translateX(-50%)', textAlign: 'center' }}>
+          <span className="text-cyan-400 font-medium">Respiración: {vitalSigns.hasRespirationData ? 
+            `${vitalSigns.respiration.rate} RPM, Profundidad: ${vitalSigns.respiration.depth}%` : 
+            'Calibrando...'}</span>
+        </div>
+      )}
+
       <div className="absolute z-20" style={{ bottom: '65px', left: 0, right: 0, padding: '0 12px' }}>
         <div className="p-2 rounded-lg">
           <div className="grid grid-cols-3 gap-1 sm:grid-cols-6">
@@ -731,7 +744,7 @@ const Index = () => {
               unit="mg/dL"
               trend={finalValues ? finalValues.glucose.trend : (vitalSigns.glucose ? vitalSigns.glucose.trend : "unknown")}
               isFinalReading={measurementComplete}
-              glucose={null}
+              glucose={glucose}
             />
           </div>
         </div>

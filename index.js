@@ -6,6 +6,7 @@ import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import PermissionsHandler from "@/components/PermissionsHandler";
+import { toast } from "sonner";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -287,6 +288,16 @@ const Index = () => {
               />
             </div>
           </div>
+
+          {isMonitoring && (
+            <div className="absolute bottom-[150px] left-0 right-0 text-center z-30 text-xs text-gray-400">
+              <span>
+                Resp Data: {vitalSigns.hasRespirationData ? 'Disponible' : 'No disponible'} | 
+                Rate: {vitalSigns.respiration.rate} RPM | Depth: {vitalSigns.respiration.depth} | 
+                Glucose: {vitalSigns.glucose ? `${vitalSigns.glucose.value} mg/dL (${vitalSigns.glucose.trend || 'unknown'})` : 'No disponible'}
+              </span>
+            </div>
+          )}
 
           {isMonitoring && (
             <div className="absolute bottom-40 left-0 right-0 text-center z-30">

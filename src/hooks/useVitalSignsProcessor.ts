@@ -675,10 +675,6 @@ export const useVitalSignsProcessor = () => {
     cleanMemory,
     calibrateGlucose,
     arrhythmiaCounter: arrhythmiaAnalyzer.arrhythmiaCounter,
-    dataCollector: dataCollector.current,
-    glucose: {
-      value: dataCollector.current.getAverageGlucose(),
-      trend: dataCollector.current.getGlucoseTrend()
-    }
+    dataCollector: dataCollector.current
   };
 };

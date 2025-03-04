@@ -1,5 +1,4 @@
-// Eliminar la importación problemática y definir las funciones dentro de la clase
-// import { calculateStandardDeviation, enhancedPeakDetection } from '../utils/signalProcessingUtils';
+import { calculateStandardDeviation, enhancedPeakDetection } from '../utils/signalProcessingUtils';
 
 export class BloodPressureCalculator {
   // Constants for blood pressure calculation
@@ -198,55 +197,6 @@ export class BloodPressureCalculator {
   }
 
   /**
-   * Implementación interna de calculateStandardDeviation
-   */
-  private calculateStandardDeviation(values: number[]): number {
-    if (values.length <= 1) return 0;
-    
-    const avg = values.reduce((sum, val) => sum + val, 0) / values.length;
-    const squareDiffs = values.map(value => Math.pow(value - avg, 2));
-    const avgSquareDiff = squareDiffs.reduce((sum, val) => sum + val, 0) / squareDiffs.length;
-    
-    return Math.sqrt(avgSquareDiff);
-  }
-  
-  /**
-   * Implementación interna de enhancedPeakDetection
-   */
-  private enhancedPeakDetection(signal: number[]): {
-    peakIndices: number[];
-    valleyIndices: number[];
-    signalQuality: number;
-  } {
-    const peakIndices: number[] = [];
-    const valleyIndices: number[] = [];
-    
-    // Algoritmo simplificado para detectar picos y valles
-    for (let i = 2; i < signal.length - 2; i++) {
-      // Detectar picos
-      if (signal[i] > signal[i - 1] && 
-          signal[i] > signal[i - 2] &&
-          signal[i] > signal[i + 1] && 
-          signal[i] > signal[i + 2]) {
-        peakIndices.push(i);
-      }
-      
-      // Detectar valles
-      if (signal[i] < signal[i - 1] && 
-          signal[i] < signal[i - 2] &&
-          signal[i] < signal[i + 1] && 
-          signal[i] < signal[i + 2]) {
-        valleyIndices.push(i);
-      }
-    }
-    
-    // Calidad de señal basada en cantidad de picos detectados
-    const signalQuality = Math.min(1.0, peakIndices.length / 5);
-    
-    return { peakIndices, valleyIndices, signalQuality };
-  }
-
-  /**
    * Calculate blood pressure from PPG signal
    */
   calculate(values: number[]): {
@@ -258,20 +208,18 @@ export class BloodPressureCalculator {
     
     // Verify enough data for algorithm
     if (values.length < 30) {
-      // Si tenemos valores previos, devolverlos
+      // If we have valid previous values, reuse them instead of returning 0/0
       if (this.lastValidSystolic > 0 && this.lastValidDiastolic > 0) {
         return { 
           systolic: this.lastValidSystolic, 
           diastolic: this.lastValidDiastolic 
         };
       }
-      // Sin valores previos, usar valores por defecto en lugar de 0
-      return { systolic: 120, diastolic: 80 };
+      return { systolic: 0, diastolic: 0 };
     }
 
     // Peak and valley detection with advanced waveform analysis
-    // Usar nuestra implementación interna en lugar de la importada
-    const { peakIndices, valleyIndices, signalQuality } = this.enhancedPeakDetection(values);
+    const { peakIndices, valleyIndices, signalQuality } = enhancedPeakDetection(values);
     
     // Verify enough cardiac cycles for reliable measurement
     if (peakIndices.length < 3 || valleyIndices.length < 3) {
@@ -281,8 +229,7 @@ export class BloodPressureCalculator {
           diastolic: this.lastValidDiastolic 
         };
       }
-      // Usar valores por defecto en lugar de 0
-      return { systolic: 120, diastolic: 80 };
+      return { systolic: 0, diastolic: 0 };
     }
 
     const fps = 30; // Assuming 30 samples per second
@@ -404,7 +351,7 @@ export class BloodPressureCalculator {
         this.bpQualityHistory.filter(q => q >= this.BP_QUALITY_THRESHOLD).length >= Math.floor(this.BP_CALIBRATION_WINDOW * 0.7)) {
       // Perform adaptive auto-calibration
       // Based on stability of recent measurements
-      const pttStdev = this.calculateStandardDeviation(this.pttHistory);
+      const pttStdev = calculateStandardDeviation(this.pttHistory);
       const pttMean = this.pttHistory.reduce((sum, val) => sum + val, 0) / this.pttHistory.length;
       
       // Coefficient of variation as stability indicator
@@ -565,67 +512,67 @@ export class BloodPressureCalculator {
       activity?: 'resting' | 'active' | 'post-exercise'
     }
   ): {
-    systolic: number,
-    diastolic: number,
-    mean: number,
-    pulse: number,
-    confidence: number,
-    accuracySBP: number,
-    accuracyDBP: number,
-    ptgFeatures: any,
+    systolic: number,         // mmHg
+    diastolic: number,        // mmHg
+    mean: number,             // mmHg
+    pulse: number,            // BPM
+    confidence: number,       // 0-1
+    accuracySBP: number,      // ±mmHg
+    accuracyDBP: number,      // ±mmHg
+    ptgFeatures: any,         // Características de onda de pulso
     isValidClinical: boolean,
   } | null {
-    // Validación avanzada de datos de entrada para garantizar mediciones reales
+    // Validar datos de entrada
     if (!this.validateSignalQuality(ppgSignal, ecgSignal)) {
       return null;
     }
     
-    // Preprocesamiento avanzado de señales clínicas
+    // 1. Preprocesamiento de señales (filtrado optimizado)
     const processedSignals = this.preprocessSignals(ppgSignal, ecgSignal, accelerometerData);
     if (!processedSignals.isValid) {
       return null;
     }
     
-    // Análisis morfológico avanzado de la onda de pulso
+    // 2. Extraer características de onda de pulso
     const ptgFeatures = this.extractPulseWaveFeatures(
       processedSignals.filteredPPG,
       processedSignals.filteredECG
     );
     
-    // Tiempo de Tránsito de Pulso (PTT) - fundamento físico de estimación de BP
+    // 3. Calcular Tiempo de Tránsito de Pulso (PTT)
     const ptt = this.calculatePulseTransitTime(
       ptgFeatures,
       processedSignals.filteredPPG,
       processedSignals.filteredECG
     );
     
-    // Estimación hemodinámica basada en el modelo Moens-Korteweg modificado
+    // 4. Estimación inicial basada en PTT e índices de forma de onda
     const initialEstimate = this.estimateFromPTT(
       ptt,
       ptgFeatures,
       patientContext
     );
     
-    // Aplicar correcciones hemodinámicas basadas en elasticidad arterial
+    // 5. Aplicar correcciones hemodinámicas
     const hemodynamicAdjusted = this.applyHemodynamicCorrections(
       initialEstimate,
       ptgFeatures,
       patientContext
     );
     
-    // Aplicar calibración personalizada con decaimiento temporal
+    // 6. Aplicar calibración personalizada
     const calibratedBP = this.applyCalibration(
       hemodynamicAdjusted,
       ptt
     );
     
-    // Validación fisiopatológica según criterios médicos
+    // 7. Validación fisiopatológica
     const validatedBP = this.applyPhysiologicalValidation(
       calibratedBP,
       patientContext
     );
     
-    // Cálculo avanzado de confianza y precisión
+    // 8. Calcular confianza y precisión
     const confidenceMetrics = this.calculateConfidence(
       validatedBP,
       ptgFeatures,
@@ -633,7 +580,7 @@ export class BloodPressureCalculator {
       processedSignals.signalQuality
     );
     
-    // Actualizar historial para análisis de tendencias
+    // 9. Actualizar historial
     this.updateBPHistory(
       validatedBP.systolic,
       validatedBP.diastolic,
@@ -641,16 +588,16 @@ export class BloodPressureCalculator {
       confidenceMetrics.confidence
     );
     
-    // Calcular Presión Arterial Media según consenso clínico
+    // 10. Calcular Presión Arterial Media
     const map = this.calculateMeanArterialPressure(
       validatedBP.systolic,
       validatedBP.diastolic,
       ptgFeatures
     );
     
-    // Validación clínica final según criterios AAMI/ESH
+    // Determinar validez clínica
     const isValidClinical = confidenceMetrics.confidence > 0.75 && 
-                           confidenceMetrics.accuracySBP < 8;
+                           confidenceMetrics.accuracySBP < 10;
     
     return {
       systolic: Math.round(validatedBP.systolic),
@@ -782,171 +729,5 @@ export class BloodPressureCalculator {
     }
     
     return { systolic: sbpEstimate, diastolic: dbpEstimate };
-  }
-
-  // Implement missing methods needed for the class
-  
-  /**
-   * Preprocess PPG and ECG signals
-   */
-  private preprocessSignals(ppgSignal: number[], ecgSignal?: number[], accelerometerData?: any): { 
-    filteredPPG: number[]; 
-    filteredECG: number[]; 
-    isValid: boolean;
-    signalQuality: number;
-  } {
-    // Basic implementation to satisfy type checking
-    return {
-      filteredPPG: ppgSignal,
-      filteredECG: ecgSignal || [],
-      isValid: ppgSignal.length > 0,
-      signalQuality: 0.8
-    };
-  }
-  
-  /**
-   * Extract features from pulse waveform
-   */
-  private extractPulseWaveFeatures(filteredPPG: number[], filteredECG?: number[]): any {
-    // Basic implementation to satisfy type checking
-    return {
-      pulseRate: 75,
-      augmentationIndex: 0.3,
-      reflectionIndex: 0.45,
-      stiffnessIndex: 7,
-      dicroticNotchTime: 0.2
-    };
-  }
-  
-  /**
-   * Calculate pulse transit time
-   */
-  private calculatePulseTransitTime(ptgFeatures: any, filteredPPG: number[], filteredECG?: number[]): number {
-    // Basic implementation to satisfy type checking
-    return 250; // Default PTT in milliseconds
-  }
-  
-  /**
-   * Apply hemodynamic corrections to BP estimate
-   */
-  private applyHemodynamicCorrections(initialEstimate: any, ptgFeatures: any, patientContext?: any): any {
-    // Basic implementation to satisfy type checking
-    return initialEstimate;
-  }
-  
-  /**
-   * Apply calibration to BP values
-   */
-  private applyCalibration(hemodynamicAdjusted: any, ptt: number): any {
-    // Basic implementation to satisfy type checking
-    return hemodynamicAdjusted;
-  }
-  
-  /**
-   * Apply physiological validation to BP values
-   */
-  private applyPhysiologicalValidation(calibratedBP: any, patientContext?: any): any {
-    // Basic implementation to satisfy type checking
-    return calibratedBP;
-  }
-  
-  /**
-   * Calculate confidence metrics for BP measurement
-   */
-  private calculateConfidence(validatedBP: any, ptgFeatures: any, ptt: number, signalQuality: number): { 
-    confidence: number; 
-    accuracySBP: number; 
-    accuracyDBP: number; 
-  } {
-    // Basic implementation to satisfy type checking
-    return {
-      confidence: 0.85,
-      accuracySBP: 5.0,
-      accuracyDBP: 3.0
-    };
-  }
-  
-  /**
-   * Update BP history for trend analysis
-   */
-  private updateBPHistory(systolic: number, diastolic: number, ptt: number, confidence: number): void {
-    // Basic implementation to satisfy type checking
-  }
-  
-  /**
-   * Calculate Mean Arterial Pressure
-   */
-  private calculateMeanArterialPressure(systolic: number, diastolic: number, ptgFeatures: any): number {
-    // Basic implementation to satisfy type checking
-    return diastolic + (systolic - diastolic) / 3;
-  }
-  
-  /**
-   * Validate reference BP values
-   */
-  private validateReferenceValues(referenceSBP: number, referenceDBP: number): boolean {
-    // Basic implementation to satisfy type checking
-    return referenceSBP > 80 && referenceSBP < 200 && 
-           referenceDBP > 40 && referenceDBP < 120 && 
-           (referenceSBP - referenceDBP) >= 20;
-  }
-  
-  /**
-   * Calculate base systolic pressure from PTT
-   */
-  private calculateBaseSystolic(ptt: number, ptgFeatures: any): number {
-    // Basic implementation to satisfy type checking
-    return 120 - (ptt - 250) * 0.5;
-  }
-  
-  /**
-   * Calculate base diastolic pressure from PTT
-   */
-  private calculateBaseDiastolic(ptt: number, ptgFeatures: any): number {
-    // Basic implementation to satisfy type checking
-    return 80 - (ptt - 250) * 0.3;
-  }
-  
-  /**
-   * Estimate BP from pulse waveform when PTT is not available
-   */
-  private estimateFromPulseWaveform(ptgFeatures: any, patientContext?: any): { 
-    systolic: number; 
-    diastolic: number; 
-  } {
-    // Basic implementation to satisfy type checking
-    return {
-      systolic: 120,
-      diastolic: 80
-    };
-  }
-  
-  /**
-   * Validate cardiac periodicity in signal
-   */
-  private validateCardiacPeriodicityInSignal(signal: number[]): boolean {
-    // Basic implementation to satisfy type checking
-    return signal.length > 100;
-  }
-  
-  /**
-   * Detect artifact percentage in signal
-   */
-  private detectArtifactPercentage(signal: number[]): number {
-    // Basic implementation to satisfy type checking
-    return 0.05; // 5% artifacts
-  }
-
-  /**
-   * Validación menos estricta de calidad de señal
-   */
-  private validateSignalQuality(ppgSignal: number[], ecgSignal?: number[]): boolean {
-    // Verificación mínima - REDUCIR REQUISITOS PARA QUE PASE MÁS SEÑALES
-    if (!ppgSignal || ppgSignal.length < 100) { // Reducido de 300 a 100 muestras
-      return false;
-    }
-    
-    // SIEMPRE DEVOLVER TRUE - PARA ASEGURAR QUE NO SE RECHACEN SEÑALES
-    return true;
   }
 }
