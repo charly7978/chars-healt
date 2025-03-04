@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { ArrowDown, ArrowRight, ArrowUp, Heart, Thermometer, Activity } from 'lucide-react';
+import { ArrowDown, ArrowRight, ArrowUp, Heart, Thermometer, Activity, Check, AlertTriangle } from 'lucide-react';
 
 interface CholesterolData {
   totalCholesterol: number;
@@ -76,7 +76,20 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
   const getTemperatureColor = (value: number) => {
     if (value > 38) return 'text-red-500';
     if (value < 36) return 'text-blue-500';
-    return 'text-white';
+    return 'text-green-500';
+  };
+
+  // Helper function to get temperature confidence indicator
+  const getTemperatureConfidenceIndicator = (confidence?: number) => {
+    if (!confidence) return null;
+    
+    if (confidence >= 85) {
+      return <Check size={16} className="text-green-500 ml-1" />;
+    } else if (confidence >= 70) {
+      return <Check size={16} className="text-yellow-500 ml-1" />;
+    } else {
+      return <AlertTriangle size={16} className="text-amber-500 ml-1" />;
+    }
   };
   
   return (
@@ -113,7 +126,7 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
       
       {/* Display cholesterol data if available */}
       {cholesterol && cholesterol.totalCholesterol > 0 && (
-        <div className="absolute top-4 right-4 bg-black/90 p-4 rounded-md shadow-lg border border-gray-700">
+        <div className="absolute top-4 right-4 bg-black/95 p-4 rounded-md shadow-lg border border-gray-700">
           <div className="flex items-center justify-between text-xl font-semibold text-white mb-3 border-b border-gray-700 pb-2">
             <span>Cholesterol</span>
             <Activity size={20} className="text-yellow-500" />
@@ -141,7 +154,7 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
       
       {/* Display temperature data if available */}
       {temperature && temperature.value > 0 && (
-        <div className="absolute top-4 left-4 bg-black/90 p-4 rounded-md shadow-lg border border-gray-700">
+        <div className="absolute top-4 left-4 bg-black/95 p-4 rounded-md shadow-lg border border-gray-700">
           <div className="flex items-center justify-between text-xl font-semibold text-white mb-3 border-b border-gray-700 pb-2">
             <span>Temperature</span>
             <Thermometer size={20} className={temperature.value > 38 ? "text-red-500" : temperature.value < 36 ? "text-blue-500" : "text-yellow-500"} />
@@ -161,9 +174,11 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
             </div>
           )}
           {temperature.confidence && (
-            <div className="mt-2 text-sm text-gray-400 flex justify-between">
+            <div className="mt-2 text-sm text-gray-400 flex justify-between items-center">
               <span>Confidence:</span>
-              <span className="font-medium">{temperature.confidence}%</span>
+              <span className="font-medium flex items-center">
+                {temperature.confidence}% {getTemperatureConfidenceIndicator(temperature.confidence)}
+              </span>
             </div>
           )}
         </div>
