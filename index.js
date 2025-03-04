@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -18,8 +19,10 @@ const Index = () => {
     arrhythmiaStatus: "--",
     respiration: { rate: 0, depth: 0, regularity: 0 },
     hasRespirationData: false,
-    glucose: null
+    glucose: { value: 0, trend: 'unknown' },
+    lipids: null
   });
+  
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState("--");
   const [elapsedTime, setElapsedTime] = useState(0);
@@ -121,7 +124,8 @@ const Index = () => {
       arrhythmiaStatus: "--",
       respiration: { rate: 0, depth: 0, regularity: 0 },
       hasRespirationData: false,
-      glucose: null
+      glucose: { value: 0, trend: 'unknown' },
+      lipids: null
     });
     setArrhythmiaCount("--");
     setSignalQuality(0);
@@ -190,14 +194,29 @@ const Index = () => {
             pressure: vitals.pressure,
             arrhythmia: vitals.arrhythmiaStatus,
             respiration: vitals.respiration,
-            glucose: vitals.glucose ? `${vitals.glucose.value} mg/dL (${vitals.glucose.trend})` : 'No data'
+            glucose: vitals.glucose ? `${vitals.glucose.value} mg/dL (${vitals.glucose.trend})` : 'No data',
+            lipids: vitals.lipids ? `${vitals.lipids.totalCholesterol} mg/dL (HDL: ${vitals.lipids.hdl})` : 'No data'
           });
           
-          setVitalSigns(vitals);
+          // Actualiza los signos vitales manteniendo la propiedad 'lipids'
+          setVitalSigns({
+            spo2: vitals.spo2 || 0,
+            pressure: vitals.pressure || "--/--",
+            arrhythmiaStatus: vitals.arrhythmiaStatus || "--",
+            respiration: vitals.respiration || { rate: 0, depth: 0, regularity: 0 },
+            hasRespirationData: vitals.hasRespirationData || false,
+            glucose: vitals.glucose || { value: 0, trend: 'unknown' },
+            lipids: vitals.lipids || null
+          });
+          
           setArrhythmiaCount(vitals.arrhythmiaStatus.split('|')[1] || "--");
           
           if (vitals.glucose && vitals.glucose.value > 0) {
             console.log(`Glucose data received: ${vitals.glucose.value} mg/dL, trend: ${vitals.glucose.trend}`);
+          }
+          
+          if (vitals.lipids) {
+            console.log(`Lipids data received: Total: ${vitals.lipids.totalCholesterol} mg/dL, HDL: ${vitals.lipids.hdl} mg/dL`);
           }
         }
         
@@ -243,6 +262,7 @@ const Index = () => {
               onStartMeasurement={startMonitoring}
               onReset={stopMonitoring}
               arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
+              lipidData={vitalSigns.lipids}
             />
           </div>
 
@@ -294,7 +314,8 @@ const Index = () => {
               <span>
                 Resp Data: {vitalSigns.hasRespirationData ? 'Disponible' : 'No disponible'} | 
                 Rate: {vitalSigns.respiration.rate} RPM | Depth: {vitalSigns.respiration.depth} | 
-                Glucose: {vitalSigns.glucose ? `${vitalSigns.glucose.value} mg/dL (${vitalSigns.glucose.trend || 'unknown'})` : 'No disponible'}
+                Glucose: {vitalSigns.glucose ? `${vitalSigns.glucose.value} mg/dL (${vitalSigns.glucose.trend || 'unknown'})` : 'No disponible'} |
+                Lipids: {vitalSigns.lipids ? `${vitalSigns.lipids.totalCholesterol} mg/dL (HDL: ${vitalSigns.lipids.hdl})` : 'No disponible'}
               </span>
             </div>
           )}

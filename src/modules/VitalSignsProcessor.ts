@@ -112,7 +112,9 @@ export class VitalSignsProcessor {
       arrhythmiaStatus: arrhythmiaResult.status,
       lastArrhythmiaData,
       glucose,
-      lipids: this.lipidValues
+      lipids: this.lipidValues,
+      hasRespirationData: false, // Por defecto, sin datos de respiración
+      respiration: { rate: 0, depth: 0, regularity: 0 } // Valores por defecto
     };
   }
   
