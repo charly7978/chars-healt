@@ -17,7 +17,7 @@ export interface VitalSigns {
     value: number; 
     confidence: number; 
     lastUpdated: number; 
-  };
+  } | null;
   lastArrhythmiaData: {
     timestamp: number;
     rmssd: number;
