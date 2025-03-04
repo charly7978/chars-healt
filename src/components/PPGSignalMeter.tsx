@@ -36,9 +36,9 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
   const lastArrhythmiaTime = useRef<number>(0);
   const arrhythmiaCountRef = useRef<number>(0);
   
-  const WINDOW_WIDTH_MS = 2800;
+  const WINDOW_WIDTH_MS = 1800;
   const CANVAS_WIDTH = 450;
-  const CANVAS_HEIGHT = 650;
+  const CANVAS_HEIGHT = 850;
   const GRID_SIZE_X = 30;
   const GRID_SIZE_Y = 10;
   const verticalScale = 79.0;
