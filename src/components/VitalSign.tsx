@@ -72,10 +72,10 @@ const VitalSign: React.FC<VitalSignProps> = ({
     }
   };
 
-  // Style for the card - using black background for all cards
+  // Pure black background with no border for all cards
   const cardClassName = isWideDisplay 
-    ? "p-2 flex flex-col space-y-1 h-full shadow-sm border border-gray-800 bg-black col-span-2" 
-    : "p-2 flex flex-col space-y-1 h-full shadow-sm border border-gray-800 bg-black";
+    ? "p-2 flex flex-col space-y-1 h-full bg-black col-span-2" 
+    : "p-2 flex flex-col space-y-1 h-full bg-black";
 
   return (
     <Card className={cardClassName}>
