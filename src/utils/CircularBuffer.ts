@@ -9,8 +9,9 @@ interface PPGDataPoint {
 export class CircularBuffer {
   private buffer: PPGDataPoint[];
   private maxSize: number;
-  private fingerDetectionThreshold: number = 0.12; // MODIFICACIÓN #1: Reducido aún más de 0.15 a 0.12 para mantener la detección más estable
-  private lastDetectionTime: number = 0; // MODIFICACIÓN #2: Añadido para mantener la detección por más tiempo
+  private fingerDetectionThreshold: number = 0.08; // MODIFICACIÓN: Reducido drásticamente de 0.12 a 0.08 para detectar señales muy débiles
+  private lastDetectionTime: number = 0;
+  private detectionHysteresis: number = 0.05; // NUEVA: Histéresis para evitar oscilaciones en la detección
 
   constructor(size: number) {
     this.buffer = [];
@@ -33,7 +34,7 @@ export class CircularBuffer {
     this.lastDetectionTime = 0;
   }
 
-  // Mejorado para mantener la detección por más tiempo
+  // Mejorado significativamente para mantener la detección más estable
   isFingerDetected(recentPoints: number = 10): boolean {
     if (this.buffer.length < recentPoints) return false;
     
@@ -41,19 +42,45 @@ export class CircularBuffer {
     const signalVariance = this.calculateVariance(latestPoints.map(p => p.value));
     const currentTime = Date.now();
     
-    // Si detectamos una varianza superior al umbral, actualizamos el tiempo de última detección
-    if (signalVariance > this.fingerDetectionThreshold) {
+    // Detección con histéresis: usamos un umbral más bajo si ya estábamos detectando
+    const wasDetected = currentTime - this.lastDetectionTime < 7000; // MODIFICACIÓN: Aumentado a 7 segundos
+    const effectiveThreshold = wasDetected 
+      ? this.fingerDetectionThreshold - this.detectionHysteresis 
+      : this.fingerDetectionThreshold;
+    
+    // Detección basada en la varianza de la señal
+    if (signalVariance > effectiveThreshold) {
       this.lastDetectionTime = currentTime;
       return true;
     }
     
-    // Mantenemos la detección por hasta 5 segundos después de la última detección real
-    // Esto evita que la detección se pierda por fluctuaciones momentáneas en la señal
-    if (currentTime - this.lastDetectionTime < 5000) {
+    // Verificación adicional: detectar cambios significativos en la señal
+    if (this.detectSignificantChanges(latestPoints)) {
+      this.lastDetectionTime = currentTime;
+      return true;
+    }
+    
+    // Mantener la detección por hasta 7 segundos después de la última detección real
+    if (currentTime - this.lastDetectionTime < 7000) { // MODIFICACIÓN: Aumentado de 5 a 7 segundos
       return true;
     }
     
     return false;
+  }
+
+  // NUEVO: Método para detectar cambios significativos en la señal que indican presencia de dedo
+  private detectSignificantChanges(points: PPGDataPoint[]): boolean {
+    if (points.length < 5) return false;
+    
+    // Calcular la diferencia máxima entre puntos consecutivos
+    let maxDiff = 0;
+    for (let i = 1; i < points.length; i++) {
+      const diff = Math.abs(points[i].value - points[i-1].value);
+      maxDiff = Math.max(maxDiff, diff);
+    }
+    
+    // Si hay cambios significativos, probablemente hay un dedo
+    return maxDiff > 0.2;
   }
 
   // Método auxiliar para calcular la varianza de la señal
