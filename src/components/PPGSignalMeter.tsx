@@ -46,7 +46,7 @@ const PPGSignalMeter = ({
   const TARGET_FPS = 60;
   const FRAME_TIME = 1000 / TARGET_FPS; // Optimized frame time calculation
   const BUFFER_SIZE = 650; // Signal history buffer size
-  const INVERT_SIGNAL = false;
+  const INVERT_SIGNAL = true;
   const PEAK_MIN_VALUE = 8.0; // Minimum threshold for peak detection
   const PEAK_DISTANCE_MS = 200; // Minimum time between peaks in milliseconds
 
