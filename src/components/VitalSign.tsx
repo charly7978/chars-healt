@@ -147,7 +147,7 @@ const VitalSign: React.FC<VitalSignProps> = ({
   };
 
   return (
-    <Card className="p-3 flex flex-row items-center bg-black/60 text-white border border-gray-800 rounded-md overflow-hidden relative h-24">
+    <Card className="p-3 flex flex-row items-center bg-black/60 text-white border border-gray-800 rounded-md overflow-hidden relative h-32">
       <div className="flex-shrink-0 mr-2">
         <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide truncate max-w-24">{label}</h3>
       </div>
@@ -163,12 +163,12 @@ const VitalSign: React.FC<VitalSignProps> = ({
         </div>
       ) : (
         <div className="flex items-center space-x-1 flex-grow">
-          <span className={`text-3xl font-bold ${getValueColor()}`}>{value}</span>
-          <span className="text-sm text-gray-400">{unit}</span>
+          <span className={`text-4xl font-bold ${getValueColor()}`}>{value}</span>
+          <span className="text-base text-gray-400">{unit}</span>
           
           {secondaryValue && secondaryUnit && (
             <div className="flex items-center space-x-1 ml-2">
-              <span className={`text-lg font-medium ${label.toLowerCase().includes('respiración') ? 'text-red-400' : 'text-gray-300'}`}>
+              <span className={`text-xl font-medium ${label.toLowerCase().includes('respiración') ? 'text-red-400' : 'text-gray-300'}`}>
                 {secondaryValue}
               </span>
               <span className="text-sm text-gray-400">{secondaryUnit}</span>
