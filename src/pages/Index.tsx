@@ -647,7 +647,10 @@ const Index = () => {
                 ...current,
                 hemoglobin: vitals.hemoglobin
               }));
-              allHemoglobinValuesRef.current.push(vitals.hemoglobin);
+              
+              if (vitals.hemoglobin >= 8 && vitals.hemoglobin <= 20) {
+                allHemoglobinValuesRef.current.push(vitals.hemoglobin);
+              }
             }
             
             if (vitals.lastArrhythmiaData) {
@@ -776,6 +779,7 @@ const Index = () => {
               value={finalValues ? finalValues.hemoglobin : vitalSigns.hemoglobin || "--"}
               unit="g/dL"
               isFinalReading={measurementComplete}
+              size="sm"
             />
           </div>
         </div>
