@@ -81,12 +81,7 @@ const Index = () => {
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat, reset: resetHeartBeat } = useHeartBeatProcessor();
-  const { 
-    processSignal: processVitalSigns, 
-    reset: resetVitalSigns, 
-    glucose: glucoseProcessor,
-    dataCollector 
-  } = useVitalSignsProcessor();
+  const { processSignal: processVitalSigns, reset: resetVitalSigns, glucose } = useVitalSignsProcessor();
 
   const handlePermissionsGranted = () => {
     console.log("Permisos concedidos correctamente");
@@ -749,7 +744,7 @@ const Index = () => {
               unit="mg/dL"
               trend={finalValues ? finalValues.glucose.trend : (vitalSigns.glucose ? vitalSigns.glucose.trend : "unknown")}
               isFinalReading={measurementComplete}
-              glucose={null}
+              glucose={glucose}
             />
           </div>
         </div>
