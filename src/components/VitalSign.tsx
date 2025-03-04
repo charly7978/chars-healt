@@ -147,42 +147,42 @@ const VitalSign: React.FC<VitalSignProps> = ({
   };
 
   return (
-    <Card className="p-2 flex flex-row items-center bg-black/60 text-white border border-gray-800 rounded-md overflow-hidden relative h-10">
-      <div className="flex-shrink-0 mr-2">
-        <h3 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide truncate max-w-16">{label}</h3>
+    <Card className="p-1 flex flex-row items-center bg-black/60 text-white border border-gray-800 rounded-md overflow-hidden relative h-8">
+      <div className="flex-shrink-0 mr-1">
+        <h3 className="text-[9px] font-semibold text-gray-400 uppercase tracking-wide truncate max-w-14">{label}</h3>
       </div>
       
       {label.toLowerCase().includes('arritmia') || label.toLowerCase().includes('arrhythmia') ? (
         <div className="flex items-center space-x-1 flex-grow">
-          <span className="text-sm font-bold tracking-tight text-white truncate">
+          <span className="text-xs font-bold tracking-tight text-white truncate">
             {value === '--' ? 'NORMAL' : 'DETECTADA'}
           </span>
           {value !== '--' && value !== 0 && (
-            <span className="text-xs font-semibold">{value}</span>
+            <span className="text-[9px] font-semibold">{value}</span>
           )}
         </div>
       ) : (
         <div className="flex items-center space-x-1 flex-grow">
-          <span className={`text-sm font-bold ${getValueColor()}`}>{value}</span>
-          <span className="text-[10px] text-gray-400">{unit}</span>
+          <span className={`text-xs font-bold ${getValueColor()}`}>{value}</span>
+          <span className="text-[8px] text-gray-400">{unit}</span>
           
           {secondaryValue && secondaryUnit && (
             <div className="flex items-center space-x-1 ml-1">
-              <span className={`text-xs font-medium ${label.toLowerCase().includes('respiración') ? 'text-red-400' : 'text-gray-300'}`}>
+              <span className={`text-[9px] font-medium ${label.toLowerCase().includes('respiración') ? 'text-red-400' : 'text-gray-300'}`}>
                 {secondaryValue}
               </span>
-              <span className="text-[10px] text-gray-400">{secondaryUnit}</span>
+              <span className="text-[8px] text-gray-400">{secondaryUnit}</span>
             </div>
           )}
           
           {cholesterolData && (
-            <div className="flex items-center text-[9px] ml-1">
+            <div className="flex items-center text-[8px] ml-1">
               <span className="text-gray-400">H:<span className="text-yellow-300">{cholesterolData.hdl}</span> L:<span className="text-yellow-300">{cholesterolData.ldl}</span></span>
             </div>
           )}
           
           {temperatureLocation && (
-            <div className="text-[9px] ml-1">
+            <div className="text-[8px] ml-1">
               <span className="text-gray-400">{temperatureLocation}</span>
             </div>
           )}
@@ -191,7 +191,7 @@ const VitalSign: React.FC<VitalSignProps> = ({
       
       {isFinalReading && (
         <div className="absolute top-1 right-1">
-          <div className="h-1.5 w-1.5 rounded-full bg-green-500"></div>
+          <div className="h-1 w-1 rounded-full bg-green-500"></div>
         </div>
       )}
     </Card>

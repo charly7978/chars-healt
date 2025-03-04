@@ -1,3 +1,4 @@
+<lov-code>
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -24,7 +25,11 @@ interface VitalSigns {
     value: number;
     trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
   } | null;
-  hemoglobin: number | null;
+  hemoglobin: { 
+    value: number; 
+    confidence: number; 
+    lastUpdated: number; 
+  } | null;
   lastArrhythmiaData: {
     timestamp: number;
     rmssd: number;
@@ -54,8 +59,8 @@ const Index = () => {
     arrhythmiaStatus: "--",
     respiration: { rate: 0, depth: 0, regularity: 0 },
     hasRespirationData: false,
-    glucose: { value: 0, trend: 'unknown' },
-    hemoglobin: null,
+    glucose: null,
+    hemoglobin: { value: 0, confidence: 0, lastUpdated: 0 },
     lastArrhythmiaData: null,
     cholesterol: null,
     temperature: null
@@ -81,8 +86,12 @@ const Index = () => {
     glucose: {
       value: number;
       trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
-    },
-    hemoglobin: number | null,
+    } | null,
+    hemoglobin: { 
+      value: number; 
+      confidence: number; 
+      lastUpdated: number; 
+    } | null,
     cholesterol: {
       totalCholesterol: number;
       hdl: number;
@@ -93,6 +102,7 @@ const Index = () => {
       value: number;
       trend: 'rising' | 'falling' | 'stable';
       location: string;
+      confidence?: number;
     } | null
   } | null>(null);
   const [permissionsGranted, setPermissionsGranted] = useState(false);
@@ -214,7 +224,7 @@ const Index = () => {
       if (validHemoglobinValues.length > 0) {
         avgHemoglobin = Math.round(validHemoglobinValues.reduce((a, b) => a + b, 0) / validHemoglobinValues.length);
       } else {
-        avgHemoglobin = vitalSigns.hemoglobin;
+        avgHemoglobin = vitalSigns.hemoglobin?.value || null;
       }
       
       let cholesterolData = null;
@@ -243,7 +253,8 @@ const Index = () => {
         temperatureData = {
           value: avgTemp,
           trend: vitalSigns.temperature?.trend || 'stable',
-          location: vitalSigns.temperature?.location || 'dedo'
+          location: vitalSigns.temperature?.location || 'dedo',
+          confidence: vitalSigns.temperature?.confidence
         };
       } else {
         temperatureData = vitalSigns.temperature;
@@ -296,7 +307,11 @@ const Index = () => {
           value: avgGlucose > 0 ? avgGlucose : (vitalSigns.glucose?.value || 0),
           trend: glucoseTrend
         },
-        hemoglobin: avgHemoglobin,
+        hemoglobin: {
+          value: avgHemoglobin > 0 ? avgHemoglobin : (vitalSigns.hemoglobin?.value || 0),
+          confidence: vitalSigns.hemoglobin?.confidence || 0,
+          lastUpdated: vitalSigns.hemoglobin?.lastUpdated || 0
+        },
         cholesterol: cholesterolData,
         temperature: temperatureData
       });
@@ -321,7 +336,7 @@ const Index = () => {
         pressure: vitalSigns.pressure,
         respiration: vitalSigns.respiration,
         glucose: vitalSigns.glucose || { value: 0, trend: 'unknown' },
-        hemoglobin: vitalSigns.hemoglobin,
+        hemoglobin: vitalSigns.hemoglobin || { value: 0, confidence: 0, lastUpdated: 0 },
         cholesterol: vitalSigns.cholesterol,
         temperature: vitalSigns.temperature
       });
@@ -362,6 +377,8 @@ const Index = () => {
       allRespirationDepthValuesRef.current = [];
       allGlucoseValuesRef.current = [];
       allHemoglobinValuesRef.current = [];
+      allCholesterolValuesRef.current = { total: [], hdl: [], ldl: [], triglycerides: [] };
+      allTemperatureValuesRef.current = [];
       
       if (measurementTimerRef.current) {
         clearInterval(measurementTimerRef.current);
@@ -459,8 +476,8 @@ const Index = () => {
       arrhythmiaStatus: "--",
       respiration: { rate: 0, depth: 0, regularity: 0 },
       hasRespirationData: false,
-      glucose: { value: 0, trend: 'unknown' },
-      hemoglobin: null,
+      glucose: null,
+      hemoglobin: { value: 0, confidence: 0, lastUpdated: 0 },
       lastArrhythmiaData: null,
       cholesterol: null,
       temperature: null
@@ -731,7 +748,11 @@ const Index = () => {
               console.log(`Hemoglobin data received: ${vitals.hemoglobin.value} g/dL (confidence: ${vitals.hemoglobin.confidence}%)`);
               setVitalSigns(current => ({
                 ...current,
-                hemoglobin: vitals.hemoglobin.value
+                hemoglobin: {
+                  value: vitals.hemoglobin.value,
+                  confidence: vitals.hemoglobin.confidence,
+                  lastUpdated: vitals.hemoglobin.lastUpdated
+                }
               }));
               allHemoglobinValuesRef.current.push(vitals.hemoglobin.value);
             }
@@ -829,158 +850,4 @@ const Index = () => {
 
       <div className="absolute inset-0 z-10">
         <PPGSignalMeter 
-          value={isMonitoring ? lastSignal?.filteredValue || 0 : 0}
-          quality={isMonitoring ? lastSignal?.quality || 0 : 0}
-          isFingerDetected={isMonitoring ? lastSignal?.fingerDetected || false : false}
-          onStartMeasurement={startMonitoring}
-          onReset={handleReset}
-          arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
-          rawArrhythmiaData={lastArrhythmiaData}
-          cholesterolData={vitalSigns.cholesterol}
-          temperatureData={vitalSigns.temperature}
-        />
-      </div>
-      
-      <div className="absolute z-20" style={{ bottom: '60px', left: 0, right: 0, padding: '0 6px' }}>
-        <div className="flex flex-wrap gap-1">
-          <div className="w-1/3 pr-0.5">
-            <VitalSign 
-              label="FRECUENCIA"
-              value={finalValues ? finalValues.heartRate : heartRate || "--"}
-              unit="BPM"
-              isFinalReading={measurementComplete}
-            />
-          </div>
-          <div className="w-1/3 px-0.5">
-            <VitalSign 
-              label="SPO2"
-              value={finalValues ? finalValues.spo2 : vitalSigns.spo2 || "--"}
-              unit="%"
-              isFinalReading={measurementComplete}
-            />
-          </div>
-          <div className="w-1/3 pl-0.5">
-            <VitalSign 
-              label="PRESIÓN"
-              value={finalValues ? finalValues.pressure : vitalSigns.pressure}
-              unit="mmHg"
-              isFinalReading={measurementComplete}
-            />
-          </div>
-          <div className="w-1/3 pr-0.5">
-            <VitalSign 
-              label="ARRITMIAS"
-              value={arrhythmiaCount}
-              unit=""
-              isFinalReading={measurementComplete}
-            />
-          </div>
-          <div className="w-1/3 px-0.5">
-            <VitalSign 
-              label="RESPIRACIÓN"
-              value={finalValues ? finalValues.respiration.rate : (vitalSigns.hasRespirationData ? vitalSigns.respiration.rate : "--")}
-              unit="RPM"
-              secondaryValue={finalValues ? finalValues.respiration.depth : (vitalSigns.hasRespirationData ? vitalSigns.respiration.depth : "--")}
-              secondaryUnit="%"
-              isFinalReading={measurementComplete}
-            />
-          </div>
-          <div className="w-1/3 pl-0.5">
-            <VitalSign 
-              label="GLUCOSA"
-              value={finalValues ? finalValues.glucose.value : (vitalSigns.glucose ? vitalSigns.glucose.value : "--")}
-              unit="mg/dL"
-              trend={finalValues ? finalValues.glucose.trend : (vitalSigns.glucose ? vitalSigns.glucose.trend : "unknown")}
-              isFinalReading={measurementComplete}
-            />
-          </div>
-          <div className="w-1/3 pr-0.5">
-            <VitalSign 
-              label="HEMOGLOBINA"
-              value={finalValues ? finalValues.hemoglobin : vitalSigns.hemoglobin || "--"}
-              unit="g/dL"
-              isFinalReading={measurementComplete}
-            />
-          </div>
-          <div className="w-1/3 px-0.5">
-            <VitalSign 
-              label="COLESTEROL"
-              value={finalValues ? finalValues.cholesterol?.totalCholesterol : vitalSigns.cholesterol?.totalCholesterol || "--"}
-              unit="mg/dL"
-              cholesterolData={finalValues ? 
-                finalValues.cholesterol ? 
-                  { hdl: finalValues.cholesterol.hdl, ldl: finalValues.cholesterol.ldl, triglycerides: finalValues.cholesterol.triglycerides } : 
-                  undefined
-                : 
-                vitalSigns.cholesterol ? 
-                  { hdl: vitalSigns.cholesterol.hdl, ldl: vitalSigns.cholesterol.ldl, triglycerides: vitalSigns.cholesterol.triglycerides } : 
-                  undefined
-              }
-              isFinalReading={measurementComplete}
-            />
-          </div>
-          <div className="w-1/3 pl-0.5">
-            <VitalSign 
-              label="TEMPERATURA"
-              value={finalValues ? finalValues.temperature?.value.toFixed(1) : vitalSigns.temperature?.value.toFixed(1) || "--"}
-              unit="°C"
-              temperatureLocation={finalValues ? finalValues.temperature?.location : vitalSigns.temperature?.location}
-              temperatureTrend={finalValues ? finalValues.temperature?.trend : vitalSigns.temperature?.trend}
-              isFinalReading={measurementComplete}
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="absolute z-50" style={{ bottom: 0, left: 0, right: 0, height: '55px' }}>
-        <div className="grid grid-cols-2 gap-px w-full h-full">
-          <button 
-            onClick={startMonitoring}
-            className="w-full h-full text-xl font-bold text-white transition-colors duration-200"
-            disabled={!permissionsGranted}
-            style={{ 
-              backgroundImage: !permissionsGranted 
-                ? 'linear-gradient(135deg, #64748b, #475569, #334155)'
-                : isMonitoring 
-                  ? 'linear-gradient(135deg, #f87171, #dc2626, #b91c1c)' 
-                  : 'linear-gradient(135deg, #3b82f6, #2563eb, #1d4ed8)',
-              textShadow: '0px 1px 3px rgba(0, 0, 0, 0.3)',
-              opacity: !permissionsGranted ? 0.7 : 1
-            }}
-          >
-            {!permissionsGranted ? 'PERMISOS REQUERIDOS' : (isMonitoring ? 'DETENER' : 'INICIAR')}
-          </button>
-          <button 
-            onClick={handleReset}
-            className="w-full h-full text-xl font-bold text-white transition-colors duration-200"
-            style={{ 
-              backgroundImage: 'linear-gradient(135deg, #64748b, #475569, #334155)',
-              textShadow: '0px 1px 3px rgba(0, 0, 0, 0.3)'
-            }}
-          >
-            RESET
-          </button>
-        </div>
-      </div>
-      
-      {!permissionsGranted && (
-        <div className="absolute z-50 top-1/2 left-0 right-0 text-center px-4 transform -translate-y-1/2">
-          <div className="bg-red-900/80 backdrop-blur-sm p-4 rounded-lg mx-auto max-w-md">
-            <h3 className="text-xl font-bold text-white mb-2">Permisos necesarios</h3>
-            <p className="text-white/90 mb-4">
-              Esta aplicación necesita acceso a la cámara para medir tus signos vitales.
-            </p>
-            <button 
-              onClick={() => window.location.reload()}
-              className="bg-white text-red-900 px-4 py-2 rounded font-medium hover:bg-gray-100"
-            >
-              Reintentar
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-export default Index;
+          value={isMonitoring ? lastSignal?.filteredValue ||
