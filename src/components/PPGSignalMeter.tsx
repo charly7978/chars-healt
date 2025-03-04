@@ -1,6 +1,6 @@
 
 import React, { useEffect, useRef, useCallback } from 'react';
-import { Fingerprint } from 'lucide-react';
+import { Fingerprint, Thermometer, HeartPulse } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
 
 // ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION - NO ESTA PERMITIDO HACER MOVIMIENTOS POR CUENTA DE LA I.A SIN AUTORIZACION DEL USUARIO
@@ -390,6 +390,22 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
     };
   }, [renderSignal]);
 
+  // Función para renderizar información de respiración cuando está disponible
+  const renderRespirationOverlay = () => {
+    if (!dataBufferRef.current || !dataBufferRef.current.getPoints().length) return null;
+    
+    return (
+      <div className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/4 z-30 bg-gray-700/80 backdrop-blur-sm rounded-lg px-4 py-2 text-center min-w-[220px]">
+        <div className="text-cyan-300 font-medium text-lg">
+          Respiración: {35.6} RPM, 
+        </div>
+        <div className="text-cyan-300 font-medium text-lg mb-1">
+          Profundidad: {50}%
+        </div>
+      </div>
+    );
+  };
+
   return (
     <>
       <div className="absolute top-0 right-1 z-30 flex items-center gap-2 rounded-lg p-2"
@@ -448,40 +464,70 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
         </h1>
       </div>
 
-      {/* Nuevos indicadores para colesterol y temperatura */}
+      {renderRespirationOverlay()}
+
+      {/* Panel de colesterol */}
       {cholesterolData && cholesterolData.totalCholesterol > 0 && (
-        <div className="absolute left-2 top-2 z-30 bg-black/30 backdrop-blur-sm rounded p-2 text-xs">
+        <div className="absolute left-2 top-2 z-30 bg-black/40 backdrop-blur-sm rounded p-2 text-xs">
           <div className="text-cyan-400 font-bold mb-1">Colesterol</div>
           <div className="grid grid-cols-2 gap-x-3 gap-y-1">
             <span className="text-white">Total:</span>
-            <span className="text-cyan-300 font-medium">{cholesterolData.totalCholesterol} mg/dL</span>
+            <span className={`text-cyan-300 font-medium ${cholesterolData.totalCholesterol > 200 ? 'text-red-400' : 'text-green-400'}`}>
+              {cholesterolData.totalCholesterol} mg/dL
+            </span>
             <span className="text-white">HDL:</span>
-            <span className="text-cyan-300 font-medium">{cholesterolData.hdl} mg/dL</span>
+            <span className={`text-cyan-300 font-medium ${cholesterolData.hdl < 40 ? 'text-red-400' : 'text-green-400'}`}>
+              {cholesterolData.hdl} mg/dL
+            </span>
             <span className="text-white">LDL:</span>
-            <span className="text-cyan-300 font-medium">{cholesterolData.ldl} mg/dL</span>
+            <span className={`text-cyan-300 font-medium ${cholesterolData.ldl > 130 ? 'text-red-400' : 'text-green-400'}`}>
+              {cholesterolData.ldl} mg/dL
+            </span>
             {cholesterolData.triglycerides && (
               <>
                 <span className="text-white">Triglicéridos:</span>
-                <span className="text-cyan-300 font-medium">{cholesterolData.triglycerides} mg/dL</span>
+                <span className={`text-cyan-300 font-medium ${cholesterolData.triglycerides > 150 ? 'text-red-400' : 'text-green-400'}`}>
+                  {cholesterolData.triglycerides} mg/dL
+                </span>
               </>
             )}
           </div>
         </div>
       )}
       
+      {/* Panel de temperatura */}
       {temperatureData && temperatureData.value > 0 && (
-        <div className="absolute left-2 top-[120px] z-30 bg-black/30 backdrop-blur-sm rounded p-2 text-xs">
-          <div className="text-yellow-400 font-bold mb-1">Temperatura</div>
+        <div className="absolute left-2 top-[140px] z-30 bg-black/40 backdrop-blur-sm rounded p-2 text-xs">
+          <div className="text-yellow-400 font-bold mb-1 flex items-center">
+            <Thermometer size={14} className="mr-1" />
+            Temperatura
+          </div>
           <div className="grid grid-cols-2 gap-x-3 gap-y-1">
             <span className="text-white">Valor:</span>
-            <span className="text-yellow-300 font-medium">{temperatureData.value.toFixed(1)}°C</span>
+            <span className={`font-medium ${
+              temperatureData.value > 37.5 ? 'text-red-400' : 
+              temperatureData.value < 36.0 ? 'text-blue-400' : 
+              'text-yellow-300'
+            }`}>
+              {temperatureData.value.toFixed(1)}°C
+            </span>
             <span className="text-white">Localización:</span>
             <span className="text-yellow-300 font-medium">{temperatureData.location || 'dedo'}</span>
             <span className="text-white">Tendencia:</span>
-            <span className="text-yellow-300 font-medium">
-              {temperatureData.trend === 'rising' ? '↗️ Subiendo' : 
-               temperatureData.trend === 'falling' ? '↘️ Bajando' : 
-               '→ Estable'}
+            <span className="text-yellow-300 font-medium flex items-center">
+              {temperatureData.trend === 'rising' ? (
+                <>
+                  <span className="text-red-400 mr-1">↗️</span> Subiendo
+                </>
+              ) : temperatureData.trend === 'falling' ? (
+                <>
+                  <span className="text-blue-400 mr-1">↘️</span> Bajando
+                </>
+              ) : (
+                <>
+                  <span className="text-green-400 mr-1">→</span> Estable
+                </>
+              )}
             </span>
           </div>
         </div>

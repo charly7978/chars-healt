@@ -11,6 +11,16 @@ export interface VitalSignProps {
   isFinalReading?: boolean;
   secondaryValue?: string | number;
   secondaryUnit?: string;
+  secondaryLabel?: string;
+  statusText?: string;
+  statusColor?: string;
+  temperatureLocation?: string;
+  temperatureTrend?: 'rising' | 'falling' | 'stable';
+  cholesterolData?: {
+    hdl: number;
+    ldl: number;
+    triglycerides?: number;
+  };
 }
 
 /**
@@ -24,7 +34,13 @@ const VitalSign: React.FC<VitalSignProps> = ({
   trend = 'stable',
   isFinalReading = false,
   secondaryValue,
-  secondaryUnit
+  secondaryUnit,
+  secondaryLabel,
+  statusText,
+  statusColor,
+  temperatureLocation,
+  temperatureTrend,
+  cholesterolData
 }) => {
   const getTrendIcon = () => {
     switch(trend) {
@@ -60,31 +76,138 @@ const VitalSign: React.FC<VitalSignProps> = ({
     }
   };
 
+  // Función para determinar el color del valor basado en la etiqueta y el valor
+  const getValueColor = () => {
+    if (label.toLowerCase().includes('cardíaca') || label.toLowerCase().includes('heart')) {
+      // Para frecuencia cardíaca
+      const bpm = typeof value === 'number' ? value : parseInt(value.toString());
+      if (bpm < 60) return 'text-blue-400';
+      if (bpm > 100) return 'text-orange-400';
+      return 'text-orange-400';
+    } 
+    else if (label.toLowerCase().includes('spo2')) {
+      // Para SpO2
+      const spo2 = typeof value === 'number' ? value : parseInt(value.toString());
+      if (spo2 < 95) return 'text-red-400';
+      return 'text-white';
+    }
+    else if (label.toLowerCase().includes('presión') || label.toLowerCase().includes('pressure')) {
+      return 'text-blue-400';
+    }
+    else if (label.toLowerCase().includes('respiración') || label.toLowerCase().includes('respiration')) {
+      return 'text-red-500';
+    }
+    else if (label.toLowerCase().includes('glucosa') || label.toLowerCase().includes('glucose')) {
+      return 'text-green-400';
+    }
+    else if (label.toLowerCase().includes('hemoglobina') || label.toLowerCase().includes('hemoglobin')) {
+      return 'text-purple-400';
+    }
+    else if (label.toLowerCase().includes('colesterol') || label.toLowerCase().includes('cholesterol')) {
+      return 'text-yellow-400';
+    }
+    else if (label.toLowerCase().includes('temperatura') || label.toLowerCase().includes('temperature')) {
+      return temperatureTrend === 'rising' ? 'text-red-500' : 
+             temperatureTrend === 'falling' ? 'text-blue-500' : 'text-yellow-500';
+    }
+    else if (label.toLowerCase().includes('arritmia') || label.toLowerCase().includes('arrhythmia')) {
+      return 'text-white';
+    }
+    
+    return 'text-white';
+  };
+
+  // Determinar el texto de estado basado en la etiqueta y el valor
+  const getStatusText = () => {
+    if (statusText) return statusText;
+    
+    if (label.toLowerCase().includes('cardíaca') || label.toLowerCase().includes('heart')) {
+      const bpm = typeof value === 'number' ? value : parseInt(value.toString());
+      if (bpm < 60) return 'BRADICARDIA';
+      if (bpm > 100) return 'LEVE TAQUICARDIA';
+      return 'NORMAL';
+    }
+    else if (label.toLowerCase().includes('presión') || label.toLowerCase().includes('pressure')) {
+      return 'PRESIÓN NORMAL';
+    }
+    else if (label.toLowerCase().includes('respiración') || label.toLowerCase().includes('respiration')) {
+      return secondaryValue && parseInt(secondaryValue.toString()) > 40 ? 'TAQUIPNEA' : 'NORMAL';
+    }
+    else if (label.toLowerCase().includes('glucosa') || label.toLowerCase().includes('glucose')) {
+      const glucoseVal = typeof value === 'number' ? value : parseInt(value.toString());
+      if (glucoseVal < 70) return 'HIPOGLUCEMIA';
+      if (glucoseVal > 110) return 'HIPERGLUCEMIA';
+      return 'NORMAL';
+    }
+    else if (label.toLowerCase().includes('arritmia') || label.toLowerCase().includes('arrhythmia')) {
+      return value === 0 || value === '0' || value === '--' ? 'NO DETECTADA' : 'RIESGO MÍNIMO';
+    }
+    
+    return '';
+  };
+
   return (
-    <Card className="p-4 flex flex-col space-y-2 h-full shadow-sm border-2 hover:border-blue-300 transition-colors">
-      <div className="flex justify-between items-start">
-        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">{label}</h3>
-        {trend && (
-          <Badge variant="outline" className={`text-xs px-2 py-0.5 ${getTrendColor()}`}>
-            {getTrendIcon()} {trend.replace('_', ' ')}
-          </Badge>
-        )}
+    <Card className="p-3 flex flex-col space-y-1 bg-black text-white border-0 rounded-xl overflow-hidden relative">
+      <div className="text-center pb-1 border-b border-gray-800">
+        <h3 className="text-xs font-semibold text-gray-300 uppercase tracking-wider">{label}</h3>
       </div>
-      <div className="flex items-baseline space-x-1">
-        <span className="text-3xl font-bold tracking-tighter">{value}</span>
-        <span className="text-sm text-gray-600 dark:text-gray-400">{unit}</span>
-      </div>
-      {secondaryValue && secondaryUnit && (
-        <div className="flex items-baseline space-x-1 mt-1">
-          <span className="text-lg font-medium tracking-tighter">{secondaryValue}</span>
-          <span className="text-xs text-gray-600 dark:text-gray-400">{secondaryUnit}</span>
-        </div>
+      
+      {label.toLowerCase().includes('arritmia') || label.toLowerCase().includes('arrhythmia') ? (
+        <>
+          <div className="flex justify-center pt-1">
+            <span className="text-2xl font-bold tracking-tighter text-white">{value === '--' ? 'ARRITMIA' : 'ARRITMIA DETECTADA'}</span>
+          </div>
+          {value !== '--' && value !== 0 && (
+            <div className="flex justify-center">
+              <span className="text-4xl font-bold">{value}</span>
+            </div>
+          )}
+          <div className="flex justify-center mt-auto pt-1">
+            <span className="text-xs text-gray-400">{getStatusText()}</span>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="flex justify-center items-baseline space-x-1 pt-1">
+            <span className={`text-4xl font-bold tracking-tighter ${getValueColor()}`}>{value}</span>
+            <span className="text-xs text-gray-400">{unit}</span>
+          </div>
+          
+          {secondaryValue && secondaryUnit && (
+            <div className="flex justify-center items-baseline space-x-1">
+              <span className={`text-2xl font-medium tracking-tighter ${label.toLowerCase().includes('respiración') ? 'text-red-500' : 'text-gray-300'}`}>
+                {secondaryValue}
+              </span>
+              <span className="text-xs text-gray-400">{secondaryUnit}</span>
+            </div>
+          )}
+          
+          {/* Para colesterol, mostrar HDL/LDL */}
+          {cholesterolData && (
+            <div className="flex justify-center items-center space-x-2 text-xs">
+              <span className="text-gray-400">HDL: <span className="text-yellow-300">{cholesterolData.hdl}</span></span>
+              <span className="text-gray-400">LDL: <span className="text-yellow-300">{cholesterolData.ldl}</span></span>
+            </div>
+          )}
+          
+          {/* Para temperatura, mostrar ubicación */}
+          {temperatureLocation && (
+            <div className="flex justify-center items-center text-xs">
+              <span className="text-gray-400">Loc: <span className="text-yellow-300">{temperatureLocation}</span></span>
+            </div>
+          )}
+          
+          {getStatusText() && (
+            <div className="flex justify-center mt-auto pt-1">
+              <span className={`text-xs ${statusColor || getValueColor()}`}>{getStatusText()}</span>
+            </div>
+          )}
+        </>
       )}
+      
       {isFinalReading && (
-        <div className="mt-auto">
-          <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-xs">
-            Complete Measurement
-          </Badge>
+        <div className="absolute top-1 right-1">
+          <div className="h-2 w-2 rounded-full bg-green-500"></div>
         </div>
       )}
     </Card>

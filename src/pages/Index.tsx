@@ -30,6 +30,18 @@ interface VitalSigns {
     rmssd: number;
     rrVariation: number;
   } | null;
+  cholesterol: {
+    totalCholesterol: number;
+    hdl: number;
+    ldl: number;
+    triglycerides?: number;
+  } | null;
+  temperature: {
+    value: number;
+    trend: 'rising' | 'falling' | 'stable';
+    location: string;
+    confidence?: number;
+  } | null;
 }
 
 const Index = () => {
@@ -44,7 +56,9 @@ const Index = () => {
     hasRespirationData: false,
     glucose: { value: 0, trend: 'unknown' },
     hemoglobin: null,
-    lastArrhythmiaData: null
+    lastArrhythmiaData: null,
+    cholesterol: null,
+    temperature: null
   });
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState<string | number>("--");
@@ -68,7 +82,18 @@ const Index = () => {
       value: number;
       trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
     },
-    hemoglobin: number | null
+    hemoglobin: number | null,
+    cholesterol: {
+      totalCholesterol: number;
+      hdl: number;
+      ldl: number;
+      triglycerides?: number;
+    } | null,
+    temperature: {
+      value: number;
+      trend: 'rising' | 'falling' | 'stable';
+      location: string;
+    } | null
   } | null>(null);
   const [permissionsGranted, setPermissionsGranted] = useState(false);
   const measurementTimerRef = useRef<number | null>(null);
@@ -81,6 +106,13 @@ const Index = () => {
   const allRespirationDepthValuesRef = useRef<number[]>([]);
   const allGlucoseValuesRef = useRef<number[]>([]);
   const allHemoglobinValuesRef = useRef<number[]>([]);
+  const allCholesterolValuesRef = useRef<{
+    total: number[];
+    hdl: number[];
+    ldl: number[];
+    triglycerides: number[];
+  }>({ total: [], hdl: [], ldl: [], triglycerides: [] });
+  const allTemperatureValuesRef = useRef<number[]>([]);
   
   const hasValidValuesRef = useRef(false);
   
@@ -115,6 +147,11 @@ const Index = () => {
       const validRespDepths = allRespirationDepthValuesRef.current.filter(v => v > 0);
       const validGlucoseValues = allGlucoseValuesRef.current.filter(v => v > 0);
       const validHemoglobinValues = allHemoglobinValuesRef.current.filter(v => v > 0);
+      const validCholesterolTotalValues = allCholesterolValuesRef.current.total.filter(v => v > 0);
+      const validCholesterolHDLValues = allCholesterolValuesRef.current.hdl.filter(v => v > 0);
+      const validCholesterolLDLValues = allCholesterolValuesRef.current.ldl.filter(v => v > 0);
+      const validCholesterolTriglyceridesValues = allCholesterolValuesRef.current.triglycerides.filter(v => v > 0);
+      const validTemperatureValues = allTemperatureValuesRef.current.filter(v => v > 0);
       
       console.log("Valores acumulados para promedios:", {
         heartRateValues: validHeartRates.length,
@@ -124,7 +161,11 @@ const Index = () => {
         respirationRates: validRespRates.length,
         respirationDepths: validRespDepths.length,
         glucoseValues: validGlucoseValues.length,
-        hemoglobinValues: validHemoglobinValues.length
+        hemoglobinValues: validHemoglobinValues.length,
+        cholesterolTotalValues: validCholesterolTotalValues.length,
+        cholesterolHDLValues: validCholesterolHDLValues.length,
+        cholesterolLDLValues: validCholesterolLDLValues.length,
+        temperatureValues: validTemperatureValues.length
       });
       
       let avgHeartRate = 0;
@@ -166,7 +207,7 @@ const Index = () => {
       if (validGlucoseValues.length > 0) {
         avgGlucose = Math.round(validGlucoseValues.reduce((a, b) => a + b, 0) / validGlucoseValues.length);
       } else {
-        avgGlucose = vitalSigns.glucose.value;
+        avgGlucose = vitalSigns.glucose?.value || 0;
       }
 
       let avgHemoglobin = null;
@@ -176,13 +217,47 @@ const Index = () => {
         avgHemoglobin = vitalSigns.hemoglobin;
       }
       
+      let cholesterolData = null;
+      if (validCholesterolTotalValues.length > 0 && validCholesterolHDLValues.length > 0 && validCholesterolLDLValues.length > 0) {
+        const avgTotal = Math.round(validCholesterolTotalValues.reduce((a, b) => a + b, 0) / validCholesterolTotalValues.length);
+        const avgHDL = Math.round(validCholesterolHDLValues.reduce((a, b) => a + b, 0) / validCholesterolHDLValues.length);
+        const avgLDL = Math.round(validCholesterolLDLValues.reduce((a, b) => a + b, 0) / validCholesterolLDLValues.length);
+        
+        cholesterolData = {
+          totalCholesterol: avgTotal,
+          hdl: avgHDL,
+          ldl: avgLDL
+        };
+        
+        if (validCholesterolTriglyceridesValues.length > 0) {
+          cholesterolData.triglycerides = Math.round(validCholesterolTriglyceridesValues.reduce((a, b) => a + b, 0) / validCholesterolTriglyceridesValues.length);
+        }
+      } else {
+        cholesterolData = vitalSigns.cholesterol;
+      }
+      
+      let temperatureData = null;
+      if (validTemperatureValues.length > 0) {
+        const avgTemp = validTemperatureValues.reduce((a, b) => a + b, 0) / validTemperatureValues.length;
+        
+        temperatureData = {
+          value: avgTemp,
+          trend: vitalSigns.temperature?.trend || 'stable',
+          location: vitalSigns.temperature?.location || 'dedo'
+        };
+      } else {
+        temperatureData = vitalSigns.temperature;
+      }
+      
       console.log("PROMEDIOS REALES calculados:", {
         heartRate: avgHeartRate,
         spo2: avgSpo2,
         pressure: finalBPString,
         respiration: { rate: avgRespRate, depth: avgRespDepth },
         glucose: avgGlucose,
-        hemoglobin: avgHemoglobin
+        hemoglobin: avgHemoglobin,
+        cholesterol: cholesterolData,
+        temperature: temperatureData
       });
       
       let glucoseTrend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown' = 'unknown';
@@ -218,10 +293,12 @@ const Index = () => {
           regularity: vitalSigns.respiration.regularity
         },
         glucose: {
-          value: avgGlucose > 0 ? avgGlucose : vitalSigns.glucose.value,
+          value: avgGlucose > 0 ? avgGlucose : (vitalSigns.glucose?.value || 0),
           trend: glucoseTrend
         },
-        hemoglobin: avgHemoglobin
+        hemoglobin: avgHemoglobin,
+        cholesterol: cholesterolData,
+        temperature: temperatureData
       });
         
       hasValidValuesRef.current = true;
@@ -234,6 +311,8 @@ const Index = () => {
       allRespirationDepthValuesRef.current = [];
       allGlucoseValuesRef.current = [];
       allHemoglobinValuesRef.current = [];
+      allCholesterolValuesRef.current = { total: [], hdl: [], ldl: [], triglycerides: [] };
+      allTemperatureValuesRef.current = [];
     } catch (error) {
       console.error("Error en calculateFinalValues:", error);
       setFinalValues({
@@ -241,8 +320,10 @@ const Index = () => {
         spo2: vitalSigns.spo2,
         pressure: vitalSigns.pressure,
         respiration: vitalSigns.respiration,
-        glucose: vitalSigns.glucose,
-        hemoglobin: vitalSigns.hemoglobin
+        glucose: vitalSigns.glucose || { value: 0, trend: 'unknown' },
+        hemoglobin: vitalSigns.hemoglobin,
+        cholesterol: vitalSigns.cholesterol,
+        temperature: vitalSigns.temperature
       });
       hasValidValuesRef.current = true;
     }
@@ -380,7 +461,9 @@ const Index = () => {
       hasRespirationData: false,
       glucose: { value: 0, trend: 'unknown' },
       hemoglobin: null,
-      lastArrhythmiaData: null
+      lastArrhythmiaData: null,
+      cholesterol: null,
+      temperature: null
     });
     setArrhythmiaCount("--");
     setLastArrhythmiaData(null);
@@ -402,6 +485,8 @@ const Index = () => {
     allRespirationDepthValuesRef.current = [];
     allGlucoseValuesRef.current = [];
     allHemoglobinValuesRef.current = [];
+    allCholesterolValuesRef.current = { total: [], hdl: [], ldl: [], triglycerides: [] };
+    allTemperatureValuesRef.current = [];
   };
 
   const handleStreamReady = (stream: MediaStream) => {
@@ -651,6 +736,30 @@ const Index = () => {
               allHemoglobinValuesRef.current.push(vitals.hemoglobin.value);
             }
             
+            if (vitals.cholesterol && vitals.cholesterol.totalCholesterol > 0) {
+              console.log(`Cholesterol data received: ${vitals.cholesterol.totalCholesterol} mg/dL`);
+              setVitalSigns(current => ({
+                ...current,
+                cholesterol: vitals.cholesterol
+              }));
+              
+              allCholesterolValuesRef.current.total.push(vitals.cholesterol.totalCholesterol);
+              allCholesterolValuesRef.current.hdl.push(vitals.cholesterol.hdl);
+              allCholesterolValuesRef.current.ldl.push(vitals.cholesterol.ldl);
+              if (vitals.cholesterol.triglycerides) {
+                allCholesterolValuesRef.current.triglycerides.push(vitals.cholesterol.triglycerides);
+              }
+            }
+            
+            if (vitals.temperature && vitals.temperature.value > 0) {
+              console.log(`Temperature data received: ${vitals.temperature.value}°C, trend: ${vitals.temperature.trend}`);
+              setVitalSigns(current => ({
+                ...current,
+                temperature: vitals.temperature
+              }));
+              allTemperatureValuesRef.current.push(vitals.temperature.value);
+            }
+            
             if (vitals.lastArrhythmiaData) {
               setLastArrhythmiaData(vitals.lastArrhythmiaData);
               setVitalSigns(current => ({
@@ -727,12 +836,14 @@ const Index = () => {
           onReset={handleReset}
           arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
           rawArrhythmiaData={lastArrhythmiaData}
+          cholesterolData={vitalSigns.cholesterol}
+          temperatureData={vitalSigns.temperature}
         />
       </div>
       
       <div className="absolute z-20" style={{ bottom: '65px', left: 0, right: 0, padding: '0 10px' }}>
         <div className="p-1 rounded-lg">
-          <div className="grid grid-cols-3 gap-1 sm:grid-cols-7">
+          <div className="grid grid-cols-3 gap-1 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-3">
             <VitalSign 
               label="FRECUENCIA CARDÍACA"
               value={finalValues ? finalValues.heartRate : heartRate || "--"}
@@ -753,7 +864,7 @@ const Index = () => {
             />
             <VitalSign 
               label="ARRITMIAS"
-              value={vitalSigns.arrhythmiaStatus}
+              value={arrhythmiaCount}
               unit=""
               isFinalReading={measurementComplete}
             />
@@ -776,6 +887,31 @@ const Index = () => {
               label="HEMOGLOBINA"
               value={finalValues ? finalValues.hemoglobin : vitalSigns.hemoglobin || "--"}
               unit="g/dL"
+              isFinalReading={measurementComplete}
+            />
+            <VitalSign 
+              label="COLESTEROL"
+              value={finalValues ? finalValues.cholesterol?.totalCholesterol : vitalSigns.cholesterol?.totalCholesterol || "--"}
+              unit="mg/dL"
+              secondaryValue={finalValues ? finalValues.cholesterol?.hdl : vitalSigns.cholesterol?.hdl || "--"}
+              secondaryUnit="HDL"
+              cholesterolData={finalValues ? 
+                finalValues.cholesterol ? 
+                  { hdl: finalValues.cholesterol.hdl, ldl: finalValues.cholesterol.ldl, triglycerides: finalValues.cholesterol.triglycerides } : 
+                  undefined
+                : 
+                vitalSigns.cholesterol ? 
+                  { hdl: vitalSigns.cholesterol.hdl, ldl: vitalSigns.cholesterol.ldl, triglycerides: vitalSigns.cholesterol.triglycerides } : 
+                  undefined
+              }
+              isFinalReading={measurementComplete}
+            />
+            <VitalSign 
+              label="TEMPERATURA"
+              value={finalValues ? finalValues.temperature?.value.toFixed(1) : vitalSigns.temperature?.value.toFixed(1) || "--"}
+              unit="°C"
+              temperatureLocation={finalValues ? finalValues.temperature?.location : vitalSigns.temperature?.location}
+              temperatureTrend={finalValues ? finalValues.temperature?.trend : vitalSigns.temperature?.trend}
               isFinalReading={measurementComplete}
             />
           </div>
