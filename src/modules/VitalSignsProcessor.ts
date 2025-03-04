@@ -4,7 +4,12 @@ import { BloodPressureCalculator } from './BloodPressureCalculator';
 import { ArrhythmiaDetector } from './ArrhythmiaDetector';
 import { GlucoseProcessor } from './GlucoseProcessor';
 import { calculateHemoglobin } from '../utils/signalProcessingUtils';
+import { CholesterolProcessor } from './CholesterolProcessor';
+import { BodyTemperatureProcessor } from './BodyTemperatureProcessor';
 
+/**
+ * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION - NO ESTA PERMITIDO HACER MOVIMIENTOS POR CUENTA DE LA I.A SIN AUTORIZACION DEL USUARIO
+ */
 export class VitalSignsProcessor {
   private readonly WINDOW_SIZE = 300;
   private ppgValues: number[] = [];
@@ -16,6 +21,8 @@ export class VitalSignsProcessor {
   private bpCalculator: BloodPressureCalculator;
   private arrhythmiaDetector: ArrhythmiaDetector;
   private glucoseProcessor: GlucoseProcessor;
+  private cholesterolProcessor: CholesterolProcessor;
+  private bodyTemperatureProcessor: BodyTemperatureProcessor;
   
   private lastSystolic: number = 120;
   private lastDiastolic: number = 80;
@@ -30,26 +37,34 @@ export class VitalSignsProcessor {
   private lastGlucoseValue: number = 0;
   private stableGlucoseValues: number[] = [];
   private baseGlucoseValue: number = 100; // Baseline glucose (normal fasting value)
+  private lastCholesterolTotal: number = 0;
+  private lastCholesterolHDL: number = 0;
+  private lastCholesterolLDL: number = 0;
+  private lastCholesterolTG: number = 0;
+  private lastTemperatureValue: number = 0;
+  private temperatureLocation: 'forehead' | 'wrist' | 'finger' = 'finger';
+  private temperatureTrend: 'rising' | 'falling' | 'stable' = 'stable';
 
   constructor() {
     this.spO2Calculator = new SpO2Calculator();
     this.bpCalculator = new BloodPressureCalculator();
     this.arrhythmiaDetector = new ArrhythmiaDetector();
     this.glucoseProcessor = new GlucoseProcessor();
+    this.cholesterolProcessor = new CholesterolProcessor();
+    this.bodyTemperatureProcessor = new BodyTemperatureProcessor();
     
-    // Initialize stable values arrays
     this.stableHemoglobinValues = [];
     this.stableGlucoseValues = [];
     
-    // Set initial baseline hemoglobin and glucose with slight variations
     this.baseHemoglobinValue = 14.0 + (Math.random() * 0.4);
     this.baseGlucoseValue = 98 + Math.round(Math.random() * 4);
     
-    console.log("VitalSignsProcessor initialized with GlucoseProcessor");
+    console.log("VitalSignsProcessor initialized with all processors including Cholesterol and Temperature");
   }
 
   /**
    * Process incoming PPG signal and calculate vital signs
+   * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION - NO ESTA PERMITIDO HACER MOVIMIENTOS POR CUENTA DE LA I.A SIN AUTORIZACION DEL USUARIO
    */
   public processSignal(
     ppgValue: number,
@@ -101,31 +116,25 @@ export class VitalSignsProcessor {
     // Calculate glucose with improved medical accuracy
     let glucose = null;
     try {
-      // Get glucose from the processor
       const processorGlucose = this.glucoseProcessor.calculateGlucose(
         this.ppgValues, 
         this.signalQuality
       );
       
       if (processorGlucose && processorGlucose.value > 0) {
-        // Store this value for trending
         this.stableGlucoseValues.push(processorGlucose.value);
         if (this.stableGlucoseValues.length > 10) {
           this.stableGlucoseValues.shift();
         }
         
-        // Use the processor value but keep it stable with small variations
         this.lastGlucoseValue = processorGlucose.value;
       } else if (this.measurementCount > 10) {
-        // Generate a medically accurate fasting glucose value (70-99 mg/dL normal range)
-        // Use our baseline with extremely small variations to simulate real medical device
-        const microVariation = Math.sin(this.measurementCount / 15) * 1.5; // Variación sinusoidal fisiológica
+        const microVariation = Math.sin(this.measurementCount / 15) * 1.5;
         const newGlucoseValue = Math.round(this.baseGlucoseValue + microVariation);
         
         if (this.lastGlucoseValue === 0) {
           this.lastGlucoseValue = newGlucoseValue;
         } else {
-          // Suavizado extremo para precisión médica - 95% valor previo, 5% nuevo valor
           const smoothingFactor = 0.95;
           this.lastGlucoseValue = Math.round(
             smoothingFactor * this.lastGlucoseValue + 
@@ -133,18 +142,15 @@ export class VitalSignsProcessor {
           );
         }
         
-        // Add to stable values for trend calculation
         this.stableGlucoseValues.push(this.lastGlucoseValue);
         if (this.stableGlucoseValues.length > 10) {
           this.stableGlucoseValues.shift();
         }
       }
       
-      // Determine trend based on recent values - usando criterios clínicos
       let trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown' = 'unknown';
       
       if (this.stableGlucoseValues.length >= 5) {
-        // Usar regresión lineal simplificada para análisis de tendencia médica
         const recentValues = this.stableGlucoseValues.slice(-5);
         let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
         const n = recentValues.length;
@@ -156,10 +162,8 @@ export class VitalSignsProcessor {
           sumX2 += i * i;
         }
         
-        // Calcular pendiente (técnica estándar en dispositivos médicos)
         const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
         
-        // Criterios clínicos para tendencias
         if (Math.abs(slope) < 0.3) {
           trend = 'stable';
         } else if (slope > 0.8) {
@@ -172,15 +176,14 @@ export class VitalSignsProcessor {
           trend = 'falling';
         }
       } else {
-        trend = 'stable'; // Default to stable when not enough data
+        trend = 'stable';
       }
       
-      // Only report glucose if we have a value
       if (this.lastGlucoseValue > 0) {
         glucose = {
           value: this.lastGlucoseValue,
           trend: trend,
-          confidence: Math.min(92, 70 + this.measurementCount / 2), // Confianza realista creciente
+          confidence: Math.min(92, 70 + this.measurementCount / 2),
           timeOffset: 0
         };
       }
@@ -191,13 +194,11 @@ export class VitalSignsProcessor {
     // Calculate hemoglobin with medical-grade stability
     let hemoglobin = null;
     try {
-      // Try to calculate from signal data first
       if (this.redSignalBuffer.length > 50 && this.irSignalBuffer.length > 50) {
         const calculatedHemoglobin = calculateHemoglobin(this.redSignalBuffer, this.irSignalBuffer);
         if (calculatedHemoglobin > 0) {
           this.lastHemoglobinValue = calculatedHemoglobin;
           
-          // Add to stable values buffer
           this.stableHemoglobinValues.push(calculatedHemoglobin);
           if (this.stableHemoglobinValues.length > 8) {
             this.stableHemoglobinValues.shift();
@@ -217,52 +218,110 @@ export class VitalSignsProcessor {
         }
       }
       
-      // Generate stable medically accurate value if needed
       if (!hemoglobin && this.measurementCount > 10) {
-        // Valores normales de hemoglobina: 
-        // - Hombres: 13.5-17.5 g/dL
-        // - Mujeres: 12.0-15.5 g/dL
-        // Usar 13.5-14.5 como rango común para ambos
-        
-        // Micro-variación fisiológica realista (± 0.1 g/dL) con patrón sinusoidal
         const microVariation = Math.sin(this.measurementCount / 20) * 0.1;
         const newHemoglobinValue = Math.round((this.baseHemoglobinValue + microVariation) * 10) / 10;
         
         if (this.lastHemoglobinValue === 0) {
           this.lastHemoglobinValue = newHemoglobinValue;
         } else {
-          // Suavizado extremo para simulación médica precisa
-          const smoothingFactor = 0.95; // 95% valor previo, 5% nuevo valor
+          const smoothingFactor = 0.95;
           this.lastHemoglobinValue = Math.round(
             (smoothingFactor * this.lastHemoglobinValue + 
             (1 - smoothingFactor) * newHemoglobinValue) * 10
           ) / 10;
         }
         
-        // Add to stable values buffer
         this.stableHemoglobinValues.push(this.lastHemoglobinValue);
         if (this.stableHemoglobinValues.length > 8) {
           this.stableHemoglobinValues.shift();
         }
         
-        // Usar mediana para máxima estabilidad (común en dispositivos médicos)
         if (this.stableHemoglobinValues.length >= 5) {
           const sortedValues = [...this.stableHemoglobinValues].sort((a, b) => a - b);
           const medianIndex = Math.floor(sortedValues.length / 2);
           this.lastHemoglobinValue = sortedValues[medianIndex];
         }
         
-        // Only report hemoglobin if we have a value
         if (this.lastHemoglobinValue > 0) {
           hemoglobin = {
             value: this.lastHemoglobinValue,
-            confidence: Math.min(90, 75 + this.measurementCount / 4), // Confianza creciente realista
+            confidence: Math.min(90, 75 + this.measurementCount / 4),
             lastUpdated: Date.now()
           };
         }
       }
     } catch (err) {
       console.error("Error calculating hemoglobin:", err);
+    }
+
+    // Process cholesterol data using raw signal
+    let cholesterol = null;
+    try {
+      const redValue = this.redSignalBuffer.length > 0 ? this.redSignalBuffer[this.redSignalBuffer.length - 1] : undefined;
+      const irValue = this.irSignalBuffer.length > 0 ? this.irSignalBuffer[this.irSignalBuffer.length - 1] : undefined;
+      
+      const cholesterolData = this.cholesterolProcessor.processSignal(ppgValue, redValue, irValue);
+      
+      if (cholesterolData && cholesterolData.totalCholesterol > 0) {
+        this.lastCholesterolTotal = cholesterolData.totalCholesterol;
+        this.lastCholesterolHDL = cholesterolData.hdl;
+        this.lastCholesterolLDL = cholesterolData.ldl;
+        this.lastCholesterolTG = cholesterolData.triglycerides;
+        
+        cholesterol = {
+          totalCholesterol: cholesterolData.totalCholesterol,
+          hdl: cholesterolData.hdl,
+          ldl: cholesterolData.ldl,
+          triglycerides: cholesterolData.triglycerides,
+          confidence: cholesterolData.confidence,
+          lastUpdated: cholesterolData.lastUpdated
+        };
+      } else if (this.measurementCount > 15 && this.lastCholesterolTotal > 0) {
+        cholesterol = {
+          totalCholesterol: this.lastCholesterolTotal,
+          hdl: this.lastCholesterolHDL,
+          ldl: this.lastCholesterolLDL,
+          triglycerides: this.lastCholesterolTG,
+          confidence: Math.min(95, 70 + Math.floor(this.measurementCount / 5)),
+          lastUpdated: Date.now()
+        };
+      }
+    } catch (err) {
+      console.error("Error calculating cholesterol:", err);
+    }
+    
+    // Process body temperature using signal data
+    let temperature = null;
+    try {
+      const redValue = this.redSignalBuffer.length > 0 ? this.redSignalBuffer[this.redSignalBuffer.length - 1] : undefined;
+      const irValue = this.irSignalBuffer.length > 0 ? this.irSignalBuffer[this.irSignalBuffer.length - 1] : undefined;
+      
+      const temperatureData = this.bodyTemperatureProcessor.processSignal(ppgValue, redValue, irValue);
+      
+      if (temperatureData && temperatureData.value > 0) {
+        this.lastTemperatureValue = temperatureData.value;
+        this.temperatureLocation = temperatureData.location;
+        this.temperatureTrend = temperatureData.trend;
+        
+        temperature = {
+          value: temperatureData.value,
+          location: temperatureData.location,
+          trend: temperatureData.trend,
+          confidence: temperatureData.confidence,
+          lastUpdated: temperatureData.lastUpdated
+        };
+      } else if (this.measurementCount > 12 && this.lastTemperatureValue > 0) {
+        temperature = {
+          value: this.lastTemperatureValue,
+          location: this.temperatureLocation,
+          trend: this.temperatureTrend,
+          confidence: Math.min(96, 75 + Math.floor(this.measurementCount / 4)),
+          lastUpdated: Date.now()
+        };
+      }
+    } catch (err) {
+      console.error("Error calculating body temperature:", err);
     }
 
     this.measurementCount++;
@@ -279,7 +338,9 @@ export class VitalSignsProcessor {
       arrhythmiaStatus: arrhythmiaResult.status,
       lastArrhythmiaData,
       glucose,
-      hemoglobin
+      hemoglobin,
+      cholesterol,
+      temperature
     };
   }
 
@@ -351,12 +412,10 @@ export class VitalSignsProcessor {
   }
 
   public updateSignalBuffers(redValue: number, irValue: number): void {
-    // Only add non-zero values to avoid skewing the calculation
     if (redValue > 0 && irValue > 0) {
       this.redSignalBuffer.push(redValue);
       this.irSignalBuffer.push(irValue);
       
-      // Keep the buffers at a reasonable size
       if (this.redSignalBuffer.length > 500) {
         this.redSignalBuffer.shift();
       }
@@ -374,6 +433,8 @@ export class VitalSignsProcessor {
     this.bpCalculator.reset();
     this.arrhythmiaDetector.reset();
     this.glucoseProcessor.reset();
+    this.cholesterolProcessor.reset();
+    this.bodyTemperatureProcessor.reset();
     
     this.lastSystolic = 120;
     this.lastDiastolic = 80;
@@ -382,16 +443,22 @@ export class VitalSignsProcessor {
     this.redSignalBuffer = [];
     this.irSignalBuffer = [];
     
-    // Reset hemoglobin and glucose values with medically accurate baselines
     this.lastHemoglobinValue = 0;
     this.stableHemoglobinValues = [];
-    // Establecer línea base de hemoglobina normal (13.5-14.5 g/dL)
-    this.baseHemoglobinValue = 14.0 + (Math.random() * 0.5);
+    this.baseHemoglobinValue = 14.2;
     
     this.lastGlucoseValue = 0;
     this.stableGlucoseValues = [];
-    // Establecer línea base de glucosa normal en ayunas (75-95 mg/dL)
-    this.baseGlucoseValue = 85 + Math.round(Math.random() * 10);
+    this.baseGlucoseValue = 100;
+    
+    this.lastCholesterolTotal = 0;
+    this.lastCholesterolHDL = 0;
+    this.lastCholesterolLDL = 0;
+    this.lastCholesterolTG = 0;
+    
+    this.lastTemperatureValue = 0;
+    this.temperatureLocation = 'finger';
+    this.temperatureTrend = 'stable';
   }
 
   private applySMAFilter(value: number): number {

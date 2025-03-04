@@ -1,3 +1,4 @@
+
 /**
  * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION - NO ESTA PERMITIDO HACER MOVIMIENTOS POR CUENTA DE LA I.A SIN AUTORIZACION DEL USUARIO
  */
@@ -57,6 +58,24 @@ export interface HemoglobinData {
   lastUpdated: number; // Timestamp de la última actualización
 }
 
+// Nuevos tipos para colesterol y temperatura
+export interface CholesterolData {
+  totalCholesterol: number;   // Colesterol total en mg/dL
+  hdl: number;                // HDL (colesterol bueno) en mg/dL
+  ldl: number;                // LDL (colesterol malo) en mg/dL
+  triglycerides: number;      // Triglicéridos en mg/dL
+  confidence: number;         // Nivel de confianza (0-100)
+  lastUpdated: number;        // Timestamp de la última actualización
+}
+
+export interface BodyTemperatureData {
+  value: number;              // Temperatura en °C
+  location: 'forehead' | 'wrist' | 'finger'; // Ubicación de la medición
+  trend: 'rising' | 'falling' | 'stable';    // Tendencia
+  confidence: number;         // Nivel de confianza (0-100)
+  lastUpdated: number;        // Timestamp de la última actualización
+}
+
 export interface HeartBeatResult {
   bpm: number;
   confidence: number;
@@ -67,6 +86,9 @@ export interface HeartBeatResult {
   isLearningPhase?: boolean;
 }
 
+/**
+ * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION - NO ESTA PERMITIDO HACER MOVIMIENTOS POR CUENTA DE LA I.A SIN AUTORIZACION DEL USUARIO
+ */
 declare global {
   interface Window {
     heartBeatProcessor: HeartBeatProcessor;

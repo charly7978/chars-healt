@@ -1,7 +1,11 @@
 import React, { memo, useMemo, useState } from 'react';
 import { VitalSignsRisk } from '../utils/vitalSignsRisk';
 import VitalSignDetail from './VitalSignDetail';
+import { Thermometer, Droplet } from 'lucide-react';
 
+/**
+ * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION - NO ESTA PERMITIDO HACER MOVIMIENTOS POR CUENTA DE LA I.A SIN AUTORIZACION DEL USUARIO
+ */
 interface VitalSignProps {
   label: string;
   value: string | number;
@@ -11,6 +15,13 @@ interface VitalSignProps {
   secondaryUnit?: string;
   trend?: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
   glucose?: number | null;
+  cholesterolData?: {
+    hdl: number;
+    ldl: number;
+    triglycerides: number;
+  };
+  temperatureLocation?: 'forehead' | 'wrist' | 'finger';
+  temperatureTrend?: 'rising' | 'falling' | 'stable';
 }
 
 const VitalSign: React.FC<VitalSignProps> = ({ 
@@ -21,7 +32,10 @@ const VitalSign: React.FC<VitalSignProps> = ({
   secondaryValue,
   secondaryUnit,
   trend,
-  glucose
+  glucose,
+  cholesterolData,
+  temperatureLocation,
+  temperatureTrend
 }) => {
   const [showDetail, setShowDetail] = useState(false);
   const isArrhythmiaDisplay = label === "ARRITMIAS";
@@ -29,6 +43,8 @@ const VitalSign: React.FC<VitalSignProps> = ({
   const isRespiration = label === "RESPIRACIÓN";
   const isGlucose = label === "GLUCOSA";
   const isHemoglobin = label === "HEMOGLOBINA";
+  const isCholesterol = label === "COLESTEROL";
+  const isTemperature = label === "TEMPERATURA";
 
   const isBloodPressureUnrealistic = (bpString: string): boolean => {
     if (!isBloodPressure || bpString === "--/--" || bpString === "0/0") return false;
@@ -64,6 +80,66 @@ const VitalSign: React.FC<VitalSignProps> = ({
     displayValueCache.set(cacheKey, result);
     return result;
   }, [value, isBloodPressure, label]);
+
+  const getCholesterolRiskDisplay = (value: number) => {
+    if (value === "--" || value === 0) {
+      return { color: '#000000', label: '' };
+    }
+    
+    if (typeof value === 'number') {
+      let riskColor = '';
+      let riskLabel = '';
+      
+      if (value < 180) {
+        riskColor = '#22C55E';
+        riskLabel = 'ÓPTIMO';
+      } else if (value < 200) {
+        riskColor = '#22C55E';
+        riskLabel = 'DESEABLE';
+      } else if (value < 240) {
+        riskColor = '#F97316';
+        riskLabel = 'LÍMITE ALTO';
+      } else if (value < 280) {
+        riskColor = '#EF4444';
+        riskLabel = 'ELEVADO';
+      } else {
+        riskColor = '#DC2626';
+        riskLabel = 'MUY ELEVADO';
+      }
+      
+      if (cholesterolData) {
+        if (cholesterolData.hdl < 40 && value >= 200) {
+          riskColor = '#DC2626';
+          riskLabel = 'RIESGO ELEVADO';
+        } else if (cholesterolData.hdl > 60 && value < 240) {
+          riskColor = '#22C55E';
+          riskLabel = 'RIESGO BAJO';
+        }
+      }
+      
+      return { color: riskColor, label: riskLabel };
+    }
+    
+    return { color: '#000000', label: '' };
+  };
+
+  const getTemperatureRiskDisplay = (value: number) => {
+    if (value === "--" || value === 0) {
+      return { color: '#000000', label: '' };
+    }
+    
+    if (typeof value === 'number') {
+      if (value < 36.0) return { color: '#3B82F6', label: 'HIPOTERMIA' };
+      if (value < 36.5) return { color: '#60A5FA', label: 'SUBNORMAL' };
+      if (value <= 37.3) return { color: '#22C55E', label: 'NORMAL' };
+      if (value <= 38.0) return { color: '#F97316', label: 'FEBRÍCULA' };
+      if (value <= 39.0) return { color: '#EF4444', label: 'FIEBRE MODERADA' };
+      if (value <= 40.0) return { color: '#DC2626', label: 'FIEBRE ALTA' };
+      return { color: '#991B1B', label: 'HIPERPIREXIA' };
+    }
+    
+    return { color: '#000000', label: '' };
+  };
 
   const getRiskInfo = () => {
     if (isArrhythmiaDisplay) {
@@ -112,6 +188,24 @@ const VitalSign: React.FC<VitalSignProps> = ({
       }
       if (typeof value === 'number') {
         return getHemoglobinRiskDisplay(value);
+      }
+    }
+    
+    if (isCholesterol) {
+      if (value === "--" || value === 0) {
+        return { color: '#000000', label: '' };
+      }
+      if (typeof value === 'number') {
+        return getCholesterolRiskDisplay(value);
+      }
+    }
+    
+    if (isTemperature) {
+      if (value === "--" || value === 0) {
+        return { color: '#000000', label: '' };
+      }
+      if (typeof value === 'number') {
+        return getTemperatureRiskDisplay(value);
       }
     }
 
@@ -264,6 +358,30 @@ const VitalSign: React.FC<VitalSignProps> = ({
     );
   };
 
+  const renderTemperatureTrend = (trend?: 'rising' | 'falling' | 'stable') => {
+    if (!trend || trend === 'stable') return null;
+    
+    let icon = '';
+    let color = '';
+    
+    switch (trend) {
+      case 'rising':
+        icon = '↗';
+        color = '#EF4444';
+        break;
+      case 'falling':
+        icon = '↘';
+        color = '#3B82F6';
+        break;
+    }
+    
+    return (
+      <span className="text-lg font-bold ml-1" style={{ color }}>
+        {icon}
+      </span>
+    );
+  };
+
   const handleCardClick = () => {
     if (
       (value === "--" || value === 0 || value === "--/--" || value === "0/0") ||
@@ -283,12 +401,24 @@ const VitalSign: React.FC<VitalSignProps> = ({
     if (label === "RESPIRACIÓN") return "respiration";
     if (label === "GLUCOSA") return "glucose";
     if (label === "HEMOGLOBINA") return "hemoglobin";
+    if (label === "COLESTEROL") return "cholesterol";
+    if (label === "TEMPERATURA") return "temperature";
     return "heartRate";
   };
 
   const { text, title, color, label: riskLabel } = isArrhythmiaDisplay ? 
     getArrhythmiaDisplay() : 
     { text: processedDisplayValue, title: undefined, ...getRiskInfo() };
+
+  const renderIcon = () => {
+    if (isCholesterol) {
+      return <Droplet className="w-3 h-3 text-white/70 absolute top-2 right-2" />;
+    }
+    if (isTemperature) {
+      return <Thermometer className="w-3 h-3 text-white/70 absolute top-2 right-2" />;
+    }
+    return null;
+  };
 
   return (
     <>
@@ -298,6 +428,8 @@ const VitalSign: React.FC<VitalSignProps> = ({
         }`}
         onClick={isFinalReading ? handleCardClick : undefined}
       >
+        {renderIcon()}
+        
         <div className="relative z-10 p-3">
           <h3 className="text-white text-[10px] font-medium tracking-wider mb-1">{label}</h3>
           <div className="flex flex-col items-center gap-0.5">
@@ -317,6 +449,7 @@ const VitalSign: React.FC<VitalSignProps> = ({
                 <span className="text-white text-[9px]">{unit}</span>
               )}
               {isGlucose && renderGlucoseTrend(trend)}
+              {isTemperature && renderTemperatureTrend(temperatureTrend)}
             </div>
             
             {secondaryValue !== undefined && (
@@ -365,6 +498,8 @@ const VitalSign: React.FC<VitalSignProps> = ({
           secondaryValue={secondaryValue as string | number}
           secondaryUnit={secondaryUnit}
           trend={isGlucose ? trend : undefined}
+          cholesterolData={isCholesterol && cholesterolData ? cholesterolData : undefined}
+          temperatureLocation={isTemperature ? temperatureLocation : undefined}
         />
       )}
     </>

@@ -10,6 +10,8 @@ export const createVitalSignsDataCollector = () => {
   const glucoseValues: number[] = [];
   const glucoseTimestamps: number[] = [];
   const hemoglobinValues: number[] = [];
+  const cholesterolValues: { total: number, hdl: number, ldl: number, triglycerides: number }[] = [];
+  const temperatureValues: number[] = [];
   
   return {
     /**
@@ -94,6 +96,43 @@ export const createVitalSignsDataCollector = () => {
         console.log(`Glucose value added: ${value} mg/dL (raw measurement)`);
       } else {
         console.log(`Glucose reading out of range: ${value} mg/dL`);
+      }
+    },
+    
+    /**
+     * Add cholesterol values to collection
+     * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION - NO ESTA PERMITIDO HACER MOVIMIENTOS POR CUENTA DE LA I.A SIN AUTORIZACION DEL USUARIO
+     */
+    addCholesterol: (total: number, hdl: number, ldl: number, triglycerides: number) => {
+      // Validate ranges for physiological values
+      if (total >= 100 && total <= 350 && 
+          hdl >= 20 && hdl <= 100 && 
+          ldl >= 50 && ldl <= 250 && 
+          triglycerides >= 40 && triglycerides <= 500) {
+        
+        cholesterolValues.push({ total, hdl, ldl, triglycerides });
+        
+        if (cholesterolValues.length > 5) {
+          cholesterolValues.shift();
+        }
+        
+        console.log(`Cholesterol values added: Total=${total}, HDL=${hdl}, LDL=${ldl}, TG=${triglycerides}`);
+      }
+    },
+    
+    /**
+     * Add body temperature value to collection
+     */
+    addTemperature: (value: number) => {
+      // Normal range: 35.0-41.0°C (incluye estados febriles y hipotermia leve)
+      if (value >= 35.0 && value <= 41.0) {
+        temperatureValues.push(value);
+        
+        if (temperatureValues.length > 10) {
+          temperatureValues.shift();
+        }
+        
+        console.log(`Temperature value added: ${value}°C`);
       }
     },
     
@@ -197,6 +236,71 @@ export const createVitalSignsDataCollector = () => {
     },
     
     /**
+     * Get the latest cholesterol values
+     */
+    getLatestCholesterol: () => {
+      if (cholesterolValues.length === 0) {
+        return { total: 0, hdl: 0, ldl: 0, triglycerides: 0 };
+      }
+      
+      return cholesterolValues[cholesterolValues.length - 1];
+    },
+    
+    /**
+     * Get the latest body temperature
+     */
+    getLatestTemperature: (): number => {
+      if (temperatureValues.length === 0) return 0;
+      
+      return temperatureValues[temperatureValues.length - 1];
+    },
+    
+    /**
+     * Get cholesterol risk level based on values
+     * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION - NO ESTA PERMITIDO HACER MOVIMIENTOS POR CUENTA DE LA I.A SIN AUTORIZACION DEL USUARIO
+     */
+    getCholesterolRiskLevel: (): string => {
+      if (cholesterolValues.length === 0) return '';
+      
+      const latest = cholesterolValues[cholesterolValues.length - 1];
+      
+      if (latest.total < 180) {
+        if (latest.hdl >= 60) return 'ÓPTIMO';
+        return 'DESEABLE';
+      }
+      
+      if (latest.total < 200) {
+        if (latest.ldl < 100) return 'DESEABLE';
+        return 'LÍMITE ALTO';
+      }
+      
+      if (latest.total < 240) {
+        if (latest.ldl < 130) return 'LÍMITE ALTO';
+        return 'ELEVADO';
+      }
+      
+      if (latest.ldl >= 190) return 'MUY ELEVADO';
+      return 'ELEVADO';
+    },
+    
+    /**
+     * Get body temperature status
+     */
+    getTemperatureStatus: (): string => {
+      if (temperatureValues.length === 0) return '';
+      
+      const latest = temperatureValues[temperatureValues.length - 1];
+      
+      if (latest < 36.0) return 'HIPOTERMIA';
+      if (latest < 36.5) return 'SUBNORMAL';
+      if (latest <= 37.3) return 'NORMAL';
+      if (latest <= 38.0) return 'FEBRÍCULA';
+      if (latest <= 39.0) return 'FIEBRE MODERADA';
+      if (latest <= 40.0) return 'FIEBRE ALTA';
+      return 'HIPERPIREXIA';
+    },
+    
+    /**
      * Get the number of glucose readings collected
      */
     getGlucoseReadingsCount: (): number => {
@@ -214,6 +318,8 @@ export const createVitalSignsDataCollector = () => {
       glucoseValues.length = 0;
       glucoseTimestamps.length = 0;
       hemoglobinValues.length = 0;
+      cholesterolValues.length = 0;
+      temperatureValues.length = 0;
     }
   };
 };
