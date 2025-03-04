@@ -1,3 +1,4 @@
+
 import { ProcessedSignal, ProcessingError } from '../types/signal';
 
 /**
@@ -41,6 +42,26 @@ export class AdvancedSignalProcessor {
     private onError?: (error: ProcessingError) => void
   ) {
     console.log("AdvancedSignalProcessor: Iniciado con optimizaciones web");
+  }
+
+  /**
+   * Método para inicializar el procesador
+   * Este método es llamado en useSignalProcessor.ts
+   */
+  async initialize(): Promise<void> {
+    console.log("AdvancedSignalProcessor: Inicialización del procesador");
+    this.reset();
+    this.isProcessing = true;
+    return Promise.resolve();
+  }
+
+  /**
+   * Método para calibrar el procesador
+   * Este método es llamado en useSignalProcessor.ts
+   */
+  async calibrate(): Promise<void> {
+    console.log("AdvancedSignalProcessor: Calibración del procesador");
+    return Promise.resolve();
   }
 
   /**
