@@ -7,12 +7,13 @@ import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import PermissionsHandler from "@/components/PermissionsHandler";
 import { toast } from "sonner";
+import { VitalSigns } from "@/types/vitalSigns";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [signalQuality, setSignalQuality] = useState(0);
-  const [vitalSigns, setVitalSigns] = useState({ 
+  const [vitalSigns, setVitalSigns] = useState<VitalSigns>({ 
     spo2: 0, 
     pressure: "--/--",
     arrhythmiaStatus: "--",
@@ -20,9 +21,7 @@ const Index = () => {
     hasRespirationData: false,
     glucose: null,
     hemoglobin: null,
-    isoCompliant: false,
-    calibrationStatus: 'uncalibrated',
-    motionScore: 0,
+    lastArrhythmiaData: null,
     cholesterol: null,
     temperature: null
   });
@@ -129,9 +128,9 @@ const Index = () => {
       hasRespirationData: false,
       glucose: null,
       hemoglobin: null,
-      isoCompliant: false,
-      calibrationStatus: 'uncalibrated',
-      motionScore: 0
+      lastArrhythmiaData: null,
+      cholesterol: null,
+      temperature: null
     });
     setArrhythmiaCount("--");
     setSignalQuality(0);
@@ -201,31 +200,20 @@ const Index = () => {
             arrhythmia: vitals.arrhythmiaStatus,
             respiration: vitals.respiration,
             glucose: vitals.glucose ? `${vitals.glucose.value} mg/dL (${vitals.glucose.trend})` : 'No data',
-            hemoglobin: vitals.hemoglobin ? `${vitals.hemoglobin} g/dL` : 'No data',
-            isoCompliant: vitals.isoCompliant ? 'Yes' : 'No',
-            calibrationStatus: vitals.calibrationStatus,
-            motionScore: vitals.motionScore || 0,
-            cholesterol: vitals.cholesterol ? `Total: ${vitals.cholesterol.totalCholesterol} mg/dL` : 'No data',
+            hemoglobin: vitals.hemoglobin ? `${vitals.hemoglobin.value} g/dL` : 'No data',
+            cholesterol: vitals.cholesterol ? `${vitals.cholesterol.totalCholesterol} mg/dL` : 'No data',
             temperature: vitals.temperature ? `${vitals.temperature.value}°C` : 'No data'
           });
           
           setVitalSigns(vitals);
           setArrhythmiaCount(vitals.arrhythmiaStatus.split('|')[1] || "--");
           
-          if (vitals.glucose && vitals.glucose.value > 0) {
-            console.log(`Glucose data received: ${vitals.glucose.value} mg/dL, trend: ${vitals.glucose.trend}`);
-          }
-          
-          if (vitals.hemoglobin && vitals.hemoglobin > 0) {
-            console.log(`Hemoglobin data received: ${vitals.hemoglobin} g/dL`);
-          }
-          
           if (vitals.cholesterol && vitals.cholesterol.totalCholesterol > 0) {
-            console.log(`Cholesterol data received: ${vitals.cholesterol.totalCholesterol} mg/dL`);
+            console.log(`Cholesterol data received: ${vitals.cholesterol.totalCholesterol} mg/dL, HDL: ${vitals.cholesterol.hdl}, LDL: ${vitals.cholesterol.ldl}`);
           }
           
           if (vitals.temperature && vitals.temperature.value > 0) {
-            console.log(`Temperature data received: ${vitals.temperature.value}°C`);
+            console.log(`Temperature data received: ${vitals.temperature.value}°C, trend: ${vitals.temperature.trend}`);
           }
         }
         
