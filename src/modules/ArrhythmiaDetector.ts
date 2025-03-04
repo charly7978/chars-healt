@@ -1,3 +1,4 @@
+
 /**
  * ArrhythmiaDetector.ts
  * 
@@ -103,6 +104,30 @@ export class ArrhythmiaDetector {
 
   constructor() {
     this.reset();
+  }
+
+  /**
+   * Detecta arritmias basado en los datos acumulados
+   * @returns Resultado de la detección de arritmias
+   */
+  detect(): { detected: boolean; status: string; data?: { rmssd: number; rrVariation: number } } {
+    const status = this.getStatus();
+    const count = this.getCount();
+    const detected = count > 0;
+    
+    let data = null;
+    if (detected && this.rmssd > 0) {
+      data = {
+        rmssd: this.rmssd,
+        rrVariation: this.rrVariation
+      };
+    }
+    
+    return {
+      detected,
+      status,
+      data
+    };
   }
 
   /**
@@ -455,10 +480,6 @@ export class ArrhythmiaDetector {
 
   /**
    * Analiza un nuevo pico R detectado
-   * @param timestamp Tiempo exacto del pico en ms
-   * @param amplitude Amplitud del pico (opcional)
-   * @param confidence Confianza en la detección (0-1)
-   * @returns Análisis de arritmia
    */
   analyzePeak(
     timestamp: number,
