@@ -1,4 +1,3 @@
-
 /**
  * Applies a Simple Moving Average filter to smooth a signal
  * @param signal Input signal array
@@ -30,6 +29,18 @@ export const applySMAFilter = (signal: number[], windowSize: number = 5): number
   }
   
   return result;
+};
+
+/**
+ * Alternative SMA implementation for single value processing
+ * @param values Previous values
+ * @param newValue New value to add
+ * @param windowSize Window size
+ * @returns Smoothed value
+ */
+export const applySMAFilterSingle = (values: number[], newValue: number, windowSize: number = 5): number => {
+  const combinedValues = [...values.slice(-windowSize + 1), newValue];
+  return combinedValues.reduce((sum, val) => sum + val, 0) / combinedValues.length;
 };
 
 /**

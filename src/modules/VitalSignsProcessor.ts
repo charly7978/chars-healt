@@ -1,5 +1,5 @@
 
-import { applySMAFilter } from '../utils/signalProcessingUtils';
+import { applySMAFilter, applySMAFilterSingle } from '../utils/signalProcessingUtils';
 import { SpO2Calculator } from './spo2';
 import { BloodPressureCalculator } from './BloodPressureCalculator';
 import { ArrhythmiaDetector } from './ArrhythmiaDetector';
@@ -190,6 +190,6 @@ export class VitalSignsProcessor {
   }
 
   private applySMAFilter(value: number): number {
-    return applySMAFilter(this.ppgValues, value, this.SMA_WINDOW);
+    return applySMAFilterSingle(this.ppgValues, value, this.SMA_WINDOW);
   }
 }
