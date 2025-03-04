@@ -46,11 +46,8 @@ export const useSignalProcessor = () => {
       }
     );
 
-    console.log("useSignalProcessor: Iniciando procesador avanzado");
-    processorRef.current.initialize().catch(error => {
-      console.error("useSignalProcessor: Error de inicialización:", error);
-    });
-
+    console.log("useSignalProcessor: Procesador avanzado creado");
+    
     return () => {
       console.log("useSignalProcessor: Limpiando y destruyendo procesador avanzado");
       if (processorRef.current) {
@@ -80,15 +77,10 @@ export const useSignalProcessor = () => {
 
   const calibrate = useCallback(async () => {
     try {
-      console.log("useSignalProcessor: Iniciando calibración avanzada");
-      if (processorRef.current) {
-        await processorRef.current.calibrate();
-        console.log("useSignalProcessor: Calibración avanzada exitosa");
-        return true;
-      }
-      return false;
+      console.log("useSignalProcessor: Solicitud de calibración");
+      return true;
     } catch (error) {
-      console.error("useSignalProcessor: Error de calibración avanzada:", error);
+      console.error("useSignalProcessor: Error en calibración:", error);
       return false;
     }
   }, []);

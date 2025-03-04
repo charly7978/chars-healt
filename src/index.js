@@ -269,9 +269,9 @@ const Index = () => {
           </div>
 
           <div className="absolute bottom-[200px] left-0 right-0 px-4 z-30">
-            <div className="grid grid-cols-9 gap-2">
+            <div className="grid grid-cols-4 gap-2 mb-2">
               <VitalSign 
-                label="HEART RATE"
+                label="FRECUENCIA CARDÍACA"
                 value={heartRate || "--"}
                 unit="BPM"
                 isFinalReading={heartRate > 0 && elapsedTime >= 15}
@@ -284,19 +284,22 @@ const Index = () => {
                 trend={vitalSigns.isoCompliant ? 'stable' : undefined}
               />
               <VitalSign 
-                label="BLOOD PRESSURE"
+                label="PRESIÓN ARTERIAL"
                 value={vitalSigns.pressure}
                 unit="mmHg"
                 isFinalReading={vitalSigns.pressure !== "--/--" && elapsedTime >= 15}
               />
               <VitalSign 
-                label="ARRHYTHMIAS"
+                label="ARRITMIAS"
                 value={vitalSigns.arrhythmiaStatus}
                 unit=""
                 isFinalReading={heartRate > 0 && elapsedTime >= 15}
               />
+            </div>
+            
+            <div className="grid grid-cols-4 gap-2">
               <VitalSign 
-                label="RESPIRATION"
+                label="RESPIRACIÓN"
                 value={vitalSigns.hasRespirationData ? vitalSigns.respiration.rate : "--"}
                 unit="RPM"
                 secondaryValue={vitalSigns.hasRespirationData ? vitalSigns.respiration.depth : "--"}
@@ -304,20 +307,30 @@ const Index = () => {
                 isFinalReading={vitalSigns.hasRespirationData && elapsedTime >= 15}
               />
               <VitalSign 
-                label="GLUCOSE"
+                label="GLUCOSA"
                 value={vitalSigns.glucose ? vitalSigns.glucose.value : "--"}
                 unit="mg/dL"
                 trend={vitalSigns.glucose ? vitalSigns.glucose.trend : undefined}
                 isFinalReading={vitalSigns.glucose && vitalSigns.glucose.value > 0 && elapsedTime >= 15}
               />
               <VitalSign 
-                label="HEMOGLOBIN"
+                label="HEMOGLOBINA"
                 value={vitalSigns.hemoglobin || "--"}
                 unit="g/dL"
                 isFinalReading={vitalSigns.hemoglobin && vitalSigns.hemoglobin > 0 && elapsedTime >= 15}
               />
               <VitalSign 
-                label="CHOLESTEROL"
+                label="TEMPERATURA"
+                value={vitalSigns.temperature ? vitalSigns.temperature.value || "--" : "--"}
+                unit="°C"
+                temperatureLocation={vitalSigns.temperature ? vitalSigns.temperature.location as any || "unknown" : "unknown"}
+                temperatureTrend={vitalSigns.temperature ? vitalSigns.temperature.trend as any || "stable" : "stable"}
+                isFinalReading={vitalSigns.temperature && vitalSigns.temperature.value > 0 && elapsedTime >= 15}
+              />
+              
+              {/* Colesterol Display ancho ocupando 2 espacios */}
+              <VitalSign 
+                label="COLESTEROL"
                 value={vitalSigns.cholesterol ? vitalSigns.cholesterol.totalCholesterol || "--" : "--"}
                 unit="mg/dL"
                 cholesterolData={vitalSigns.cholesterol ? {
@@ -326,14 +339,7 @@ const Index = () => {
                   triglycerides: vitalSigns.cholesterol.triglycerides || 0
                 } : undefined}
                 isFinalReading={vitalSigns.cholesterol && elapsedTime >= 15}
-              />
-              <VitalSign 
-                label="TEMPERATURE"
-                value={vitalSigns.temperature ? vitalSigns.temperature.value || "--" : "--"}
-                unit="°C"
-                temperatureLocation={vitalSigns.temperature ? vitalSigns.temperature.location as any || "unknown" : "unknown"}
-                temperatureTrend={vitalSigns.temperature ? vitalSigns.temperature.trend as any || "stable" : "stable"}
-                isFinalReading={vitalSigns.temperature && vitalSigns.temperature.value > 0 && elapsedTime >= 15}
+                isWideDisplay={true}
               />
             </div>
           </div>
@@ -363,7 +369,7 @@ const Index = () => {
               className={`w-full h-full text-2xl font-bold text-white active:bg-gray-800 ${!permissionsGranted ? 'bg-gray-600' : 'bg-black/80'}`}
               disabled={!permissionsGranted}
             >
-              {!permissionsGranted ? 'PERMISSIONS REQUIRED' : 'START'}
+              {!permissionsGranted ? 'PERMISOS REQUERIDOS' : 'INICIAR'}
             </button>
             <button 
               onClick={stopMonitoring}
@@ -376,7 +382,7 @@ const Index = () => {
           {!permissionsGranted && (
             <div className="absolute bottom-20 left-0 right-0 text-center px-4 z-30">
               <span className="text-lg font-medium text-red-400">
-                The application needs camera permissions to function correctly
+                La aplicación necesita permisos de cámara para funcionar correctamente
               </span>
             </div>
           )}
