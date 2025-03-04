@@ -234,7 +234,7 @@ const Index = () => {
         arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
       />
 
-      <div className="fixed bottom-0 left-0 right-0 grid grid-cols-3 gap-2 p-2 bg-black/80 backdrop-blur">
+      <div className="fixed bottom-[70px] left-0 right-0 grid grid-cols-3 gap-2 p-2 bg-black/80 backdrop-blur">
         <VitalSign
           label="SpO2"
           value={vitalSigns.spo2}
@@ -251,6 +251,35 @@ const Index = () => {
           unit="mg/dL"
           cholesterolData={vitalSigns.cholesterol}
         />
+      </div>
+
+      <div className="fixed bottom-0 left-0 right-0 h-[55px] grid grid-cols-2 gap-px">
+        <button 
+          onClick={startMonitoring}
+          className="w-full h-full text-xl font-bold text-white transition-colors duration-200"
+          disabled={!hasPermissions}
+          style={{ 
+            backgroundImage: !hasPermissions 
+              ? 'linear-gradient(135deg, #64748b, #475569, #334155)'
+              : isMonitoring 
+                ? 'linear-gradient(135deg, #f87171, #dc2626, #b91c1c)' 
+                : 'linear-gradient(135deg, #3b82f6, #2563eb, #1d4ed8)',
+            textShadow: '0px 1px 3px rgba(0, 0, 0, 0.3)',
+            opacity: !hasPermissions ? 0.7 : 1
+          }}
+        >
+          {!hasPermissions ? 'PERMISOS REQUERIDOS' : (isMonitoring ? 'DETENER' : 'INICIAR')}
+        </button>
+        <button 
+          onClick={stopMonitoring}
+          className="w-full h-full text-xl font-bold text-white transition-colors duration-200"
+          style={{ 
+            backgroundImage: 'linear-gradient(135deg, #64748b, #475569, #334155)',
+            textShadow: '0px 1px 3px rgba(0, 0, 0, 0.3)'
+          }}
+        >
+          RESET
+        </button>
       </div>
     </div>
   );
