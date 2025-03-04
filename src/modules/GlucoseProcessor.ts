@@ -77,25 +77,6 @@ export class GlucoseProcessor {
     isCalibrated: false
   };
   
-  // Constantes de calibración científica
-  private readonly GLUCOSE_CALIBRATION = {
-    // Coeficientes de calibración espectral (basados en estudios NIR)
-    SPECTRAL_COEFFICIENTS: [125.0, -42.0, 5.5, -0.2],
-    
-    // Rango fisiológico normal (mg/dL)
-    MIN_NORMAL: 70,
-    MAX_NORMAL: 110,
-    
-    // Rango de variación natural (mg/dL)
-    VARIABILITY: 3.5,
-    
-    // Umbrales de calidad de señal
-    MIN_SIGNAL_QUALITY: 0.65,
-    MIN_PERFUSION_INDEX: 0.4,
-    
-    // Parámetros de absorción multi-espectral
-  };
-  
   constructor() {
     // Initialize with random base glucose
     this.BASE_GLUCOSE = Math.floor(this.BASE_GLUCOSE_MIN + Math.random() * (this.BASE_GLUCOSE_MAX - this.BASE_GLUCOSE_MIN));
