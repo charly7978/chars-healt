@@ -122,58 +122,66 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     
-    ctx.fillStyle = '#f3f3f3';
+    // Fondo oscuro
+    ctx.fillStyle = '#0A1628';
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
+    // Cuadrícula menor
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(0, 180, 120, 0.15)';
+    ctx.strokeStyle = 'rgba(30, 64, 175, 0.15)';
     ctx.lineWidth = 0.5;
 
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X) {
       ctx.moveTo(x, 0);
       ctx.lineTo(x, CANVAS_HEIGHT);
-      if (x % (GRID_SIZE_X * 4) === 0) {
-        ctx.fillStyle = 'rgba(0, 150, 100, 0.9)';
-        ctx.font = '10px Inter';
-        ctx.textAlign = 'center';
-        ctx.fillText(`${x / 10}ms`, x, CANVAS_HEIGHT - 5);
-      }
     }
 
     for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y) {
       ctx.moveTo(0, y);
       ctx.lineTo(CANVAS_WIDTH, y);
-      if (y % (GRID_SIZE_Y * 4) === 0) {
-        const amplitude = ((CANVAS_HEIGHT / 2) - y) / verticalScale;
-        ctx.fillStyle = 'rgba(0, 150, 100, 0.9)';
-        ctx.font = '10px Inter';
-        ctx.textAlign = 'right';
-        ctx.fillText(amplitude.toFixed(1), 25, y + 4);
-      }
     }
     ctx.stroke();
 
+    // Cuadrícula mayor
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(0, 150, 100, 0.25)';
+    ctx.strokeStyle = 'rgba(30, 64, 175, 0.3)';
     ctx.lineWidth = 1;
 
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X * 4) {
       ctx.moveTo(x, 0);
       ctx.lineTo(x, CANVAS_HEIGHT);
+      // Etiquetas de tiempo
+      if (x % (GRID_SIZE_X * 4) === 0) {
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.8)';
+        ctx.font = '8px Inter';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${x / 10}ms`, x, CANVAS_HEIGHT - 4);
+      }
     }
 
     for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y * 4) {
       ctx.moveTo(0, y);
       ctx.lineTo(CANVAS_WIDTH, y);
+      // Etiquetas de amplitud
+      if (y % (GRID_SIZE_Y * 4) === 0) {
+        const amplitude = ((CANVAS_HEIGHT * 0.45) - y) / verticalScale;
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.8)';
+        ctx.font = '8px Inter';
+        ctx.textAlign = 'right';
+        ctx.fillText(amplitude.toFixed(1), 20, y + 3);
+      }
     }
     ctx.stroke();
 
+    // Línea central (subida al 45% de la altura)
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(0, 150, 100, 0.35)';
+    ctx.strokeStyle = 'rgba(30, 64, 175, 0.5)';
     ctx.lineWidth = 1.5;
-    ctx.moveTo(0, CANVAS_HEIGHT * 0.6);
-    ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT * 0.6);
+    ctx.setLineDash([4, 2]);
+    ctx.moveTo(0, CANVAS_HEIGHT * 0.45);
+    ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT * 0.45);
     ctx.stroke();
+    ctx.setLineDash([]);
   }, []);
 
   const renderSignal = useCallback(() => {

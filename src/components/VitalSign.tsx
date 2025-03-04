@@ -70,44 +70,44 @@ const VitalSign: React.FC<VitalSignProps> = ({
   };
 
   return (
-    <Card className="p-2 flex flex-col space-y-1 h-[100px] shadow-sm border border-blue-500/20 hover:border-blue-400/30 transition-colors bg-blue-950/40 backdrop-blur-sm">
+    <Card className="p-1.5 flex flex-col space-y-0.5 h-[90px] shadow-sm border border-blue-500/20 hover:border-blue-400/30 transition-colors bg-blue-950/40 backdrop-blur-sm">
       <div className="flex justify-between items-start">
-        <h3 className="text-[9px] font-semibold text-blue-300/90">{label}</h3>
+        <h3 className="text-[8px] font-semibold text-blue-300/90">{label}</h3>
         {trend && trend !== 'stable' && (
-          <Badge variant="outline" className={`text-[8px] px-1 py-0 ${getTrendColor()}`}>
+          <Badge variant="outline" className={`text-[7px] px-0.5 py-0 ${getTrendColor()}`}>
             {getTrendIcon()} {trend.replace('_', ' ')}
           </Badge>
         )}
       </div>
       <div className="flex items-baseline space-x-1 justify-center flex-1">
-        <span className="text-lg font-bold tracking-tighter text-white">{value}</span>
-        <span className="text-[9px] text-blue-300/70">{unit}</span>
+        <span className="text-base font-bold tracking-tighter text-white">{value}</span>
+        <span className="text-[8px] text-blue-300/70">{unit}</span>
       </div>
       {secondaryValue && secondaryUnit && (
         <div className="flex items-baseline space-x-1 justify-center">
           <span className="text-xs font-medium tracking-tighter text-blue-200/90">{secondaryValue}</span>
-          <span className="text-[8px] text-blue-300/70">{secondaryUnit}</span>
+          <span className="text-[7px] text-blue-300/70">{secondaryUnit}</span>
         </div>
       )}
       {cholesterolData && (
         <div className="flex flex-col mt-0.5 space-y-0.5">
           <div className="flex items-baseline justify-between">
-            <span className="text-[8px] text-blue-300/70">HDL:</span>
-            <span className="text-[8px] font-medium text-blue-200/90">{cholesterolData.hdl}</span>
+            <span className="text-[7px] text-blue-300/70">HDL:</span>
+            <span className="text-[7px] font-medium text-blue-200/90">{cholesterolData.hdl}</span>
           </div>
           <div className="flex items-baseline justify-between">
-            <span className="text-[8px] text-blue-300/70">LDL:</span>
-            <span className="text-[8px] font-medium text-blue-200/90">{cholesterolData.ldl}</span>
+            <span className="text-[7px] text-blue-300/70">LDL:</span>
+            <span className="text-[7px] font-medium text-blue-200/90">{cholesterolData.ldl}</span>
           </div>
           <div className="flex items-baseline justify-between">
-            <span className="text-[8px] text-blue-300/70">TG:</span>
-            <span className="text-[8px] font-medium text-blue-200/90">{cholesterolData.triglycerides}</span>
+            <span className="text-[7px] text-blue-300/70">TG:</span>
+            <span className="text-[7px] font-medium text-blue-200/90">{cholesterolData.triglycerides}</span>
           </div>
         </div>
       )}
       {temperatureLocation && (
         <div className="flex items-baseline space-x-1 justify-center">
-          <span className="text-[8px] text-blue-300/70">
+          <span className="text-[7px] text-blue-300/70">
             {temperatureLocation === 'finger' ? 'Dedo' : 
              temperatureLocation === 'wrist' ? 'Muñeca' : 
              temperatureLocation === 'forehead' ? 'Frente' : 'Desconocido'}
