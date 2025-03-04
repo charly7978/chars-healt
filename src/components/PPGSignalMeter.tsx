@@ -448,10 +448,10 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
         </h1>
       </div>
 
-      {/* Nuevos indicadores para colesterol y temperatura */}
+      {/* Indicadores de colesterol */}
       {cholesterolData && cholesterolData.totalCholesterol > 0 && (
-        <div className="absolute left-2 top-2 z-30 bg-black/30 backdrop-blur-sm rounded p-2 text-xs">
-          <div className="text-cyan-400 font-bold mb-1">Colesterol</div>
+        <div className="absolute left-2 top-2 z-30 bg-black/70 backdrop-blur-md rounded-lg p-3 text-xs">
+          <div className="text-cyan-400 font-bold mb-1 text-sm">Colesterol</div>
           <div className="grid grid-cols-2 gap-x-3 gap-y-1">
             <span className="text-white">Total:</span>
             <span className="text-cyan-300 font-medium">{cholesterolData.totalCholesterol} mg/dL</span>
@@ -469,9 +469,10 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
         </div>
       )}
       
+      {/* Indicadores de temperatura */}
       {temperatureData && temperatureData.value > 0 && (
-        <div className="absolute left-2 top-[120px] z-30 bg-black/30 backdrop-blur-sm rounded p-2 text-xs">
-          <div className="text-yellow-400 font-bold mb-1">Temperatura</div>
+        <div className="absolute left-2 top-[150px] z-30 bg-black/70 backdrop-blur-md rounded-lg p-3 text-xs">
+          <div className="text-yellow-400 font-bold mb-1 text-sm">Temperatura</div>
           <div className="grid grid-cols-2 gap-x-3 gap-y-1">
             <span className="text-white">Valor:</span>
             <span className="text-yellow-300 font-medium">{temperatureData.value.toFixed(1)}°C</span>
