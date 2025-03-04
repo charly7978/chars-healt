@@ -1,4 +1,3 @@
-
 import { useState, useRef, useCallback } from 'react';
 import { HeartBeatProcessor } from '../modules/HeartBeatProcessor';
 import { HeartBeatResult } from '../types/signal';
@@ -19,7 +18,7 @@ export const useHeartBeatProcessor = () => {
       console.log('useHeartBeatProcessor: Creating new HeartBeatProcessor instance');
       processorRef.current = new HeartBeatProcessor();
       // Make it globally accessible for debugging
-      window.heartBeatProcessor = processorRef.current;
+      (window as any).heartBeatProcessor = processorRef.current;
     }
     return processorRef.current;
   }, []);
@@ -123,7 +122,15 @@ export const useHeartBeatProcessor = () => {
    */
   const reset = useCallback(() => {
     if (processorRef.current) {
-      processorRef.current.reset();
+      try {
+        processorRef.current.reset();
+        // Remove global reference if it exists
+        if (window && (window as any).heartBeatProcessor === processorRef.current) {
+          delete (window as any).heartBeatProcessor;
+        }
+      } catch (error) {
+        console.error('Error cleaning HeartBeatProcessor memory:', error);
+      }
     }
     signalBufferRef.current = [];
     setBpm(0);
@@ -171,8 +178,8 @@ export const useHeartBeatProcessor = () => {
       try {
         processorRef.current.reset();
         // Remove global reference if it exists
-        if (window.heartBeatProcessor === processorRef.current) {
-          delete window.heartBeatProcessor;
+        if (window && (window as any).heartBeatProcessor === processorRef.current) {
+          delete (window as any).heartBeatProcessor;
         }
       } catch (error) {
         console.error('Error cleaning HeartBeatProcessor memory:', error);

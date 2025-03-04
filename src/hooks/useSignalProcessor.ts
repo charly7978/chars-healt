@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { PPGSignalProcessor } from '../modules/SignalProcessor';
 import { ProcessedSignal, ProcessingError } from '../types/signal';
@@ -131,7 +130,8 @@ export const useSignalProcessor = () => {
           const dataPoint = {
             time: lastSignal.timestamp,
             value: enhancedValue,
-            isArrhythmia: false
+            isArrhythmia: false,
+            isWaveStart: false
           };
           signalBufferRef.current.push(dataPoint);
           
@@ -177,8 +177,8 @@ export const useSignalProcessor = () => {
             setLastSignal(enhancedSignal);
             
             // Pass to heart beat processor if available
-            if (window.heartBeatProcessor) {
-              window.heartBeatProcessor.processSignal(enhancedValue);
+            if (window && (window as any).heartBeatProcessor) {
+              (window as any).heartBeatProcessor.processSignal(enhancedValue);
             }
             
             // Log cardiac analysis results for debugging

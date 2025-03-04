@@ -9,7 +9,7 @@ import PermissionsHandler from "@/components/PermissionsHandler";
 import { VitalSignsRisk } from '@/utils/vitalSignsRisk';
 import { toast } from "sonner";
 import { VitalSignsProcessorResult } from "@/types/signal";
-import { VitalSigns, initialVitalSigns } from '../types/VitalSigns';
+import { VitalSigns, initialVitalSigns } from '@/types/VitalSigns';
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -445,91 +445,80 @@ const Index = () => {
           if (vitals) {
             console.log("Raw vital signs data:", JSON.stringify(vitals));
             
-            if (vitals.spo2 > 0) {
-              setVitalSigns(current => ({
-                ...current,
-                spo2: vitals.spo2
-              }));
-              allSpo2ValuesRef.current.push(vitals.spo2);
-            }
-            
-            if (vitals.pressure !== "--/--" && vitals.pressure !== "0/0") {
-              setVitalSigns(current => ({
-                ...current,
-                pressure: vitals.pressure
-              }));
+            setVitalSigns(current => {
+              const updated = { ...current };
               
-              const [systolic, diastolic] = vitals.pressure.split('/').map(Number);
-              if (systolic > 0 && diastolic > 0) {
-                allSystolicValuesRef.current.push(systolic);
-                allDiastolicValuesRef.current.push(diastolic);
-              }
-            }
-            
-            setVitalSigns(current => ({
-              ...current,
-              arrhythmiaStatus: vitals.arrhythmiaStatus
-            }));
-            
-            if (vitals.hasRespirationData && vitals.respiration) {
-              console.log("Procesando datos de respiración:", vitals.respiration);
-              setVitalSigns(current => ({
-                ...current,
-                respiration: vitals.respiration,
-                hasRespirationData: true
-              }));
-              
-              if (vitals.respiration.rate > 0) {
-                allRespirationRateValuesRef.current.push(vitals.respiration.rate);
+              if (vitals.spo2 > 0) {
+                updated.spo2 = vitals.spo2;
+                allSpo2ValuesRef.current.push(vitals.spo2);
               }
               
-              if (vitals.respiration.depth > 0) {
-                allRespirationDepthValuesRef.current.push(vitals.respiration.depth);
+              if (vitals.pressure !== "--/--" && vitals.pressure !== "0/0") {
+                updated.pressure = vitals.pressure;
+                
+                const [systolic, diastolic] = vitals.pressure.split('/').map(Number);
+                if (systolic > 0 && diastolic > 0) {
+                  allSystolicValuesRef.current.push(systolic);
+                  allDiastolicValuesRef.current.push(diastolic);
+                }
               }
-            }
-            
-            if (vitals.glucose) {
-              console.log("Actualizando UI con datos de glucosa:", vitals.glucose);
-              setVitalSigns(current => ({
-                ...current,
-                glucose: vitals.glucose
-              }));
               
-              if (vitals.glucose.value > 0) {
-                allGlucoseValuesRef.current.push(vitals.glucose.value);
+              updated.arrhythmiaStatus = vitals.arrhythmiaStatus;
+              
+              if (vitals.hasRespirationData && vitals.respiration) {
+                console.log("Procesando datos de respiración:", vitals.respiration);
+                updated.respiration = vitals.respiration;
+                updated.hasRespirationData = true;
+                
+                if (vitals.respiration.rate > 0) {
+                  allRespirationRateValuesRef.current.push(vitals.respiration.rate);
+                }
+                
+                if (vitals.respiration.depth > 0) {
+                  allRespirationDepthValuesRef.current.push(vitals.respiration.depth);
+                }
               }
-            }
+              
+              if (vitals.glucose) {
+                console.log("Actualizando UI con datos de glucosa:", vitals.glucose);
+                updated.glucose = {
+                  value: vitals.glucose.value,
+                  trend: vitals.glucose.trend
+                };
+                
+                if (vitals.glucose.value > 0) {
+                  allGlucoseValuesRef.current.push(vitals.glucose.value);
+                }
+              }
+              
+              if (vitals.hemoglobin) {
+                console.log(`Hemoglobin data received: ${vitals.hemoglobin.value} g/dL (confidence: ${vitals.hemoglobin.confidence}%)`);
+                updated.hemoglobin = vitals.hemoglobin;
+                allHemoglobinValuesRef.current.push(vitals.hemoglobin.value);
+              }
+              
+              if (vitals.lastArrhythmiaData) {
+                setLastArrhythmiaData(vitals.lastArrhythmiaData);
+                updated.lastArrhythmiaData = vitals.lastArrhythmiaData;
+                
+                const [status, count] = vitals.arrhythmiaStatus.split('|');
+                setArrhythmiaCount(count || "0");
+              }
 
-            if (vitals.hemoglobin) {
-              console.log(`Hemoglobin data received: ${vitals.hemoglobin.value} g/dL (confidence: ${vitals.hemoglobin.confidence}%)`);
-              setVitalSigns(current => ({
-                ...current,
-                hemoglobin: vitals.hemoglobin
-              }));
-              allHemoglobinValuesRef.current.push(vitals.hemoglobin.value);
-            }
-            
-            if (vitals.lastArrhythmiaData) {
-              setLastArrhythmiaData(vitals.lastArrhythmiaData);
-              setVitalSigns(current => ({
-                ...current,
-                lastArrhythmiaData: vitals.lastArrhythmiaData
-              }));
+              if (vitals.cholesterol) {
+                console.log(`Lipid data received: Total=${vitals.cholesterol.totalCholesterol}, HDL=${vitals.cholesterol.hdl}, LDL=${vitals.cholesterol.ldl}, TG=${vitals.cholesterol.triglycerides}`);
+                updated.cholesterol = vitals.cholesterol;
+              }
               
-              const [status, count] = vitals.arrhythmiaStatus.split('|');
-              setArrhythmiaCount(count || "0");
-            }
-
-            if (vitals.cholesterol) {
-              console.log(`Lipid data received: Total=${vitals.cholesterol.totalCholesterol}, HDL=${vitals.cholesterol.hdl}, LDL=${vitals.cholesterol.ldl}, TG=${vitals.cholesterol.triglycerides}`);
-              setVitalSigns(current => ({
-                ...current,
-                cholesterol: vitals.cholesterol
-              }));
-            }
+              if (vitals.lipids) {
+                updated.lipids = vitals.lipids;
+              }
+              
+              return updated;
+            });
+          
+            setSignalQuality(lastSignal.quality);
           }
-        
-          setSignalQuality(lastSignal.quality);
         }
       } catch (error) {
         console.error("Error procesando señal:", error);
@@ -610,6 +599,11 @@ const Index = () => {
         paddingLeft: 'var(--sal)',
       }}
     >
+      <PermissionsHandler 
+        onPermissionsGranted={handlePermissionsGranted}
+        onPermissionsDenied={handlePermissionsDenied}
+      />
+      
       <CameraView 
         onStreamReady={handleStreamReady}
         isMonitoring={isMonitoring}
@@ -663,6 +657,7 @@ const Index = () => {
               label="GLUCOSE"
               value={vitalSigns.glucose ? vitalSigns.glucose.value : "--"}
               unit="mg/dL"
+              trend={vitalSigns.glucose ? vitalSigns.glucose.trend : "unknown"}
             />
             <VitalSign 
               label="HEMOGLOBIN"

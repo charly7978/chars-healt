@@ -25,4 +25,28 @@ export interface VitalSigns {
     rmssd: number;
     rrVariation: number;
   } | null;
+  hemoglobin: {
+    value: number;
+    confidence: number;
+  };
+  cholesterol?: {
+    totalCholesterol: number;
+    hdl: number;
+    ldl: number;
+    triglycerides: number;
+    confidence?: number;
+  };
 }
+
+export const initialVitalSigns: VitalSigns = {
+  spo2: 0,
+  pressure: "--/--",
+  arrhythmiaStatus: "--",
+  respiration: { rate: 0, depth: 0, regularity: 0 },
+  hasRespirationData: false,
+  glucose: { value: 0, trend: 'unknown' },
+  lipids: null,
+  lastArrhythmiaData: null,
+  hemoglobin: { value: 0, confidence: 0 },
+  cholesterol: null
+};

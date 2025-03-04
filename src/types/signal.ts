@@ -14,11 +14,13 @@ export interface ProcessedSignal {
     height: number;
   };
   isPeak?: boolean;
+  rawPixelData?: Uint8ClampedArray;
 }
 
 export interface ProcessingError {
   code: string;
   message: string;
+  timestamp?: number;
 }
 
 export interface HeartBeatResult {
@@ -48,6 +50,12 @@ export interface HemoglobinData {
   confidence: number;
 }
 
+export interface RespirationData {
+  rate: number;
+  depth: number;
+  regularity: number;
+}
+
 export interface VitalSignsProcessorResult {
   spo2: number;
   pressure: string;
@@ -72,4 +80,21 @@ export interface VitalSignsProcessorResult {
     triglycerides: number;
     confidence?: number;
   };
-} 
+  lipids?: {
+    totalCholesterol: number;
+    hdl: number;
+    ldl: number;
+    triglycerides: number;
+    confidence?: number;
+  } | null;
+}
+
+export interface SignalProcessor {
+  onSignalReady?: (signal: ProcessedSignal) => void;
+  onError?: (error: ProcessingError) => void;
+  initialize(): Promise<void>;
+  start(): void;
+  stop(): void;
+  calibrate(): Promise<boolean>;
+  processFrame(imageData: ImageData): void;
+}
