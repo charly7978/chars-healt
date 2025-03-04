@@ -1,3 +1,4 @@
+
 /**
  * Implementación avanzada de cálculo de SpO2 utilizando análisis espectral cuántico
  */
@@ -108,6 +109,146 @@ export class SpO2Calculator {
   }
 
   /**
+   * Calcular entropía espectral (mide la regularidad de la señal)
+   */
+  private calculateSpectralEntropy(spectrum: number[]): number {
+    let sum = 0;
+    let entropy = 0;
+    
+    // Normalizar el espectro para calcular probabilidades
+    for (let i = 0; i < spectrum.length; i++) {
+      sum += spectrum[i];
+    }
+    
+    if (sum === 0) return 0;
+    
+    // Calcular entropía de Shannon
+    for (let i = 0; i < spectrum.length; i++) {
+      if (spectrum[i] > 0) {
+        const p = spectrum[i] / sum;
+        entropy -= p * Math.log(p);
+      }
+    }
+    
+    // Normalizar a [0,1]
+    return entropy / Math.log(spectrum.length);
+  }
+
+  /**
+   * Calcular centroide espectral (centro de gravedad del espectro)
+   */
+  private calculateSpectralCentroid(spectrum: number[]): number {
+    let weighted_sum = 0;
+    let sum = 0;
+    
+    for (let i = 0; i < spectrum.length; i++) {
+      weighted_sum += i * spectrum[i];
+      sum += spectrum[i];
+    }
+    
+    return sum > 0 ? weighted_sum / sum : 0;
+  }
+
+  /**
+   * Calcular dispersión espectral (varianza alrededor del centroide)
+   */
+  private calculateSpectralSpread(spectrum: number[], centroid: number): number {
+    let weighted_sum = 0;
+    let sum = 0;
+    
+    for (let i = 0; i < spectrum.length; i++) {
+      weighted_sum += Math.pow(i - centroid, 2) * spectrum[i];
+      sum += spectrum[i];
+    }
+    
+    return sum > 0 ? Math.sqrt(weighted_sum / sum) : 0;
+  }
+
+  /**
+   * Calcular asimetría espectral (skewness del espectro)
+   */
+  private calculateSpectralSkewness(spectrum: number[], centroid: number, spread: number): number {
+    let weighted_sum = 0;
+    let sum = 0;
+    
+    if (spread === 0) return 0;
+    
+    for (let i = 0; i < spectrum.length; i++) {
+      weighted_sum += Math.pow((i - centroid) / spread, 3) * spectrum[i];
+      sum += spectrum[i];
+    }
+    
+    return sum > 0 ? weighted_sum / sum : 0;
+  }
+
+  /**
+   * Calcular potencia en bajas frecuencias (0.01-0.1 Hz, artefactos)
+   */
+  private calculateLowFrequencyPower(spectrum: number[]): number {
+    let lowFreqPower = 0;
+    let totalPower = 0;
+    
+    // Asumiendo una frecuencia de muestreo de 30Hz y espectro con 256 puntos
+    // las frecuencias bajas (0.01-0.1Hz) están aproximadamente en bins 0-8
+    const lowFreqBins = Math.ceil(spectrum.length * 0.1 / (30/2));
+    
+    for (let i = 0; i < spectrum.length; i++) {
+      if (i < lowFreqBins) {
+        lowFreqPower += spectrum[i];
+      }
+      totalPower += spectrum[i];
+    }
+    
+    return totalPower > 0 ? lowFreqPower / totalPower : 0;
+  }
+
+  /**
+   * Calcular ratio de potencia entre alta/baja frecuencia
+   */
+  private calculateFrequencyRatio(spectrum: number[]): number {
+    let lowFreqPower = 0;
+    let highFreqPower = 0;
+    
+    // Asumiendo espectro de 256 puntos y frecuencia 30Hz
+    const lowFreqBins = Math.ceil(spectrum.length * 0.1 / (30/2)); // 0.01-0.1Hz
+    const midFreqBins = Math.ceil(spectrum.length * 0.5 / (30/2));  // 0.1-0.5Hz
+    
+    for (let i = 0; i < spectrum.length; i++) {
+      if (i < lowFreqBins) {
+        lowFreqPower += spectrum[i];
+      } else if (i >= lowFreqBins && i < midFreqBins) {
+        highFreqPower += spectrum[i];
+      }
+    }
+    
+    return lowFreqPower > 0 ? highFreqPower / lowFreqPower : 0;
+  }
+
+  /**
+   * Calcular estabilidad espectral comparando features actuales con anteriores
+   */
+  private calculateSpectralStability(currentFeatures: number[], previousFeatures: number[]): number {
+    if (previousFeatures.every(f => f === 0)) return 0;
+    
+    let sumSquaredDiff = 0;
+    let sumSquared = 0;
+    
+    // Solo usar las primeras 5 características para comparar estabilidad
+    for (let i = 0; i < 5; i++) {
+      if (previousFeatures[i] !== 0) {
+        sumSquaredDiff += Math.pow(currentFeatures[i] - previousFeatures[i], 2);
+        sumSquared += Math.pow(previousFeatures[i], 2);
+      }
+    }
+    
+    if (sumSquared === 0) return 0;
+    
+    // Convertir diferencia a estabilidad (1 = estable, 0 = inestable)
+    const similarity = 1 - Math.sqrt(sumSquaredDiff / sumSquared);
+    return Math.max(0, Math.min(1, similarity));
+  }
+
+  /**
    * Implementar Fast Fourier Transform real (no simulado)
    */
   private performFFT(data: number[]): number[] {
@@ -115,11 +256,11 @@ export class SpO2Calculator {
     if (n <= 1) return data;
     
     // FFT real (versión simplificada pero funcional)
-    const result = new Array(n).fill(0);
+    const result: {real: number, imag: number}[] = new Array(n).fill(null).map(() => ({real: 0, imag: 0}));
     
     // Separar pares e impares
-    const even = new Array(n/2);
-    const odd = new Array(n/2);
+    const even: number[] = new Array(n/2);
+    const odd: number[] = new Array(n/2);
     
     for (let i = 0; i < n/2; i++) {
       even[i] = data[i*2];
@@ -127,8 +268,8 @@ export class SpO2Calculator {
     }
     
     // Recursión
-    const evenFFT = this.performFFT(even);
-    const oddFFT = this.performFFT(odd);
+    const evenFFT: any[] = this.performFFT(even);
+    const oddFFT: any[] = this.performFFT(odd);
     
     // Combinar resultados
     for (let k = 0; k < n/2; k++) {

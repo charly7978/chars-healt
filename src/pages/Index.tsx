@@ -770,7 +770,6 @@ const Index = () => {
               unit="mg/dL"
               trend={finalValues ? finalValues.glucose.trend : (vitalSigns.glucose ? vitalSigns.glucose.trend : "unknown")}
               isFinalReading={measurementComplete}
-              glucose={null}
             />
             <VitalSign 
               label="HEMOGLOBINA"
