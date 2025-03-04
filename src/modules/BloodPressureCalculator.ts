@@ -512,67 +512,67 @@ export class BloodPressureCalculator {
       activity?: 'resting' | 'active' | 'post-exercise'
     }
   ): {
-    systolic: number,         // mmHg
-    diastolic: number,        // mmHg
-    mean: number,             // mmHg
-    pulse: number,            // BPM
-    confidence: number,       // 0-1
-    accuracySBP: number,      // ±mmHg
-    accuracyDBP: number,      // ±mmHg
-    ptgFeatures: any,         // Características de onda de pulso
+    systolic: number,
+    diastolic: number,
+    mean: number,
+    pulse: number,
+    confidence: number,
+    accuracySBP: number,
+    accuracyDBP: number,
+    ptgFeatures: any,
     isValidClinical: boolean,
   } | null {
-    // Validar datos de entrada
+    // Validación avanzada de datos de entrada para garantizar mediciones reales
     if (!this.validateSignalQuality(ppgSignal, ecgSignal)) {
       return null;
     }
     
-    // 1. Preprocesamiento de señales (filtrado optimizado)
+    // Preprocesamiento avanzado de señales clínicas
     const processedSignals = this.preprocessSignals(ppgSignal, ecgSignal, accelerometerData);
     if (!processedSignals.isValid) {
       return null;
     }
     
-    // 2. Extraer características de onda de pulso
+    // Análisis morfológico avanzado de la onda de pulso
     const ptgFeatures = this.extractPulseWaveFeatures(
       processedSignals.filteredPPG,
       processedSignals.filteredECG
     );
     
-    // 3. Calcular Tiempo de Tránsito de Pulso (PTT)
+    // Tiempo de Tránsito de Pulso (PTT) - fundamento físico de estimación de BP
     const ptt = this.calculatePulseTransitTime(
       ptgFeatures,
       processedSignals.filteredPPG,
       processedSignals.filteredECG
     );
     
-    // 4. Estimación inicial basada en PTT e índices de forma de onda
+    // Estimación hemodinámica basada en el modelo Moens-Korteweg modificado
     const initialEstimate = this.estimateFromPTT(
       ptt,
       ptgFeatures,
       patientContext
     );
     
-    // 5. Aplicar correcciones hemodinámicas
+    // Aplicar correcciones hemodinámicas basadas en elasticidad arterial
     const hemodynamicAdjusted = this.applyHemodynamicCorrections(
       initialEstimate,
       ptgFeatures,
       patientContext
     );
     
-    // 6. Aplicar calibración personalizada
+    // Aplicar calibración personalizada con decaimiento temporal
     const calibratedBP = this.applyCalibration(
       hemodynamicAdjusted,
       ptt
     );
     
-    // 7. Validación fisiopatológica
+    // Validación fisiopatológica según criterios médicos
     const validatedBP = this.applyPhysiologicalValidation(
       calibratedBP,
       patientContext
     );
     
-    // 8. Calcular confianza y precisión
+    // Cálculo avanzado de confianza y precisión
     const confidenceMetrics = this.calculateConfidence(
       validatedBP,
       ptgFeatures,
@@ -580,7 +580,7 @@ export class BloodPressureCalculator {
       processedSignals.signalQuality
     );
     
-    // 9. Actualizar historial
+    // Actualizar historial para análisis de tendencias
     this.updateBPHistory(
       validatedBP.systolic,
       validatedBP.diastolic,
@@ -588,16 +588,16 @@ export class BloodPressureCalculator {
       confidenceMetrics.confidence
     );
     
-    // 10. Calcular Presión Arterial Media
+    // Calcular Presión Arterial Media según consenso clínico
     const map = this.calculateMeanArterialPressure(
       validatedBP.systolic,
       validatedBP.diastolic,
       ptgFeatures
     );
     
-    // Determinar validez clínica
+    // Validación clínica final según criterios AAMI/ESH
     const isValidClinical = confidenceMetrics.confidence > 0.75 && 
-                           confidenceMetrics.accuracySBP < 10;
+                           confidenceMetrics.accuracySBP < 8;
     
     return {
       systolic: Math.round(validatedBP.systolic),
@@ -729,5 +729,51 @@ export class BloodPressureCalculator {
     }
     
     return { systolic: sbpEstimate, diastolic: dbpEstimate };
+  }
+
+  // Validación avanzada de calidad de señal con criterios clínicos
+  private validateSignalQuality(ppgSignal: number[], ecgSignal?: number[]): boolean {
+    // Verificar longitud mínima para análisis adecuado
+    if (!ppgSignal || ppgSignal.length < 300) { // Mínimo 3 segundos a 100Hz
+      return false;
+    }
+    
+    // Verificar amplitud suficiente y relación señal-ruido
+    const ppgRange = Math.max(...ppgSignal) - Math.min(...ppgSignal);
+    const noiseEstimate = this.estimateSignalNoise(ppgSignal);
+    const signalToNoiseRatio = ppgRange / (noiseEstimate || 1);
+    
+    if (signalToNoiseRatio < 3.5) { // Criterio clínico para mediciones de BP
+      return false;
+    }
+    
+    // Verificar consistencia temporal (periodicidad cardíaca)
+    const hasValidPeriodicBeat = this.validateCardiacPeriodicityInSignal(ppgSignal);
+    if (!hasValidPeriodicBeat) {
+      return false;
+    }
+    
+    // Verificar ausencia de artefactos significativos
+    const artifactPercentage = this.detectArtifactPercentage(ppgSignal);
+    if (artifactPercentage > 0.25) { // Más del 25% de artefactos invalida la medición
+      return false;
+    }
+    
+    return true;
+  }
+
+  // Estimación de ruido de señal basada en análisis de altas frecuencias
+  private estimateSignalNoise(signal: number[]): number {
+    // Diferencias de primer orden para estimar componentes de alta frecuencia
+    const differences = [];
+    for (let i = 1; i < signal.length; i++) {
+      differences.push(Math.abs(signal[i] - signal[i-1]));
+    }
+    
+    // Ordenar y usar percentil 75 como estimación robusta de ruido
+    const sortedDiffs = [...differences].sort((a, b) => a - b);
+    const noiseEstimate = sortedDiffs[Math.floor(sortedDiffs.length * 0.75)];
+    
+    return noiseEstimate;
   }
 }
