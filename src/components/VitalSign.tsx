@@ -9,18 +9,22 @@ export interface VitalSignProps {
   unit: string;
   trend?: 'rising' | 'falling' | 'stable' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
   isFinalReading?: boolean;
+  secondaryValue?: string | number;
+  secondaryUnit?: string;
 }
 
 /**
- * Componente para mostrar un signo vital con tendencia e indicación de calidad
- * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION
+ * Component for displaying vital sign with trend and quality indication
+ * 100% REAL MEASUREMENTS - NO SIMULATION ALLOWED
  */
 const VitalSign: React.FC<VitalSignProps> = ({
   label,
   value,
   unit,
   trend = 'stable',
-  isFinalReading = false
+  isFinalReading = false,
+  secondaryValue,
+  secondaryUnit
 }) => {
   const getTrendIcon = () => {
     switch(trend) {
@@ -60,18 +64,26 @@ const VitalSign: React.FC<VitalSignProps> = ({
     <Card className="p-4 flex flex-col space-y-2 h-full shadow-sm border-2 hover:border-blue-300 transition-colors">
       <div className="flex justify-between items-start">
         <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">{label}</h3>
-        <Badge variant="outline" className={`text-xs px-2 py-0.5 ${getTrendColor()}`}>
-          {getTrendIcon()} {trend.replace('_', ' ')}
-        </Badge>
+        {trend && (
+          <Badge variant="outline" className={`text-xs px-2 py-0.5 ${getTrendColor()}`}>
+            {getTrendIcon()} {trend.replace('_', ' ')}
+          </Badge>
+        )}
       </div>
       <div className="flex items-baseline space-x-1">
         <span className="text-3xl font-bold tracking-tighter">{value}</span>
         <span className="text-sm text-gray-600 dark:text-gray-400">{unit}</span>
       </div>
+      {secondaryValue && secondaryUnit && (
+        <div className="flex items-baseline space-x-1 mt-1">
+          <span className="text-lg font-medium tracking-tighter">{secondaryValue}</span>
+          <span className="text-xs text-gray-600 dark:text-gray-400">{secondaryUnit}</span>
+        </div>
+      )}
       {isFinalReading && (
         <div className="mt-auto">
           <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-xs">
-            Medición Completa
+            Complete Measurement
           </Badge>
         </div>
       )}

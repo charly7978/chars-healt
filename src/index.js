@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -19,7 +20,10 @@ const Index = () => {
     respiration: { rate: 0, depth: 0, regularity: 0 },
     hasRespirationData: false,
     glucose: null,
-    hemoglobin: null // Initialize hemoglobin with null
+    hemoglobin: null,
+    isoCompliant: false,
+    calibrationStatus: 'uncalibrated',
+    motionScore: 0
   });
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState("--");
@@ -123,7 +127,10 @@ const Index = () => {
       respiration: { rate: 0, depth: 0, regularity: 0 },
       hasRespirationData: false,
       glucose: null,
-      hemoglobin: null // Reset hemoglobin
+      hemoglobin: null,
+      isoCompliant: false,
+      calibrationStatus: 'uncalibrated',
+      motionScore: 0
     });
     setArrhythmiaCount("--");
     setSignalQuality(0);
@@ -193,7 +200,10 @@ const Index = () => {
             arrhythmia: vitals.arrhythmiaStatus,
             respiration: vitals.respiration,
             glucose: vitals.glucose ? `${vitals.glucose.value} mg/dL (${vitals.glucose.trend})` : 'No data',
-            hemoglobin: vitals.hemoglobin ? `${vitals.hemoglobin} g/dL` : 'No data'
+            hemoglobin: vitals.hemoglobin ? `${vitals.hemoglobin} g/dL` : 'No data',
+            isoCompliant: vitals.isoCompliant ? 'Yes' : 'No',
+            calibrationStatus: vitals.calibrationStatus,
+            motionScore: vitals.motionScore || 0
           });
           
           setVitalSigns(vitals);
@@ -256,7 +266,7 @@ const Index = () => {
           <div className="absolute bottom-[200px] left-0 right-0 px-4 z-30">
             <div className="grid grid-cols-7 gap-2">
               <VitalSign 
-                label="FRECUENCIA CARDÍACA"
+                label="HEART RATE"
                 value={heartRate || "--"}
                 unit="BPM"
                 isFinalReading={heartRate > 0 && elapsedTime >= 15}
@@ -266,35 +276,37 @@ const Index = () => {
                 value={vitalSigns.spo2 || "--"}
                 unit="%"
                 isFinalReading={vitalSigns.spo2 > 0 && elapsedTime >= 15}
+                trend={vitalSigns.isoCompliant ? 'stable' : undefined}
               />
               <VitalSign 
-                label="PRESIÓN ARTERIAL"
+                label="BLOOD PRESSURE"
                 value={vitalSigns.pressure}
                 unit="mmHg"
                 isFinalReading={vitalSigns.pressure !== "--/--" && elapsedTime >= 15}
               />
               <VitalSign 
-                label="ARRITMIAS"
+                label="ARRHYTHMIAS"
                 value={vitalSigns.arrhythmiaStatus}
+                unit=""
                 isFinalReading={heartRate > 0 && elapsedTime >= 15}
               />
               <VitalSign 
-                label="RESPIRACIÓN"
+                label="RESPIRATION"
                 value={vitalSigns.hasRespirationData ? vitalSigns.respiration.rate : "--"}
                 unit="RPM"
                 secondaryValue={vitalSigns.hasRespirationData ? vitalSigns.respiration.depth : "--"}
-                secondaryUnit="Prof."
+                secondaryUnit="Depth"
                 isFinalReading={vitalSigns.hasRespirationData && elapsedTime >= 15}
               />
               <VitalSign 
-                label="GLUCOSA"
+                label="GLUCOSE"
                 value={vitalSigns.glucose ? vitalSigns.glucose.value : "--"}
                 unit="mg/dL"
                 trend={vitalSigns.glucose ? vitalSigns.glucose.trend : undefined}
                 isFinalReading={vitalSigns.glucose && vitalSigns.glucose.value > 0 && elapsedTime >= 15}
               />
               <VitalSign 
-                label="HEMOGLOBINA"
+                label="HEMOGLOBIN"
                 value={vitalSigns.hemoglobin || "--"}
                 unit="g/dL"
                 isFinalReading={vitalSigns.hemoglobin && vitalSigns.hemoglobin > 0 && elapsedTime >= 15}
@@ -305,10 +317,12 @@ const Index = () => {
           {isMonitoring && (
             <div className="absolute bottom-[150px] left-0 right-0 text-center z-30 text-xs text-gray-400">
               <span>
-                Resp Data: {vitalSigns.hasRespirationData ? 'Disponible' : 'No disponible'} | 
+                Resp Data: {vitalSigns.hasRespirationData ? 'Available' : 'Not available'} | 
                 Rate: {vitalSigns.respiration.rate} RPM | Depth: {vitalSigns.respiration.depth} | 
-                Glucose: {vitalSigns.glucose ? `${vitalSigns.glucose.value} mg/dL (${vitalSigns.glucose.trend || 'unknown'})` : 'No disponible'} |
-                Hemoglobin: {vitalSigns.hemoglobin ? `${vitalSigns.hemoglobin} g/dL` : 'No disponible'}
+                Glucose: {vitalSigns.glucose ? `${vitalSigns.glucose.value} mg/dL (${vitalSigns.glucose.trend || 'unknown'})` : 'Not available'} |
+                Hemoglobin: {vitalSigns.hemoglobin ? `${vitalSigns.hemoglobin} g/dL` : 'Not available'} |
+                ISO Compliant: {vitalSigns.isoCompliant ? 'Yes' : 'No'} |
+                Motion Score: {vitalSigns.motionScore || 0}
               </span>
             </div>
           )}
@@ -325,7 +339,7 @@ const Index = () => {
               className={`w-full h-full text-2xl font-bold text-white active:bg-gray-800 ${!permissionsGranted ? 'bg-gray-600' : 'bg-black/80'}`}
               disabled={!permissionsGranted}
             >
-              {!permissionsGranted ? 'PERMISOS REQUERIDOS' : 'INICIAR'}
+              {!permissionsGranted ? 'PERMISSIONS REQUIRED' : 'START'}
             </button>
             <button 
               onClick={stopMonitoring}
@@ -338,7 +352,7 @@ const Index = () => {
           {!permissionsGranted && (
             <div className="absolute bottom-20 left-0 right-0 text-center px-4 z-30">
               <span className="text-lg font-medium text-red-400">
-                La aplicación necesita permisos de cámara para funcionar correctamente
+                The application needs camera permissions to function correctly
               </span>
             </div>
           )}
