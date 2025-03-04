@@ -31,5 +31,5 @@ export interface VitalSigns {
     location: string;
     confidence?: number;
   } | null;
-  isoCompliant?: boolean;
+  isoCompliant: boolean;
 }
