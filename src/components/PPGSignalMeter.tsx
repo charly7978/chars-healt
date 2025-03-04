@@ -42,11 +42,11 @@ const PPGSignalMeter = ({
   const GRID_SIZE_X = 100; // Grid cell width
   const GRID_SIZE_Y = 25; // Grid cell height
   const VERTICAL_SCALE = 42.0; // Signal amplification factor
-  const SMOOTHING_FACTOR = 1.6; // Wave smoothing factor
+  const SMOOTHING_FACTOR = 1.5; // Wave smoothing factor
   const TARGET_FPS = 60;
   const FRAME_TIME = 1000 / TARGET_FPS; // Optimized frame time calculation
   const BUFFER_SIZE = 650; // Signal history buffer size
-  const INVERT_SIGNAL = true;
+  const INVERT_SIGNAL = false;
   const PEAK_MIN_VALUE = 8.0; // Minimum threshold for peak detection
   const PEAK_DISTANCE_MS = 200; // Minimum time between peaks in milliseconds
 
