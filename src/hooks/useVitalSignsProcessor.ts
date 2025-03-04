@@ -37,11 +37,6 @@ const PEAK_DETECTION_SENSITIVITY = 0.22;
 const VALLEY_DETECTION_SENSITIVITY = 0.18;
 const TEMPORAL_COHERENCE_FACTOR = 0.82;
 
-// Realistic glucose value range (mg/dL)
-const MIN_GLUCOSE_VALUE = 75; 
-const MAX_GLUCOSE_VALUE = 140;
-const BASELINE_GLUCOSE_RANGE = [85, 115]; // Realistic fasting baseline range
-
 export const useVitalSignsProcessor = () => {
   // Core processor
   const processorRef = useRef<VitalSignsProcessor | null>(null);
@@ -78,9 +73,6 @@ export const useVitalSignsProcessor = () => {
     adiposeFactor: 1.0,
     melaninIndex: 0.5
   });
-
-  // Reference for initial baseline glucose value - will be set on first processing
-  const baselineGlucoseRef = useRef<number>(0);
   
   // Initialization of processor
   const getProcessor = useCallback(() => {
@@ -158,13 +150,6 @@ export const useVitalSignsProcessor = () => {
     if (normalizedVariance < SIGNAL_VARIANCE_THRESHOLD * 0.5 || normalizedVariance > SIGNAL_VARIANCE_THRESHOLD * 3.0) {
       console.log(`Glucose signal variance outside acceptable range: ${normalizedVariance.toFixed(4)}`);
       return null;
-    }
-    
-    // Initialize baseline glucose if not set yet - Random value within normal range
-    if (baselineGlucoseRef.current === 0) {
-      baselineGlucoseRef.current = Math.floor(BASELINE_GLUCOSE_RANGE[0] + 
-        Math.random() * (BASELINE_GLUCOSE_RANGE[1] - BASELINE_GLUCOSE_RANGE[0]));
-      console.log(`Initial baseline glucose set to: ${baselineGlucoseRef.current} mg/dL`);
     }
     
     // Advanced peak and valley detection with improved sensitivity
@@ -324,25 +309,12 @@ export const useVitalSignsProcessor = () => {
         glucoseEstimate *= (0.85 + 0.15 * avgTemporalCoherence);
       }
     } else {
-      // Introduce more variability with personalized baseline
-      // Use signal characteristics to create unique variations around baseline
-      const signalVariationFactor = (normalizedAmplitude - 0.5) * 30;
-      const coherenceVariationFactor = (avgTemporalCoherence - 0.5) * 15;
+      // Without calibration, less precise value using only optical parameters
+      glucoseEstimate = Math.round(CALIBRATION_CONSTANT * rValueRatio * (1 + normalizedAmplitude * ABSORPTION_FACTOR));
       
-      // Create a dynamic estimate with realistic variations
-      glucoseEstimate = baselineGlucoseRef.current + signalVariationFactor + coherenceVariationFactor;
-      
-      // Add randomized small fluctuations to mimic real biological variations
-      const randomFluctuation = (Math.random() - 0.5) * 8;
-      glucoseEstimate += randomFluctuation;
-      
-      // Add heart rate influence (higher HR often correlates with higher glucose)
-      if (heartRateTrendRef.current.length > 0) {
-        const avgHeartRate = heartRateTrendRef.current.reduce((sum, val) => sum + val, 0) / 
-          heartRateTrendRef.current.length;
-        const hrAdjustment = (avgHeartRate - 75) * 0.1;
-        glucoseEstimate += hrAdjustment;
-      }
+      // Apply tissue and optical characteristic adjustments
+      glucoseEstimate *= (1 - 0.05 * tissueCharacteristicsRef.current.melaninIndex);
+      glucoseEstimate *= (1 + TEMPERATURE_CORRECTION * (temperatureEstimateRef.current - 37.0));
     }
     
     // Adjust by signal quality
@@ -362,20 +334,19 @@ export const useVitalSignsProcessor = () => {
     
     glucoseConfidenceRef.current = confidence;
     
-    // Apply physiological limits (mg/dL) - ensure measurements stay in realistic range
-    glucoseEstimate = Math.max(MIN_GLUCOSE_VALUE, Math.min(MAX_GLUCOSE_VALUE, glucoseEstimate));
+    // Apply physiological limits (mg/dL)
+    glucoseEstimate = Math.max(60, Math.min(350, glucoseEstimate));
     
     // Update last calculation time
     lastGlucoseTimeRef.current = currentTime;
     
-    // Add to collection for averages - with additional random variation
+    // Add to collection for averages
     dataCollector.current.addGlucose(glucoseEstimate);
     
-    // Get a more stable averaged value, but ensure it's not too stable (add slight variations)
-    const baseSmoothedValue = dataCollector.current.getAverageGlucose();
-    const smoothedValue = Math.round(baseSmoothedValue + (Math.random() - 0.5) * 3);
+    // Get a more stable averaged value
+    const smoothedValue = dataCollector.current.getAverageGlucose();
     
-    console.log(`Glucose estimate: ${smoothedValue} mg/dL (raw: ${glucoseEstimate}, confidence: ${confidence}%, coherence: ${avgTemporalCoherence.toFixed(2)})`);
+    console.log(`Glucose estimate: ${smoothedValue} mg/dL (confidence: ${confidence}%, coherence: ${avgTemporalCoherence.toFixed(2)})`);
     
     return {
       value: smoothedValue,
@@ -432,7 +403,6 @@ export const useVitalSignsProcessor = () => {
   const calibrateGlucose = useCallback((value: number) => {
     if (value >= 60 && value <= 350) {
       glucoseCalibrationValueRef.current = value;
-      baselineGlucoseRef.current = value; // Update baseline too
       dataCollector.current.addGlucose(value); // Add this precise calibration value
       console.log(`Glucose calibrated to ${value} mg/dL`);
       return true;
@@ -538,32 +508,8 @@ export const useVitalSignsProcessor = () => {
       // Get all available PPG signals for glucose calculation
       const availableSignals = signalHistory.getRawSignals();
       
-      // Pass signal quality directly to the processor for real data analysis
-      // Use either the custom processor or our advanced algorithm
-      const processorGlucoseData = glucoseProcessor.calculateGlucose(availableSignals, signalQuality);
-      
-      // Use our advanced algorithm as fallback
-      if (!processorGlucoseData) {
-        glucoseData = processGlucoseSignal(value, signalQuality);
-      } else {
-        // When processor returns data, add some natural variation to avoid static readings
-        if (processorGlucoseData.value > 0) {
-          const variation = (Math.random() - 0.5) * 6;
-          const adjustedValue = Math.round(processorGlucoseData.value + variation);
-          
-          // Ensure value stays in realistic range
-          const finalValue = Math.max(MIN_GLUCOSE_VALUE, Math.min(MAX_GLUCOSE_VALUE, adjustedValue));
-          
-          glucoseData = {
-            value: finalValue,
-            trend: processorGlucoseData.trend,
-            confidence: processorGlucoseData.confidence || 75,
-            timeOffset: processorGlucoseData.timeOffset || 0
-          };
-        } else {
-          glucoseData = processorGlucoseData;
-        }
-      }
+      // Pass signal quality directly to the processor
+      glucoseData = glucoseProcessor.calculateGlucose(availableSignals, signalQuality);
       
       if (glucoseData) {
         console.log(`VitalSignsProcessor: Glucose calculated - ${glucoseData.value} mg/dL (${glucoseData.trend})`);
@@ -572,47 +518,6 @@ export const useVitalSignsProcessor = () => {
       }
     } catch (error) {
       console.error("Error processing glucose:", error);
-    }
-    
-    // Calculate hemoglobin based on the signal quality and available data
-    // Hemoglobin calculation based on multiple parameters
-    let hemoglobinValue = 0;
-    let hemoglobinConfidence = 0;
-    
-    if (signalQuality > 60 && result.spo2 > 85) {
-      // Calculate hemoglobin based on signal characteristics and SpO2
-      // Normal hemoglobin range is approx 12-17 g/dL for males, 11.5-15.5 g/dL for females
-      // We'll generate realistic values within this range based on signal quality
-      
-      // Base value in the normal range
-      const baseHemoglobin = 14.2; 
-      
-      // Modifiers based on available physiological parameters
-      const spo2Factor = (result.spo2 - 95) * 0.05; // SpO2 influence
-      
-      // Heart rate influence - higher HR might indicate lower hemoglobin in some cases
-      let hrFactor = 0;
-      if (heartRateTrendRef.current.length > 0) {
-        const avgHR = heartRateTrendRef.current.reduce((sum, val) => sum + val, 0) / 
-          heartRateTrendRef.current.length;
-        hrFactor = (75 - avgHR) * 0.01; // Slight adjustment based on heart rate
-      }
-      
-      // Signal quality influence - better quality means more reliable reading
-      const qualityFactor = (signalQuality - 80) * 0.02;
-      
-      // Calculate final value with realistic variations
-      hemoglobinValue = baseHemoglobin + spo2Factor + hrFactor + qualityFactor;
-      
-      // Add small realistic fluctuations
-      hemoglobinValue += (Math.random() - 0.5) * 0.6;
-      
-      // Keep within realistic limits
-      hemoglobinValue = Math.max(11.0, Math.min(17.5, hemoglobinValue));
-      hemoglobinValue = Math.round(hemoglobinValue * 10) / 10; // Round to 1 decimal place
-      
-      // Calculate confidence based on signal quality
-      hemoglobinConfidence = Math.min(100, signalQuality + 10);
     }
     
     // Collect data for final averages
@@ -626,12 +531,6 @@ export const useVitalSignsProcessor = () => {
     
     if (respirationResult.rate > 0) {
       dataCollector.current.addRespirationRate(respirationResult.rate);
-    }
-    
-    // Add hemoglobin data to collector if value is valid
-    if (result.hemoglobin && result.hemoglobin.value > 0) {
-      console.log(`Processing hemoglobin value: ${result.hemoglobin.value} g/dL`);
-      dataCollector.current.addHemoglobin(result.hemoglobin.value);
     }
     
     // Advanced arrhythmia analysis - ensure amplitude data is passed if available
@@ -653,14 +552,9 @@ export const useVitalSignsProcessor = () => {
       spo2: result.spo2,
       pressure: stabilizedBP,
       arrhythmiaStatus,
-      respiration: respirationProcessor.getRespirationData(),
+      respiration: respirationResult,
       hasRespirationData: respirationProcessor.hasValidData(),
       glucose: glucoseData,
-      hemoglobin: {
-        value: hemoglobinValue > 0 ? hemoglobinValue : 0,
-        confidence: hemoglobinConfidence,
-        lastUpdated: Date.now()
-      },
       lastArrhythmiaData
     };
     
@@ -671,14 +565,8 @@ export const useVitalSignsProcessor = () => {
       console.log("Glucose data from vitals: No hay datos de glucosa");
     }
     
-    if (vitalsData.hemoglobin.value > 0) {
-      console.log(`Hemoglobin value: ${vitalsData.hemoglobin.value} g/dL (confidence: ${vitalsData.hemoglobin.confidence}%)`);
-    } else {
-      console.log("No hemoglobin data available in this reading");
-    }
-    
     return vitalsData;
-  }, [getProcessor, getRespirationProcessor, getGlucoseProcessor, arrhythmiaAnalyzer, signalHistory, processGlucoseSignal]);
+  }, [getProcessor, getRespirationProcessor, getGlucoseProcessor, arrhythmiaAnalyzer, signalHistory]);
 
   /**
    * Reset all processors
@@ -696,12 +584,10 @@ export const useVitalSignsProcessor = () => {
     
     if (respirationProcessorRef.current) {
       respirationProcessorRef.current.reset();
-      respirationProcessorRef.current = null;
     }
     
     if (glucoseProcessorRef.current) {
       glucoseProcessorRef.current.reset();
-      glucoseProcessorRef.current = null;
     }
     
     // Reset glucose data
@@ -720,9 +606,6 @@ export const useVitalSignsProcessor = () => {
       adiposeFactor: 1.0,
       melaninIndex: 0.5
     };
-    
-    // Reset baseline glucose to randomize the starting point for next measurement
-    baselineGlucoseRef.current = 0;
     
     VitalSignsRisk.resetHistory();
     
@@ -774,9 +657,6 @@ export const useVitalSignsProcessor = () => {
       melaninIndex: 0.5
     };
     
-    // Reset baseline glucose
-    baselineGlucoseRef.current = 0;
-    
     VitalSignsRisk.resetHistory();
     
     // Force garbage collection if available
@@ -789,19 +669,12 @@ export const useVitalSignsProcessor = () => {
     }
   }, [arrhythmiaAnalyzer, signalHistory]);
 
-  // Get glucose processor for exposure
-  const glucose = useCallback(() => {
-    const processor = getGlucoseProcessor();
-    return processor || null;
-  }, [getGlucoseProcessor]);
-
   return {
     processSignal,
     reset,
     cleanMemory,
     calibrateGlucose,
     arrhythmiaCounter: arrhythmiaAnalyzer.arrhythmiaCounter,
-    dataCollector: dataCollector.current,
-    glucose // Expose the glucose processor or data
+    dataCollector: dataCollector.current
   };
 };

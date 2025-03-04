@@ -92,7 +92,7 @@ const PPGSignalMeter = ({
       }
     }
 
-    const amplitudeLines = 50;
+    const amplitudeLines = 10;
     for (let i = 0; i <= amplitudeLines; i++) {
       const y = (canvas.height / amplitudeLines) * i;
       ctx.beginPath();

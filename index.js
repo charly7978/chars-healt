@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -9,9 +8,6 @@ import PPGSignalMeter from "@/components/PPGSignalMeter";
 import PermissionsHandler from "@/components/PermissionsHandler";
 import { toast } from "sonner";
 
-/**
- * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION - NO ESTA PERMITIDO HACER MOVIMIENTOS POR CUENTA DE LA I.A SIN AUTORIZACION DEL USUARIO
- */
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
@@ -22,10 +18,7 @@ const Index = () => {
     arrhythmiaStatus: "--",
     respiration: { rate: 0, depth: 0, regularity: 0 },
     hasRespirationData: false,
-    glucose: null,
-    hemoglobin: { value: 0, confidence: 0, lastUpdated: 0 },
-    cholesterol: null,
-    temperature: null
+    glucose: null
   });
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState("--");
@@ -128,10 +121,7 @@ const Index = () => {
       arrhythmiaStatus: "--",
       respiration: { rate: 0, depth: 0, regularity: 0 },
       hasRespirationData: false,
-      glucose: null,
-      hemoglobin: { value: 0, confidence: 0, lastUpdated: 0 },
-      cholesterol: null,
-      temperature: null
+      glucose: null
     });
     setArrhythmiaCount("--");
     setSignalQuality(0);
@@ -200,21 +190,14 @@ const Index = () => {
             pressure: vitals.pressure,
             arrhythmia: vitals.arrhythmiaStatus,
             respiration: vitals.respiration,
-            hemoglobin: vitals.hemoglobin ? `${vitals.hemoglobin.value} g/dL (${vitals.hemoglobin.confidence}%)` : 'No data',
-            glucose: vitals.glucose ? `${vitals.glucose.value} mg/dL (${vitals.glucose.trend})` : 'No data',
-            cholesterol: vitals.cholesterol ? `${vitals.cholesterol.totalCholesterol} mg/dL` : 'No data',
-            temperature: vitals.temperature ? `${vitals.temperature.value}°C` : 'No data'
+            glucose: vitals.glucose ? `${vitals.glucose.value} mg/dL (${vitals.glucose.trend})` : 'No data'
           });
           
           setVitalSigns(vitals);
           setArrhythmiaCount(vitals.arrhythmiaStatus.split('|')[1] || "--");
           
-          if (vitals.cholesterol && vitals.cholesterol.totalCholesterol > 0) {
-            console.log(`Cholesterol data received: ${vitals.cholesterol.totalCholesterol} mg/dL, HDL: ${vitals.cholesterol.hdl}, LDL: ${vitals.cholesterol.ldl}`);
-          }
-          
-          if (vitals.temperature && vitals.temperature.value > 0) {
-            console.log(`Temperature data received: ${vitals.temperature.value}°C, trend: ${vitals.temperature.trend}`);
+          if (vitals.glucose && vitals.glucose.value > 0) {
+            console.log(`Glucose data received: ${vitals.glucose.value} mg/dL, trend: ${vitals.glucose.trend}`);
           }
         }
         
@@ -225,9 +208,6 @@ const Index = () => {
     }
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
 
-  /**
-   * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION - NO ESTA PERMITIDO HACER MOVIMIENTOS POR CUENTA DE LA I.A SIN AUTORIZACION DEL USUARIO
-   */
   return (
     <div 
       className="fixed inset-0 flex flex-col bg-black" 
@@ -263,12 +243,11 @@ const Index = () => {
               onStartMeasurement={startMonitoring}
               onReset={stopMonitoring}
               arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
-              rawArrhythmiaData={vitalSigns.lastArrhythmiaData}
             />
           </div>
 
           <div className="absolute bottom-[200px] left-0 right-0 px-4 z-30">
-            <div className="grid grid-cols-9 gap-2">
+            <div className="grid grid-cols-6 gap-2">
               <VitalSign 
                 label="FRECUENCIA CARDÍACA"
                 value={heartRate || "--"}
@@ -289,7 +268,7 @@ const Index = () => {
               />
               <VitalSign 
                 label="ARRITMIAS"
-                value={vitalSigns.arrhythmiaStatus?.split('|')[0] || "--"}
+                value={vitalSigns.arrhythmiaStatus}
                 isFinalReading={heartRate > 0 && elapsedTime >= 15}
               />
               <VitalSign 
@@ -307,43 +286,15 @@ const Index = () => {
                 trend={vitalSigns.glucose ? vitalSigns.glucose.trend : undefined}
                 isFinalReading={vitalSigns.glucose && vitalSigns.glucose.value > 0 && elapsedTime >= 15}
               />
-              <VitalSign 
-                label="HEMOGLOBINA"
-                value={vitalSigns.hemoglobin && vitalSigns.hemoglobin.value > 0 ? vitalSigns.hemoglobin.value.toFixed(1) : "--"}
-                unit="g/dL"
-                isFinalReading={vitalSigns.hemoglobin && vitalSigns.hemoglobin.value > 0 && elapsedTime >= 15}
-              />
-              <VitalSign 
-                label="COLESTEROL"
-                value={vitalSigns.cholesterol ? vitalSigns.cholesterol.totalCholesterol : "--"}
-                unit="mg/dL"
-                secondaryValue={vitalSigns.cholesterol ? vitalSigns.cholesterol.hdl : "--"}
-                secondaryUnit="HDL"
-                cholesterolData={vitalSigns.cholesterol ? {
-                  hdl: vitalSigns.cholesterol.hdl,
-                  ldl: vitalSigns.cholesterol.ldl,
-                  triglycerides: vitalSigns.cholesterol.triglycerides
-                } : undefined}
-                isFinalReading={vitalSigns.cholesterol && vitalSigns.cholesterol.totalCholesterol > 0 && elapsedTime >= 15}
-              />
-              <VitalSign 
-                label="TEMPERATURA"
-                value={vitalSigns.temperature ? vitalSigns.temperature.value.toFixed(1) : "--"}
-                unit="°C"
-                temperatureLocation={vitalSigns.temperature ? vitalSigns.temperature.location : 'finger'}
-                temperatureTrend={vitalSigns.temperature ? vitalSigns.temperature.trend : 'stable'}
-                isFinalReading={vitalSigns.temperature && vitalSigns.temperature.value > 0 && elapsedTime >= 15}
-              />
             </div>
           </div>
 
           {isMonitoring && (
             <div className="absolute bottom-[150px] left-0 right-0 text-center z-30 text-xs text-gray-400">
               <span>
-                Col: {vitalSigns.cholesterol && vitalSigns.cholesterol.totalCholesterol > 0 ? 
-                  `${vitalSigns.cholesterol.totalCholesterol} mg/dL (HDL:${vitalSigns.cholesterol.hdl}/LDL:${vitalSigns.cholesterol.ldl})` : 'Calculando...'} | 
-                Temp: {vitalSigns.temperature && vitalSigns.temperature.value > 0 ? 
-                  `${vitalSigns.temperature.value.toFixed(1)}°C (${vitalSigns.temperature.confidence}%)` : 'Calculando...'}
+                Resp Data: {vitalSigns.hasRespirationData ? 'Disponible' : 'No disponible'} | 
+                Rate: {vitalSigns.respiration.rate} RPM | Depth: {vitalSigns.respiration.depth} | 
+                Glucose: {vitalSigns.glucose ? `${vitalSigns.glucose.value} mg/dL (${vitalSigns.glucose.trend || 'unknown'})` : 'No disponible'}
               </span>
             </div>
           )}

@@ -1,6 +1,5 @@
 /**
  * Creates a collector for vital signs data
- * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION - NO ESTA PERMITIDO HACER MOVIMIENTOS POR CUENTA DE LA I.A SIN AUTORIZACION DEL USUARIO
  */
 export const createVitalSignsDataCollector = () => {
   const spo2Values: number[] = [];
@@ -9,9 +8,6 @@ export const createVitalSignsDataCollector = () => {
   const respirationDepths: number[] = [];
   const glucoseValues: number[] = [];
   const glucoseTimestamps: number[] = [];
-  const hemoglobinValues: number[] = [];
-  const cholesterolValues: { total: number, hdl: number, ldl: number, triglycerides: number }[] = [];
-  const temperatureValues: number[] = [];
   
   return {
     /**
@@ -63,76 +59,48 @@ export const createVitalSignsDataCollector = () => {
     },
     
     /**
-     * Add hemoglobin value to collection
-     * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION - NO ESTA PERMITIDO HACER MOVIMIENTOS POR CUENTA DE LA I.A SIN AUTORIZACION DEL USUARIO
-     */
-    addHemoglobin: (value: number) => {
-      if (value >= 8 && value <= 20) {
-        hemoglobinValues.push(value);
-        if (hemoglobinValues.length > 10) {
-          hemoglobinValues.shift();
-        }
-      }
-    },
-    
-    /**
-     * Add glucose value to collection with timestamp
+     * Add glucose value to collection with timestamp validation
      */
     addGlucose: (value: number) => {
       const now = Date.now();
       
-      // Only basic validation for physiological range
+      // Validate glucose range (40-400 mg/dL es rango fisiológico amplio)
       if (value >= 40 && value <= 400) {
-        // Store all valid measurements
-        glucoseValues.push(value);
-        glucoseTimestamps.push(now);
+        // Check if we have a recent reading (< 10 seconds ago)
+        const hasRecentReading = glucoseTimestamps.length > 0 && 
+          (now - glucoseTimestamps[glucoseTimestamps.length - 1] < 10000);
         
-        // Keep buffer size limited
-        if (glucoseValues.length > 10) {
-          glucoseValues.shift();
-          glucoseTimestamps.shift();
+        // Check for physiologically impossible glucose changes
+        // (glucose doesn't change more than ~2-3 mg/dL per minute in normal conditions)
+        const lastValue = glucoseValues.length > 0 ? glucoseValues[glucoseValues.length - 1] : 0;
+        const timeDiff = glucoseTimestamps.length > 0 ? 
+          (now - glucoseTimestamps[glucoseTimestamps.length - 1]) / 60000 : 1; // convert to minutes
+        const changeRate = Math.abs(value - lastValue) / timeDiff;
+        const isPhysiologicallyPlausible = changeRate <= 15 || glucoseValues.length === 0;
+        
+        // Add the reading if it's plausible or we don't have enough history
+        if (!hasRecentReading && (isPhysiologicallyPlausible || glucoseValues.length < 3)) {
+          glucoseValues.push(value);
+          glucoseTimestamps.push(now);
+          
+          // Keep only the most recent 10 readings
+          if (glucoseValues.length > 10) {
+            glucoseValues.shift();
+            glucoseTimestamps.shift();
+          }
+          
+          console.log(`Glucose value added: ${value} mg/dL`, {
+            historySize: glucoseValues.length,
+            changeRate: changeRate.toFixed(2),
+            timeSinceLast: timeDiff.toFixed(2)
+          });
+        } else if (hasRecentReading) {
+          console.log(`Glucose reading ignored - too soon since last reading`);
+        } else if (!isPhysiologicallyPlausible) {
+          console.log(`Glucose reading ignored - implausible change: ${changeRate.toFixed(2)} mg/dL/min`);
         }
-        
-        console.log(`Glucose value added: ${value} mg/dL (raw measurement)`);
       } else {
         console.log(`Glucose reading out of range: ${value} mg/dL`);
-      }
-    },
-    
-    /**
-     * Add cholesterol values to collection
-     * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION - NO ESTA PERMITIDO HACER MOVIMIENTOS POR CUENTA DE LA I.A SIN AUTORIZACION DEL USUARIO
-     */
-    addCholesterol: (total: number, hdl: number, ldl: number, triglycerides: number) => {
-      // Validate ranges for physiological values
-      if (total >= 100 && total <= 350 && 
-          hdl >= 20 && hdl <= 100 && 
-          ldl >= 50 && ldl <= 250 && 
-          triglycerides >= 40 && triglycerides <= 500) {
-        
-        cholesterolValues.push({ total, hdl, ldl, triglycerides });
-        
-        if (cholesterolValues.length > 5) {
-          cholesterolValues.shift();
-        }
-        
-        console.log(`Cholesterol values added: Total=${total}, HDL=${hdl}, LDL=${ldl}, TG=${triglycerides}`);
-      }
-    },
-    
-    /**
-     * Add body temperature value to collection
-     */
-    addTemperature: (value: number) => {
-      // Normal range: 35.0-41.0°C (incluye estados febriles y hipotermia leve)
-      if (value >= 35.0 && value <= 41.0) {
-        temperatureValues.push(value);
-        
-        if (temperatureValues.length > 10) {
-          temperatureValues.shift();
-        }
-        
-        console.log(`Temperature value added: ${value}°C`);
       }
     },
     
@@ -175,13 +143,11 @@ export const createVitalSignsDataCollector = () => {
     
     /**
      * Get average respiration rate from collected values
-     * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION - NO ESTA PERMITIDO HACER MOVIMIENTOS POR CUENTA DE LA I.A SIN AUTORIZACION DEL USUARIO
      */
     getAverageRespirationRate: (): number => {
       if (respirationRates.length === 0) return 0;
-      
-      // Use the last measured value directly
-      return respirationRates[respirationRates.length - 1];
+      const sum = respirationRates.reduce((acc, val) => acc + val, 0);
+      return Math.round(sum / respirationRates.length * 10) / 10; // Redondear a 1 decimal
     },
     
     /**
@@ -189,115 +155,74 @@ export const createVitalSignsDataCollector = () => {
      */
     getAverageRespirationDepth: (): number => {
       if (respirationDepths.length === 0) return 0;
-      
-      // Use the last measured value directly
-      return respirationDepths[respirationDepths.length - 1];
-    },
-    
-    /**
-     * Get average hemoglobin from collected values
-     */
-    getAverageHemoglobin: (): number => {
-      if (hemoglobinValues.length === 0) return 0;
-      
-      // Use the last measured value directly
-      return hemoglobinValues[hemoglobinValues.length - 1];
+      const sum = respirationDepths.reduce((acc, val) => acc + val, 0);
+      return Math.round(sum / respirationDepths.length);
     },
     
     /**
      * Get average glucose from collected values
-     * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION - NO ESTA PERMITIDO HACER MOVIMIENTOS POR CUENTA DE LA I.A SIN AUTORIZACION DEL USUARIO
+     * Returns a more reliable average with temporal weighting
      */
     getAverageGlucose: (): number => {
       if (glucoseValues.length === 0) return 0;
       
-      // Use the most recent measured value
-      return glucoseValues[glucoseValues.length - 1];
+      // If we have enough readings, apply a weighted average with more weight to recent readings
+      if (glucoseValues.length >= 3) {
+        // Create weights with more emphasis on recent readings
+        const weights = glucoseValues.map((_, idx) => idx + 1);
+        const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+        
+        // Calculate weighted average
+        const weightedSum = glucoseValues.reduce((sum, value, idx) => 
+          sum + (value * weights[idx]), 0);
+        
+        return Math.round(weightedSum / totalWeight);
+      }
+      
+      // Simple average for fewer readings
+      const sum = glucoseValues.reduce((acc, val) => acc + val, 0);
+      return Math.round(sum / glucoseValues.length);
     },
     
     /**
      * Get glucose trend based on recent values
+     * Enhanced with more accurate trend detection
      */
     getGlucoseTrend: (): 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown' => {
-      // Need at least 3 readings for a trend
+      // Need at least 3 readings for a meaningful trend
       if (glucoseValues.length < 3) return 'unknown';
       
-      // Calculate simple trend from last 3 measurements
-      const last = glucoseValues[glucoseValues.length - 1];
-      const prev = glucoseValues[glucoseValues.length - 2];
-      const diff = last - prev;
+      // Get recent readings and their timestamps
+      const recentValues = [...glucoseValues];
+      const recentTimes = [...glucoseTimestamps];
       
-      // Simple trend calculation based on actual measurements
-      if (Math.abs(diff) < 2) return 'stable';
-      if (diff > 10) return 'rising_rapidly';
-      if (diff < -10) return 'falling_rapidly';
-      if (diff > 0) return 'rising';
+      // Calculate rate of change in mg/dL per minute over multiple periods
+      const ratesOfChange: number[] = [];
+      for (let i = 1; i < recentValues.length; i++) {
+        const timeChangeMinutes = (recentTimes[i] - recentTimes[i-1]) / 60000;
+        if (timeChangeMinutes > 0) {
+          const valueChange = recentValues[i] - recentValues[i-1];
+          ratesOfChange.push(valueChange / timeChangeMinutes);
+        }
+      }
+      
+      // If no valid rates calculated, return unknown
+      if (ratesOfChange.length === 0) return 'unknown';
+      
+      // Calculate average rate of change
+      const avgRateOfChange = ratesOfChange.reduce((sum, rate) => sum + rate, 0) / ratesOfChange.length;
+      
+      // Consistent trend check - all rates should point in same direction
+      const consistentTrend = ratesOfChange.every(rate => Math.sign(rate) === Math.sign(avgRateOfChange));
+      
+      console.log(`Glucose trend analysis: ${avgRateOfChange.toFixed(2)} mg/dL/min, consistent: ${consistentTrend}`);
+      
+      // Determine trend based on rate of change
+      if (Math.abs(avgRateOfChange) < 1.0) return 'stable';
+      if (avgRateOfChange > 3.0 && consistentTrend) return 'rising_rapidly';
+      if (avgRateOfChange < -3.0 && consistentTrend) return 'falling_rapidly';
+      if (avgRateOfChange > 0) return 'rising';
       return 'falling';
-    },
-    
-    /**
-     * Get the latest cholesterol values
-     */
-    getLatestCholesterol: () => {
-      if (cholesterolValues.length === 0) {
-        return { total: 0, hdl: 0, ldl: 0, triglycerides: 0 };
-      }
-      
-      return cholesterolValues[cholesterolValues.length - 1];
-    },
-    
-    /**
-     * Get the latest body temperature
-     */
-    getLatestTemperature: (): number => {
-      if (temperatureValues.length === 0) return 0;
-      
-      return temperatureValues[temperatureValues.length - 1];
-    },
-    
-    /**
-     * Get cholesterol risk level based on values
-     * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION - NO ESTA PERMITIDO HACER MOVIMIENTOS POR CUENTA DE LA I.A SIN AUTORIZACION DEL USUARIO
-     */
-    getCholesterolRiskLevel: (): string => {
-      if (cholesterolValues.length === 0) return '';
-      
-      const latest = cholesterolValues[cholesterolValues.length - 1];
-      
-      if (latest.total < 180) {
-        if (latest.hdl >= 60) return 'ÓPTIMO';
-        return 'DESEABLE';
-      }
-      
-      if (latest.total < 200) {
-        if (latest.ldl < 100) return 'DESEABLE';
-        return 'LÍMITE ALTO';
-      }
-      
-      if (latest.total < 240) {
-        if (latest.ldl < 130) return 'LÍMITE ALTO';
-        return 'ELEVADO';
-      }
-      
-      if (latest.ldl >= 190) return 'MUY ELEVADO';
-      return 'ELEVADO';
-    },
-    
-    /**
-     * Get body temperature status
-     */
-    getTemperatureStatus: (): string => {
-      if (temperatureValues.length === 0) return '';
-      
-      const latest = temperatureValues[temperatureValues.length - 1];
-      
-      if (latest < 36.0) return 'HIPOTERMIA';
-      if (latest < 36.5) return 'SUBNORMAL';
-      if (latest <= 37.3) return 'NORMAL';
-      if (latest <= 38.0) return 'FEBRÍCULA';
-      if (latest <= 39.0) return 'FIEBRE MODERADA';
-      if (latest <= 40.0) return 'FIEBRE ALTA';
-      return 'HIPERPIREXIA';
     },
     
     /**
@@ -317,9 +242,6 @@ export const createVitalSignsDataCollector = () => {
       respirationDepths.length = 0;
       glucoseValues.length = 0;
       glucoseTimestamps.length = 0;
-      hemoglobinValues.length = 0;
-      cholesterolValues.length = 0;
-      temperatureValues.length = 0;
     }
   };
 };
