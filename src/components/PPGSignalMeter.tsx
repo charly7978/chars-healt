@@ -75,25 +75,31 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
       
       {/* Display cholesterol data if available */}
       {cholesterol && cholesterol.totalCholesterol > 0 && (
-        <div className="absolute top-4 right-4 bg-black/50 p-2 rounded text-xs">
-          <div className="text-green-400">Cholesterol: {cholesterol.totalCholesterol} mg/dL</div>
-          <div className="text-blue-400">HDL: {cholesterol.hdl} mg/dL</div>
-          <div className="text-yellow-400">LDL: {cholesterol.ldl} mg/dL</div>
-          <div className="text-orange-400">Triglycerides: {cholesterol.triglycerides} mg/dL</div>
+        <div className="absolute top-4 right-4 bg-black/60 p-3 rounded-md shadow-lg border border-gray-700">
+          <div className="text-lg font-semibold text-white mb-1">Cholesterol</div>
+          <div className="flex flex-col gap-1">
+            <div className="text-green-400 font-medium">Total: {cholesterol.totalCholesterol} mg/dL</div>
+            <div className="text-blue-400">HDL: {cholesterol.hdl} mg/dL</div>
+            <div className="text-yellow-400">LDL: {cholesterol.ldl} mg/dL</div>
+            <div className="text-orange-400">Triglycerides: {cholesterol.triglycerides} mg/dL</div>
+          </div>
         </div>
       )}
       
       {/* Display temperature data if available */}
       {temperature && temperature.value > 0 && (
-        <div className="absolute top-4 left-4 bg-black/50 p-2 rounded text-xs">
-          <div className={`${
+        <div className="absolute top-4 left-4 bg-black/60 p-3 rounded-md shadow-lg border border-gray-700">
+          <div className="text-lg font-semibold text-white mb-1">Temperature</div>
+          <div className={`text-xl font-medium ${
             temperature.trend === 'rising' ? 'text-red-400' : 
             temperature.trend === 'falling' ? 'text-blue-400' : 
             'text-white'
           }`}>
-            Temp: {temperature.value.toFixed(1)}°C {temperature.trend === 'rising' ? '↑' : temperature.trend === 'falling' ? '↓' : '→'}
-            <div className="text-gray-400 text-[10px]">Location: {temperature.location}</div>
+            {temperature.value.toFixed(1)}°C {temperature.trend === 'rising' ? '↑' : temperature.trend === 'falling' ? '↓' : '→'}
           </div>
+          <div className="text-gray-300 text-sm">Location: {temperature.location}</div>
+          {temperature.trend === 'rising' && <div className="text-red-400 text-sm mt-1">Temperature increasing</div>}
+          {temperature.trend === 'falling' && <div className="text-blue-400 text-sm mt-1">Temperature decreasing</div>}
         </div>
       )}
     </div>
