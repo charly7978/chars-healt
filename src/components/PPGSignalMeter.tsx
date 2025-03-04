@@ -37,10 +37,10 @@ const PPGSignalMeter = ({
   
   // Optimized constants with SIGNIFICANTLY INCREASED dimensions for better visibility
   const WINDOW_WIDTH_MS = 3500; // Visualization time window
-  const CANVAS_WIDTH = 700; // Increased from 700px to 1000px for much better readability
-  const CANVAS_HEIGHT = 600; // Increased from 900px to 1100px for much better vertical detail
-  const GRID_SIZE_X = 25; // Grid cell width
-  const GRID_SIZE_Y = 10; // Grid cell height
+  const CANVAS_WIDTH = 800; // Increased from 700px to 1000px for much better readability
+  const CANVAS_HEIGHT = 500; // Increased from 900px to 1100px for much better vertical detail
+  const GRID_SIZE_X = 20; // Grid cell width
+  const GRID_SIZE_Y = 5; // Grid cell height
   const VERTICAL_SCALE = 50.0; // Signal amplification factor
   const SMOOTHING_FACTOR = 1.6; // Wave smoothing factor
   const TARGET_FPS = 60;
