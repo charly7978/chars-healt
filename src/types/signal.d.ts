@@ -22,6 +22,13 @@ export interface ProcessedSignal {
     b: number;
     ir?: number;
   };
+  advancedMetrics?: {
+    acComponent?: number;
+    dcComponent?: number;
+    perfusionIndex?: number;
+    signalToNoiseRatio?: number;
+    spectralPurity?: number;
+  };
 }
 
 export interface ProcessingError {
@@ -58,7 +65,7 @@ export interface HemoglobinData {
   lastUpdated: number; // Timestamp de la última actualización
 }
 
-// Nuevos tipos para colesterol y temperatura
+// Tipos para colesterol y temperatura
 export interface CholesterolData {
   totalCholesterol: number;   // Colesterol total en mg/dL
   hdl: number;                // HDL (colesterol bueno) en mg/dL
@@ -84,6 +91,30 @@ export interface HeartBeatResult {
   arrhythmiaCount: number;
   amplitude?: number;
   isLearningPhase?: boolean;
+}
+
+// Nuevos tipos para procesamiento de señal avanzado
+export interface AdvancedSignalMetrics {
+  acComponent: number;         // Componente AC de la señal PPG
+  dcComponent: number;         // Componente DC de la señal PPG
+  perfusionIndex: number;      // Índice de perfusión (PI = AC/DC * 100)
+  signalToNoiseRatio: number;  // Relación señal-ruido
+  spectralPurity: number;      // Pureza espectral (0-1)
+  harmonicDistortion: number;  // Distorsión armónica total
+}
+
+export interface WaveletAnalysisResult {
+  coefficients: number[];      // Coeficientes wavelet
+  energyDistribution: number[];// Distribución de energía por banda
+  dominantFrequency: number;   // Frecuencia dominante
+  scale: number;               // Escala de análisis
+}
+
+export interface AdaptiveFilterParameters {
+  convergenceRate: number;     // Tasa de convergencia del filtro
+  filterOrder: number;         // Orden del filtro
+  weights: number[];           // Pesos del filtro
+  errorSignal: number[];       // Señal de error
 }
 
 /**
