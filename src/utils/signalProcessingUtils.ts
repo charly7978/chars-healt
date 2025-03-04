@@ -1,3 +1,4 @@
+
 /**
  * Applies a Simple Moving Average filter to smooth a signal
  * @param signal Input signal array
@@ -393,7 +394,7 @@ export const enhancedPeakDetection = (signal: number[]): {
  * Wavelet-inspired denoising algorithm to remove high-frequency noise
  * while preserving relevant cardiac signal features
  */
-const waveletDenoise = (signal: number[]): number[] => {
+export const waveletDenoise = (signal: number[]): number[] => {
   // Simplified wavelet-inspired denoising
   const result: number[] = [];
   const kernelSize = 5;

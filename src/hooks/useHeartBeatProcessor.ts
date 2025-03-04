@@ -91,16 +91,17 @@ export const useHeartBeatProcessor = () => {
         rrData.amplitudes.push(result.amplitude);
       }
       
-      // Add advanced cardiac metrics if available
-      if (advancedAnalysis && advancedAnalysis.rrIntervals) {
-        rrData.advancedRRIntervals = advancedAnalysis.rrIntervals;
-      }
+      // Create a copy of rrData that includes advancedRRIntervals if available
+      const enhancedRRData = {
+        ...rrData,
+        advancedRRIntervals: advancedAnalysis?.rrIntervals || []
+      };
       
       return {
         bpm: result.bpm,
         confidence: result.confidence,
         isPeak: result.isPeak,
-        rrData,
+        rrData: enhancedRRData,
         amplitude: result.amplitude,
         perfusionIndex: result.perfusionIndex || (advancedAnalysis?.perfusionIndex || 0),
         pulsePressure: result.pulsePressure || (advancedAnalysis?.pulsePressure || 0)
@@ -111,7 +112,7 @@ export const useHeartBeatProcessor = () => {
         bpm: 0,
         confidence: 0,
         isPeak: false,
-        rrData: { intervals: [], lastPeakTime: null },
+        rrData: { intervals: [], lastPeakTime: null, amplitudes: [], advancedRRIntervals: [] },
         amplitude: undefined
       };
     }
