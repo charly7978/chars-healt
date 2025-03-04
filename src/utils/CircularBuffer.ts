@@ -1,101 +1,105 @@
 
-interface PPGDataPoint {
+/**
+ * PPG Data Point interface representing a single point in the PPG signal
+ */
+export interface PPGDataPoint {
   time: number;
   value: number;
   isArrhythmia: boolean;
-  isWaveStart?: boolean;
 }
 
+/**
+ * Circular Buffer implementation for efficiently storing and managing PPG signal data
+ */
 export class CircularBuffer {
   private buffer: PPGDataPoint[];
-  private maxSize: number;
-  private detectionThreshold: number = 0.00001;
-  private lastDetectionTime: number = 0;
-  private persistenceTime: number = 45000; // 45 segundos de persistencia
-  private isFingerCurrentlyDetected: boolean = false;
+  private capacity: number;
+  private head: number = 0;
+  private tail: number = 0;
+  private size: number = 0;
 
-  constructor(size: number) {
-    this.buffer = [];
-    this.maxSize = size;
+  /**
+   * Creates a new CircularBuffer with the specified capacity
+   * @param capacity Maximum number of data points the buffer can hold
+   */
+  constructor(capacity: number) {
+    this.buffer = new Array<PPGDataPoint>(capacity);
+    this.capacity = capacity;
   }
 
+  /**
+   * Adds a new data point to the buffer
+   * @param point The PPG data point to add
+   */
   push(point: PPGDataPoint): void {
-    this.buffer.push(point);
-    if (this.buffer.length > this.maxSize) {
-      this.buffer.shift();
+    this.buffer[this.tail] = point;
+    
+    if (this.size === this.capacity) {
+      // Buffer is full, move head
+      this.head = (this.head + 1) % this.capacity;
+    } else {
+      // Buffer not full yet, increase size
+      this.size++;
     }
     
-    // Actualizar estado de detección
-    if (this.buffer.length > 3) {
-      this.isFingerCurrentlyDetected = this.detectFinger();
-    }
+    // Update tail position for next insertion
+    this.tail = (this.tail + 1) % this.capacity;
   }
 
+  /**
+   * Gets all data points in the buffer in chronological order
+   * @returns Array of data points
+   */
   getPoints(): PPGDataPoint[] {
-    return [...this.buffer];
+    const result: PPGDataPoint[] = [];
+    
+    if (this.size === 0) {
+      return result;
+    }
+    
+    // Start from head and collect all points in order
+    let current = this.head;
+    for (let i = 0; i < this.size; i++) {
+      result.push(this.buffer[current]);
+      current = (current + 1) % this.capacity;
+    }
+    
+    // Sort by time to ensure chronological order
+    return result.sort((a, b) => a.time - b.time);
   }
 
+  /**
+   * Clears all data from the buffer
+   */
   clear(): void {
-    this.buffer = [];
-    this.lastDetectionTime = 0;
-    this.isFingerCurrentlyDetected = false;
+    this.head = 0;
+    this.tail = 0;
+    this.size = 0;
   }
 
-  isFingerDetected(): boolean {
-    // Si no hay suficientes puntos, mantener detección actual
-    if (this.buffer.length < 3) {
-      return this.isFingerCurrentlyDetected;
-    }
-    
-    // Verificar persistencia de tiempo
-    const currentTime = Date.now();
-    if (currentTime - this.lastDetectionTime < this.persistenceTime) {
-      return true;
-    }
-    
-    // Detectar con algoritmo simplificado
-    const detected = this.detectFinger();
-    
-    if (detected) {
-      this.lastDetectionTime = currentTime;
-      this.isFingerCurrentlyDetected = true;
-    }
-    
-    return this.isFingerCurrentlyDetected;
-  }
-  
-  private detectFinger(): boolean {
-    // Método 1: Detectar cambios en la señal
-    if (this.hasSignalChange()) {
-      return true;
-    }
-    
-    // Método 2: Detectar señal no nula
-    if (this.hasNonZeroSignal()) {
-      return true;
-    }
-    
-    return false;
+  /**
+   * Gets the current number of data points in the buffer
+   * @returns Number of data points
+   */
+  getSize(): number {
+    return this.size;
   }
 
-  private hasSignalChange(): boolean {
-    const recentPoints = this.buffer.slice(-Math.min(5, this.buffer.length));
-    
-    for (let i = 1; i < recentPoints.length; i++) {
-      const diff = Math.abs(recentPoints[i].value - recentPoints[i-1].value);
-      if (diff > this.detectionThreshold) {
-        return true;
-      }
-    }
-    
-    return false;
+  /**
+   * Gets the maximum capacity of the buffer
+   * @returns Maximum capacity
+   */
+  getCapacity(): number {
+    return this.capacity;
   }
-  
-  private hasNonZeroSignal(): boolean {
-    const recentPoints = this.buffer.slice(-Math.min(10, this.buffer.length));
-    const avgSignal = recentPoints.reduce((sum, p) => sum + Math.abs(p.value), 0) / recentPoints.length;
-    return avgSignal > this.detectionThreshold;
+
+  /**
+   * Gets latest data points up to the specified count
+   * @param count Maximum number of recent points to return
+   * @returns Array of the most recent data points
+   */
+  getLatestPoints(count: number): PPGDataPoint[] {
+    const allPoints = this.getPoints();
+    return allPoints.slice(Math.max(0, allPoints.length - count));
   }
 }
-
-export type { PPGDataPoint };

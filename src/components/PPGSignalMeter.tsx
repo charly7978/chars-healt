@@ -15,6 +15,12 @@ interface PPGSignalMeterProps {
     rmssd: number;
     rrVariation: number;
   } | null;
+  lipidData?: {
+    totalCholesterol: number;
+    hdl: number;
+    ldl: number;
+    triglycerides: number;
+  } | null;
 }
 
 const PPGSignalMeter = ({ 
@@ -24,7 +30,8 @@ const PPGSignalMeter = ({
   onStartMeasurement,
   onReset,
   arrhythmiaStatus,
-  rawArrhythmiaData
+  rawArrhythmiaData,
+  lipidData
 }: PPGSignalMeterProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dataBufferRef = useRef<CircularBuffer | null>(null);
@@ -35,31 +42,39 @@ const PPGSignalMeter = ({
   const lastArrhythmiaTime = useRef<number>(0);
   const arrhythmiaCountRef = useRef<number>(0);
   
-  const WINDOW_WIDTH_MS = 4000;
-  const CANVAS_WIDTH = 450;
-  const CANVAS_HEIGHT = 450;
-  const GRID_SIZE_X = 10;
-  const GRID_SIZE_Y = 10;
-  const verticalScale = 25.0;
-  const SMOOTHING_FACTOR = 0.7;
+  const WINDOW_WIDTH_MS = 3500;
+  const CANVAS_WIDTH = 1800;
+  const CANVAS_HEIGHT = 1200;
+  const GRID_SIZE_X = 150;
+  const GRID_SIZE_Y = 150;
+  const VERTICAL_SCALE = 40.0;
+  const SMOOTHING_FACTOR = 1.6;
   const TARGET_FPS = 60;
   const FRAME_TIME = 1000 / TARGET_FPS;
-  const BUFFER_SIZE = 200;
+  const BUFFER_SIZE = 650;
+  const INVERT_SIGNAL = false;
+  const PEAK_MIN_VALUE = 8.0;
+  const PEAK_DISTANCE_MS = 200;
+  
+  const COLORS = {
+    BACKGROUND: '#F6F6F7', // Cambiado a gris claro
+    GRID_MAIN: 'rgba(128, 128, 128, 0.3)',
+    GRID_MINOR: 'rgba(128, 128, 128, 0.1)',
+    ZERO_LINE: 'rgba(0, 255, 150, 0.9)',
+    AXIS_TEXT: 'rgba(50, 50, 50, 1.0)',
+    SIGNAL_LINE: '#FFFFFF',
+    ARRHYTHMIA_LINE: '#EF4444',
+    PEAK_NORMAL: '#FFFFFF',
+    PEAK_ARRHYTHMIA: '#EF4444',
+    PEAK_GLOW_NORMAL: 'rgba(255, 255, 255, 0.3)',
+    PEAK_GLOW_ARRHYTHMIA: 'rgba(239, 68, 68, 0.3)'
+  };
 
   useEffect(() => {
     if (!dataBufferRef.current) {
       dataBufferRef.current = new CircularBuffer(BUFFER_SIZE);
     }
-    
-    // Log arrhythmia status when it changes
-    if (arrhythmiaStatus && arrhythmiaStatus.includes("ARRITMIA")) {
-      console.log("PPGSignalMeter: Arrhythmia status received:", arrhythmiaStatus);
-      
-      if (rawArrhythmiaData) {
-        console.log("PPGSignalMeter: Raw arrhythmia data:", rawArrhythmiaData);
-      }
-    }
-  }, [arrhythmiaStatus, rawArrhythmiaData]);
+  }, []);
 
   const getQualityColor = useCallback((q: number) => {
     if (!isFingerDetected) return 'from-gray-400 to-gray-500';
@@ -84,59 +99,78 @@ const PPGSignalMeter = ({
 
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-    
-    ctx.fillStyle = '#f3f3f3';
+    ctx.fillStyle = COLORS.BACKGROUND;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
+    const zeroY = CANVAS_HEIGHT * 0.6;
+    
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(0, 180, 120, 0.15)';
+    ctx.strokeStyle = COLORS.ZERO_LINE;
+    ctx.lineWidth = 2.0;
+    ctx.moveTo(0, zeroY);
+    ctx.lineTo(CANVAS_WIDTH, zeroY);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.strokeStyle = COLORS.GRID_MINOR;
     ctx.lineWidth = 0.5;
 
-    for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X) {
+    for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X / 4) {
       ctx.moveTo(x, 0);
       ctx.lineTo(x, CANVAS_HEIGHT);
-      if (x % (GRID_SIZE_X * 4) === 0) {
-        ctx.fillStyle = 'rgba(0, 150, 100, 0.9)';
-        ctx.font = '10px Inter';
-        ctx.textAlign = 'center';
-        ctx.fillText(`${x / 10}ms`, x, CANVAS_HEIGHT - 5);
-      }
     }
 
-    for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y) {
+    for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y / 4) {
       ctx.moveTo(0, y);
       ctx.lineTo(CANVAS_WIDTH, y);
-      if (y % (GRID_SIZE_Y * 4) === 0) {
-        const amplitude = ((CANVAS_HEIGHT / 2) - y) / verticalScale;
-        ctx.fillStyle = 'rgba(0, 150, 100, 0.9)';
-        ctx.font = '10px Inter';
-        ctx.textAlign = 'right';
-        ctx.fillText(amplitude.toFixed(1), 25, y + 4);
-      }
     }
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(0, 150, 100, 0.25)';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = COLORS.GRID_MAIN;
+    ctx.lineWidth = 1.0;
 
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X * 4) {
       ctx.moveTo(x, 0);
       ctx.lineTo(x, CANVAS_HEIGHT);
+      
+      if (x >= 0) {
+        const timeMs = (x / CANVAS_WIDTH) * WINDOW_WIDTH_MS;
+        ctx.fillStyle = COLORS.AXIS_TEXT;
+        ctx.font = '22px "Inter", sans-serif'; // Aumentado tamaño de texto
+        ctx.textAlign = 'center';
+        ctx.fillText(`${Math.round(timeMs)}ms`, x, CANVAS_HEIGHT - 10);
+      }
     }
 
     for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y * 4) {
       ctx.moveTo(0, y);
       ctx.lineTo(CANVAS_WIDTH, y);
+      
+      if (y % (GRID_SIZE_Y * 4) === 0) {
+        const amplitude = ((zeroY - y) / VERTICAL_SCALE).toFixed(1);
+        ctx.fillStyle = COLORS.AXIS_TEXT;
+        ctx.font = '22px "Inter", sans-serif'; // Aumentado tamaño de texto
+        ctx.textAlign = 'right';
+        ctx.fillText(amplitude, 32, y + 6);
+      }
     }
     ctx.stroke();
 
-    ctx.beginPath();
-    ctx.strokeStyle = 'rgba(0, 150, 100, 0.35)';
-    ctx.lineWidth = 1.5;
-    ctx.moveTo(0, CANVAS_HEIGHT * 0.6);
-    ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT * 0.6);
-    ctx.stroke();
+    ctx.fillStyle = COLORS.AXIS_TEXT;
+    ctx.font = 'bold 24px "Inter", sans-serif'; // Aumentado tamaño de texto
+    
+    ctx.textAlign = 'center';
+    ctx.fillText('Tiempo (ms)', CANVAS_WIDTH / 2, CANVAS_HEIGHT - 30);
+    
+    ctx.save();
+    ctx.translate(24, CANVAS_HEIGHT / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText('Amplitud', 0, 0);
+    ctx.restore();
+    
+    ctx.font = '18px "Inter", sans-serif'; // Aumentado tamaño de texto
+    ctx.fillText('(0,0)', 40, zeroY + 20);
   }, []);
 
   const renderSignal = useCallback(() => {
@@ -154,7 +188,11 @@ const PPGSignalMeter = ({
     }
 
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d', { alpha: true, desynchronized: true });
+    const ctx = canvas.getContext('2d', { 
+      alpha: false,
+      desynchronized: true
+    });
+    
     if (!ctx) {
       animationFrameRef.current = requestAnimationFrame(renderSignal);
       return;
@@ -165,29 +203,23 @@ const PPGSignalMeter = ({
     if (baselineRef.current === null) {
       baselineRef.current = value;
     } else {
-      baselineRef.current = baselineRef.current * 0.95 + value * 0.05;
+      const adaptiveRate = isFingerDetected ? 0.95 : 0.8;
+      baselineRef.current = baselineRef.current * adaptiveRate + value * (1 - adaptiveRate);
     }
 
     const smoothedValue = smoothValue(value, lastValueRef.current);
     lastValueRef.current = smoothedValue;
 
     const normalizedValue = smoothedValue - (baselineRef.current || 0);
-    const scaledValue = normalizedValue * verticalScale;
+    const scaledValue = normalizedValue * VERTICAL_SCALE;
     
     let isArrhythmia = false;
     if (rawArrhythmiaData && 
         arrhythmiaStatus?.includes("ARRITMIA") && 
-        now - rawArrhythmiaData.timestamp < 2000) { // Ampliado de 1000ms a 2000ms para mayor visibilidad
+        now - rawArrhythmiaData.timestamp < 1000) {
       isArrhythmia = true;
       lastArrhythmiaTime.current = now;
-      
-      // Registrar eventos de arritmia para debugging
       arrhythmiaCountRef.current++;
-      console.log("PPGSignalMeter: Arrhythmia detected and visualized", { 
-        count: arrhythmiaCountRef.current,
-        timestamp: now,
-        rawData: rawArrhythmiaData
-      });
     }
 
     const dataPoint: PPGDataPoint = {
@@ -208,8 +240,8 @@ const PPGSignalMeter = ({
       
       if (visiblePoints.length > 1) {
         ctx.beginPath();
-        ctx.strokeStyle = '#0EA5E9';
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = COLORS.SIGNAL_LINE;
+        ctx.lineWidth = 2.2;
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
         
@@ -230,8 +262,8 @@ const PPGSignalMeter = ({
           if (point.isArrhythmia && i < visiblePoints.length - 1) {
             ctx.stroke();
             ctx.beginPath();
-            ctx.strokeStyle = '#DC2626';
-            ctx.lineWidth = 3;
+            ctx.strokeStyle = COLORS.ARRHYTHMIA_LINE;
+            ctx.lineWidth = 2.5;
             ctx.setLineDash([3, 2]);
             ctx.moveTo(x, y);
             
@@ -242,8 +274,8 @@ const PPGSignalMeter = ({
             ctx.stroke();
             
             ctx.beginPath();
-            ctx.strokeStyle = '#0EA5E9';
-            ctx.lineWidth = 2;
+            ctx.strokeStyle = COLORS.SIGNAL_LINE;
+            ctx.lineWidth = 2.2;
             ctx.setLineDash([]);
             ctx.moveTo(nextX, nextY);
             firstPoint = false;
@@ -253,7 +285,6 @@ const PPGSignalMeter = ({
         ctx.stroke();
       }
 
-      // Find and highlight peak points
       const maxPeakIndices: number[] = [];
       
       for (let i = 2; i < visiblePoints.length - 2; i++) {
@@ -268,14 +299,14 @@ const PPGSignalMeter = ({
             point.value > nextPoint1.value && 
             point.value > nextPoint2.value) {
           
-          const peakAmplitude = Math.abs(point.value);
+          const peakAmplitude = point.value;
           
-          // Umbral más bajo para detectar picos
-          if (peakAmplitude > 5.0) {
+          if (peakAmplitude > PEAK_MIN_VALUE) {
             const peakTime = point.time;
+            
             const hasPeakNearby = maxPeakIndices.some(idx => {
               const existingPeakTime = visiblePoints[idx].time;
-              return Math.abs(existingPeakTime - peakTime) < 250;
+              return Math.abs(existingPeakTime - peakTime) < PEAK_DISTANCE_MS;
             });
             
             if (!hasPeakNearby) {
@@ -285,89 +316,50 @@ const PPGSignalMeter = ({
         }
       }
       
-      // Visualización mejorada de picos
-      for (let idx of maxPeakIndices) {
+      for (const idx of maxPeakIndices) {
         const point = visiblePoints[idx];
         const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
         const y = canvas.height * 0.6 - point.value;
         
-        // Picos normales
-        ctx.beginPath();
-        ctx.arc(x, y, point.isArrhythmia ? 5 : 4, 0, Math.PI * 2);
-        ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
-        ctx.fill();
-
-        ctx.font = 'bold 12px Inter';
-        ctx.fillStyle = '#666666';
-        ctx.textAlign = 'center';
-        ctx.fillText(Math.abs(point.value / verticalScale).toFixed(2), x, y - 20);
+        const isArrhythmiaPeak = point.isArrhythmia;
         
-        // Visualización especial para picos arrítmicos
-        if (point.isArrhythmia) {
-          // Círculo interno
-          ctx.beginPath();
-          ctx.arc(x, y, 9, 0, Math.PI * 2);
-          ctx.strokeStyle = '#FFFF00';
-          ctx.lineWidth = 2;
-          ctx.stroke();
+        ctx.beginPath();
+        const peakColor = isArrhythmiaPeak ? COLORS.PEAK_ARRHYTHMIA : COLORS.PEAK_NORMAL;
+        const glowColor = isArrhythmiaPeak ? COLORS.PEAK_GLOW_ARRHYTHMIA : COLORS.PEAK_GLOW_NORMAL;
+        
+        const gradient = ctx.createRadialGradient(x, y, 2, x, y, 10);
+        gradient.addColorStop(0, peakColor);
+        gradient.addColorStop(1, glowColor);
+        
+        ctx.fillStyle = gradient;
+        ctx.arc(x, y, isArrhythmiaPeak ? 7 : 5.5, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.strokeStyle = isArrhythmiaPeak ? '#FF4D4D' : COLORS.PEAK_NORMAL;
+        ctx.lineWidth = 1.8;
+        ctx.stroke();
+
+        ctx.font = 'bold 15px "Inter", sans-serif';
+        ctx.fillStyle = isArrhythmiaPeak ? '#FFCCCB' : '#FFFFFF';
+        ctx.textAlign = 'center';
+        ctx.fillText(Math.abs(point.value / VERTICAL_SCALE).toFixed(2), x, y - 22);
+        
+        if (isArrhythmiaPeak) {
+          ctx.font = 'bold 16px "Inter", sans-serif';
+          ctx.fillStyle = '#FF4D4D';
+          ctx.fillText("ARRITMIA DETECTADA", x, y - 40);
           
-          // Círculo externo
-          ctx.beginPath();
-          ctx.arc(x, y, 14, 0, Math.PI * 2);
-          ctx.strokeStyle = '#FF6B6B';
-          ctx.lineWidth = 1;
-          ctx.setLineDash([2, 2]);
-          ctx.stroke();
-          ctx.setLineDash([]);
-          
-          // Etiqueta de latido prematuro
-          ctx.font = 'bold 10px Inter';
-          ctx.fillStyle = '#FF6B6B';
-          ctx.fillText("LATIDO PREMATURO", x, y - 35);
-          
-          // Líneas de conexión
-          ctx.beginPath();
-          ctx.setLineDash([2, 2]);
-          ctx.strokeStyle = 'rgba(255, 107, 107, 0.6)';
-          ctx.lineWidth = 1;
-          
-          if (idx > 0) {
-            const prevX = canvas.width - ((now - visiblePoints[idx-1].time) * canvas.width / WINDOW_WIDTH_MS);
-            const prevY = canvas.height * 0.6 - visiblePoints[idx-1].value;
-            
-            ctx.moveTo(prevX, prevY - 15);
-            ctx.lineTo(x, y - 15);
-            ctx.stroke();
+          if (rawArrhythmiaData) {
+            ctx.font = '14px "Inter", sans-serif';
+            ctx.fillStyle = '#FFCCCB';
+            ctx.fillText(`RMSSD: ${rawArrhythmiaData.rmssd.toFixed(1)}`, x, y - 60);
+            ctx.fillText(`Variación RR: ${rawArrhythmiaData.rrVariation.toFixed(1)}%`, x, y - 75);
           }
-          
-          if (idx < visiblePoints.length - 1) {
-            const nextX = canvas.width - ((now - visiblePoints[idx+1].time) * canvas.width / WINDOW_WIDTH_MS);
-            const nextY = canvas.height * 0.6 - visiblePoints[idx+1].value;
-            
-            ctx.moveTo(x, y - 15);
-            ctx.lineTo(nextX, nextY - 15);
-            ctx.stroke();
-          }
-          
-          ctx.setLineDash([]);
         }
       }
     }
 
-    // Indicador adicional de arritmia en la parte superior de la pantalla
-    if (arrhythmiaStatus && arrhythmiaStatus.includes("ARRITMIA")) {
-      ctx.font = 'bold 16px Inter';
-      ctx.fillStyle = '#FF0000';
-      ctx.textAlign = 'center';
-      ctx.fillText("¡ARRITMIA DETECTADA!", canvas.width / 2, 25);
-      
-      const severity = arrhythmiaStatus.split('|')[1] || "0";
-      ctx.font = '14px Inter';
-      ctx.fillStyle = '#FF3333';
-      ctx.fillText(`Severidad: ${severity}/10`, canvas.width / 2, 45);
-    }
-
-    lastRenderTimeRef.current = currentTime;
+    lastRenderTimeRef.current = performance.now();
     animationFrameRef.current = requestAnimationFrame(renderSignal);
   }, [value, quality, isFingerDetected, rawArrhythmiaData, arrhythmiaStatus, drawGrid, smoothValue]);
 
@@ -383,7 +375,7 @@ const PPGSignalMeter = ({
   return (
     <>
       <div className="absolute top-0 right-1 z-30 flex items-center gap-2 rounded-lg p-2"
-           style={{ top: '5px', right: '5px' }}>
+           style={{ top: '8px', right: '8px' }}>
         <div className="w-[190px]">
           <div className={`h-1.5 w-full rounded-full bg-gradient-to-r ${getQualityColor(quality)} transition-all duration-1000 ease-in-out`}>
             <div
@@ -421,26 +413,49 @@ const PPGSignalMeter = ({
         </div>
       </div>
 
-      <div className="absolute inset-0 w-full" style={{ height: '50vh', top: 0 }}>
+      <div className="absolute inset-0 w-full" style={{ height: '65vh', top: 0 }}>
         <canvas
           ref={canvasRef}
           width={CANVAS_WIDTH}
           height={CANVAS_HEIGHT}
           className="w-full h-full"
-          style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 }}
+          style={{ 
+            position: 'absolute', 
+            top: 0, 
+            left: 0, 
+            right: 0, 
+            zIndex: 10,
+            imageRendering: 'crisp-edges',
+            transform: 'translateZ(0)',
+          }}
         />
       </div>
       
-      {/* Indicador de arritmia destacado */}
-      {arrhythmiaStatus && arrhythmiaStatus.includes("ARRITMIA") && (
-        <div className="absolute top-[70px] left-0 right-0 z-40 flex justify-center">
-          <div className="bg-red-600 text-white px-4 py-2 rounded-lg animate-pulse shadow-lg">
-            <span className="font-bold">¡ARRITMIA DETECTADA!</span>
+      {lipidData && (
+        <div className="absolute left-2 top-20 p-4 z-30 bg-black/50 backdrop-blur-sm rounded-lg">
+          <h3 className="text-white text-lg font-bold mb-2">Lípidos en Sangre</h3>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+            <div className="text-white">
+              <p className="text-sm font-semibold">Colesterol Total</p>
+              <p className="text-xl font-bold">{lipidData.totalCholesterol} <span className="text-sm">mg/dL</span></p>
+            </div>
+            <div className="text-white">
+              <p className="text-sm font-semibold">HDL</p>
+              <p className="text-xl font-bold">{lipidData.hdl} <span className="text-sm">mg/dL</span></p>
+            </div>
+            <div className="text-white">
+              <p className="text-sm font-semibold">LDL</p>
+              <p className="text-xl font-bold">{lipidData.ldl} <span className="text-sm">mg/dL</span></p>
+            </div>
+            <div className="text-white">
+              <p className="text-sm font-semibold">Triglicéridos</p>
+              <p className="text-xl font-bold">{lipidData.triglycerides} <span className="text-sm">mg/dL</span></p>
+            </div>
           </div>
         </div>
       )}
       
-      <div className="absolute" style={{ top: 'calc(50vh + 5px)', left: 0, right: 0, textAlign: 'center', zIndex: 30 }}>
+      <div className="absolute" style={{ top: 'calc(65vh + 5px)', left: 0, right: 0, textAlign: 'center', zIndex: 30 }}>
         <h1 className="text-xl font-bold">
           <span className="text-white">Chars</span>
           <span className="text-[#ea384c]">Healt</span>

@@ -7,7 +7,6 @@ import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import PermissionsHandler from "@/components/PermissionsHandler";
 import { VitalSignsRisk } from '@/utils/vitalSignsRisk';
-import { toast } from "sonner";
 
 interface VitalSigns {
   spo2: number;
@@ -23,25 +22,17 @@ interface VitalSigns {
     value: number;
     trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
   };
-}
-
-interface ProcessedVitalSignsData {
-  spo2: number;
-  pressure: string;
-  arrhythmiaStatus: string;
-  lastArrhythmiaData?: {
+  lipids: {
+    totalCholesterol: number;
+    hdl: number;
+    ldl: number;
+    triglycerides: number;
+  } | null;
+  lastArrhythmiaData: {
     timestamp: number;
     rmssd: number;
     rrVariation: number;
   } | null;
-  respiratoryRate?: number;
-  respiratoryPattern?: string;
-  respiratoryConfidence?: number;
-  glucose?: {
-    value: number;
-    trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
-    confidence: number;
-  };
 }
 
 const Index = () => {
@@ -54,7 +45,9 @@ const Index = () => {
     arrhythmiaStatus: "--",
     respiration: { rate: 0, depth: 0, regularity: 0 },
     hasRespirationData: false,
-    glucose: { value: 0, trend: 'unknown' }
+    glucose: { value: 0, trend: 'unknown' },
+    lipids: null,
+    lastArrhythmiaData: null
   });
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState<string | number>("--");
@@ -78,8 +71,12 @@ const Index = () => {
       value: number;
       trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
     },
-    hasGlucoseData: boolean,
-    arrhythmiaStatus: string
+    lipids: {
+      totalCholesterol: number;
+      hdl: number;
+      ldl: number;
+      triglycerides: number;
+    } | null
   } | null>(null);
   const [permissionsGranted, setPermissionsGranted] = useState(false);
   const measurementTimerRef = useRef<number | null>(null);
@@ -91,12 +88,23 @@ const Index = () => {
   const allRespirationRateValuesRef = useRef<number[]>([]);
   const allRespirationDepthValuesRef = useRef<number[]>([]);
   const allGlucoseValuesRef = useRef<number[]>([]);
+  const allLipidValuesRef = useRef<{
+    totalCholesterol: number[];
+    hdl: number[];
+    ldl: number[];
+    triglycerides: number[];
+  }>({
+    totalCholesterol: [],
+    hdl: [],
+    ldl: [],
+    triglycerides: []
+  });
   
   const hasValidValuesRef = useRef(false);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat, reset: resetHeartBeat } = useHeartBeatProcessor();
-  const { vitalSignsData, processSignal, reset, getCurrentRespiratoryData, calibrateGlucose } = useVitalSignsProcessor();
+  const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
   const handlePermissionsGranted = () => {
     console.log("Permisos concedidos correctamente");
@@ -119,6 +127,7 @@ const Index = () => {
       const validRespRates = allRespirationRateValuesRef.current.filter(v => v > 0);
       const validRespDepths = allRespirationDepthValuesRef.current.filter(v => v > 0);
       const validGlucoseValues = allGlucoseValuesRef.current.filter(v => v > 0);
+      const validLipidValues = allLipidValuesRef.current.totalCholesterol.filter(v => v > 0);
       
       console.log("Valores acumulados para promedios:", {
         heartRateValues: validHeartRates.length,
@@ -127,7 +136,8 @@ const Index = () => {
         diastolicValues: validDiastolicValues.length,
         respirationRates: validRespRates.length,
         respirationDepths: validRespDepths.length,
-        glucoseValues: validGlucoseValues.length
+        glucoseValues: validGlucoseValues.length,
+        lipidValues: validLipidValues.length
       });
       
       let avgHeartRate = 0;
@@ -172,15 +182,48 @@ const Index = () => {
         avgGlucose = vitalSigns.glucose.value;
       }
       
+      let finalLipids = null;
+      if (allLipidValuesRef.current.totalCholesterol.length > 0) {
+        const avgTotalCholesterol = Math.round(
+          allLipidValuesRef.current.totalCholesterol.reduce((a, b) => a + b, 0) / 
+          allLipidValuesRef.current.totalCholesterol.length
+        );
+        
+        const avgHDL = Math.round(
+          allLipidValuesRef.current.hdl.reduce((a, b) => a + b, 0) / 
+          allLipidValuesRef.current.hdl.length
+        );
+        
+        const avgLDL = Math.round(
+          allLipidValuesRef.current.ldl.reduce((a, b) => a + b, 0) / 
+          allLipidValuesRef.current.ldl.length
+        );
+        
+        const avgTriglycerides = Math.round(
+          allLipidValuesRef.current.triglycerides.reduce((a, b) => a + b, 0) / 
+          allLipidValuesRef.current.triglycerides.length
+        );
+        
+        finalLipids = {
+          totalCholesterol: avgTotalCholesterol,
+          hdl: avgHDL,
+          ldl: avgLDL,
+          triglycerides: avgTriglycerides
+        };
+      } else {
+        finalLipids = vitalSigns.lipids;
+      }
+      
       console.log("PROMEDIOS REALES calculados:", {
         heartRate: avgHeartRate,
         spo2: avgSpo2,
         pressure: finalBPString,
         respiration: { rate: avgRespRate, depth: avgRespDepth },
-        glucose: avgGlucose
+        glucose: avgGlucose,
+        lipids: finalLipids
       });
       
-      let calculatedGlucoseTrend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown' = 'unknown';
+      let glucoseTrend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown' = 'unknown';
       if (validGlucoseValues.length >= 3) {
         const recentValues = validGlucoseValues.slice(-3);
         const changes = [];
@@ -191,28 +234,15 @@ const Index = () => {
         const avgChange = changes.reduce((a, b) => a + b, 0) / changes.length;
         
         if (Math.abs(avgChange) < 2) {
-          calculatedGlucoseTrend = 'stable';
+          glucoseTrend = 'stable';
         } else if (avgChange > 5) {
-          calculatedGlucoseTrend = 'rising_rapidly';
+          glucoseTrend = 'rising_rapidly';
         } else if (avgChange > 2) {
-          calculatedGlucoseTrend = 'rising';
+          glucoseTrend = 'rising';
         } else if (avgChange < -5) {
-          calculatedGlucoseTrend = 'falling_rapidly';
+          glucoseTrend = 'falling_rapidly';
         } else if (avgChange < -2) {
-          calculatedGlucoseTrend = 'falling';
-        }
-      }
-      
-      const glucoseValue = vitalSignsData?.glucose?.value || 0;
-      const glucoseTrend = vitalSignsData?.glucose?.trend || 'unknown';
-      
-      let calculatedArrhythmiaStatus = vitalSigns.arrhythmiaStatus;
-      if (vitalSignsData?.arrhythmiaStatus) {
-        if (vitalSignsData.arrhythmiaStatus.includes('ARRITMIA DETECTADA')) {
-          console.log('Arritmia detectada en frame actual:', vitalSignsData.arrhythmiaStatus);
-          calculatedArrhythmiaStatus = vitalSignsData.arrhythmiaStatus;
-        } else {
-          calculatedArrhythmiaStatus = vitalSignsData.arrhythmiaStatus;
+          glucoseTrend = 'falling';
         }
       }
       
@@ -226,11 +256,10 @@ const Index = () => {
           regularity: vitalSigns.respiration.regularity
         },
         glucose: {
-          value: glucoseValue > 0 ? glucoseValue : avgGlucose,
+          value: avgGlucose > 0 ? avgGlucose : vitalSigns.glucose.value,
           trend: glucoseTrend
         },
-        hasGlucoseData: glucoseValue > 0,
-        arrhythmiaStatus: calculatedArrhythmiaStatus
+        lipids: finalLipids
       });
         
       hasValidValuesRef.current = true;
@@ -242,6 +271,12 @@ const Index = () => {
       allRespirationRateValuesRef.current = [];
       allRespirationDepthValuesRef.current = [];
       allGlucoseValuesRef.current = [];
+      allLipidValuesRef.current = {
+        totalCholesterol: [],
+        hdl: [],
+        ldl: [],
+        triglycerides: []
+      };
     } catch (error) {
       console.error("Error en calculateFinalValues:", error);
       setFinalValues({
@@ -250,8 +285,7 @@ const Index = () => {
         pressure: vitalSigns.pressure,
         respiration: vitalSigns.respiration,
         glucose: vitalSigns.glucose,
-        hasGlucoseData: false,
-        arrhythmiaStatus: vitalSigns.arrhythmiaStatus
+        lipids: vitalSigns.lipids
       });
       hasValidValuesRef.current = true;
     }
@@ -265,9 +299,6 @@ const Index = () => {
     
     if (!isMonitoring && lastSignal?.quality < 50) {
       console.log("Señal insuficiente para iniciar medición", lastSignal?.quality);
-      toast.warning("Calidad de señal insuficiente. Posicione bien su dedo en la cámara.", {
-        duration: 3000,
-      });
       return;
     }
     
@@ -289,6 +320,12 @@ const Index = () => {
       allRespirationRateValuesRef.current = [];
       allRespirationDepthValuesRef.current = [];
       allGlucoseValuesRef.current = [];
+      allLipidValuesRef.current = {
+        totalCholesterol: [],
+        hdl: [],
+        ldl: [],
+        triglycerides: []
+      };
       
       if (measurementTimerRef.current) {
         clearInterval(measurementTimerRef.current);
@@ -313,7 +350,7 @@ const Index = () => {
     setElapsedTime(0);
     
     resetHeartBeat();
-    reset();
+    resetVitalSigns();
     VitalSignsRisk.resetHistory();
   };
 
@@ -386,7 +423,9 @@ const Index = () => {
       arrhythmiaStatus: "--",
       respiration: { rate: 0, depth: 0, regularity: 0 },
       hasRespirationData: false,
-      glucose: { value: 0, trend: 'unknown' }
+      glucose: { value: 0, trend: 'unknown' },
+      lipids: null,
+      lastArrhythmiaData: null
     });
     setArrhythmiaCount("--");
     setLastArrhythmiaData(null);
@@ -395,7 +434,7 @@ const Index = () => {
     setFinalValues(null);
     
     resetHeartBeat();
-    reset();
+    resetVitalSigns();
     VitalSignsRisk.resetHistory();
     
     hasValidValuesRef.current = false;
@@ -407,58 +446,87 @@ const Index = () => {
     allRespirationRateValuesRef.current = [];
     allRespirationDepthValuesRef.current = [];
     allGlucoseValuesRef.current = [];
+    allLipidValuesRef.current = {
+      totalCholesterol: [],
+      hdl: [],
+      ldl: [],
+      triglycerides: []
+    };
   };
 
   const handleStreamReady = (stream: MediaStream) => {
     if (!isMonitoring) return;
     
-    const videoTrack = stream.getVideoTracks()[0];
-    const imageCapture = new ImageCapture(videoTrack);
-    
-    if (isMonitoring && videoTrack.getCapabilities()?.torch) {
-      videoTrack.applyConstraints({
-        advanced: [{ torch: true }]
-      }).catch(err => console.error("Error activando linterna:", err));
-    }
-    
-    const tempCanvas = document.createElement('canvas');
-    const tempCtx = tempCanvas.getContext('2d');
-    if (!tempCtx) {
-      console.error("No se pudo obtener el contexto 2D");
-      return;
-    }
-    
-    const processImage = async () => {
-      if (!isMonitoring) return;
-      
-      try {
-        const frame = await imageCapture.grabFrame();
-        tempCanvas.width = frame.width;
-        tempCanvas.height = frame.height;
-        tempCtx.drawImage(frame, 0, 0);
-        const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
-        processFrame(imageData);
-        
-        if (isMonitoring) {
-          requestAnimationFrame(processImage);
-        }
-      } catch (error) {
-        console.error("Error capturando frame:", error);
-        if (isMonitoring) {
-          requestAnimationFrame(processImage);
-        }
+    try {
+      const videoTrack = stream.getVideoTracks()[0];
+      if (!videoTrack) {
+        console.error("No video track available in stream");
+        return;
       }
-    };
-
-    processImage();
-    
-    return () => {
+      
+      const imageCapture = new ImageCapture(videoTrack);
+      
       if (videoTrack.getCapabilities()?.torch) {
         videoTrack.applyConstraints({
-          advanced: [{ torch: false }]
-        }).catch(err => console.error("Error desactivando linterna:", err));
+          advanced: [{ torch: true }]
+        }).catch(err => console.error("Error activando linterna:", err));
       }
-    };
+      
+      const tempCanvas = document.createElement('canvas');
+      const tempCtx = tempCanvas.getContext('2d');
+      if (!tempCtx) {
+        console.error("No se pudo obtener el contexto 2D");
+        return;
+      }
+      
+      let frameProcessingActive = true;
+      
+      const processImage = async () => {
+        if (!isMonitoring || !frameProcessingActive) return;
+        
+        try {
+          if (videoTrack.readyState !== 'live') {
+            console.log('Video track is not in live state, waiting...');
+            if (isMonitoring && frameProcessingActive) {
+              setTimeout(() => requestAnimationFrame(processImage), 500);
+            }
+            return;
+          }
+          
+          const frame = await imageCapture.grabFrame();
+          tempCanvas.width = frame.width;
+          tempCanvas.height = frame.height;
+          tempCtx.drawImage(frame, 0, 0);
+          const imageData = tempCtx.getImageData(0, 0, frame.width, frame.height);
+          processFrame(imageData);
+          
+          if (isMonitoring && frameProcessingActive) {
+            requestAnimationFrame(processImage);
+          }
+        } catch (error) {
+          console.error("Error capturando frame:", error);
+          if (isMonitoring && frameProcessingActive) {
+            setTimeout(() => requestAnimationFrame(processImage), 500);
+          }
+        }
+      };
+
+      processImage();
+      
+      return () => {
+        console.log("Cleaning up video processing resources");
+        frameProcessingActive = false;
+        
+        if (videoTrack.getCapabilities()?.torch) {
+          videoTrack.applyConstraints({
+            advanced: [{ torch: false }]
+          }).catch(err => console.error("Error desactivando linterna:", err));
+        }
+      };
+    } catch (error) {
+      console.error("Error setting up image capture:", error);
+      return () => {};
+    }
   };
 
   useEffect(() => {
@@ -563,8 +631,10 @@ const Index = () => {
             allHeartRateValuesRef.current.push(heartBeatResult.bpm);
           }
           
-          const vitals = processSignal(lastSignal.filteredValue, heartBeatResult.rrData);
+          const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
           if (vitals) {
+            console.log("Raw vital signs data:", JSON.stringify(vitals));
+            
             if (vitals.spo2 > 0) {
               setVitalSigns(current => ({
                 ...current,
@@ -591,65 +661,77 @@ const Index = () => {
               arrhythmiaStatus: vitals.arrhythmiaStatus
             }));
             
-            if (vitals.glucose && vitals.glucose.value > 0) {
-              console.log("Procesando datos de glucosa:", vitals.glucose);
-              
+            if (vitals.hasRespirationData && vitals.respiration) {
+              console.log("Procesando datos de respiración:", vitals.respiration);
               setVitalSigns(current => ({
                 ...current,
-                glucose: {
-                  value: vitals.glucose.value,
-                  trend: vitals.glucose.trend || 'unknown'
-                }
-              }));
-            }
-            
-            const hasHeartRateData = heartRate > 0;
-            
-            if (hasHeartRateData) {
-              const estimatedRespRate = Math.round(heartRate / 4);
-              const estimatedDepth = 50 + (Math.random() * 20);
-              const estimatedRegularity = 70 + (Math.random() * 15);
-              
-              console.log("Generando datos respiratorios aproximados:", {
-                rate: estimatedRespRate,
-                depth: estimatedDepth,
-                regularity: estimatedRegularity
-              });
-              
-              const respirationData = {
-                rate: estimatedRespRate,
-                depth: estimatedDepth,
-                regularity: estimatedRegularity
-              };
-              
-              setVitalSigns(current => ({
-                ...current,
-                respiration: respirationData,
+                respiration: vitals.respiration,
                 hasRespirationData: true
               }));
               
-              if (estimatedRespRate > 0) {
-                allRespirationRateValuesRef.current.push(estimatedRespRate);
+              if (vitals.respiration.rate > 0) {
+                allRespirationRateValuesRef.current.push(vitals.respiration.rate);
               }
               
-              allRespirationDepthValuesRef.current.push(estimatedDepth);
+              if (vitals.respiration.depth > 0) {
+                allRespirationDepthValuesRef.current.push(vitals.respiration.depth);
+              }
+            }
+            
+            console.log("Glucose data from vitals:", vitals.glucose ? 
+              `${vitals.glucose.value} mg/dL (${vitals.glucose.trend})` : 
+              'No hay datos de glucosa');
+            
+            if (vitals.glucose && vitals.glucose.value > 0) {
+              console.log("Actualizando UI con datos de glucosa:", vitals.glucose);
+              setVitalSigns(current => ({
+                ...current,
+                glucose: vitals.glucose
+              }));
+              
+              allGlucoseValuesRef.current.push(vitals.glucose.value);
+            }
+            
+            if (vitals.lipids) {
+              console.log("Actualizando UI con datos de lípidos:", vitals.lipids);
+              setVitalSigns(current => ({
+                ...current,
+                lipids: vitals.lipids
+              }));
+              
+              if (vitals.lipids.totalCholesterol > 0) {
+                allLipidValuesRef.current.totalCholesterol.push(vitals.lipids.totalCholesterol);
+              }
+              if (vitals.lipids.hdl > 0) {
+                allLipidValuesRef.current.hdl.push(vitals.lipids.hdl);
+              }
+              if (vitals.lipids.ldl > 0) {
+                allLipidValuesRef.current.ldl.push(vitals.lipids.ldl);
+              }
+              if (vitals.lipids.triglycerides > 0) {
+                allLipidValuesRef.current.triglycerides.push(vitals.lipids.triglycerides);
+              }
             }
             
             if (vitals.lastArrhythmiaData) {
               setLastArrhythmiaData(vitals.lastArrhythmiaData);
+              setVitalSigns(current => ({
+                ...current,
+                lastArrhythmiaData: vitals.lastArrhythmiaData
+              }));
               
               const [status, count] = vitals.arrhythmiaStatus.split('|');
               setArrhythmiaCount(count || "0");
             }
           }
-        }
         
-        setSignalQuality(lastSignal.quality);
+          setSignalQuality(lastSignal.quality);
+        }
       } catch (error) {
         console.error("Error procesando señal:", error);
       }
     }
-  }, [lastSignal, isMonitoring, processHeartBeat, processSignal, measurementComplete]);
+  }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns, measurementComplete]);
 
   useEffect(() => {
     return () => {
@@ -707,20 +789,12 @@ const Index = () => {
           onReset={handleReset}
           arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
           rawArrhythmiaData={lastArrhythmiaData}
+          lipidData={vitalSigns.lipids}
         />
       </div>
       
-      {isMonitoring && (
-        <div className="absolute z-30 text-sm bg-black/50 backdrop-blur-sm px-3 py-1 rounded-lg" 
-          style={{ top: '35%', left: '50%', transform: 'translateX(-50%)', textAlign: 'center' }}>
-          <span className="text-cyan-400 font-medium">Respiración: {vitalSigns.hasRespirationData ? 
-            `${vitalSigns.respiration.rate} RPM, Profundidad: ${vitalSigns.respiration.depth}%` : 
-            'Calibrando...'}</span>
-        </div>
-      )}
-
-      <div className="absolute z-20" style={{ bottom: '65px', left: 0, right: 0, padding: '0 12px' }}>
-        <div className="p-2 rounded-lg">
+      <div className="absolute z-20" style={{ bottom: '55px', left: 0, right: 0, padding: '0 8px' }}>
+        <div className="p-1 rounded-lg">
           <div className="grid grid-cols-3 gap-1 sm:grid-cols-6">
             <VitalSign 
               label="FRECUENCIA CARDÍACA"
@@ -754,17 +828,17 @@ const Index = () => {
               isFinalReading={measurementComplete}
             />
             <VitalSign 
-              label="GLUCOSA"
-              value={finalValues ? finalValues.glucose.value : vitalSigns.glucose.value || "--"}
+              label="LÍPIDOS"
+              value={vitalSigns.lipids ? vitalSigns.lipids.totalCholesterol : "--"}
               unit="mg/dL"
-              trend={finalValues ? finalValues.glucose.trend : vitalSigns.glucose.trend}
+              secondaryValue={vitalSigns.lipids ? `HDL: ${vitalSigns.lipids.hdl}` : "--"}
               isFinalReading={measurementComplete}
             />
           </div>
         </div>
       </div>
 
-      <div className="absolute z-50" style={{ bottom: 0, left: 0, right: 0, height: '55px' }}>
+      <div className="absolute z-50" style={{ bottom: 0, left: 0, right: 0, height: '45px' }}>
         <div className="grid grid-cols-2 gap-px w-full h-full">
           <button 
             onClick={startMonitoring}
