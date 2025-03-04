@@ -21,7 +21,7 @@ const Index = () => {
     respiration: { rate: 0, depth: 0, regularity: 0 },
     hasRespirationData: false,
     glucose: null,
-    hemoglobin: { value: 0, confidence: 0, lastUpdated: 0 },
+    hemoglobin: null,
     lastArrhythmiaData: null,
     cholesterol: null,
     temperature: null
@@ -438,7 +438,7 @@ const Index = () => {
       respiration: { rate: 0, depth: 0, regularity: 0 },
       hasRespirationData: false,
       glucose: null,
-      hemoglobin: { value: 0, confidence: 0, lastUpdated: 0 },
+      hemoglobin: null,
       lastArrhythmiaData: null,
       cholesterol: null,
       temperature: null
