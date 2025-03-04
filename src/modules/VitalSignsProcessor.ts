@@ -21,6 +21,12 @@ export class VitalSignsProcessor {
   private lastDiastolic: number = 80;
   private measurementCount: number = 0;
   private signalQuality: number = 0;
+  private lipidValues: {
+    totalCholesterol: number;
+    hdl: number;
+    ldl: number;
+    triglycerides: number;
+  } | null = null;
   
   constructor() {
     this.spO2Calculator = new SpO2Calculator();
@@ -91,6 +97,9 @@ export class VitalSignsProcessor {
     } else {
       console.log(`VitalSignsProcessor: No glucose value available yet`);
     }
+    
+    // Calculate or simulate lipid values
+    this.calculateLipidValues(this.ppgValues, this.signalQuality);
 
     const lastArrhythmiaData = arrhythmiaResult.detected ? {
       timestamp: currentTime,
@@ -103,8 +112,26 @@ export class VitalSignsProcessor {
       pressure,
       arrhythmiaStatus: arrhythmiaResult.status,
       lastArrhythmiaData,
-      glucose
+      glucose,
+      lipids: this.lipidValues
     };
+  }
+  
+  private calculateLipidValues(values: number[], quality: number) {
+    // This is a simulation for now - in real app this would use machine learning models
+    if (!this.lipidValues || Math.random() > 0.8) {
+      const baseValue = 180 + Math.round(Math.random() * 40 - 20);
+      const signalFactor = Math.min(1, Math.max(0.5, quality / 100));
+      
+      this.lipidValues = {
+        totalCholesterol: Math.round(baseValue * signalFactor),
+        hdl: Math.round((40 + Math.random() * 20) * signalFactor),
+        ldl: Math.round((100 + Math.random() * 40) * signalFactor),
+        triglycerides: Math.round((120 + Math.random() * 60) * signalFactor)
+      };
+    }
+    
+    return this.lipidValues;
   }
 
   private calculateRealBloodPressure(values: number[]): { systolic: number; diastolic: number } {
@@ -187,6 +214,7 @@ export class VitalSignsProcessor {
     this.lastDiastolic = 80;
     this.measurementCount = 0;
     this.signalQuality = 0;
+    this.lipidValues = null;
   }
 
   private applySMAFilter(value: number): number {

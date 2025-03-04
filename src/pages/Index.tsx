@@ -820,11 +820,10 @@ const Index = () => {
               isFinalReading={measurementComplete}
             />
             <VitalSign 
-              label="RESPIRACIÓN"
-              value={finalValues ? finalValues.respiration.rate : (vitalSigns.hasRespirationData ? vitalSigns.respiration.rate : "--")}
-              unit="RPM"
-              secondaryValue={finalValues ? finalValues.respiration.depth : (vitalSigns.hasRespirationData ? vitalSigns.respiration.depth : "--")}
-              secondaryUnit="%"
+              label="GLUCOSA"
+              value={finalValues ? finalValues.glucose.value : vitalSigns.glucose.value || "--"}
+              unit="mg/dL"
+              trend={finalValues ? finalValues.glucose.trend : vitalSigns.glucose.trend}
               isFinalReading={measurementComplete}
             />
             <VitalSign 
