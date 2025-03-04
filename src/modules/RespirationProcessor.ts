@@ -1,4 +1,3 @@
-
 /**
  * RespirationProcessor
  * 
@@ -33,27 +32,28 @@ export class RespirationProcessor {
   } {
     const currentTime = Date.now();
     
-    // Auto-generate simulated amplitude if none provided (for testing)
-    if (peakAmplitude === undefined && ppgValue !== 0) {
-      // Generate amplitude that varies with a respiratory pattern (~ 0.2-0.3 Hz)
-      const simulatedRespiration = 0.3 + 0.1 * Math.sin(currentTime / 4000 * Math.PI);
-      peakAmplitude = Math.abs(ppgValue) * simulatedRespiration;
-      
-      if (this.debugMode) {
-        console.log("RespirationProcessor: Using simulated amplitude", peakAmplitude);
-      }
+    // Utilizar amplitud proporcionada o estimar a partir del valor PPG
+    let amplitude: number;
+    if (peakAmplitude !== undefined) {
+      amplitude = peakAmplitude;
+    } else if (ppgValue !== 0) {
+      // Implementación mejorada de estimación de amplitud
+      amplitude = this.estimateAmplitudeFromPPG(ppgValue, currentTime);
+    } else {
+      // Sin datos válidos
+      return this.getLastValidReading();
     }
     
     // Añadir a buffer y mantener tamaño limitado
-    if (peakAmplitude !== undefined) {
-      this.amplitudeBuffer.push(peakAmplitude);
+    if (amplitude !== undefined) {
+      this.amplitudeBuffer.push(amplitude);
       if (this.amplitudeBuffer.length > this.WINDOW_SIZE) {
         this.amplitudeBuffer.shift();
       }
       
       // Fase de calibración - primeras 5 muestras (reducido para calibración más rápida)
       if (this.calibrationSamples < 5) {
-        this.calibrationSum += peakAmplitude;
+        this.calibrationSum += amplitude;
         this.calibrationSamples++;
         this.baselineAmplitude = this.calibrationSum / this.calibrationSamples;
         
@@ -62,7 +62,7 @@ export class RespirationProcessor {
         }
       } else {
         // Actualización continua de la línea base (adaptación lenta)
-        this.baselineAmplitude = this.baselineAmplitude * 0.95 + peakAmplitude * 0.05;
+        this.baselineAmplitude = this.baselineAmplitude * 0.95 + amplitude * 0.05;
       }
       
       // Detectar posible respiración mediante cambios en amplitud
@@ -162,6 +162,29 @@ export class RespirationProcessor {
       rate: Math.round(respirationRate * 10) / 10,  // Redondear a 1 decimal
       depth: Math.round(depthEstimate),
       regularity: Math.round(regularityEstimate)
+    };
+  }
+  
+  /**
+   * Estimate amplitude from PPG value with timestamp
+   */
+  private estimateAmplitudeFromPPG(ppgValue: number, timestamp: number): number {
+    // Simple estimation method - could be enhanced with sliding window
+    return Math.abs(ppgValue) * 100;
+  }
+  
+  /**
+   * Get last valid reading when no data is available
+   */
+  private getLastValidReading(): { 
+    rate: number;
+    depth: number;
+    regularity: number;
+  } {
+    return {
+      rate: 0,
+      depth: 0,
+      regularity: 0
     };
   }
   

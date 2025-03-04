@@ -115,27 +115,21 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     
+    // Fondo con color profesional
     ctx.fillStyle = '#f3f3f3';
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
+    // Cuadrícula menor (más fina)
     ctx.beginPath();
     ctx.strokeStyle = 'rgba(0, 180, 120, 0.15)';
     ctx.lineWidth = 0.5;
 
-    for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X) {
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, CANVAS_HEIGHT);
-      if (x % (GRID_SIZE_X * 4) === 0) {
-        ctx.fillStyle = 'rgba(0, 150, 100, 0.9)';
-        ctx.font = '10px Inter';
-        ctx.textAlign = 'center';
-        ctx.fillText(`${x / 10}ms`, x, CANVAS_HEIGHT - 5);
-      }
-    }
-
+    // Líneas horizontales
     for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y) {
       ctx.moveTo(0, y);
       ctx.lineTo(CANVAS_WIDTH, y);
+      
+      // Añadir escalas para valores fisiológicos (cada 4 líneas)
       if (y % (GRID_SIZE_Y * 4) === 0) {
         const amplitude = ((CANVAS_HEIGHT / 2) - y) / verticalScale;
         ctx.fillStyle = 'rgba(0, 150, 100, 0.9)';
