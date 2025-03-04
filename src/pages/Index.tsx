@@ -811,7 +811,7 @@ const Index = () => {
 
       <div className="absolute inset-0 z-10 flex flex-col">
         <div className="flex-1 flex flex-col">
-          <div className="h-1/3">
+          <div className="h-1/4">
             <PPGSignalMeter 
               value={isMonitoring ? lastSignal?.filteredValue || 0 : 0}
               quality={isMonitoring ? signalQuality || 0 : 0}
@@ -823,8 +823,8 @@ const Index = () => {
             />
           </div>
 
-          <div className="h-2/3 px-2 pb-24">
-            <div className="grid grid-cols-3 gap-2 h-full">
+          <div className="h-3/4 px-1 pb-16">
+            <div className="grid grid-cols-3 grid-rows-3 gap-1 h-full">
               <VitalSign 
                 label="FRECUENCIA CARDÍACA"
                 value={heartRate || "--"}
@@ -834,13 +834,13 @@ const Index = () => {
               />
               <VitalSign 
                 label="SPO2"
-                value={measurementComplete && finalValues ? finalValues.spo2 : vitalSigns.spo2 || "--"}
+                value={vitalSigns.spo2 || "--"}
                 unit="%"
                 isFinalReading={measurementComplete && vitalSigns.spo2 > 0}
               />
               <VitalSign 
                 label="PRESIÓN ARTERIAL"
-                value={measurementComplete && finalValues ? finalValues.pressure : vitalSigns.pressure}
+                value={vitalSigns.pressure}
                 unit="mmHg"
                 isFinalReading={measurementComplete && vitalSigns.pressure !== "--/--"}
               />
@@ -896,30 +896,30 @@ const Index = () => {
           </div>
 
           {isMonitoring && (
-            <div className="absolute bottom-24 left-0 right-0 text-center z-30">
+            <div className="absolute bottom-20 left-0 right-0 text-center z-30">
               <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 40s</span>
             </div>
           )}
         </div>
 
-        <div className="h-[100px] grid grid-cols-2 gap-px bg-gray-900 fixed bottom-0 left-0 right-0 z-30">
+        <div className="h-[70px] grid grid-cols-2 gap-px bg-gray-900 fixed bottom-0 left-0 right-0 z-30">
           <button 
             onClick={startMonitoring}
-            className={`w-full h-full text-3xl font-bold text-white active:bg-gray-800 ${!permissionsGranted ? 'bg-gray-600' : 'bg-black/80'}`}
+            className={`w-full h-full text-2xl font-bold text-white active:bg-gray-800 ${!permissionsGranted ? 'bg-gray-600' : 'bg-black/80'}`}
             disabled={!permissionsGranted}
           >
             {!permissionsGranted ? 'PERMISOS REQUERIDOS' : 'INICIAR'}
           </button>
           <button 
             onClick={handleReset}
-            className="w-full h-full bg-black/80 text-3xl font-bold text-white active:bg-gray-800"
+            className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
           >
             RESET
           </button>
         </div>
         
         {!permissionsGranted && (
-          <div className="absolute bottom-28 left-0 right-0 text-center px-4 z-30">
+          <div className="absolute bottom-24 left-0 right-0 text-center px-4 z-30">
             <span className="text-lg font-medium text-red-400">
               La aplicación necesita permisos de cámara para funcionar correctamente
             </span>
