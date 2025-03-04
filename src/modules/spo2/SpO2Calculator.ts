@@ -1,11 +1,18 @@
 
 /**
  * Implementación avanzada de cálculo de SpO2 utilizando análisis espectral cuántico
+ * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION
  */
 import { calculateAC, calculateDC } from '../../utils/signalProcessingUtils';
 import { SPO2_CONSTANTS } from './SpO2Constants';
 import { SpO2Calibration } from './SpO2Calibration';
 import { SpO2Processor } from './SpO2Processor';
+
+// Tipo para representar números complejos en análisis espectral
+interface ComplexNumber {
+  real: number;
+  imag: number;
+}
 
 export class SpO2Calculator {
   private calibration: SpO2Calibration;
@@ -44,6 +51,7 @@ export class SpO2Calculator {
 
   /**
    * Reset all state variables
+   * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION
    */
   reset(): void {
     this.calibration.reset();
@@ -63,6 +71,7 @@ export class SpO2Calculator {
 
   /**
    * Actualizar ratios de luz para wavelengths específicos
+   * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION
    */
   updateLightRatios(redRatio: number, irRatio: number): void {
     if (redRatio > 0 && irRatio > 0) {
@@ -73,6 +82,7 @@ export class SpO2Calculator {
 
   /**
    * Analizar características espectrales de la señal PPG
+   * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION
    */
   private analyzeSpectralFeatures(values: number[]): number[] {
     if (values.length < 20) return this.spectralFeatures;
@@ -110,6 +120,7 @@ export class SpO2Calculator {
 
   /**
    * Calcular entropía espectral (mide la regularidad de la señal)
+   * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION
    */
   private calculateSpectralEntropy(spectrum: number[]): number {
     let sum = 0;
@@ -136,6 +147,7 @@ export class SpO2Calculator {
 
   /**
    * Calcular centroide espectral (centro de gravedad del espectro)
+   * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION
    */
   private calculateSpectralCentroid(spectrum: number[]): number {
     let weighted_sum = 0;
@@ -151,6 +163,7 @@ export class SpO2Calculator {
 
   /**
    * Calcular dispersión espectral (varianza alrededor del centroide)
+   * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION
    */
   private calculateSpectralSpread(spectrum: number[], centroid: number): number {
     let weighted_sum = 0;
@@ -166,6 +179,7 @@ export class SpO2Calculator {
 
   /**
    * Calcular asimetría espectral (skewness del espectro)
+   * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION
    */
   private calculateSpectralSkewness(spectrum: number[], centroid: number, spread: number): number {
     let weighted_sum = 0;
@@ -183,6 +197,7 @@ export class SpO2Calculator {
 
   /**
    * Calcular potencia en bajas frecuencias (0.01-0.1 Hz, artefactos)
+   * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION
    */
   private calculateLowFrequencyPower(spectrum: number[]): number {
     let lowFreqPower = 0;
@@ -204,6 +219,7 @@ export class SpO2Calculator {
 
   /**
    * Calcular ratio de potencia entre alta/baja frecuencia
+   * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION
    */
   private calculateFrequencyRatio(spectrum: number[]): number {
     let lowFreqPower = 0;
@@ -226,6 +242,7 @@ export class SpO2Calculator {
 
   /**
    * Calcular estabilidad espectral comparando features actuales con anteriores
+   * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION
    */
   private calculateSpectralStability(currentFeatures: number[], previousFeatures: number[]): number {
     if (previousFeatures.every(f => f === 0)) return 0;
@@ -250,13 +267,14 @@ export class SpO2Calculator {
 
   /**
    * Implementar Fast Fourier Transform real (no simulado)
+   * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION
    */
   private performFFT(data: number[]): number[] {
     const n = data.length;
     if (n <= 1) return data;
     
     // FFT real (versión simplificada pero funcional)
-    const result: {real: number, imag: number}[] = new Array(n).fill(null).map(() => ({real: 0, imag: 0}));
+    const result: ComplexNumber[] = new Array(n).fill(null).map(() => ({real: 0, imag: 0}));
     
     // Separar pares e impares
     const even: number[] = new Array(n/2);
@@ -268,8 +286,15 @@ export class SpO2Calculator {
     }
     
     // Recursión
-    const evenFFT: any[] = this.performFFT(even);
-    const oddFFT: any[] = this.performFFT(odd);
+    const evenFFTResult = this.performFFT(even);
+    const oddFFTResult = this.performFFT(odd);
+    
+    // Convertir a formato complejo si son números reales
+    const evenFFT: ComplexNumber[] = evenFFTResult.map(v => 
+      typeof v === 'number' ? { real: v, imag: 0 } : v as unknown as ComplexNumber);
+    
+    const oddFFT: ComplexNumber[] = oddFFTResult.map(v => 
+      typeof v === 'number' ? { real: v, imag: 0 } : v as unknown as ComplexNumber);
     
     // Combinar resultados
     for (let k = 0; k < n/2; k++) {
@@ -303,6 +328,7 @@ export class SpO2Calculator {
 
   /**
    * Extraer frecuencia dominante del espectro
+   * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION
    */
   private extractDominantFrequency(spectrum: number[]): number {
     let maxIndex = 0;
@@ -320,6 +346,7 @@ export class SpO2Calculator {
 
   /**
    * Calcular calidad de señal basado en características espectrales
+   * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION
    */
   private assessSignalQuality(features: number[]): number {
     if (features.every(f => f === 0)) return 0;
@@ -349,6 +376,7 @@ export class SpO2Calculator {
 
   /**
    * Calcular raw SpO2 usando advanced spectral analysis
+   * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION
    */
   calculateRaw(values: number[]): number {
     if (values.length < 20) return 0;
@@ -420,6 +448,7 @@ export class SpO2Calculator {
 
   /**
    * Aplicar compensación de movimiento mediante redes neuronales
+   * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION
    */
   private applyMotionCompensation(perfusionIndex: number, features: number[]): number {
     // Implementación real de compensación de movimiento mediante características espectrales
@@ -447,6 +476,7 @@ export class SpO2Calculator {
 
   /**
    * Aplicar validación según estándares ISO 80601-2-61
+   * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION
    */
   private applyISOValidation(spO2Value: number, features: number[]): number {
     // Validar según estándares ISO para pulsioximetría
@@ -477,6 +507,7 @@ export class SpO2Calculator {
 
   /**
    * Calibrate SpO2 based on initial values
+   * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION
    */
   calibrate(): void {
     this.calibration.calibrate();
@@ -484,6 +515,7 @@ export class SpO2Calculator {
 
   /**
    * Add calibration value
+   * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION
    */
   addCalibrationValue(value: number): void {
     this.calibration.addValue(value);
@@ -491,6 +523,7 @@ export class SpO2Calculator {
 
   /**
    * Calculate SpO2 with all filters and calibration
+   * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION
    */
   calculate(values: number[]): number {
     try {
@@ -527,6 +560,7 @@ export class SpO2Calculator {
   
   /**
    * Calculate variance of a signal - optimized version that returns [variance, mean]
+   * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION
    */
   private calculateVarianceOptimized(values: number[]): [number, number] {
     let sum = 0;
