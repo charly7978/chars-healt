@@ -8,6 +8,7 @@ import PPGSignalMeter from "@/components/PPGSignalMeter";
 import PermissionsHandler from "@/components/PermissionsHandler";
 import { VitalSignsRisk } from '@/utils/vitalSignsRisk';
 import { toast } from "sonner";
+import { VitalSigns } from "@/types/vitalSigns";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
