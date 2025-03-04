@@ -1,3 +1,4 @@
+<lov-code>
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -30,6 +31,12 @@ interface VitalSigns {
     rmssd: number;
     rrVariation: number;
   } | null;
+  cholesterol?: {
+    totalCholesterol: number;
+    hdl: number;
+    ldl: number;
+    triglycerides: number;
+  } | null;
 }
 
 const Index = () => {
@@ -44,7 +51,8 @@ const Index = () => {
     hasRespirationData: false,
     glucose: { value: 0, trend: 'unknown' },
     hemoglobin: null,
-    lastArrhythmiaData: null
+    lastArrhythmiaData: null,
+    cholesterol: null
   });
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState<string | number>("--");
@@ -68,7 +76,13 @@ const Index = () => {
       value: number;
       trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
     },
-    hemoglobin: number | null
+    hemoglobin: number | null,
+    cholesterol?: {
+      totalCholesterol: number;
+      hdl: number;
+      ldl: number;
+      triglycerides: number;
+    } | null;
   } | null>(null);
   const [permissionsGranted, setPermissionsGranted] = useState(false);
   const measurementTimerRef = useRef<number | null>(null);
@@ -175,6 +189,8 @@ const Index = () => {
       } else {
         avgHemoglobin = vitalSigns.hemoglobin;
       }
+
+      let cholesterol = vitalSigns.cholesterol || null;
       
       console.log("PROMEDIOS REALES calculados:", {
         heartRate: avgHeartRate,
@@ -182,7 +198,8 @@ const Index = () => {
         pressure: finalBPString,
         respiration: { rate: avgRespRate, depth: avgRespDepth },
         glucose: avgGlucose,
-        hemoglobin: avgHemoglobin
+        hemoglobin: avgHemoglobin,
+        cholesterol: cholesterol
       });
       
       let glucoseTrend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown' = 'unknown';
@@ -221,7 +238,8 @@ const Index = () => {
           value: avgGlucose > 0 ? avgGlucose : vitalSigns.glucose.value,
           trend: glucoseTrend
         },
-        hemoglobin: avgHemoglobin
+        hemoglobin: avgHemoglobin,
+        cholesterol: cholesterol
       });
         
       hasValidValuesRef.current = true;
@@ -242,7 +260,8 @@ const Index = () => {
         pressure: vitalSigns.pressure,
         respiration: vitalSigns.respiration,
         glucose: vitalSigns.glucose,
-        hemoglobin: vitalSigns.hemoglobin
+        hemoglobin: vitalSigns.hemoglobin,
+        cholesterol: vitalSigns.cholesterol
       });
       hasValidValuesRef.current = true;
     }
@@ -380,7 +399,8 @@ const Index = () => {
       hasRespirationData: false,
       glucose: { value: 0, trend: 'unknown' },
       hemoglobin: null,
-      lastArrhythmiaData: null
+      lastArrhythmiaData: null,
+      cholesterol: null
     });
     setArrhythmiaCount("--");
     setLastArrhythmiaData(null);
@@ -650,6 +670,19 @@ const Index = () => {
               }));
               allHemoglobinValuesRef.current.push(vitals.hemoglobin.value);
             }
+
+            if (vitals.cholesterol && vitals.cholesterol.totalCholesterol > 0) {
+              console.log(`Cholesterol data received: ${vitals.cholesterol.totalCholesterol} mg/dL`);
+              setVitalSigns(current => ({
+                ...current,
+                cholesterol: {
+                  totalCholesterol: vitals.cholesterol.totalCholesterol,
+                  hdl: vitals.cholesterol.hdl,
+                  ldl: vitals.cholesterol.ldl,
+                  triglycerides: vitals.cholesterol.triglycerides
+                }
+              }));
+            }
             
             if (vitals.lastArrhythmiaData) {
               setLastArrhythmiaData(vitals.lastArrhythmiaData);
@@ -773,9 +806,23 @@ const Index = () => {
               isFinalReading={measurementComplete}
             />
             <VitalSign 
-              label="HEMOGLOBINA"
-              value={finalValues ? finalValues.hemoglobin : vitalSigns.hemoglobin || "--"}
-              unit="g/dL"
+              label="COLESTEROL"
+              value={finalValues && finalValues.cholesterol ? finalValues.cholesterol.totalCholesterol : (vitalSigns.cholesterol ? vitalSigns.cholesterol.totalCholesterol : "--")}
+              unit="mg/dL"
+              cholesterolData={finalValues && finalValues.cholesterol ? 
+                {
+                  hdl: finalValues.cholesterol.hdl,
+                  ldl: finalValues.cholesterol.ldl,
+                  triglycerides: finalValues.cholesterol.triglycerides
+                } : 
+                (vitalSigns.cholesterol ? 
+                  {
+                    hdl: vitalSigns.cholesterol.hdl,
+                    ldl: vitalSigns.cholesterol.ldl,
+                    triglycerides: vitalSigns.cholesterol.triglycerides
+                  } : undefined)
+              }
+              isWideDisplay={true}
               isFinalReading={measurementComplete}
             />
           </div>
@@ -814,23 +861,4 @@ const Index = () => {
       </div>
       
       {!permissionsGranted && (
-        <div className="absolute z-50 top-1/2 left-0 right-0 text-center px-4 transform -translate-y-1/2">
-          <div className="bg-red-900/80 backdrop-blur-sm p-4 rounded-lg mx-auto max-w-md">
-            <h3 className="text-xl font-bold text-white mb-2">Permisos necesarios</h3>
-            <p className="text-white/90 mb-4">
-              Esta aplicación necesita acceso a la cámara para medir tus signos vitales.
-            </p>
-            <button 
-              onClick={() => window.location.reload()}
-              className="bg-white text-red-900 px-4 py-2 rounded font-medium hover:bg-gray-100"
-            >
-              Reintentar
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-export default Index;
+        <div className="absolute
