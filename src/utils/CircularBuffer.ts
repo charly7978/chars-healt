@@ -1,46 +1,33 @@
-export interface PPGDataPoint {
+
+interface PPGDataPoint {
   time: number;
   value: number;
   isArrhythmia: boolean;
-  isWaveStart: boolean;
 }
 
 export class CircularBuffer {
   private buffer: PPGDataPoint[];
-  private size: number;
-  private currentIndex: number;
-  private isFull: boolean;
+  private maxSize: number;
 
   constructor(size: number) {
-    this.buffer = new Array(size);
-    this.size = size;
-    this.currentIndex = 0;
-    this.isFull = false;
+    this.buffer = [];
+    this.maxSize = size;
   }
 
-  push(point: PPGDataPoint) {
-    this.buffer[this.currentIndex] = point;
-    this.currentIndex = (this.currentIndex + 1) % this.size;
-    if (this.currentIndex === 0) {
-      this.isFull = true;
+  push(point: PPGDataPoint): void {
+    this.buffer.push(point);
+    if (this.buffer.length > this.maxSize) {
+      this.buffer.shift();
     }
   }
 
   getPoints(): PPGDataPoint[] {
-    if (!this.isFull) {
-      return this.buffer.slice(0, this.currentIndex);
-    }
-    
-    const points = new Array(this.size);
-    for (let i = 0; i < this.size; i++) {
-      points[i] = this.buffer[(this.currentIndex + i) % this.size];
-    }
-    return points.filter(point => point !== undefined);
+    return [...this.buffer];
   }
 
-  clear() {
-    this.buffer = new Array(this.size);
-    this.currentIndex = 0;
-    this.isFull = false;
+  clear(): void {
+    this.buffer = [];
   }
 }
+
+export type { PPGDataPoint };

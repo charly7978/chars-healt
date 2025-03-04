@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Badge } from './ui/badge';
 import { Card } from './ui/card';
@@ -10,11 +11,12 @@ export interface VitalSignProps {
   isFinalReading?: boolean;
   secondaryValue?: string | number;
   secondaryUnit?: string;
+  temperatureLocation?: 'finger' | 'wrist' | 'forehead' | 'unknown';
+  temperatureTrend?: 'rising' | 'falling' | 'stable' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
   cholesterolData?: {
     hdl: number;
     ldl: number;
     triglycerides: number;
-    confidence?: number;
   };
 }
 
@@ -30,6 +32,8 @@ const VitalSign: React.FC<VitalSignProps> = ({
   isFinalReading = false,
   secondaryValue,
   secondaryUnit,
+  temperatureLocation,
+  temperatureTrend,
   cholesterolData
 }) => {
   const getTrendIcon = () => {
@@ -66,84 +70,61 @@ const VitalSign: React.FC<VitalSignProps> = ({
     }
   };
 
-  const getLipidRiskColor = (type: 'hdl' | 'ldl' | 'tg', value: number) => {
-    if (type === 'hdl') {
-      if (value >= 60) return 'text-emerald-400';
-      if (value >= 40) return 'text-blue-400';
-      return 'text-red-400';
-    }
-    if (type === 'ldl') {
-      if (value < 100) return 'text-emerald-400';
-      if (value < 130) return 'text-blue-400';
-      if (value < 160) return 'text-yellow-400';
-      return 'text-red-400';
-    }
-    // Triglicéridos
-    if (value < 150) return 'text-emerald-400';
-    if (value < 200) return 'text-blue-400';
-    if (value < 500) return 'text-yellow-400';
-    return 'text-red-400';
-  };
-
   return (
-    <Card className="p-1.5 flex flex-col space-y-0.5 h-[90px] shadow-sm border border-blue-500/20 hover:border-blue-400/30 transition-colors bg-blue-950/40 backdrop-blur-sm">
+    <Card className="p-2 flex flex-col space-y-1 h-full shadow-sm border border-gray-200 hover:border-blue-300 transition-colors">
       <div className="flex justify-between items-start">
-        <h3 className="text-[8px] font-semibold text-blue-300/90">{label}</h3>
-        {trend && trend !== 'stable' && (
-          <Badge variant="outline" className={`text-[7px] px-0.5 py-0 ${getTrendColor()}`}>
+        <h3 className="text-xs font-semibold text-gray-700 dark:text-gray-300">{label}</h3>
+        {trend && (
+          <Badge variant="outline" className={`text-[10px] px-1 py-0 ${getTrendColor()}`}>
             {getTrendIcon()} {trend.replace('_', ' ')}
           </Badge>
         )}
       </div>
-
-      {cholesterolData ? (
-        // Vista especial para perfil lipídico
-        <div className="flex-1 grid grid-cols-3 gap-0.5 mt-0.5">
-          <div className="flex flex-col items-center">
-            <span className="text-[7px] text-blue-300/70">HDL</span>
-            <span className={`text-[10px] font-bold ${getLipidRiskColor('hdl', cholesterolData.hdl)}`}>
-              {cholesterolData.hdl}
-            </span>
+      <div className="flex items-baseline space-x-1">
+        <span className="text-2xl font-bold tracking-tighter">{value}</span>
+        <span className="text-xs text-gray-600 dark:text-gray-400">{unit}</span>
+      </div>
+      {secondaryValue && secondaryUnit && (
+        <div className="flex items-baseline space-x-1">
+          <span className="text-sm font-medium tracking-tighter">{secondaryValue}</span>
+          <span className="text-[10px] text-gray-600 dark:text-gray-400">{secondaryUnit}</span>
+        </div>
+      )}
+      {cholesterolData && (
+        <div className="flex flex-col mt-1 space-y-0.5">
+          <div className="flex items-baseline justify-between">
+            <span className="text-[10px] text-gray-600">HDL:</span>
+            <span className="text-[10px] font-medium">{cholesterolData.hdl} mg/dL</span>
           </div>
-          <div className="flex flex-col items-center">
-            <span className="text-[7px] text-blue-300/70">LDL</span>
-            <span className={`text-[10px] font-bold ${getLipidRiskColor('ldl', cholesterolData.ldl)}`}>
-              {cholesterolData.ldl}
-            </span>
+          <div className="flex items-baseline justify-between">
+            <span className="text-[10px] text-gray-600">LDL:</span>
+            <span className="text-[10px] font-medium">{cholesterolData.ldl} mg/dL</span>
           </div>
-          <div className="flex flex-col items-center">
-            <span className="text-[7px] text-blue-300/70">TG</span>
-            <span className={`text-[10px] font-bold ${getLipidRiskColor('tg', cholesterolData.triglycerides)}`}>
-              {cholesterolData.triglycerides}
-            </span>
+          <div className="flex items-baseline justify-between">
+            <span className="text-[10px] text-gray-600">TG:</span>
+            <span className="text-[10px] font-medium">{cholesterolData.triglycerides} mg/dL</span>
           </div>
-          <div className="col-span-3 flex justify-center items-baseline mt-0.5">
-            <span className="text-base font-bold tracking-tighter text-white">{value}</span>
-            <span className="text-[8px] text-blue-300/70 ml-1">{unit}</span>
-          </div>
-          {cholesterolData.confidence && (
-            <div className="col-span-3 flex justify-center">
-              <span className="text-[7px] text-blue-300/70">
-                Confianza: {Math.round(cholesterolData.confidence)}%
-              </span>
-            </div>
+        </div>
+      )}
+      {temperatureLocation && (
+        <div className="flex items-baseline space-x-1">
+          <span className="text-[10px] text-gray-600 dark:text-gray-400">
+            {temperatureLocation === 'finger' ? 'Dedo' : 
+             temperatureLocation === 'wrist' ? 'Muñeca' : 
+             temperatureLocation === 'forehead' ? 'Frente' : 'Desconocido'}
+          </span>
+          {temperatureTrend && (
+            <Badge variant="outline" className="text-[8px] px-1 py-0 bg-sky-100 text-sky-800">
+              {getTrendIcon()} {temperatureTrend.replace('_', ' ')}
+            </Badge>
           )}
         </div>
-      ) : (
-        // Vista normal para otros signos vitales
-        <div className="flex-1 flex flex-col justify-center">
-          <div className="flex items-baseline space-x-1 justify-center">
-            <span className="text-base font-bold tracking-tighter text-white">{value}</span>
-            <span className="text-[8px] text-blue-300/70">{unit}</span>
-          </div>
-          {secondaryValue && secondaryUnit && (
-            <div className="flex items-baseline space-x-1 justify-center">
-              <span className="text-xs font-medium tracking-tighter text-blue-200/90">
-                {secondaryValue}
-              </span>
-              <span className="text-[7px] text-blue-300/70">{secondaryUnit}</span>
-            </div>
-          )}
+      )}
+      {isFinalReading && (
+        <div className="mt-auto">
+          <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px]">
+            Medición Final
+          </Badge>
         </div>
       )}
     </Card>

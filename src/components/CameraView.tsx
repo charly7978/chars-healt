@@ -2,7 +2,6 @@
  * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION - NO ESTA PERMITIDO HACER MOVIMIENTOS POR CUENTA DE LA I.A SIN AUTORIZACION DEL USUARIO
  */
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { Fingerprint } from 'lucide-react';
 
 interface CameraViewProps {
   onStreamReady?: (stream: MediaStream) => void;
@@ -213,7 +212,6 @@ const CameraView = ({
     mountedRef.current = true;
     console.log("CameraView: Componente montado");
 
-    // Verificar permisos al montar
     navigator.mediaDevices?.getUserMedia({ video: true, audio: false })
       .then(stream => {
         stream.getTracks().forEach(track => track.stop());
@@ -232,41 +230,26 @@ const CameraView = ({
   }, [stopCamera]);
 
   return (
-    <div className="fixed inset-0 pt-16 pb-14 flex flex-col bg-black">
-      <div className="flex-1 relative overflow-hidden">
-        {error && (
-          <div className="absolute top-0 left-0 z-50 bg-red-500/80 text-white p-2 text-sm font-medium rounded m-2">
-            {error}
-          </div>
-        )}
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
-          className={`absolute top-0 left-0 min-w-full min-h-full w-auto h-auto z-0 object-cover ${!isMonitoring ? 'hidden' : ''}`}
-          style={{
-            transform: 'translateZ(0)',
-            WebkitBackfaceVisibility: 'hidden',
-            backfaceVisibility: 'hidden',
-            willChange: isAndroid ? 'transform' : 'auto',
-          }}
-        />
-        {isMonitoring && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <Fingerprint
-              size={48}
-              className={`transition-colors duration-300 ${
-                !isFingerDetected ? 'text-gray-400' :
-                signalQuality > 75 ? 'text-green-500' :
-                signalQuality > 50 ? 'text-yellow-500' :
-                'text-red-500'
-              }`}
-            />
-          </div>
-        )}
-      </div>
-    </div>
+    <>
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        className={`absolute top-0 left-0 min-w-full min-h-full w-auto h-auto z-0 object-cover ${!isMonitoring ? 'hidden' : ''}`}
+        style={{
+          transform: 'translateZ(0)',
+          WebkitBackfaceVisibility: 'hidden',
+          backfaceVisibility: 'hidden',
+          willChange: isAndroid ? 'transform' : 'auto',
+        }}
+      />
+      {error && (
+        <div className="absolute top-0 left-0 z-50 bg-red-500/80 text-white p-2 text-sm font-medium rounded m-2">
+          {error}
+        </div>
+      )}
+    </>
   );
 };
 

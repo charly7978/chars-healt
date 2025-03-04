@@ -1,3 +1,4 @@
+
 import { applySMAFilter, calculateHemoglobin } from '../utils/signalProcessingUtils';
 import { SpO2Calculator } from './spo2';
 import { BloodPressureCalculator } from './BloodPressureCalculator';
@@ -125,7 +126,6 @@ export class VitalSignsProcessor {
       this.calibrationStatus = 'calibrated';
     }
 
-    // Use the detect method we just added to ArrhythmiaDetector
     const arrhythmiaResult = this.arrhythmiaDetector.detect();
 
     // Calculate SpO2 using quantum spectral analysis

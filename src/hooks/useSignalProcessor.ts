@@ -14,53 +14,42 @@ export const useSignalProcessor = () => {
   
   useEffect(() => {
     console.log("useSignalProcessor: Creando nueva instancia del procesador avanzado");
-    try {
-      processorRef.current = new AdvancedSignalProcessor(
-        // Signal ready callback
-        (signal: ProcessedSignal) => {
-          console.log("useSignalProcessor: Señal recibida:", {
-            timestamp: signal.timestamp,
-            quality: signal.quality,
-            filteredValue: signal.filteredValue
-          });
-          
-          // Extract red and ir values from RGB components if available
-          // This is important for hemoglobin calculation
-          if (signal.rawPixelData) {
-            // Use the data for hemoglobin calculation in the VitalSignsProcessor
-            const vitalSignsProcessor = window.vitalSignsProcessor;
-            if (vitalSignsProcessor) {
-              const redValue = signal.rawPixelData.r || 0;
-              const irValue = signal.rawPixelData.ir || signal.rawPixelData.g || 0;
-              console.log(`Signal processor: Updating buffers - Red: ${redValue}, IR: ${irValue}`);
-              vitalSignsProcessor.updateSignalBuffers(redValue, irValue);
-            }
-          }
-          
-          setLastSignal(signal);
-          setError(null);
-        },
-        // Error callback
-        (error: ProcessingError) => {
-          console.error("useSignalProcessor: Error recibido:", error);
-          setError(error);
-        }
-      );
-
-      console.log("useSignalProcessor: Procesador avanzado creado correctamente");
-      
-      // Verificar si el método initialize existe antes de llamarlo
-      if (processorRef.current && typeof processorRef.current.initialize === 'function') {
-        console.log("useSignalProcessor: Iniciando procesador avanzado con initialize()");
-        processorRef.current.initialize().catch(error => {
-          console.error("useSignalProcessor: Error de inicialización:", error);
+    processorRef.current = new AdvancedSignalProcessor(
+      // Signal ready callback
+      (signal: ProcessedSignal) => {
+        console.log("useSignalProcessor: Señal recibida:", {
+          timestamp: signal.timestamp,
+          quality: signal.quality,
+          filteredValue: signal.filteredValue
         });
-      } else {
-        console.log("useSignalProcessor: El método initialize no existe, omitiendo inicialización");
+        
+        // Extract red and ir values from RGB components if available
+        // This is important for hemoglobin calculation
+        if (signal.rawPixelData) {
+          // Use the data for hemoglobin calculation in the VitalSignsProcessor
+          const vitalSignsProcessor = window.vitalSignsProcessor;
+          if (vitalSignsProcessor) {
+            const redValue = signal.rawPixelData.r || 0;
+            const irValue = signal.rawPixelData.ir || signal.rawPixelData.g || 0;
+            console.log(`Signal processor: Updating buffers - Red: ${redValue}, IR: ${irValue}`);
+            vitalSignsProcessor.updateSignalBuffers(redValue, irValue);
+          }
+        }
+        
+        setLastSignal(signal);
+        setError(null);
+      },
+      // Error callback
+      (error: ProcessingError) => {
+        console.error("useSignalProcessor: Error recibido:", error);
+        setError(error);
       }
-    } catch (error) {
-      console.error("useSignalProcessor: Error creando procesador avanzado:", error);
-    }
+    );
+
+    console.log("useSignalProcessor: Iniciando procesador avanzado");
+    processorRef.current.initialize().catch(error => {
+      console.error("useSignalProcessor: Error de inicialización:", error);
+    });
 
     return () => {
       console.log("useSignalProcessor: Limpiando y destruyendo procesador avanzado");
@@ -92,7 +81,7 @@ export const useSignalProcessor = () => {
   const calibrate = useCallback(async () => {
     try {
       console.log("useSignalProcessor: Iniciando calibración avanzada");
-      if (processorRef.current && typeof processorRef.current.calibrate === 'function') {
+      if (processorRef.current) {
         await processorRef.current.calibrate();
         console.log("useSignalProcessor: Calibración avanzada exitosa");
         return true;
