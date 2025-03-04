@@ -1,9 +1,9 @@
-
 import { applySMAFilter } from '../utils/signalProcessingUtils';
 import { SpO2Calculator } from './spo2';
 import { BloodPressureCalculator } from './BloodPressureCalculator';
 import { ArrhythmiaDetector } from './ArrhythmiaDetector';
 import { GlucoseProcessor } from './GlucoseProcessor';
+import { calculateHemoglobin } from '../utils/signalProcessingUtils';
 
 export class VitalSignsProcessor {
   private readonly WINDOW_SIZE = 300;
@@ -22,6 +22,9 @@ export class VitalSignsProcessor {
   private measurementCount: number = 0;
   private signalQuality: number = 0;
   
+  private redSignalBuffer: number[] = [];
+  private irSignalBuffer: number[] = [];
+
   constructor() {
     this.spO2Calculator = new SpO2Calculator();
     this.bpCalculator = new BloodPressureCalculator();
@@ -92,6 +95,13 @@ export class VitalSignsProcessor {
       console.log(`VitalSignsProcessor: No glucose value available yet`);
     }
 
+    // Calculate hemoglobin if we have enough data
+    let hemoglobin = null;
+    if (this.redSignalBuffer.length > 50 && this.irSignalBuffer.length > 50) {
+      hemoglobin = calculateHemoglobin(this.redSignalBuffer, this.irSignalBuffer);
+      console.log(`Calculated hemoglobin: ${hemoglobin} g/dL`);
+    }
+
     const lastArrhythmiaData = arrhythmiaResult.detected ? {
       timestamp: currentTime,
       rmssd: arrhythmiaResult.data?.rmssd || 0,
@@ -103,7 +113,8 @@ export class VitalSignsProcessor {
       pressure,
       arrhythmiaStatus: arrhythmiaResult.status,
       lastArrhythmiaData,
-      glucose
+      glucose,
+      hemoglobin
     };
   }
 
@@ -174,7 +185,7 @@ export class VitalSignsProcessor {
     return smoothed;
   }
 
-  public reset() {
+  public reset(): void {
     console.log("VitalSignsProcessor: Resetting all processors");
     this.ppgValues = [];
     this.lastBPM = 0;
@@ -187,9 +198,24 @@ export class VitalSignsProcessor {
     this.lastDiastolic = 80;
     this.measurementCount = 0;
     this.signalQuality = 0;
+    this.redSignalBuffer = [];
+    this.irSignalBuffer = [];
   }
 
   private applySMAFilter(value: number): number {
     return applySMAFilter(this.ppgValues, value, this.SMA_WINDOW);
+  }
+
+  public updateSignalBuffers(redValue: number, irValue: number): void {
+    this.redSignalBuffer.push(redValue);
+    this.irSignalBuffer.push(irValue);
+    
+    // Keep the buffers at a reasonable size
+    if (this.redSignalBuffer.length > 500) {
+      this.redSignalBuffer.shift();
+    }
+    if (this.irSignalBuffer.length > 500) {
+      this.irSignalBuffer.shift();
+    }
   }
 }

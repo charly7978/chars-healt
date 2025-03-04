@@ -16,3 +16,20 @@ export interface VitalSigns {
   glucose: number | null;
   arrhythmia?: string | null;
 } 
+
+export interface VitalSignsData {
+  spo2: number;
+  pressure: string;
+  arrhythmiaStatus: string;
+  respiration: {
+    rate: number;
+    depth: number;
+    regularity: number;
+  };
+  hasRespirationData: boolean;
+  glucose: {
+    value: number;
+    trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
+  } | null;
+  hemoglobin: number | null; // Add hemoglobin field
+}
