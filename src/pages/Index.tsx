@@ -1,4 +1,3 @@
-<lov-code>
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -9,45 +8,6 @@ import PPGSignalMeter from "@/components/PPGSignalMeter";
 import PermissionsHandler from "@/components/PermissionsHandler";
 import { VitalSignsRisk } from '@/utils/vitalSignsRisk';
 import { toast } from "sonner";
-import { HemoglobinData } from "@/types/signal";
-
-interface VitalSigns {
-  spo2: number;
-  pressure: string;
-  arrhythmiaStatus: string;
-  respiration: {
-    rate: number;
-    depth: number;
-    regularity: number;
-  };
-  hasRespirationData: boolean;
-  glucose: {
-    value: number;
-    trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
-  } | null;
-  hemoglobin: { 
-    value: number; 
-    confidence: number; 
-    lastUpdated: number; 
-  } | null;
-  lastArrhythmiaData: {
-    timestamp: number;
-    rmssd: number;
-    rrVariation: number;
-  } | null;
-  cholesterol: {
-    totalCholesterol: number;
-    hdl: number;
-    ldl: number;
-    triglycerides?: number;
-  } | null;
-  temperature: {
-    value: number;
-    trend: 'rising' | 'falling' | 'stable';
-    location: string;
-    confidence?: number;
-  } | null;
-}
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -850,4 +810,121 @@ const Index = () => {
 
       <div className="absolute inset-0 z-10">
         <PPGSignalMeter 
-          value={isMonitoring ? lastSignal?.filteredValue ||
+          value={isMonitoring ? lastSignal?.filteredValue || 0 : 0}
+          quality={isMonitoring ? signalQuality || 0 : 0}
+          isFingerDetected={isMonitoring ? lastSignal?.fingerDetected || false : false}
+          onStartMeasurement={startMonitoring}
+          onReset={handleReset}
+          arrhythmiaStatus={vitalSigns.arrhythmiaStatus || '--'}
+          rawArrhythmiaData={vitalSigns.lastArrhythmiaData || null}
+        />
+
+        <div className="absolute bottom-[120px] left-0 right-0 px-2 z-30">
+          <div className="grid grid-cols-3 gap-1.5">
+            <VitalSign 
+              label="FRECUENCIA CARDÍACA"
+              value={heartRate || "--"}
+              unit="BPM"
+              isFinalReading={measurementComplete && heartRate > 0}
+              trend={finalValues ? (finalValues.heartRate > heartRate ? 'rising' : finalValues.heartRate < heartRate ? 'falling' : 'stable') : 'stable'}
+            />
+            <VitalSign 
+              label="SPO2"
+              value={measurementComplete && finalValues ? finalValues.spo2 : vitalSigns.spo2 || "--"}
+              unit="%"
+              isFinalReading={measurementComplete && (finalValues?.spo2 || vitalSigns.spo2) > 0}
+            />
+            <VitalSign 
+              label="PRESIÓN ARTERIAL"
+              value={measurementComplete && finalValues ? finalValues.pressure : vitalSigns.pressure}
+              unit="mmHg"
+              isFinalReading={measurementComplete && vitalSigns.pressure !== "--/--"}
+            />
+            <VitalSign 
+              label="ARRITMIAS"
+              value={arrhythmiaCount}
+              unit=""
+              isFinalReading={measurementComplete && heartRate > 0}
+            />
+            <VitalSign 
+              label="RESPIRACIÓN"
+              value={measurementComplete && finalValues ? finalValues.respiration.rate : (vitalSigns.hasRespirationData ? vitalSigns.respiration.rate : "--")}
+              unit="RPM"
+              secondaryValue={measurementComplete && finalValues ? finalValues.respiration.depth : (vitalSigns.hasRespirationData ? vitalSigns.respiration.depth : "--")}
+              secondaryUnit="Prof."
+              isFinalReading={measurementComplete && vitalSigns.hasRespirationData}
+            />
+            <VitalSign 
+              label="GLUCOSA"
+              value={measurementComplete && finalValues?.glucose ? finalValues.glucose.value : (vitalSigns.glucose ? vitalSigns.glucose.value : "--")}
+              unit="mg/dL"
+              trend={measurementComplete && finalValues?.glucose ? finalValues.glucose.trend : (vitalSigns.glucose ? vitalSigns.glucose.trend : undefined)}
+              isFinalReading={measurementComplete && ((finalValues?.glucose && finalValues.glucose.value > 0) || (vitalSigns.glucose && vitalSigns.glucose.value > 0))}
+            />
+            <VitalSign 
+              label="HEMOGLOBINA"
+              value={measurementComplete && finalValues?.hemoglobin ? finalValues.hemoglobin.value.toFixed(1) : (vitalSigns.hemoglobin && vitalSigns.hemoglobin.value > 0 ? vitalSigns.hemoglobin.value.toFixed(1) : "--")}
+              unit="g/dL"
+              isFinalReading={measurementComplete && ((finalValues?.hemoglobin && finalValues.hemoglobin.value > 0) || (vitalSigns.hemoglobin && vitalSigns.hemoglobin.value > 0))}
+            />
+            <VitalSign 
+              label="COLESTEROL"
+              value={measurementComplete && finalValues?.cholesterol ? finalValues.cholesterol.totalCholesterol : (vitalSigns.cholesterol ? vitalSigns.cholesterol.totalCholesterol : "--")}
+              unit="mg/dL"
+              cholesterolData={measurementComplete && finalValues?.cholesterol ? {
+                hdl: finalValues.cholesterol.hdl,
+                ldl: finalValues.cholesterol.ldl,
+                triglycerides: finalValues.cholesterol.triglycerides
+              } : (vitalSigns.cholesterol ? {
+                hdl: vitalSigns.cholesterol.hdl,
+                ldl: vitalSigns.cholesterol.ldl,
+                triglycerides: vitalSigns.cholesterol.triglycerides
+              } : undefined)}
+              isFinalReading={measurementComplete && ((finalValues?.cholesterol && finalValues.cholesterol.totalCholesterol > 0) || (vitalSigns.cholesterol && vitalSigns.cholesterol.totalCholesterol > 0))}
+            />
+            <VitalSign 
+              label="TEMPERATURA"
+              value={measurementComplete && finalValues?.temperature ? finalValues.temperature.value.toFixed(1) : (vitalSigns.temperature ? vitalSigns.temperature.value.toFixed(1) : "--")}
+              unit="°C"
+              temperatureLocation={measurementComplete && finalValues?.temperature ? finalValues.temperature.location : (vitalSigns.temperature ? vitalSigns.temperature.location : 'dedo')}
+              temperatureTrend={measurementComplete && finalValues?.temperature ? finalValues.temperature.trend : (vitalSigns.temperature ? vitalSigns.temperature.trend : 'stable')}
+              isFinalReading={measurementComplete && ((finalValues?.temperature && finalValues.temperature.value > 0) || (vitalSigns.temperature && vitalSigns.temperature.value > 0))}
+            />
+          </div>
+        </div>
+
+        {isMonitoring && (
+          <div className="absolute bottom-40 left-0 right-0 text-center z-30">
+            <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 40s</span>
+          </div>
+        )}
+
+        <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 absolute bottom-0 inset-x-0 relative z-30">
+          <button 
+            onClick={startMonitoring}
+            className={`w-full h-full text-2xl font-bold text-white active:bg-gray-800 ${!permissionsGranted || isMonitoring ? 'bg-gray-600' : 'bg-black/80'}`}
+            disabled={!permissionsGranted || isMonitoring}
+          >
+            {!permissionsGranted ? 'PERMISOS REQUERIDOS' : isMonitoring ? 'MIDIENDO...' : 'INICIAR'}
+          </button>
+          <button 
+            onClick={handleReset}
+            className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
+          >
+            RESET
+          </button>
+        </div>
+        
+        {!permissionsGranted && (
+          <div className="absolute bottom-20 left-0 right-0 text-center px-4 z-30">
+            <span className="text-lg font-medium text-red-400">
+              La aplicación necesita permisos de cámara para funcionar correctamente
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default Index;
