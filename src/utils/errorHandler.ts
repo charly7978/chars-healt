@@ -1,124 +1,68 @@
-import { ErrorSeverity } from '../types/signal';
 
-export class ErrorHandler {
-  private static instance: ErrorHandler;
-  private errors: Array<{
-    code: string;
-    message: string;
-    timestamp: number;
-    severity: ErrorSeverity;
-  }> = [];
-  private errorSubscribers: Array<(error: any) => void> = [];
+import { ProcessingError } from '../types/signal';
 
-  private constructor() {
-    // Private constructor for singleton pattern
-  }
-
-  public static getInstance(): ErrorHandler {
-    if (!ErrorHandler.instance) {
-      ErrorHandler.instance = new ErrorHandler();
-    }
-    return ErrorHandler.instance;
-  }
-
-  public captureError(code: string, message: string, severity: ErrorSeverity = ErrorSeverity.ERROR): void {
-    const error = {
-      code,
-      message,
-      timestamp: Date.now(),
-      severity
-    };
-    this.errors.push(error);
-    this.notifySubscribers(error);
-    
-    // Log to console based on severity
-    switch(severity) {
-      case ErrorSeverity.INFO:
-        console.info(`[INFO] ${code}: ${message}`);
-        break;
-      case ErrorSeverity.WARNING:
-        console.warn(`[WARNING] ${code}: ${message}`);
-        break;
-      case ErrorSeverity.ERROR:
-        console.error(`[ERROR] ${code}: ${message}`);
-        break;
-      case ErrorSeverity.CRITICAL:
-        console.error(`[CRITICAL] ${code}: ${message}`);
-        // Maybe trigger crash reporting or other critical error handling
-        break;
-      default:
-        console.log(`[LOG] ${code}: ${message}`);
-    }
-    
-    // Clean up old errors to prevent memory issues
-    this.pruneOldErrors();
-  }
-
-  public subscribe(callback: (error: any) => void): () => void {
-    this.errorSubscribers.push(callback);
-    
-    // Return unsubscribe function
-    return () => {
-      this.errorSubscribers = this.errorSubscribers.filter(cb => cb !== callback);
-    };
-  }
-  
-  public getRecentErrors(count = 10): Array<any> {
-    return this.errors.slice(-count);
-  }
-  
-  public clearErrors(): void {
-    this.errors = [];
-  }
-  
-  public getErrorCount(): number {
-    return this.errors.length;
-  }
-
-  public getSeverityCount(severity: ErrorSeverity): number {
-    return this.errors.filter(e => e.severity === severity).length;
-  }
-  
-  public hasCriticalErrors(): boolean {
-    return this.errors.some(e => e.severity === ErrorSeverity.CRITICAL);
-  }
-  
-  private notifySubscribers(error: any): void {
-    this.errorSubscribers.forEach(callback => {
-      try {
-        callback(error);
-      } catch (e) {
-        console.error('Error in error subscriber callback', e);
-      }
-    });
-  }
-  
-  private pruneOldErrors(): void {
-    // Keep only the last 100 errors to prevent memory issues
-    if (this.errors.length > 100) {
-      this.errors = this.errors.slice(-100);
-    }
-    
-    // Remove errors older than 1 hour
-    const oneHourAgo = Date.now() - (60 * 60 * 1000);
-    this.errors = this.errors.filter(error => error.timestamp >= oneHourAgo);
-  }
-  
-  public logSystemInfo(): void {
-    // Use switch for severity comparison
-    switch(ErrorSeverity.INFO) {
-      case ErrorSeverity.WARNING:
-      case ErrorSeverity.ERROR:
-      case ErrorSeverity.CRITICAL:
-        // This will never execute
-        console.log("Unexpected severity level");
-        break;
-      case ErrorSeverity.INFO:
-      default:
-        console.log("System information logged with INFO severity");
-        break;
-    }
-  }
+// Simplemente redefino el enum aquí para evitar errores de importación
+enum ErrorSeverity {
+  INFO = 'INFO',
+  WARNING = 'WARNING',
+  ERROR = 'ERROR',
+  CRITICAL = 'CRITICAL'
 }
 
-export default ErrorHandler.getInstance();
+export const handleProcessingError = (error: ProcessingError, callback?: (error: ProcessingError) => void): void => {
+  console.error(`[Processing Error] ${error.code}: ${error.message}`, error);
+  
+  if (error.details) {
+    console.error('Error details:', error.details);
+  }
+  
+  // Manejo específico según el tipo de error
+  switch (error.code) {
+    case 'SIGNAL_QUALITY_LOW':
+      console.warn('Signal quality is too low for reliable processing');
+      break;
+    case 'CALIBRATION_REQUIRED':
+      console.warn('Calibration is required before processing');
+      break;
+    case 'FINGER_NOT_DETECTED':
+      console.info('No finger detected on the camera');
+      break;
+    // Otros casos de error...
+  }
+  
+  // Manejo según la severidad
+  switch (error.severity) {
+    case ErrorSeverity.INFO:
+      // Solo información, no requiere acción
+      break;
+    case ErrorSeverity.WARNING:
+      // Advertencia, puede requerir atención del usuario
+      break;
+    case ErrorSeverity.ERROR:
+      // Error recuperable, pero requiere acción
+      break;
+    case ErrorSeverity.CRITICAL:
+      // Error crítico, requiere reinicio o intervención mayor
+      break;
+  }
+  
+  // Llamar al callback si existe
+  if (callback) {
+    callback(error);
+  }
+};
+
+export const createProcessingError = (
+  code: string,
+  message: string,
+  severity: ErrorSeverity,
+  details?: any
+): ProcessingError => {
+  return {
+    code,
+    message,
+    severity,
+    timestamp: new Date().toISOString(),
+    details
+  };
+};

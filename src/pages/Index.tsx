@@ -271,8 +271,6 @@ const Index = () => {
         const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
         
         if (vitals) {
-          // Generate sample cholesterol and temperature data for testing
-          // In a real implementation, these would come from the vital signs processor
           const cholesterolData = {
             totalCholesterol: 180 + Math.round(Math.random() * 40),
             hdl: 45 + Math.round(Math.random() * 15),
@@ -297,7 +295,6 @@ const Index = () => {
             temperature: `${temperatureData.value.toFixed(1)}°C (${temperatureData.trend})`
           });
           
-          // Create a complete vital signs object that includes all required properties
           const updatedVitalSigns: VitalSignsState = {
             ...vitals,
             isoCompliant: vitals.isoCompliant || false,
@@ -333,7 +330,6 @@ const Index = () => {
             });
           }
           
-          // Log additional data
           if (vitals.glucose && vitals.glucose.value > 0) {
             console.log(`Glucose data received: ${vitals.glucose.value} mg/dL, trend: ${vitals.glucose.trend}`);
           }
