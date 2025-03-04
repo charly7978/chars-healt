@@ -23,7 +23,8 @@ const Index = () => {
     hemoglobin: null,
     lastArrhythmiaData: null,
     cholesterol: null,
-    temperature: null
+    temperature: null,
+    isoCompliant: false
   });
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState("--");
@@ -130,7 +131,8 @@ const Index = () => {
       hemoglobin: null,
       lastArrhythmiaData: null,
       cholesterol: null,
-      temperature: null
+      temperature: null,
+      isoCompliant: false
     });
     setArrhythmiaCount("--");
     setSignalQuality(0);
