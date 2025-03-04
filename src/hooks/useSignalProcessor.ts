@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { PPGSignalProcessor } from '../modules/SignalProcessor';
 import { ProcessedSignal, ProcessingError } from '../types/signal';
@@ -137,8 +136,8 @@ export const useSignalProcessor = () => {
           const signalValues = signalBufferRef.current.getPoints().map(p => p.value);
           
           if (signalValues.length >= 30) {
-            const peaks = enhancedPeakDetection(signalValues);
-            const quality = peaks.signalQuality;
+            const peakInfo = enhancedPeakDetection(signalValues);
+            const quality = peakInfo.signalQuality;
             
             const fingerDetected = quality > 20 && lastSignal.fingerDetected;
             
@@ -154,10 +153,6 @@ export const useSignalProcessor = () => {
             setLastSignal(enhancedSignal);
             
             if (window.heartBeatProcessor) {
-              const heartBeatData = {
-                timestamp: now,
-                value: enhancedValue
-              };
               window.heartBeatProcessor.processSignal(enhancedValue);
             }
           }
