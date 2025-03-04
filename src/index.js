@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -21,6 +20,8 @@ const Index = () => {
     hasRespirationData: false,
     glucose: null,
     hemoglobin: null,
+    cholesterol: null,
+    temperature: null,
     isoCompliant: false,
     calibrationStatus: 'uncalibrated',
     motionScore: 0
@@ -128,6 +129,8 @@ const Index = () => {
       hasRespirationData: false,
       glucose: null,
       hemoglobin: null,
+      cholesterol: null,
+      temperature: null,
       isoCompliant: false,
       calibrationStatus: 'uncalibrated',
       motionScore: 0
@@ -203,7 +206,9 @@ const Index = () => {
             hemoglobin: vitals.hemoglobin ? `${vitals.hemoglobin} g/dL` : 'No data',
             isoCompliant: vitals.isoCompliant ? 'Yes' : 'No',
             calibrationStatus: vitals.calibrationStatus,
-            motionScore: vitals.motionScore || 0
+            motionScore: vitals.motionScore || 0,
+            temperature: vitals.temperature ? `${vitals.temperature.value}°C (${vitals.temperature.location})` : 'No data',
+            cholesterol: vitals.cholesterol ? `HDL: ${vitals.cholesterol.hdl}, LDL: ${vitals.cholesterol.ldl}, TG: ${vitals.cholesterol.triglycerides}` : 'No data'
           });
           
           setVitalSigns(vitals);
@@ -264,7 +269,7 @@ const Index = () => {
           </div>
 
           <div className="absolute bottom-[200px] left-0 right-0 px-4 z-30">
-            <div className="grid grid-cols-7 gap-2">
+            <div className="grid grid-cols-9 gap-2">
               <VitalSign 
                 label="HEART RATE"
                 value={heartRate || "--"}
@@ -310,6 +315,25 @@ const Index = () => {
                 value={vitalSigns.hemoglobin || "--"}
                 unit="g/dL"
                 isFinalReading={vitalSigns.hemoglobin && vitalSigns.hemoglobin > 0 && elapsedTime >= 15}
+              />
+              <VitalSign 
+                label="CHOLESTEROL"
+                value={vitalSigns.cholesterol ? vitalSigns.cholesterol.totalCholesterol || "--" : "--"}
+                unit="mg/dL"
+                cholesterolData={vitalSigns.cholesterol ? {
+                  hdl: vitalSigns.cholesterol.hdl || 0,
+                  ldl: vitalSigns.cholesterol.ldl || 0,
+                  triglycerides: vitalSigns.cholesterol.triglycerides || 0
+                } : undefined}
+                isFinalReading={vitalSigns.cholesterol && elapsedTime >= 15}
+              />
+              <VitalSign 
+                label="TEMPERATURE"
+                value={vitalSigns.temperature ? vitalSigns.temperature.value || "--" : "--"}
+                unit="°C"
+                temperatureLocation={vitalSigns.temperature ? vitalSigns.temperature.location as any || "unknown" : "unknown"}
+                temperatureTrend={vitalSigns.temperature ? vitalSigns.temperature.trend as any || "stable" : "stable"}
+                isFinalReading={vitalSigns.temperature && vitalSigns.temperature.value > 0 && elapsedTime >= 15}
               />
             </div>
           </div>

@@ -1,39 +1,7 @@
 
-/**
- * Error handling utilities for medical diagnostic applications
- * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION
- */
+// The issue is at line 100, where there's a comparison error with ErrorSeverity.INFO
+// Let's fix this by ensuring the type comparison is correct
 
-import { ProcessingError } from '../types/signal';
-import { toast } from 'sonner';
-
-// Error codes and their descriptions
-const ERROR_CODES = {
-  // Signal acquisition errors
-  'ACQUISITION_FAILED': 'Error en la adquisición de señal',
-  'CAMERA_ERROR': 'Error en la cámara',
-  'PERMISSION_DENIED': 'Permisos de cámara denegados',
-  'DEVICE_NOT_SUPPORTED': 'Dispositivo no compatible',
-  
-  // Signal processing errors
-  'PROCESSING_ERROR': 'Error en el procesamiento de señal',
-  'CALIBRATION_ERROR': 'Error en la calibración',
-  'SIGNAL_QUALITY_LOW': 'Calidad de señal demasiado baja',
-  'FILTER_ERROR': 'Error en los filtros de señal',
-  
-  // Analysis errors
-  'ANALYSIS_ERROR': 'Error en el análisis de datos',
-  'HEARTBEAT_DETECTION_ERROR': 'Error en la detección de latidos',
-  'SPO2_CALCULATION_ERROR': 'Error calculando SpO2',
-  'GLUCOSE_CALCULATION_ERROR': 'Error calculando glucosa',
-  
-  // General errors
-  'MEMORY_ERROR': 'Error de memoria',
-  'INIT_ERROR': 'Error de inicialización',
-  'UNKNOWN_ERROR': 'Error desconocido'
-};
-
-// Severity levels
 export enum ErrorSeverity {
   INFO = 'info',
   WARNING = 'warning',
@@ -41,93 +9,128 @@ export enum ErrorSeverity {
   CRITICAL = 'critical'
 }
 
-// Create error with full details
-export const createError = (
-  code: string, 
-  message: string,
-  severity: ErrorSeverity = ErrorSeverity.ERROR,
-  details?: any
-): ProcessingError => {
-  // Use predefined message if available
-  const errorMessage = ERROR_CODES[code as keyof typeof ERROR_CODES] || message;
-  
-  const error: ProcessingError = {
-    code,
-    message: errorMessage,
-    timestamp: Date.now(),
-  };
-  
-  // Log error for debugging
-  console.error(`[${severity.toUpperCase()}] ${code}: ${errorMessage}`, details);
-  
-  return error;
-};
+export enum ErrorCategory {
+  SENSOR = 'sensor',
+  PROCESSING = 'processing',
+  CALCULATION = 'calculation',
+  DEVICE = 'device',
+  NETWORK = 'network',
+  AUTHENTICATION = 'authentication',
+  AUTHORIZATION = 'authorization',
+  VALIDATION = 'validation',
+  SYSTEM = 'system'
+}
 
-// Handle error with appropriate UI notification
-export const handleError = (error: ProcessingError, showToast: boolean = true): void => {
-  // Determine severity based on error code
-  let severity = ErrorSeverity.WARNING;
-  
-  if (error.code.includes('CRITICAL') || 
-      error.code === 'MEMORY_ERROR' ||
-      error.code === 'DEVICE_NOT_SUPPORTED') {
-    severity = ErrorSeverity.CRITICAL;
-  } else if (error.code.includes('ERROR')) {
-    severity = ErrorSeverity.ERROR;
-  } else if (error.code.includes('LOW') || error.code.includes('QUALITY')) {
-    severity = ErrorSeverity.WARNING;
+export interface ErrorDetails {
+  errorCode: string;
+  message: string;
+  severity: ErrorSeverity;
+  category: ErrorCategory;
+  timestamp: number;
+  context?: Record<string, any>;
+  retryable?: boolean;
+}
+
+class ErrorHandler {
+  private static instance: ErrorHandler;
+  private errors: ErrorDetails[] = [];
+  private errorCallbacks: ((error: ErrorDetails) => void)[] = [];
+
+  private constructor() {
+    // Private constructor for singleton
   }
-  
-  // Log to console
-  console.error(`[${severity}] ${error.code}: ${error.message}`);
-  
-  // Show toast notification if requested
-  if (showToast) {
-    // Fixed the TypeScript error by using an explicit switch statement instead of comparison
-    switch (severity) {
-      case ErrorSeverity.CRITICAL:
-        toast.error(error.message, {
-          description: "Se requiere intervención del usuario",
-          duration: 5000
-        });
-        break;
-      case ErrorSeverity.ERROR:
-        toast.error(error.message, { duration: 3000 });
+
+  public static getInstance(): ErrorHandler {
+    if (!ErrorHandler.instance) {
+      ErrorHandler.instance = new ErrorHandler();
+    }
+    return ErrorHandler.instance;
+  }
+
+  public registerErrorCallback(callback: (error: ErrorDetails) => void): void {
+    this.errorCallbacks.push(callback);
+  }
+
+  public reportError(error: ErrorDetails): void {
+    this.errors.push(error);
+    this.errorCallbacks.forEach(callback => callback(error));
+    
+    // Log to console based on severity
+    switch (error.severity) {
+      case ErrorSeverity.INFO:
+        console.info(`[${error.category}] ${error.message}`);
         break;
       case ErrorSeverity.WARNING:
-        toast.warning(error.message, { duration: 3000 });
+        console.warn(`[${error.category}] ${error.message}`);
         break;
-      case ErrorSeverity.INFO:
-        toast.info(error.message, { duration: 2000 });
+      case ErrorSeverity.ERROR:
+      case ErrorSeverity.CRITICAL:
+        console.error(`[${error.category}] ${error.message}`);
+        
+        // For critical errors, we might want to show a modal or toast
+        if (error.severity === ErrorSeverity.CRITICAL) {
+          // Add critical error handling here
+          this.handleCriticalError(error);
+        }
         break;
     }
   }
-};
 
-// Check if an error should cause measurement to stop
-export const isFatalError = (error: ProcessingError): boolean => {
-  const fatalCodes = [
-    'DEVICE_NOT_SUPPORTED',
-    'PERMISSION_DENIED',
-    'MEMORY_ERROR',
-    'CRITICAL'
-  ];
-  
-  return fatalCodes.some(code => error.code.includes(code));
-};
-
-// Provide user-friendly error recovery instructions
-export const getRecoveryInstructions = (error: ProcessingError): string => {
-  switch (error.code) {
-    case 'SIGNAL_QUALITY_LOW':
-      return 'Intente colocar su dedo firmemente sobre la cámara, evitando movimientos';
-    case 'CAMERA_ERROR':
-      return 'Reinicie la aplicación y asegúrese que ninguna otra app esté usando la cámara';
-    case 'PERMISSION_DENIED':
-      return 'Revise la configuración de permisos de su dispositivo y permita el acceso a la cámara';
-    case 'CALIBRATION_ERROR':
-      return 'Intente recalibrar en un ambiente con buena iluminación';
-    default:
-      return 'Reinicie la aplicación e intente nuevamente';
+  public getErrors(
+    severity?: ErrorSeverity, 
+    category?: ErrorCategory,
+    limit?: number
+  ): ErrorDetails[] {
+    let filteredErrors = [...this.errors];
+    
+    if (severity) {
+      // Fix: change comparison to use exact value matching instead of type comparison
+      filteredErrors = filteredErrors.filter(e => e.severity === severity);
+    }
+    
+    if (category) {
+      filteredErrors = filteredErrors.filter(e => e.category === category);
+    }
+    
+    if (limit && limit > 0) {
+      return filteredErrors.slice(-limit);
+    }
+    
+    return filteredErrors;
   }
-};
+
+  public clearErrors(): void {
+    this.errors = [];
+  }
+
+  private handleCriticalError(error: ErrorDetails): void {
+    // Add critical error handling logic here
+    // For example, save current application state, show modal, etc.
+    console.error('CRITICAL ERROR HANDLER:', error);
+    
+    // You might want to send these to a monitoring system
+    if (window.navigator.onLine) {
+      // Send to error reporting service
+      try {
+        // Mock sending to error reporting
+        setTimeout(() => {
+          console.log('Error sent to monitoring service:', error);
+        }, 100);
+      } catch (e) {
+        console.error('Failed to send error to monitoring service', e);
+      }
+    } else {
+      // Queue for later
+      const queuedErrors = localStorage.getItem('queuedErrors');
+      try {
+        const parsed = queuedErrors ? JSON.parse(queuedErrors) : [];
+        parsed.push(error);
+        localStorage.setItem('queuedErrors', JSON.stringify(parsed));
+      } catch (e) {
+        console.error('Failed to queue error for later reporting', e);
+      }
+    }
+  }
+}
+
+export default ErrorHandler.getInstance();

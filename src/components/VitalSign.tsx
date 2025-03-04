@@ -90,6 +90,36 @@ const VitalSign: React.FC<VitalSignProps> = ({
           <span className="text-[10px] text-gray-600 dark:text-gray-400">{secondaryUnit}</span>
         </div>
       )}
+      {cholesterolData && (
+        <div className="flex flex-col mt-1 space-y-0.5">
+          <div className="flex items-baseline justify-between">
+            <span className="text-[10px] text-gray-600">HDL:</span>
+            <span className="text-[10px] font-medium">{cholesterolData.hdl} mg/dL</span>
+          </div>
+          <div className="flex items-baseline justify-between">
+            <span className="text-[10px] text-gray-600">LDL:</span>
+            <span className="text-[10px] font-medium">{cholesterolData.ldl} mg/dL</span>
+          </div>
+          <div className="flex items-baseline justify-between">
+            <span className="text-[10px] text-gray-600">TG:</span>
+            <span className="text-[10px] font-medium">{cholesterolData.triglycerides} mg/dL</span>
+          </div>
+        </div>
+      )}
+      {temperatureLocation && (
+        <div className="flex items-baseline space-x-1">
+          <span className="text-[10px] text-gray-600 dark:text-gray-400">
+            {temperatureLocation === 'finger' ? 'Dedo' : 
+             temperatureLocation === 'wrist' ? 'Muñeca' : 
+             temperatureLocation === 'forehead' ? 'Frente' : 'Desconocido'}
+          </span>
+          {temperatureTrend && (
+            <Badge variant="outline" className="text-[8px] px-1 py-0 bg-sky-100 text-sky-800">
+              {getTrendIcon()} {temperatureTrend.replace('_', ' ')}
+            </Badge>
+          )}
+        </div>
+      )}
       {isFinalReading && (
         <div className="mt-auto">
           <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px]">
