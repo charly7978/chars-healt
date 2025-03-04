@@ -273,46 +273,46 @@ const VitalSign: React.FC<VitalSignProps> = ({
   return (
     <>
       <div 
-        className={`relative overflow-hidden rounded-xl bg-black shadow-lg ${
+        className={`relative overflow-hidden rounded-lg bg-black shadow-lg ${
           isFinalReading ? 'active:scale-95 transition-transform cursor-pointer' : ''
         }`}
         onClick={isFinalReading ? handleCardClick : undefined}
       >
-        <div className="relative z-10 p-4">
-          <h3 className="text-white text-xs font-medium tracking-wider mb-2">{label}</h3>
-          <div className="flex flex-col items-center gap-1">
+        <div className="relative z-10 p-3">
+          <h3 className="text-white text-[10px] font-medium tracking-wider mb-1">{label}</h3>
+          <div className="flex flex-col items-center gap-0.5">
             {isArrhythmiaDisplay && title && (
-              <span className="text-sm font-bold tracking-wider" style={{ color: color || '#FFFFFF' }}>
+              <span className="text-xs font-bold tracking-wider" style={{ color: color || '#FFFFFF' }}>
                 {title}
               </span>
             )}
-            <div className="flex items-baseline gap-1 justify-center">
+            <div className="flex items-baseline gap-0.5 justify-center">
               <span 
-                className={`${isArrhythmiaDisplay ? 'text-base' : 'text-xl'} font-bold transition-colors duration-300 text-white`}
+                className={`${isArrhythmiaDisplay ? 'text-sm' : 'text-lg'} font-bold transition-colors duration-300 text-white`}
                 style={{ color: color || '#000000' }}
               >
                 {text}
               </span>
               {!isArrhythmiaDisplay && unit && (
-                <span className="text-white text-xs">{unit}</span>
+                <span className="text-white text-[9px]">{unit}</span>
               )}
               {isGlucose && renderGlucoseTrend(trend)}
             </div>
             
             {secondaryValue !== undefined && (
-              <div className="flex items-baseline gap-1 justify-center mt-1">
-                <span className="text-sm font-medium text-white/80">
+              <div className="flex items-baseline gap-0.5 justify-center mt-0.5">
+                <span className="text-xs font-medium text-white/80">
                   {secondaryValue}
                 </span>
                 {secondaryUnit && (
-                  <span className="text-white/70 text-[10px]">{secondaryUnit}</span>
+                  <span className="text-white/70 text-[8px]">{secondaryUnit}</span>
                 )}
               </div>
             )}
             
             {riskLabel && (
               <span 
-                className="text-[10px] font-semibold tracking-wider mt-1 text-white"
+                className="text-[9px] font-semibold tracking-wider mt-0.5 text-white"
                 style={{ color: color || '#000000' }}
               >
                 {riskLabel}
@@ -324,8 +324,8 @@ const VitalSign: React.FC<VitalSignProps> = ({
         {isFinalReading && (
           <div className="absolute inset-0 bg-white/5 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="bg-white/10 rounded-full p-2">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/70">
+              <div className="bg-white/10 rounded-full p-1.5">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/70">
                   <path d="M9 18l6-6-6-6"/>
                 </svg>
               </div>

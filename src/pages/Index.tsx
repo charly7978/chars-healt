@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -730,17 +729,8 @@ const Index = () => {
         />
       </div>
       
-      {isMonitoring && (
-        <div className="absolute z-30 text-sm bg-black/50 backdrop-blur-sm px-3 py-1 rounded-lg" 
-          style={{ top: '35%', left: '50%', transform: 'translateX(-50%)', textAlign: 'center' }}>
-          <span className="text-cyan-400 font-medium">Respiración: {vitalSigns.hasRespirationData ? 
-            `${vitalSigns.respiration.rate} RPM, Profundidad: ${vitalSigns.respiration.depth}%` : 
-            'Calibrando...'}</span>
-        </div>
-      )}
-
-      <div className="absolute z-20" style={{ bottom: '65px', left: 0, right: 0, padding: '0 12px' }}>
-        <div className="p-2 rounded-lg">
+      <div className="absolute z-20" style={{ bottom: '65px', left: 0, right: 0, padding: '0 10px' }}>
+        <div className="p-1 rounded-lg">
           <div className="grid grid-cols-3 gap-1 sm:grid-cols-7">
             <VitalSign 
               label="FRECUENCIA CARDÍACA"
