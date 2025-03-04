@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback, memo } from 'react';
+import React, { useEffect, useRef, useCallback, memo, useState } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
 
@@ -49,12 +49,12 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
   const lastArrhythmiaTime = useRef<number>(0);
   const arrhythmiaCountRef = useRef<number>(0);
   
-  const WINDOW_WIDTH_MS = 2200;
-  const CANVAS_WIDTH = 390;
-  const CANVAS_HEIGHT = 400;
+  const WINDOW_WIDTH_MS = 5000;
+  const CANVAS_WIDTH = 1000;
+  const CANVAS_HEIGHT = 300;
   const GRID_SIZE_X = 30;
   const GRID_SIZE_Y = 5;
-  const verticalScale = 48.0;
+  const verticalScale = 100.0;
   const SMOOTHING_FACTOR = 1.7;
   const TARGET_FPS = 180;
   const FRAME_TIME = 1500 / TARGET_FPS;
@@ -92,6 +92,12 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
     cullFactor: 0.8
   };
 
+  const [startTime, setStartTime] = useState(Date.now());
+
+  const GRID_COLOR = 'rgba(51, 65, 85, 0.1)';
+  const SIGNAL_COLOR = '#0ea5e9';
+  const CENTER_LINE_COLOR = 'rgba(51, 65, 85, 0.3)';
+
   useEffect(() => {
     if (!dataBufferRef.current) {
       dataBufferRef.current = new CircularBuffer(BUFFER_SIZE);
@@ -100,18 +106,20 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
 
   const getQualityColor = useCallback((q: number) => {
     if (!isFingerDetected) return 'from-gray-400 to-gray-500';
-    if (q > 75) return 'from-green-500 to-emerald-500';
-    if (q > 50) return 'from-yellow-500 to-orange-500';
-    if (q > 30) return 'from-orange-500 to-red-500';
-    return 'from-red-500 to-rose-500';
+    if (q > 90) return 'from-emerald-500/80 to-emerald-400/80';
+    if (q > 75) return 'from-sky-500/80 to-sky-400/80';
+    if (q > 60) return 'from-indigo-500/80 to-indigo-400/80';
+    if (q > 40) return 'from-amber-500/80 to-amber-400/80';
+    return 'from-red-500/80 to-red-400/80';
   }, [isFingerDetected]);
 
   const getQualityText = useCallback((q: number) => {
     if (!isFingerDetected) return 'Sin detección';
-    if (q > 75) return 'Señal óptima';
-    if (q > 50) return 'Señal aceptable';
-    if (q > 30) return 'Señal débil';
-    return 'Señal muy débil';
+    if (q > 90) return 'Excellent';
+    if (q > 75) return 'Very Good';
+    if (q > 60) return 'Good';
+    if (q > 40) return 'Fair';
+    return 'Poor';
   }, [isFingerDetected]);
 
   const smoothValue = useCallback((currentValue: number, previousValue: number | null): number => {
@@ -123,12 +131,12 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     
     // Fondo oscuro
-    ctx.fillStyle = '#0A1628';
+    ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
     // Cuadrícula menor
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(30, 64, 175, 0.15)';
+    ctx.strokeStyle = GRID_COLOR;
     ctx.lineWidth = 0.5;
 
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X) {
@@ -144,7 +152,7 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
 
     // Cuadrícula mayor
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(30, 64, 175, 0.3)';
+    ctx.strokeStyle = GRID_COLOR;
     ctx.lineWidth = 1;
 
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X * 4) {
@@ -152,10 +160,10 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
       ctx.lineTo(x, CANVAS_HEIGHT);
       // Etiquetas de tiempo
       if (x % (GRID_SIZE_X * 4) === 0) {
-        ctx.fillStyle = 'rgba(148, 163, 184, 0.8)';
-        ctx.font = '8px Inter';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.font = '10px monospace';
         ctx.textAlign = 'center';
-        ctx.fillText(`${x / 10}ms`, x, CANVAS_HEIGHT - 4);
+        ctx.fillText(`${x / 50}ms`, x, CANVAS_HEIGHT - 5);
       }
     }
 
@@ -165,8 +173,8 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
       // Etiquetas de amplitud
       if (y % (GRID_SIZE_Y * 4) === 0) {
         const amplitude = ((CANVAS_HEIGHT * 0.45) - y) / verticalScale;
-        ctx.fillStyle = 'rgba(148, 163, 184, 0.8)';
-        ctx.font = '8px Inter';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.font = '10px monospace';
         ctx.textAlign = 'right';
         ctx.fillText(amplitude.toFixed(1), 20, y + 3);
       }
@@ -175,9 +183,9 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
 
     // Línea central (subida al 45% de la altura)
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(30, 64, 175, 0.5)';
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([4, 2]);
+    ctx.strokeStyle = CENTER_LINE_COLOR;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([5, 5]);
     ctx.moveTo(0, CANVAS_HEIGHT * 0.45);
     ctx.lineTo(CANVAS_WIDTH, CANVAS_HEIGHT * 0.45);
     ctx.stroke();
@@ -210,14 +218,15 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
     if (baselineRef.current === null) {
       baselineRef.current = value;
     } else {
-      baselineRef.current = baselineRef.current * 0.95 + value * 0.05;
+      baselineRef.current = baselineRef.current * 0.98 + value * 0.02;
     }
 
     const smoothedValue = smoothValue(value, lastValueRef.current);
     lastValueRef.current = smoothedValue;
 
-    const normalizedValue = smoothedValue - (baselineRef.current || 0);
-    const scaledValue = normalizedValue * verticalScale;
+    const normalizedValue = (smoothedValue - (baselineRef.current || 0)) * verticalScale;
+    const isWaveStart = lastValueRef.current < 0 && normalizedValue >= 0;
+    const scaledValue = normalizedValue;
     
     let isArrhythmia = false;
     if (rawArrhythmiaData && 
@@ -232,6 +241,7 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
     const dataPoint: PPGDataPoint = {
       time: now,
       value: scaledValue,
+      isWaveStart,
       isArrhythmia
     };
     
@@ -247,7 +257,7 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
       
       if (visiblePoints.length > 1) {
         ctx.beginPath();
-        ctx.strokeStyle = '#0EA5E9';
+        ctx.strokeStyle = SIGNAL_COLOR;
         ctx.lineWidth = 2;
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
@@ -281,7 +291,7 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
             ctx.stroke();
             
             ctx.beginPath();
-            ctx.strokeStyle = '#0EA5E9';
+            ctx.strokeStyle = SIGNAL_COLOR;
             ctx.lineWidth = 2;
             ctx.setLineDash([]);
             ctx.moveTo(nextX, nextY);
@@ -329,7 +339,7 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
         
         ctx.beginPath();
         ctx.arc(x, y, point.isArrhythmia ? 5 : 4, 0, Math.PI * 2);
-        ctx.fillStyle = point.isArrhythmia ? '#DC2626' : '#0EA5E9';
+        ctx.fillStyle = point.isArrhythmia ? '#DC2626' : SIGNAL_COLOR;
         ctx.fill();
 
         ctx.font = 'bold 12px Inter';
@@ -399,46 +409,43 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
 
   const handleReset = useCallback(() => {
     dataBufferRef.current = new CircularBuffer(BUFFER_SIZE);
+    baselineRef.current = null;
+    lastValueRef.current = 0;
+    setStartTime(Date.now());
     onReset();
   }, [onReset]);
 
   return (
-    <div className="fixed inset-0 bg-gradient-to-b from-white to-slate-50/30">
-      <div className="absolute top-0 left-0 right-0 p-2 flex justify-between items-center bg-white/60 backdrop-blur-sm border-b border-slate-100 shadow-sm">
-        <div className="w-[190px]">
-          <div className={`h-1.5 w-full rounded-full bg-gradient-to-r ${getQualityColor(quality)} transition-all duration-1000 ease-in-out`}>
-            <div
-              className="h-full rounded-full bg-white/20 animate-pulse transition-all duration-1000"
-              style={{ width: `${isFingerDetected ? quality : 0}%` }}
-            />
+    <div className="fixed inset-0 bg-black">
+      <div className="absolute top-0 left-0 right-0 p-2 flex justify-between items-center bg-black/60 backdrop-blur-sm border-b border-gray-800">
+        <div className="flex items-center gap-3 flex-1">
+          <span className="text-xl font-bold text-white">PPG Monitor</span>
+          <div className="flex flex-col flex-1">
+            <div className={`h-1.5 w-[80%] mx-auto rounded-full bg-gradient-to-r ${getQualityColor(quality)} transition-all duration-1000 ease-in-out`}>
+              <div
+                className="h-full rounded-full bg-white/20 animate-pulse transition-all duration-1000"
+                style={{ width: `${quality}%` }}
+              />
+            </div>
+            <span className="text-[9px] text-center mt-0.5 font-medium transition-colors duration-700" 
+                  style={{ color: quality > 60 ? '#0EA5E9' : '#F59E0B' }}>
+              {getQualityText(quality)}
+            </span>
           </div>
-          <span className="text-[9px] text-center mt-0.5 font-medium transition-colors duration-700 block text-white" 
-                style={{ 
-                  color: quality > 75 ? '#0EA5E9' : 
-                         quality > 50 ? '#F59E0B' : 
-                         quality > 30 ? '#DC2626' : '#FF4136' 
-                }}>
-            {getQualityText(quality)}
-          </span>
-        </div>
-
-        <div className="flex flex-col items-center">
-          <Fingerprint
-            className={`h-12 w-12 transition-colors duration-300 ${
-              !isFingerDetected ? 'text-gray-400' :
-              quality > 75 ? 'text-green-500' :
-              quality > 50 ? 'text-yellow-500' :
-              quality > 30 ? 'text-orange-500' :
-              'text-red-500'
-            }`}
-            strokeWidth={1.5}
-          />
-          <span className={`text-[9px] text-center mt-0.5 font-medium ${
-            !isFingerDetected ? 'text-gray-400' : 
-            quality > 50 ? 'text-green-500' : 'text-yellow-500'
-          }`}>
-            {isFingerDetected ? "Dedo detectado" : "Ubique su dedo en la Lente"}
-          </span>
+          
+          <div className="flex flex-col items-center">
+            <Fingerprint 
+              size={56}
+              className={`transition-all duration-700 ${
+                isFingerDetected 
+                  ? 'text-emerald-500 scale-100 drop-shadow-md'
+                  : 'text-gray-600 scale-95'
+              }`}
+            />
+            <span className="text-xs font-medium text-gray-400 transition-all duration-700">
+              {isFingerDetected ? 'Dedo detectado' : 'Ubique su dedo en el lente'}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -446,71 +453,19 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
         ref={canvasRef}
         width={CANVAS_WIDTH}
         height={CANVAS_HEIGHT}
-        className="w-full h-full"
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 }}
-        aria-label="PPG Signal Graph"
-        role="img"
+        className="w-full h-[calc(50vh)] mt-20"
       />
-      
-      <div className="absolute" style={{ top: 'calc(50vh + 5px)', left: 0, right: 0, textAlign: 'center', zIndex: 30 }}>
-        <h1 className="text-xl font-bold">
-          <span className="text-white">Chars</span>
-          <span className="text-[#ea384c]">Healt</span>
-        </h1>
-      </div>
 
-      {/* Colesterol display */}
-      {cholesterolData && cholesterolData.totalCholesterol > 0 && (
-        <div className="absolute left-2 top-20 z-30 bg-black/60 backdrop-blur-sm rounded-lg p-3 text-xs">
-          <div className="text-cyan-400 font-bold mb-1 text-center">Colesterol</div>
-          <div className="grid grid-cols-2 gap-x-3 gap-y-1">
-            <span className="text-white">Total:</span>
-            <span className="text-cyan-300 font-medium">{cholesterolData.totalCholesterol} mg/dL</span>
-            <span className="text-white">HDL:</span>
-            <span className="text-cyan-300 font-medium">{cholesterolData.hdl} mg/dL</span>
-            <span className="text-white">LDL:</span>
-            <span className="text-cyan-300 font-medium">{cholesterolData.ldl} mg/dL</span>
-            {cholesterolData.triglycerides && (
-              <>
-                <span className="text-white">Triglicéridos:</span>
-                <span className="text-cyan-300 font-medium">{cholesterolData.triglycerides} mg/dL</span>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-      
-      {/* Temperatura display */}
-      {temperatureData && temperatureData.value > 0 && (
-        <div className="absolute right-2 top-20 z-30 bg-black/60 backdrop-blur-sm rounded-lg p-3 text-xs">
-          <div className="text-yellow-400 font-bold mb-1 text-center">Temperatura</div>
-          <div className="grid grid-cols-2 gap-x-3 gap-y-1">
-            <span className="text-white">Valor:</span>
-            <span className="text-yellow-300 font-medium">{temperatureData.value.toFixed(1)}°C</span>
-            <span className="text-white">Localización:</span>
-            <span className="text-yellow-300 font-medium">{temperatureData.location || 'dedo'}</span>
-            <span className="text-white">Tendencia:</span>
-            <span className="text-yellow-300 font-medium">
-              {temperatureData.trend === 'rising' ? '↗️ Subiendo' : 
-               temperatureData.trend === 'falling' ? '↘️ Bajando' : 
-               '→ Estable'}
-            </span>
-          </div>
-        </div>
-      )}
-
-      <div className="fixed bottom-0 left-0 right-0 h-[60px] grid grid-cols-2 gap-px bg-white/80 backdrop-blur-sm border-t border-slate-100">
+      <div className="fixed bottom-0 left-0 right-0 h-[60px] grid grid-cols-2 gap-px bg-black/60 backdrop-blur-sm border-t border-gray-800">
         <button 
           onClick={onStartMeasurement}
-          className="w-full h-full bg-white/80 hover:bg-slate-50/80 text-xl font-bold text-slate-700 transition-all duration-300"
-          aria-label="Start measurement"
+          className="w-full h-full bg-blue-500/10 hover:bg-blue-500/20 text-xl font-bold text-white transition-all duration-300"
         >
           INICIAR
         </button>
         <button 
           onClick={handleReset}
-          className="w-full h-full bg-white/80 hover:bg-slate-50/80 text-xl font-bold text-slate-700 transition-all duration-300"
-          aria-label="Reset measurement"
+          className="w-full h-full bg-blue-500/10 hover:bg-blue-500/20 text-xl font-bold text-white transition-all duration-300"
         >
           RESET
         </button>
