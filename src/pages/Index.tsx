@@ -841,33 +841,41 @@ const Index = () => {
         />
       </div>
       
-      <div className="absolute z-20" style={{ bottom: '65px', left: 0, right: 0, padding: '0 10px' }}>
-        <div className="p-1 rounded-lg">
-          <div className="grid grid-cols-3 gap-1 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-3">
+      <div className="absolute z-20" style={{ bottom: '60px', left: 0, right: 0, padding: '0 6px' }}>
+        <div className="flex flex-wrap gap-1">
+          <div className="w-1/3 pr-0.5">
             <VitalSign 
-              label="FRECUENCIA CARDÍACA"
+              label="FRECUENCIA"
               value={finalValues ? finalValues.heartRate : heartRate || "--"}
               unit="BPM"
               isFinalReading={measurementComplete}
             />
+          </div>
+          <div className="w-1/3 px-0.5">
             <VitalSign 
               label="SPO2"
               value={finalValues ? finalValues.spo2 : vitalSigns.spo2 || "--"}
               unit="%"
               isFinalReading={measurementComplete}
             />
+          </div>
+          <div className="w-1/3 pl-0.5">
             <VitalSign 
-              label="PRESIÓN ARTERIAL"
+              label="PRESIÓN"
               value={finalValues ? finalValues.pressure : vitalSigns.pressure}
               unit="mmHg"
               isFinalReading={measurementComplete}
             />
+          </div>
+          <div className="w-1/3 pr-0.5">
             <VitalSign 
               label="ARRITMIAS"
               value={arrhythmiaCount}
               unit=""
               isFinalReading={measurementComplete}
             />
+          </div>
+          <div className="w-1/3 px-0.5">
             <VitalSign 
               label="RESPIRACIÓN"
               value={finalValues ? finalValues.respiration.rate : (vitalSigns.hasRespirationData ? vitalSigns.respiration.rate : "--")}
@@ -876,6 +884,8 @@ const Index = () => {
               secondaryUnit="%"
               isFinalReading={measurementComplete}
             />
+          </div>
+          <div className="w-1/3 pl-0.5">
             <VitalSign 
               label="GLUCOSA"
               value={finalValues ? finalValues.glucose.value : (vitalSigns.glucose ? vitalSigns.glucose.value : "--")}
@@ -883,18 +893,20 @@ const Index = () => {
               trend={finalValues ? finalValues.glucose.trend : (vitalSigns.glucose ? vitalSigns.glucose.trend : "unknown")}
               isFinalReading={measurementComplete}
             />
+          </div>
+          <div className="w-1/3 pr-0.5">
             <VitalSign 
               label="HEMOGLOBINA"
               value={finalValues ? finalValues.hemoglobin : vitalSigns.hemoglobin || "--"}
               unit="g/dL"
               isFinalReading={measurementComplete}
             />
+          </div>
+          <div className="w-1/3 px-0.5">
             <VitalSign 
               label="COLESTEROL"
               value={finalValues ? finalValues.cholesterol?.totalCholesterol : vitalSigns.cholesterol?.totalCholesterol || "--"}
               unit="mg/dL"
-              secondaryValue={finalValues ? finalValues.cholesterol?.hdl : vitalSigns.cholesterol?.hdl || "--"}
-              secondaryUnit="HDL"
               cholesterolData={finalValues ? 
                 finalValues.cholesterol ? 
                   { hdl: finalValues.cholesterol.hdl, ldl: finalValues.cholesterol.ldl, triglycerides: finalValues.cholesterol.triglycerides } : 
@@ -906,6 +918,8 @@ const Index = () => {
               }
               isFinalReading={measurementComplete}
             />
+          </div>
+          <div className="w-1/3 pl-0.5">
             <VitalSign 
               label="TEMPERATURA"
               value={finalValues ? finalValues.temperature?.value.toFixed(1) : vitalSigns.temperature?.value.toFixed(1) || "--"}

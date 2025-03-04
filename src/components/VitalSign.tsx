@@ -76,17 +76,17 @@ const VitalSign: React.FC<VitalSignProps> = ({
     }
   };
 
-  // Función para determinar el color del valor basado en la etiqueta y el valor
+  // Function to determine the color of the value based on the label and value
   const getValueColor = () => {
     if (label.toLowerCase().includes('cardíaca') || label.toLowerCase().includes('heart')) {
-      // Para frecuencia cardíaca
+      // For heart rate
       const bpm = typeof value === 'number' ? value : parseInt(value.toString());
       if (bpm < 60) return 'text-blue-400';
       if (bpm > 100) return 'text-orange-400';
       return 'text-orange-400';
     } 
     else if (label.toLowerCase().includes('spo2')) {
-      // Para SpO2
+      // For SpO2
       const spo2 = typeof value === 'number' ? value : parseInt(value.toString());
       if (spo2 < 95) return 'text-red-400';
       return 'text-white';
@@ -117,7 +117,7 @@ const VitalSign: React.FC<VitalSignProps> = ({
     return 'text-white';
   };
 
-  // Determinar el texto de estado basado en la etiqueta y el valor
+  // Determine status text based on label and value
   const getStatusText = () => {
     if (statusText) return statusText;
     
@@ -147,67 +147,51 @@ const VitalSign: React.FC<VitalSignProps> = ({
   };
 
   return (
-    <Card className="p-3 flex flex-col space-y-1 bg-black text-white border-0 rounded-xl overflow-hidden relative">
-      <div className="text-center pb-1 border-b border-gray-800">
-        <h3 className="text-xs font-semibold text-gray-300 uppercase tracking-wider">{label}</h3>
+    <Card className="p-2 flex flex-row items-center bg-black/60 text-white border border-gray-800 rounded-md overflow-hidden relative h-10">
+      <div className="flex-shrink-0 mr-2">
+        <h3 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide truncate max-w-16">{label}</h3>
       </div>
       
       {label.toLowerCase().includes('arritmia') || label.toLowerCase().includes('arrhythmia') ? (
-        <>
-          <div className="flex justify-center pt-1">
-            <span className="text-2xl font-bold tracking-tighter text-white">{value === '--' ? 'ARRITMIA' : 'ARRITMIA DETECTADA'}</span>
-          </div>
+        <div className="flex items-center space-x-1 flex-grow">
+          <span className="text-sm font-bold tracking-tight text-white truncate">
+            {value === '--' ? 'NORMAL' : 'DETECTADA'}
+          </span>
           {value !== '--' && value !== 0 && (
-            <div className="flex justify-center">
-              <span className="text-4xl font-bold">{value}</span>
-            </div>
+            <span className="text-xs font-semibold">{value}</span>
           )}
-          <div className="flex justify-center mt-auto pt-1">
-            <span className="text-xs text-gray-400">{getStatusText()}</span>
-          </div>
-        </>
+        </div>
       ) : (
-        <>
-          <div className="flex justify-center items-baseline space-x-1 pt-1">
-            <span className={`text-4xl font-bold tracking-tighter ${getValueColor()}`}>{value}</span>
-            <span className="text-xs text-gray-400">{unit}</span>
-          </div>
+        <div className="flex items-center space-x-1 flex-grow">
+          <span className={`text-sm font-bold ${getValueColor()}`}>{value}</span>
+          <span className="text-[10px] text-gray-400">{unit}</span>
           
           {secondaryValue && secondaryUnit && (
-            <div className="flex justify-center items-baseline space-x-1">
-              <span className={`text-2xl font-medium tracking-tighter ${label.toLowerCase().includes('respiración') ? 'text-red-500' : 'text-gray-300'}`}>
+            <div className="flex items-center space-x-1 ml-1">
+              <span className={`text-xs font-medium ${label.toLowerCase().includes('respiración') ? 'text-red-400' : 'text-gray-300'}`}>
                 {secondaryValue}
               </span>
-              <span className="text-xs text-gray-400">{secondaryUnit}</span>
+              <span className="text-[10px] text-gray-400">{secondaryUnit}</span>
             </div>
           )}
           
-          {/* Para colesterol, mostrar HDL/LDL */}
           {cholesterolData && (
-            <div className="flex justify-center items-center space-x-2 text-xs">
-              <span className="text-gray-400">HDL: <span className="text-yellow-300">{cholesterolData.hdl}</span></span>
-              <span className="text-gray-400">LDL: <span className="text-yellow-300">{cholesterolData.ldl}</span></span>
+            <div className="flex items-center text-[9px] ml-1">
+              <span className="text-gray-400">H:<span className="text-yellow-300">{cholesterolData.hdl}</span> L:<span className="text-yellow-300">{cholesterolData.ldl}</span></span>
             </div>
           )}
           
-          {/* Para temperatura, mostrar ubicación */}
           {temperatureLocation && (
-            <div className="flex justify-center items-center text-xs">
-              <span className="text-gray-400">Loc: <span className="text-yellow-300">{temperatureLocation}</span></span>
+            <div className="text-[9px] ml-1">
+              <span className="text-gray-400">{temperatureLocation}</span>
             </div>
           )}
-          
-          {getStatusText() && (
-            <div className="flex justify-center mt-auto pt-1">
-              <span className={`text-xs ${statusColor || getValueColor()}`}>{getStatusText()}</span>
-            </div>
-          )}
-        </>
+        </div>
       )}
       
       {isFinalReading && (
         <div className="absolute top-1 right-1">
-          <div className="h-2 w-2 rounded-full bg-green-500"></div>
+          <div className="h-1.5 w-1.5 rounded-full bg-green-500"></div>
         </div>
       )}
     </Card>
