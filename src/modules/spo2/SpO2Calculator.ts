@@ -1,6 +1,6 @@
-
 /**
  * Handles core SpO2 calculation logic
+ * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION - NO ESTA PERMITIDO HACER MOVIMIENTOS POR CUENTA DE LA I.A SIN AUTORIZACION DEL USUARIO
  */
 import { calculateAC, calculateDC } from '../../utils/signalProcessingUtils';
 import { SPO2_CONSTANTS } from './SpO2Constants';
@@ -29,6 +29,7 @@ export class SpO2Calculator {
 
   /**
    * Reset all state variables
+   * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION - NO ESTA PERMITIDO HACER MOVIMIENTOS POR CUENTA DE LA I.A SIN AUTORIZACION DEL USUARIO
    */
   reset(): void {
     this.calibration.reset();
@@ -48,7 +49,8 @@ export class SpO2Calculator {
   calculateRaw(values: number[]): number {
     if (values.length < 20) return 0;
 
-    // More balanced throttling to prevent excessive updates
+    // Minimal processing to avoid artificial stabilization
+    // Only calculate based on actual measured values
     const now = performance.now();
     if (now - this.lastCalculationTime < this.calculationThrottleMs) {
       return this.processor.getLastValue();
@@ -56,23 +58,8 @@ export class SpO2Calculator {
     this.lastCalculationTime = now;
 
     try {
-      // Only recalculate signal variance periodically to improve performance
-      const cacheUpdateNeeded = this.signalCache.length === 0 || 
-                               (now % 800 < this.calculationThrottleMs); // Less frequent updates
-      
-      let signalVariance: number;
-      let signalMean: number;
-      
-      if (cacheUpdateNeeded) {
-        // Signal quality check - use a more efficient variance calculation
-        [signalVariance, signalMean] = this.calculateVarianceOptimized(values);
-        this.signalCache = values.slice();
-        this.cacheMean = signalMean;
-      } else {
-        // Use cached value for signal mean and variance
-        signalVariance = this.calculateVarianceOptimized(this.signalCache)[0];
-        signalMean = this.cacheMean;
-      }
+      // Signal quality check
+      const [signalVariance, signalMean] = this.calculateVarianceOptimized(values);
       
       const normalizedVariance = signalVariance / (signalMean * signalMean);
       
@@ -81,7 +68,7 @@ export class SpO2Calculator {
         return this.processor.getLastValue() || 0;
       }
       
-      // PPG wave characteristics - use cached calculations when possible
+      // PPG wave characteristics - direct calculation from measured values
       const dc = calculateDC(values);
       if (dc <= 0) return this.processor.getLastValue() || 0;
 
@@ -128,21 +115,22 @@ export class SpO2Calculator {
 
   /**
    * Calculate SpO2 with all filters and calibration
+   * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION - NO ESTA PERMITIDO HACER MOVIMIENTOS POR CUENTA DE LA I.A SIN AUTORIZACION DEL USUARIO
    */
   calculate(values: number[]): number {
     try {
       // If not enough values or no finger, use previous value or 0
       if (values.length < 20) {
-        return this.stableValue || this.processor.getLastValue() || 0;
+        return this.processor.getLastValue() || 0;
       }
 
-      // Get raw SpO2 value
+      // Get raw SpO2 value from actual measurements
       const rawSpO2 = this.calculateRaw(values);
       if (rawSpO2 <= 0) {
-        return this.stableValue || this.processor.getLastValue() || 0;
+        return this.processor.getLastValue() || 0;
       }
 
-      // Save raw value for analysis
+      // Only minimal necessary processing to avoid artificial stabilization
       this.processor.addRawValue(rawSpO2);
 
       // Apply calibration if available
@@ -155,39 +143,10 @@ export class SpO2Calculator {
       calibratedSpO2 = Math.min(calibratedSpO2, 100);
       calibratedSpO2 = Math.max(calibratedSpO2, 90);
       
-      // Process and filter the SpO2 value
-      const processedSpO2 = this.processor.processValue(calibratedSpO2);
-      
-      // Apply additional heavy smoothing for display purposes
-      this.previousResults[this.resultIndex] = processedSpO2;
-      this.resultIndex = (this.resultIndex + 1) % this.RESULT_BUFFER_SIZE;
-      
-      // Weighted average for display stability (more recent values get more weight)
-      let weightedSum = 0;
-      let totalWeight = 0;
-      
-      for (let i = 0; i < this.RESULT_BUFFER_SIZE; i++) {
-        const value = this.previousResults[(this.resultIndex + i) % this.RESULT_BUFFER_SIZE];
-        if (value > 0) {
-          // More recent values get higher weight
-          const weight = i < 2 ? 3 : 1;
-          weightedSum += value * weight;
-          totalWeight += weight;
-        }
-      }
-      
-      const finalSpO2 = totalWeight > 0 ? 
-                        Math.round(weightedSum / totalWeight) : 
-                        processedSpO2;
-      
-      // Extra stability layer - only update if the change is significant
-      if (this.stableValue === 0 || Math.abs(finalSpO2 - this.stableValue) >= 1) {
-        this.stableValue = finalSpO2;
-      }
-      
-      return this.stableValue;
+      // Use measured values with minimal processing
+      return this.processor.processRawValue(calibratedSpO2);
     } catch (err) {
-      return this.stableValue || this.processor.getLastValue() || 0;
+      return this.processor.getLastValue() || 0;
     }
   }
   

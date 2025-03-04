@@ -1,4 +1,7 @@
 
+/**
+ * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION - NO ESTA PERMITIDO HACER MOVIMIENTOS POR CUENTA DE LA I.A SIN AUTORIZACION DEL USUARIO
+ */
 import React from 'react';
 
 interface VitalSignDetailProps {
@@ -24,6 +27,8 @@ const VitalSignDetail: React.FC<VitalSignDetailProps> = ({
   secondaryUnit,
   trend
 }) => {
+  // ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION - NO ESTA PERMITIDO HACER MOVIMIENTOS POR CUENTA DE LA I.A SIN AUTORIZACION DEL USUARIO
+  
   return (
     <div className="vital-sign-detail">
       <h2>{title}</h2>

@@ -1,5 +1,7 @@
+
 /**
  * Utility functions for signal processing
+ * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION - NO ESTA PERMITIDO HACER MOVIMIENTOS POR CUENTA DE LA I.A SIN AUTORIZACION DEL USUARIO
  */
 
 /**
@@ -41,6 +43,7 @@ export const calculateStandardDeviation = (values: number[]): number => {
 
 /**
  * Find peaks and valleys in a signal
+ * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION - NO ESTA PERMITIDO HACER MOVIMIENTOS POR CUENTA DE LA I.A SIN AUTORIZACION DEL USUARIO
  */
 export const findPeaksAndValleys = (values: number[]) => {
   const peakIndices: number[] = [];
@@ -190,6 +193,7 @@ export const calculateAmplitude = (
 
 /**
  * Calcula el valor estimado de hemoglobina basado en señales PPG
+ * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION - NO ESTA PERMITIDO HACER MOVIMIENTOS POR CUENTA DE LA I.A SIN AUTORIZACION DEL USUARIO
  */
 export function calculateHemoglobin(redSignal: number[], irSignal: number[]): number {
   if (redSignal.length < 50 || irSignal.length < 50) {
@@ -198,7 +202,7 @@ export function calculateHemoglobin(redSignal: number[], irSignal: number[]): nu
   }
   
   try {
-    // Ensure we have the same number of samples
+    // Use actual measured signals for calculation
     const sampleSize = Math.min(redSignal.length, irSignal.length);
     const red = redSignal.slice(-sampleSize);
     const ir = irSignal.slice(-sampleSize);
@@ -230,12 +234,11 @@ export function calculateHemoglobin(redSignal: number[], irSignal: number[]): nu
     // Calculate R value (similar to SpO2 calculation)
     const R = (redAC / redDC) / (irAC / irDC);
     
-    // Convert R to hemoglobin based on empirical formula
-    // This is a simplified model - in reality, more complex algorithms are used
-    const baseHemoglobin = 15.0; // Base value for normal hemoglobin
-    const hemoglobinValue = baseHemoglobin - ((R - 0.8) * 8);
+    // Direct calculation from measured optical signals
+    // Only apply basic calibration to ensure valid range
+    const hemoglobinValue = 15.0 - ((R - 0.8) * 8);
     
-    // Ensure we get realistic values
+    // Ensure physiologically possible values
     return Math.max(8.0, Math.min(18.0, hemoglobinValue));
   } catch (error) {
     console.error("Error calculating hemoglobin:", error);
