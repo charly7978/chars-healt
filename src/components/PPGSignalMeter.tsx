@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
@@ -47,6 +48,21 @@ const PPGSignalMeter = ({
   const INVERT_SIGNAL = false;
   const PEAK_MIN_VALUE = 8.0;
   const PEAK_DISTANCE_MS = 200;
+  
+  // Colors for the dark blue theme
+  const COLORS = {
+    BACKGROUND: '#0A1929', // Dark blue background
+    GRID_MAIN: 'rgba(255, 255, 255, 0.3)', // White grid lines (main)
+    GRID_MINOR: 'rgba(255, 255, 255, 0.1)', // White grid lines (minor)
+    ZERO_LINE: 'rgba(0, 255, 150, 0.9)', // Zero line color
+    AXIS_TEXT: 'rgba(230, 255, 230, 1.0)', // Axis text color
+    SIGNAL_LINE: '#38BDF8', // Signal line color
+    ARRHYTHMIA_LINE: '#EF4444', // Arrhythmia line color
+    PEAK_NORMAL: '#38BDF8', // Normal peak color
+    PEAK_ARRHYTHMIA: '#EF4444', // Arrhythmia peak color
+    PEAK_GLOW_NORMAL: 'rgba(56, 189, 248, 0.3)', // Normal peak glow
+    PEAK_GLOW_ARRHYTHMIA: 'rgba(239, 68, 68, 0.3)' // Arrhythmia peak glow
+  };
 
   useEffect(() => {
     if (!dataBufferRef.current) {
@@ -76,21 +92,24 @@ const PPGSignalMeter = ({
   }, []);
 
   const drawGrid = useCallback((ctx: CanvasRenderingContext2D) => {
+    // Clear and fill background with dark blue
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-    
-    ctx.fillStyle = '#000000';
+    ctx.fillStyle = COLORS.BACKGROUND;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
     const zeroY = CANVAS_HEIGHT * 0.6;
+    
+    // Draw zero line (center horizontal line)
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(0, 200, 100, 0.9)';
+    ctx.strokeStyle = COLORS.ZERO_LINE;
     ctx.lineWidth = 2.0;
     ctx.moveTo(0, zeroY);
     ctx.lineTo(CANVAS_WIDTH, zeroY);
     ctx.stroke();
 
+    // Draw minor grid lines
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(180, 180, 180, 0.15)';
+    ctx.strokeStyle = COLORS.GRID_MINOR;
     ctx.lineWidth = 0.5;
 
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X / 4) {
@@ -104,30 +123,33 @@ const PPGSignalMeter = ({
     }
     ctx.stroke();
 
+    // Draw major grid lines
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(200, 200, 200, 0.3)';
+    ctx.strokeStyle = COLORS.GRID_MAIN;
     ctx.lineWidth = 1.0;
 
+    // X-axis major grid lines with time labels
     for (let x = 0; x <= CANVAS_WIDTH; x += GRID_SIZE_X * 4) {
       ctx.moveTo(x, 0);
       ctx.lineTo(x, CANVAS_HEIGHT);
       
       if (x >= 0) {
         const timeMs = (x / CANVAS_WIDTH) * WINDOW_WIDTH_MS;
-        ctx.fillStyle = 'rgba(180, 255, 180, 1.0)';
+        ctx.fillStyle = COLORS.AXIS_TEXT;
         ctx.font = '16px "Inter", sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText(`${Math.round(timeMs)}ms`, x, CANVAS_HEIGHT - 10);
       }
     }
 
+    // Y-axis major grid lines with amplitude labels
     for (let y = 0; y <= CANVAS_HEIGHT; y += GRID_SIZE_Y * 4) {
       ctx.moveTo(0, y);
       ctx.lineTo(CANVAS_WIDTH, y);
       
       if (y % (GRID_SIZE_Y * 4) === 0) {
         const amplitude = ((zeroY - y) / VERTICAL_SCALE).toFixed(1);
-        ctx.fillStyle = 'rgba(180, 255, 180, 1.0)';
+        ctx.fillStyle = COLORS.AXIS_TEXT;
         ctx.font = '16px "Inter", sans-serif';
         ctx.textAlign = 'right';
         ctx.fillText(amplitude, 32, y + 6);
@@ -135,16 +157,24 @@ const PPGSignalMeter = ({
     }
     ctx.stroke();
 
-    ctx.fillStyle = 'rgba(180, 255, 180, 1.0)';
+    // Draw axis labels
+    ctx.fillStyle = COLORS.AXIS_TEXT;
     ctx.font = 'bold 18px "Inter", sans-serif';
+    
+    // X-axis label
     ctx.textAlign = 'center';
     ctx.fillText('Tiempo (ms)', CANVAS_WIDTH / 2, CANVAS_HEIGHT - 30);
     
+    // Y-axis label
     ctx.save();
     ctx.translate(24, CANVAS_HEIGHT / 2);
     ctx.rotate(-Math.PI / 2);
     ctx.fillText('Amplitud', 0, 0);
     ctx.restore();
+    
+    // Draw cartesian coordinates
+    ctx.font = '12px "Inter", sans-serif';
+    ctx.fillText('(0,0)', 40, zeroY + 20);
   }, []);
 
   const renderSignal = useCallback(() => {
@@ -214,7 +244,7 @@ const PPGSignalMeter = ({
       
       if (visiblePoints.length > 1) {
         ctx.beginPath();
-        ctx.strokeStyle = '#0EA5E9';
+        ctx.strokeStyle = COLORS.SIGNAL_LINE;
         ctx.lineWidth = 2.8;
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
@@ -236,7 +266,7 @@ const PPGSignalMeter = ({
           if (point.isArrhythmia && i < visiblePoints.length - 1) {
             ctx.stroke();
             ctx.beginPath();
-            ctx.strokeStyle = '#DC2626';
+            ctx.strokeStyle = COLORS.ARRHYTHMIA_LINE;
             ctx.lineWidth = 3.2;
             ctx.setLineDash([3, 2]);
             ctx.moveTo(x, y);
@@ -248,7 +278,7 @@ const PPGSignalMeter = ({
             ctx.stroke();
             
             ctx.beginPath();
-            ctx.strokeStyle = '#0EA5E9';
+            ctx.strokeStyle = COLORS.SIGNAL_LINE;
             ctx.lineWidth = 2.8;
             ctx.setLineDash([]);
             ctx.moveTo(nextX, nextY);
@@ -290,87 +320,53 @@ const PPGSignalMeter = ({
         }
       }
       
+      // Draw peaks with simplified visualization
       for (const idx of maxPeakIndices) {
         const point = visiblePoints[idx];
         const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
         const y = canvas.height * 0.6 - point.value;
         
-        ctx.beginPath();
-        
         const isArrhythmiaPeak = point.isArrhythmia;
-        const peakColor = isArrhythmiaPeak ? '#DC2626' : '#0EA5E9';
-        const glowColor = isArrhythmiaPeak ? 'rgba(220, 38, 38, 0.3)' : 'rgba(14, 165, 233, 0.3)';
         
+        // Draw only one circle per peak with improved visibility
+        ctx.beginPath();
+        const peakColor = isArrhythmiaPeak ? COLORS.PEAK_ARRHYTHMIA : COLORS.PEAK_NORMAL;
+        const glowColor = isArrhythmiaPeak ? COLORS.PEAK_GLOW_ARRHYTHMIA : COLORS.PEAK_GLOW_NORMAL;
+        
+        // Create glow effect
         const gradient = ctx.createRadialGradient(x, y, 2, x, y, 10);
         gradient.addColorStop(0, peakColor);
         gradient.addColorStop(1, glowColor);
         
         ctx.fillStyle = gradient;
-        ctx.arc(x, y, isArrhythmiaPeak ? 6.5 : 5.5, 0, Math.PI * 2);
+        ctx.arc(x, y, isArrhythmiaPeak ? 7 : 5.5, 0, Math.PI * 2);
         ctx.fill();
         
+        // Add peak outline
         ctx.strokeStyle = isArrhythmiaPeak ? '#FF4D4D' : '#38BDF8';
         ctx.lineWidth = 1.8;
         ctx.stroke();
 
+        // Display peak value
         ctx.font = 'bold 13px "Inter", sans-serif';
-        ctx.fillStyle = isArrhythmiaPeak ? '#B91C1C' : '#0369A1';
+        ctx.fillStyle = isArrhythmiaPeak ? '#FFCCCB' : '#ADD8E6';
         ctx.textAlign = 'center';
         ctx.fillText(Math.abs(point.value / VERTICAL_SCALE).toFixed(2), x, y - 22);
         
+        // Enhanced arrhythmia information display
         if (isArrhythmiaPeak) {
-          ctx.beginPath();
-          ctx.arc(x, y, 13, 0, Math.PI * 2);
-          ctx.strokeStyle = 'rgba(239, 68, 68, 0.85)';
-          ctx.lineWidth = 2.2;
-          ctx.stroke();
+          // Add bold "ARRITMIA" label
+          ctx.font = 'bold 14px "Inter", sans-serif';
+          ctx.fillStyle = '#FF4D4D';
+          ctx.fillText("ARRITMIA DETECTADA", x, y - 40);
           
-          ctx.beginPath();
-          ctx.arc(x, y, 20, 0, Math.PI * 2);
-          ctx.strokeStyle = 'rgba(248, 113, 113, 0.7)';
-          ctx.lineWidth = 1.2;
-          ctx.setLineDash([3, 3]);
-          ctx.stroke();
-          ctx.setLineDash([]);
-          
-          ctx.font = 'bold 12px "Inter", sans-serif';
-          ctx.fillStyle = '#EF4444';
-          ctx.fillText("LATIDO PREMATURO", x, y - 36);
-          
-          ctx.beginPath();
-          ctx.setLineDash([2, 2]);
-          ctx.strokeStyle = 'rgba(239, 68, 68, 0.5)';
-          ctx.lineWidth = 1.2;
-          
-          if (idx > 0) {
-            const prevIdx = maxPeakIndices.findIndex(i => i < idx);
-            if (prevIdx !== -1) {
-              const prevPeakIdx = maxPeakIndices[prevIdx];
-              const prevPoint = visiblePoints[prevPeakIdx];
-              const prevX = canvas.width - ((now - prevPoint.time) * canvas.width / WINDOW_WIDTH_MS);
-              const prevY = canvas.height * 0.6 - prevPoint.value;
-              
-              ctx.moveTo(prevX, prevY - 15);
-              ctx.lineTo(x, y - 15);
-              ctx.stroke();
-            }
+          // Display additional data if available
+          if (rawArrhythmiaData) {
+            ctx.font = '12px "Inter", sans-serif';
+            ctx.fillStyle = '#FFCCCB';
+            ctx.fillText(`RMSSD: ${rawArrhythmiaData.rmssd.toFixed(1)}`, x, y - 60);
+            ctx.fillText(`Variación RR: ${rawArrhythmiaData.rrVariation.toFixed(1)}%`, x, y - 75);
           }
-          
-          if (idx < visiblePoints.length - 1) {
-            const nextIdx = maxPeakIndices.findIndex(i => i > idx);
-            if (nextIdx !== -1) {
-              const nextPeakIdx = maxPeakIndices[nextIdx];
-              const nextPoint = visiblePoints[nextPeakIdx];
-              const nextX = canvas.width - ((now - nextPoint.time) * canvas.width / WINDOW_WIDTH_MS);
-              const nextY = canvas.height * 0.6 - nextPoint.value;
-              
-              ctx.moveTo(x, y - 15);
-              ctx.lineTo(nextX, nextY - 15);
-              ctx.stroke();
-            }
-          }
-          
-          ctx.setLineDash([]);
         }
       }
     }
