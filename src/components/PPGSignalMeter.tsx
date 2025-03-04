@@ -365,87 +365,89 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
         </div>
 
         {/* Displays médicos */}
-        <div className="h-32 px-4 py-2 grid grid-cols-3 gap-4 bg-[#051527]/90 backdrop-blur-sm z-10">
-          {arrhythmiaStatus && (
-            <div className="bg-[#051527]/90 backdrop-blur-sm rounded-lg p-4 border border-blue-900/30">
-              <h3 className="text-sm font-semibold text-white mb-2">Estado Cardíaco</h3>
-              <div className="grid gap-y-2 text-sm">
-                <span className={`font-medium ${
-                  arrhythmiaStatus.includes("ARRITMIA") ? 'text-red-400' : 'text-emerald-400'
-                }`}>
-                  {arrhythmiaStatus}
-                </span>
-                {rawArrhythmiaData && (
-                  <>
-                    <div className="grid grid-cols-2 gap-1">
-                      <span className="text-gray-400">RMSSD:</span>
-                      <span className={getRiskColor(rawArrhythmiaData.rmssd, 'rmssd')}>
-                        {rawArrhythmiaData.rmssd.toFixed(1)}ms
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-1">
-                      <span className="text-gray-400">Variación RR:</span>
-                      <span className={rawArrhythmiaData.rrVariation > 20 ? 'text-red-400' : 'text-emerald-400'}>
-                        {rawArrhythmiaData.rrVariation.toFixed(1)}%
-                      </span>
-                    </div>
-                  </>
-                )}
+        <div className="h-40 overflow-y-auto">
+          <div className="px-4 py-2 grid grid-cols-2 gap-4 bg-[#051527]/95 backdrop-blur-sm">
+            {arrhythmiaStatus && (
+              <div className="bg-[#0A1628] rounded-lg p-4 border border-blue-900/30 shadow-lg">
+                <h3 className="text-[13px] font-bold text-blue-400 mb-3">Estado Cardíaco</h3>
+                <div className="grid gap-y-2.5">
+                  <span className={`text-[12px] font-semibold ${
+                    arrhythmiaStatus.includes("ARRITMIA") ? 'text-red-400' : 'text-emerald-400'
+                  }`}>
+                    {arrhythmiaStatus}
+                  </span>
+                  {rawArrhythmiaData && (
+                    <>
+                      <div className="grid grid-cols-2 gap-2">
+                        <span className="text-[11px] text-gray-400">RMSSD:</span>
+                        <span className={`text-[11px] font-medium ${getRiskColor(rawArrhythmiaData.rmssd, 'rmssd')}`}>
+                          {rawArrhythmiaData.rmssd.toFixed(1)}ms
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <span className="text-[11px] text-gray-400">Variación RR:</span>
+                        <span className={`text-[11px] font-medium ${rawArrhythmiaData.rrVariation > 20 ? 'text-red-400' : 'text-emerald-400'}`}>
+                          {rawArrhythmiaData.rrVariation.toFixed(1)}%
+                        </span>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {cholesterolData && (
-            <div className="bg-[#051527]/90 backdrop-blur-sm rounded-lg p-4 border border-blue-900/30">
-              <h3 className="text-sm font-semibold text-white mb-2">Colesterol</h3>
-              <div className="grid grid-cols-2 gap-y-2 text-sm">
-                <span className="text-gray-400">Total:</span>
-                <span className={getRiskColor(cholesterolData.totalCholesterol, 'cholesterol')}>
-                  {cholesterolData.totalCholesterol} mg/dL
-                </span>
-                <span className="text-gray-400">HDL:</span>
-                <span className={cholesterolData.hdl >= 40 ? 'text-emerald-400' : 'text-yellow-400'}>
-                  {cholesterolData.hdl} mg/dL
-                </span>
-                <span className="text-gray-400">LDL:</span>
-                <span className={cholesterolData.ldl < 130 ? 'text-emerald-400' : 'text-red-400'}>
-                  {cholesterolData.ldl} mg/dL
-                </span>
-                {cholesterolData.triglycerides && (
-                  <>
-                    <span className="text-gray-400">Triglicéridos:</span>
-                    <span className={cholesterolData.triglycerides < 150 ? 'text-emerald-400' : 'text-red-400'}>
-                      {cholesterolData.triglycerides} mg/dL
-                    </span>
-                  </>
-                )}
+            {cholesterolData && (
+              <div className="bg-[#0A1628] rounded-lg p-4 border border-blue-900/30 shadow-lg">
+                <h3 className="text-[13px] font-bold text-blue-400 mb-3">Perfil Lipídico</h3>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-2.5">
+                  <span className="text-[11px] text-gray-400">Total:</span>
+                  <span className={`text-[11px] font-medium ${getRiskColor(cholesterolData.totalCholesterol, 'cholesterol')}`}>
+                    {cholesterolData.totalCholesterol} mg/dL
+                  </span>
+                  <span className="text-[11px] text-gray-400">HDL:</span>
+                  <span className={`text-[11px] font-medium ${cholesterolData.hdl >= 40 ? 'text-emerald-400' : 'text-yellow-400'}`}>
+                    {cholesterolData.hdl} mg/dL
+                  </span>
+                  <span className="text-[11px] text-gray-400">LDL:</span>
+                  <span className={`text-[11px] font-medium ${cholesterolData.ldl < 130 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {cholesterolData.ldl} mg/dL
+                  </span>
+                  {cholesterolData.triglycerides && (
+                    <>
+                      <span className="text-[11px] text-gray-400">TG:</span>
+                      <span className={`text-[11px] font-medium ${cholesterolData.triglycerides < 150 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {cholesterolData.triglycerides} mg/dL
+                      </span>
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {temperatureData && (
-            <div className="bg-[#051527]/90 backdrop-blur-sm rounded-lg p-4 border border-blue-900/30">
-              <h3 className="text-sm font-semibold text-white mb-2">Temperatura</h3>
-              <div className="grid grid-cols-2 gap-y-2 text-sm">
-                <span className="text-gray-400">Valor:</span>
-                <span className={getRiskColor(temperatureData.value, 'temperature')}>
-                  {temperatureData.value.toFixed(1)}°C
-                </span>
-                <span className="text-gray-400">Ubicación:</span>
-                <span className="text-white">{temperatureData.location}</span>
-                <span className="text-gray-400">Tendencia:</span>
-                <span className={`text-white ${
-                  temperatureData.trend === 'rising' ? 'text-yellow-400' :
-                  temperatureData.trend === 'falling' ? 'text-blue-400' :
-                  'text-emerald-400'
-                }`}>
-                  {temperatureData.trend === 'rising' ? '↗ Subiendo' :
-                   temperatureData.trend === 'falling' ? '↘ Bajando' :
-                   '→ Estable'}
-                </span>
+            {temperatureData && (
+              <div className="bg-[#0A1628] rounded-lg p-4 border border-blue-900/30 shadow-lg">
+                <h3 className="text-[13px] font-bold text-blue-400 mb-3">Temperatura</h3>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-2.5">
+                  <span className="text-[11px] text-gray-400">Valor:</span>
+                  <span className={`text-[11px] font-medium ${getRiskColor(temperatureData.value, 'temperature')}`}>
+                    {temperatureData.value.toFixed(1)}°C
+                  </span>
+                  <span className="text-[11px] text-gray-400">Ubicación:</span>
+                  <span className="text-[11px] font-medium text-white">{temperatureData.location}</span>
+                  <span className="text-[11px] text-gray-400">Tendencia:</span>
+                  <span className={`text-[11px] font-medium ${
+                    temperatureData.trend === 'rising' ? 'text-yellow-400' :
+                    temperatureData.trend === 'falling' ? 'text-blue-400' :
+                    'text-emerald-400'
+                  }`}>
+                    {temperatureData.trend === 'rising' ? '↗ Subiendo' :
+                     temperatureData.trend === 'falling' ? '↘ Bajando' :
+                     '→ Estable'}
+                  </span>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
 

@@ -1,4 +1,3 @@
-
 /**
  * Advanced quantum spectral analysis for multiple wavelengths
  * 100% REAL MEASUREMENTS - NO SIMULATION ALLOWED

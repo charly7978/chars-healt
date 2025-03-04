@@ -10,12 +10,11 @@ export interface VitalSignProps {
   isFinalReading?: boolean;
   secondaryValue?: string | number;
   secondaryUnit?: string;
-  temperatureLocation?: 'finger' | 'wrist' | 'forehead' | 'unknown';
-  temperatureTrend?: 'rising' | 'falling' | 'stable' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
   cholesterolData?: {
     hdl: number;
     ldl: number;
     triglycerides: number;
+    confidence?: number;
   };
 }
 
@@ -31,8 +30,6 @@ const VitalSign: React.FC<VitalSignProps> = ({
   isFinalReading = false,
   secondaryValue,
   secondaryUnit,
-  temperatureLocation,
-  temperatureTrend,
   cholesterolData
 }) => {
   const getTrendIcon = () => {
@@ -69,6 +66,25 @@ const VitalSign: React.FC<VitalSignProps> = ({
     }
   };
 
+  const getLipidRiskColor = (type: 'hdl' | 'ldl' | 'tg', value: number) => {
+    if (type === 'hdl') {
+      if (value >= 60) return 'text-emerald-400';
+      if (value >= 40) return 'text-blue-400';
+      return 'text-red-400';
+    }
+    if (type === 'ldl') {
+      if (value < 100) return 'text-emerald-400';
+      if (value < 130) return 'text-blue-400';
+      if (value < 160) return 'text-yellow-400';
+      return 'text-red-400';
+    }
+    // Triglicéridos
+    if (value < 150) return 'text-emerald-400';
+    if (value < 200) return 'text-blue-400';
+    if (value < 500) return 'text-yellow-400';
+    return 'text-red-400';
+  };
+
   return (
     <Card className="p-1.5 flex flex-col space-y-0.5 h-[90px] shadow-sm border border-blue-500/20 hover:border-blue-400/30 transition-colors bg-blue-950/40 backdrop-blur-sm">
       <div className="flex justify-between items-start">
@@ -79,39 +95,55 @@ const VitalSign: React.FC<VitalSignProps> = ({
           </Badge>
         )}
       </div>
-      <div className="flex items-baseline space-x-1 justify-center flex-1">
-        <span className="text-base font-bold tracking-tighter text-white">{value}</span>
-        <span className="text-[8px] text-blue-300/70">{unit}</span>
-      </div>
-      {secondaryValue && secondaryUnit && (
-        <div className="flex items-baseline space-x-1 justify-center">
-          <span className="text-xs font-medium tracking-tighter text-blue-200/90">{secondaryValue}</span>
-          <span className="text-[7px] text-blue-300/70">{secondaryUnit}</span>
+
+      {cholesterolData ? (
+        // Vista especial para perfil lipídico
+        <div className="flex-1 grid grid-cols-3 gap-0.5 mt-0.5">
+          <div className="flex flex-col items-center">
+            <span className="text-[7px] text-blue-300/70">HDL</span>
+            <span className={`text-[10px] font-bold ${getLipidRiskColor('hdl', cholesterolData.hdl)}`}>
+              {cholesterolData.hdl}
+            </span>
+          </div>
+          <div className="flex flex-col items-center">
+            <span className="text-[7px] text-blue-300/70">LDL</span>
+            <span className={`text-[10px] font-bold ${getLipidRiskColor('ldl', cholesterolData.ldl)}`}>
+              {cholesterolData.ldl}
+            </span>
+          </div>
+          <div className="flex flex-col items-center">
+            <span className="text-[7px] text-blue-300/70">TG</span>
+            <span className={`text-[10px] font-bold ${getLipidRiskColor('tg', cholesterolData.triglycerides)}`}>
+              {cholesterolData.triglycerides}
+            </span>
+          </div>
+          <div className="col-span-3 flex justify-center items-baseline mt-0.5">
+            <span className="text-base font-bold tracking-tighter text-white">{value}</span>
+            <span className="text-[8px] text-blue-300/70 ml-1">{unit}</span>
+          </div>
+          {cholesterolData.confidence && (
+            <div className="col-span-3 flex justify-center">
+              <span className="text-[7px] text-blue-300/70">
+                Confianza: {Math.round(cholesterolData.confidence)}%
+              </span>
+            </div>
+          )}
         </div>
-      )}
-      {cholesterolData && (
-        <div className="flex flex-col mt-0.5 space-y-0.5">
-          <div className="flex items-baseline justify-between">
-            <span className="text-[7px] text-blue-300/70">HDL:</span>
-            <span className="text-[7px] font-medium text-blue-200/90">{cholesterolData.hdl}</span>
+      ) : (
+        // Vista normal para otros signos vitales
+        <div className="flex-1 flex flex-col justify-center">
+          <div className="flex items-baseline space-x-1 justify-center">
+            <span className="text-base font-bold tracking-tighter text-white">{value}</span>
+            <span className="text-[8px] text-blue-300/70">{unit}</span>
           </div>
-          <div className="flex items-baseline justify-between">
-            <span className="text-[7px] text-blue-300/70">LDL:</span>
-            <span className="text-[7px] font-medium text-blue-200/90">{cholesterolData.ldl}</span>
-          </div>
-          <div className="flex items-baseline justify-between">
-            <span className="text-[7px] text-blue-300/70">TG:</span>
-            <span className="text-[7px] font-medium text-blue-200/90">{cholesterolData.triglycerides}</span>
-          </div>
-        </div>
-      )}
-      {temperatureLocation && (
-        <div className="flex items-baseline space-x-1 justify-center">
-          <span className="text-[7px] text-blue-300/70">
-            {temperatureLocation === 'finger' ? 'Dedo' : 
-             temperatureLocation === 'wrist' ? 'Muñeca' : 
-             temperatureLocation === 'forehead' ? 'Frente' : 'Desconocido'}
-          </span>
+          {secondaryValue && secondaryUnit && (
+            <div className="flex items-baseline space-x-1 justify-center">
+              <span className="text-xs font-medium tracking-tighter text-blue-200/90">
+                {secondaryValue}
+              </span>
+              <span className="text-[7px] text-blue-300/70">{secondaryUnit}</span>
+            </div>
+          )}
         </div>
       )}
     </Card>
