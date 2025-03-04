@@ -52,31 +52,6 @@ export class GlucoseProcessor {
   private readonly CALIBRATION_ADJUSTMENT_RATE = 0.2; // Tasa de ajuste de calibración
   private readonly SPECTRAL_BANDS_GLUCOSE
   
-  // Constantes de calibración multi-espectral
-  private readonly CLINICAL_PARAMETERS = {
-    // Bandas específicas de absorción de glucosa (nm)
-    GLUCOSE_BANDS: [920, 1050, 1250],
-    // Coeficientes validados
-    ABSORPTION_COEFFICIENTS: [0.267, 0.331, 0.169, 0.457],
-    // Correcciones fisiológicas
-    TEMPERATURE_CORRECTION: 0.012,  // mg/dL/°C
-    HEMATOCRIT_CORRECTION: 0.039,   // mg/dL/%
-    // Límites clínicos (mg/dL)
-    MIN_VALID_GLUCOSE: 40,
-    MAX_VALID_GLUCOSE: 400,
-    // Precisión clínica
-    ACCURACY_RMSE: 10.5 // mg/dL
-  };
-  
-  // Calibración personalizada
-  private calibrationData = {
-    referenceGlucose: 0,
-    referenceTimestamp: 0,
-    calibrationFactor: 1.0,
-    personalOffset: 0,
-    isCalibrated: false
-  };
-  
   constructor() {
     // Initialize with random base glucose
     this.BASE_GLUCOSE = Math.floor(this.BASE_GLUCOSE_MIN + Math.random() * (this.BASE_GLUCOSE_MAX - this.BASE_GLUCOSE_MIN));
@@ -535,7 +510,7 @@ export class GlucoseProcessor {
     // Suavizado adaptativo - más peso a valores recientes
     if (this.glucoseHistory.length >= 3) {
       const weights = this.glucoseHistory.map((_, idx, arr) => 
-        (idx + 1) / ((arr.length * (arr.length + 1)) / 2
+        (idx + 1) / ((arr.length * (arr.length + 1)) / 2)
       );
       
       glucoseLevel = this.glucoseHistory.reduce(
@@ -902,7 +877,6 @@ export class GlucoseProcessor {
           }
         }
       }
-    }
       
       // Calcular índice si tenemos todos los puntos
       if (mainPeakIdx >= 0 && dicroticNotchIdx > mainPeakIdx && dicroticPeakIdx > dicroticNotchIdx) {
@@ -1399,74 +1373,5 @@ export class GlucoseProcessor {
     const meanY = sumY / sumWeights;
     
     return (sumXY - meanX * meanY) / (sumXX - meanX * meanX);
-  }
-
-  /**
-   * Procesa señales PPG para extraer nivel de glucosa
-   */
-  processGlucoseFromPPG(
-    redSignal: number[],
-    irSignal: number[],
-    greenSignal?: number[],
-    patientContext?: any
-  ): {
-    glucoseLevel: number;
-    trendDirection: string;
-    confidence: number;
-    accuracy: number;
-    isValidClinical: boolean;
-  } | null {
-    // 1. Validación de señal
-    if (!this.validateSignalQuality(redSignal, irSignal, greenSignal)) {
-      return null;
-    }
-    
-    // 2. Preprocesamiento y extracción de características
-    const processedData = this.processSignals(redSignal, irSignal, greenSignal);
-    if (!processedData.isValid) {
-      return null;
-    }
-    
-    // 3. Análisis de patrones espectrales relacionados con glucosa
-    const absorptionFeatures = this.extractGlucoseAbsorptionFeatures(
-      processedData.redFeatures,
-      processedData.irFeatures,
-      processedData.greenFeatures
-    );
-    
-    // 4. Estimación inicial de glucosa
-    let glucoseValue = this.calculateGlucoseFromAbsorption(absorptionFeatures);
-    
-    // 5. Correcciones fisiológicas
-    glucoseValue = this.applyPhysiologicalCorrections(
-      glucoseValue,
-      patientContext
-    );
-    
-    // 6. Calibración personalizada
-    const calibratedGlucose = this.applyCalibration(glucoseValue);
-    
-    // 7. Validación clínica
-    const isValidClinical = this.applyPhysiologicalValidation(calibratedGlucose, patientContext);
-    
-    // 8. Actualizar historial
-    this.updateHistory(calibratedGlucose, processedData.signalQuality);
-    
-    // 9. Calcular nivel de glucosa
-    const glucoseLevel = this.calculateGlucose(
-      [calibratedGlucose],
-      processedData.signalQuality
-    );
-    
-    // 10. Determinar tendencia
-    const trendDirection = this.determineTrend();
-    
-    return {
-      glucoseLevel: glucoseLevel.value,
-      trendDirection: trendDirection,
-      confidence: glucoseLevel.confidence,
-      accuracy: this.calculateMeasurementAccuracy(processedData.signalQuality),
-      isValidClinical: isValidClinical
-    };
   }
 }

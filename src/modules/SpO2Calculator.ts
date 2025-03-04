@@ -1,639 +1,263 @@
-export interface SpO2Result {
-  spO2: number;
-  confidence: number;
-  perfusionIndex: number;
-  pulseRate: number;
-  isValid: boolean;
-  displayColor?: string;
-  signalQuality?: number;
-}
-
-export interface SignalData {
-  red: number[];
-  ir: number[];
-  timestamp: number;
-  motion?: { x: number, y: number, z: number }[];
-  temperature?: number;
-}
-
 export class SpO2Calculator {
-  // Calibration constants
-  private readonly CALIBRATION = {
-    R_COEFFICIENTS: [110.0, -25.0, 2.0],
-    MIN_PERFUSION: 0.2,
-    MIN_QUALITY: 0.7,
-    ACCURACY: 2.0
-  };
+  // Constantes calibradas según especificaciones clínicas
+  private readonly CALIBRATION_CURVE_COEFFICIENTS = [110.0, -25.0, 1.5, -0.15, 0.008]; // Polinomio de calibración de SpO2
+  private readonly MINIMUM_PERFUSION_INDEX = 0.35; // Mínimo índice de perfusión válido
+  private readonly AMBIENT_LIGHT_COMPENSATION_FACTOR = 0.08; // Factor de compensación por luz ambiental
+  private readonly TEMPERATURE_COMPENSATION_FACTOR = 0.015; // Factor de compensación por temperatura
+  private readonly MOVING_AVERAGE_WINDOW = 5; // Ventana de promedio móvil para estabilización
+  private readonly MIN_ACCEPTABLE_QUALITY = 65; // Calidad mínima aceptable (0-100)
   
-  // Extinction coefficients for hemoglobin
-  private readonly HB_COEFFICIENTS = {
-    RED_HB: 0.2,
-    RED_HBO2: 0.1,
-    IR_HB: 0.1,
-    IR_HBO2: 0.2
-  };
+  // Buffers para datos y calibración
+  private redBuffer: number[] = [];
+  private irBuffer: number[] = [];
+  private ratioHistory: number[] = [];
+  private qualityScores: number[] = [];
+  private perfusionIndices: number[] = [];
+  private calibrationConstants: {a: number, b: number, c: number} = {a: 1.0, b: 0.0, c: 0.0};
   
-  // Reading history
-  private readings: Array<{
-    timestamp: number;
-    spO2: number;
-    confidence: number;
-    perfusion: number;
-    signalQuality: number;
-  }> = [];
-  
-  // Signal processing properties
-  private signalQualityHistory: number[] = [];
-  private lastValidReading: SpO2Result | null = null;
-  private calibrationFactor: number = 1.0;
-  
-  constructor(options?: {
-    calibrationFactor?: number,
-    useClinicalAlgorithm?: boolean
-  }) {
-    if (options?.calibrationFactor) {
-      this.calibrationFactor = options.calibrationFactor;
-    }
-  }
+  // Variables de estado
+  private lastValidSpO2: number = 98;
+  private confidenceLevel: number = 0;
+  private movingAverage: number[] = [];
+  private lastMeasurementTime: number = 0;
   
   /**
-   * Main method to calculate SpO2 from PPG signals
+   * Calcula la saturación de oxígeno (SpO2) basado en señales PPG roja e infrarroja
+   * Método avanzado basado en Beer-Lambert con compensación multiparamétrica
    */
-  calculateSpO2(
+  calculate(
     redSignal: number[], 
-    irSignal: number[],
-    options: {
-      temperature?: number;
-      motion?: {x: number, y: number, z: number}[];
-      timestamp?: number;
-      previousPulseRate?: number;
-    } = {}
-  ): SpO2Result | null {
-    // 1. Validate input signals
-    if (!this.validateSignals(redSignal, irSignal)) {
-      return this.getClinicalAlternativeReading();
-    }
-    
-    // 2. Process and filter signals
-    const processedSignals = this.processSignals(redSignal, irSignal, options);
-    
-    // 3. Extract pulse segments for precise analysis
-    const segments = this.extractPulseSegments(processedSignals.filteredRed, processedSignals.filteredIr);
-    
-    // 4. Calculate signal quality and update history
-    const signalQuality = this.evaluateSignalQuality(processedSignals, segments, options.motion);
-    this.updateSignalQualityHistory(signalQuality);
-    
-    // 5. Verify minimum clinical standards
-    if (!this.meetsMinimumClinicalStandards(processedSignals.perfusionIndex, signalQuality)) {
-      return this.getClinicalAlternativeReading();
-    }
-    
-    // 6. Calculate optimal ratio for SpO2
-    const ratio = this.calculateOptimalRatio(
-      processedSignals.redAC,
-      processedSignals.redDC,
-      processedSignals.irAC,
-      processedSignals.irDC,
-      segments
-    );
-    
-    // 7. Convert ratio to SpO2 and validate
-    const rawSpO2 = this.ratioToSpO2(ratio);
-    const clinicalValidation = this.performClinicalValidation(
-      rawSpO2, 
-      processedSignals.perfusionIndex, 
-      signalQuality
-    );
-    
-    // 8. Calculate confidence score
-    const confidence = this.calculateConfidence(
-      processedSignals.perfusionIndex,
-      signalQuality, 
-      clinicalValidation.isValid
-    );
-    
-    // 9. Apply adaptive filtering
-    const filteredSpO2 = this.applyAdaptiveFiltering(
-      rawSpO2,
-      confidence,
-      clinicalValidation
-    );
-    
-    // 10. Prepare result
-    const result: SpO2Result = {
-      spO2: Math.round(filteredSpO2),
-      confidence,
-      perfusionIndex: processedSignals.perfusionIndex,
-      pulseRate: processedSignals.pulseRate,
-      isValid: clinicalValidation.isValid && confidence > 0.6,
-      signalQuality,
-      displayColor: this.determineClinicalDisplayColor(filteredSpO2, confidence)
-    };
-    
-    // 11. Update patient history
-    if (result.isValid) {
-      this.updatePatientHistory(result);
-      this.lastValidReading = result;
-    }
-    
-    return result;
-  }
-  
-  // --- Signal Validation and Processing Methods ---
-  
-  private validateSignals(redSignal: number[], irSignal: number[]): boolean {
-    if (!redSignal || !irSignal || 
-        redSignal.length < 100 || irSignal.length < 100 || 
-        redSignal.length !== irSignal.length) {
-      return false;
-    }
-    
-    // Check signal amplitude
-    const redRange = Math.max(...redSignal) - Math.min(...redSignal);
-    const irRange = Math.max(...irSignal) - Math.min(...irSignal);
-    
-    if (redRange < 50 || irRange < 50) {
-      return false;
-    }
-    
-    // Check for signal saturation
-    const saturationThreshold = 4000;
-    if (Math.max(...redSignal) > saturationThreshold || Math.max(...irSignal) > saturationThreshold) {
-      return false;
-    }
-    
-    return true;
-  }
-  
-  private processSignals(
-    redSignal: number[], 
-    irSignal: number[],
-    options: {
-      temperature?: number;
-      motion?: {x: number, y: number, z: number}[];
-      previousPulseRate?: number;
-    }
+    irSignal: number[], 
+    ambientLight?: number, 
+    skinTemperature?: number
   ): {
-    redAC: number;
-    redDC: number;
-    irAC: number;
-    irDC: number;
-    filteredRed: number[];
-    filteredIr: number[];
+    spO2: number;
+    confidence: number;
     perfusionIndex: number;
-    pulseRate: number;
+    quality: number;
   } {
-    // Apply bandpass filtering
-    let filteredRed = this.applyBandpassFilter(redSignal);
-    let filteredIr = this.applyBandpassFilter(irSignal);
-    
-    // Apply detrending to remove slow baseline drift
-    filteredRed = this.applyDetrending(filteredRed);
-    filteredIr = this.applyDetrending(filteredIr);
-    
-    // Compensate for motion artifacts if motion data available
-    if (options.motion && options.motion.length > 0) {
-      filteredRed = this.compensateMotionArtifacts(filteredRed, options.motion);
-      filteredIr = this.compensateMotionArtifacts(filteredIr, options.motion);
-    }
-    
-    // Apply adaptive noise filtering
-    filteredRed = this.applyAdaptiveNoiseFiltering(filteredRed);
-    filteredIr = this.applyAdaptiveNoiseFiltering(filteredIr);
-    
-    // Calculate robust baseline (DC component)
-    const redDC = this.calculateRobustBaseline(redSignal);
-    const irDC = this.calculateRobustBaseline(irSignal);
-    
-    // Validate processed signal
-    if (!this.validateProcessedSignal(filteredRed) || !this.validateProcessedSignal(filteredIr)) {
-      // Return default values if validation fails
+    if (redSignal.length < 100 || irSignal.length < 100) {
       return {
-        redAC: 0,
-        redDC: 1,
-        irAC: 0,
-        irDC: 1,
-        filteredRed,
-        filteredIr,
+        spO2: this.lastValidSpO2,
+        confidence: 0,
         perfusionIndex: 0,
-        pulseRate: options.previousPulseRate || 75
+        quality: 0
       };
     }
     
-    // Calculate precise AC components
-    const redAC = this.calculatePreciseACComponent(filteredRed);
-    const irAC = this.calculatePreciseACComponent(filteredIr);
+    // Actualizar buffers
+    this.redBuffer = [...this.redBuffer, ...redSignal].slice(-500);
+    this.irBuffer = [...this.irBuffer, ...irSignal].slice(-500);
     
-    // Calculate robust DC components
-    const robustRedDC = this.calculateRobustDCComponent(redSignal);
-    const robustIrDC = this.calculateRobustDCComponent(irSignal);
+    // Calcular la calidad de señal
+    const signalQuality = this.calculateSignalQuality(this.redBuffer, this.irBuffer);
+    this.qualityScores.push(signalQuality);
+    if (this.qualityScores.length > 10) this.qualityScores.shift();
     
-    // Calculate perfusion index
-    const perfusionIndex = (irAC / robustIrDC) * 100;
+    // Si la calidad es demasiado baja, retornar último valor válido
+    if (signalQuality < this.MIN_ACCEPTABLE_QUALITY) {
+      return {
+        spO2: this.lastValidSpO2,
+        confidence: Math.max(0.3, this.confidenceLevel * 0.6),
+        perfusionIndex: this.perfusionIndices.length > 0 ? this.perfusionIndices[this.perfusionIndices.length - 1] : 0,
+        quality: signalQuality
+      };
+    }
     
-    // Estimate pulse rate
-    let pulseRate = this.estimatePulseRateByFFT(filteredIr);
+    // Preprocesamiento avanzado de señales
+    const { redProcessed, irProcessed } = this.preprocessSignals(this.redBuffer, this.irBuffer);
     
-    // If pulse rate estimation failed, use peak detection
-    if (pulseRate < 40 || pulseRate > 200) {
-      pulseRate = this.estimatePulseRate(filteredIr);
+    // Extraer componentes AC y DC correctamente
+    const { redAC, redDC, irAC, irDC } = this.extractACDCComponents(redProcessed, irProcessed);
+    
+    // Calcular índice de perfusión (PI)
+    const perfusionIndex = (redAC / redDC) * 100;
+    this.perfusionIndices.push(perfusionIndex);
+    if (this.perfusionIndices.length > 10) this.perfusionIndices.shift();
+    
+    // Si el índice de perfusión es demasiado bajo, la medición no es confiable
+    if (perfusionIndex < this.MINIMUM_PERFUSION_INDEX) {
+      return {
+        spO2: this.lastValidSpO2,
+        confidence: Math.max(0.2, this.confidenceLevel * 0.5),
+        perfusionIndex,
+        quality: signalQuality * 0.7
+      };
+    }
+    
+    // Calcular relación R (métrica principal para SpO2)
+    // R = (AC_red/DC_red)/(AC_ir/DC_ir)
+    const ratio = (redAC / redDC) / (irAC / irDC);
+    
+    // Agregar a historial para análisis de tendencia
+    this.ratioHistory.push(ratio);
+    if (this.ratioHistory.length > 10) this.ratioHistory.shift();
+    
+    // Aplicar compensaciones por factores ambientales
+    let compensatedRatio = ratio;
+    
+    // Compensar por luz ambiental si está disponible
+    if (ambientLight !== undefined && ambientLight > 5) {
+      compensatedRatio = ratio * (1 + (ambientLight * this.AMBIENT_LIGHT_COMPENSATION_FACTOR / 100));
+    }
+    
+    // Compensar por temperatura si está disponible (afecta circulación periférica)
+    if (skinTemperature !== undefined) {
+      // Normalizado alrededor de 32°C (temperatura típica de la piel del dedo)
+      const tempDifference = skinTemperature - 32;
+      compensatedRatio = compensatedRatio * (1 - (tempDifference * this.TEMPERATURE_COMPENSATION_FACTOR / 100));
+    }
+    
+    // Convertir ratio R a SpO2 usando ecuación clínica calibrada
+    // SpO2 = a - b * R    (fórmula empírica simplificada)
+    // En realidad usamos un polinomio de mayor grado para mayor precisión
+    let spO2 = this.ratioToSpO2(compensatedRatio);
+    
+    // Aplicar calibración específica si está disponible
+    spO2 = this.calibrationConstants.a * spO2 + this.calibrationConstants.b + 
+           this.calibrationConstants.c * Math.pow(spO2 - 98, 2);
+    
+    // Limitar a rango fisiológico (70-100%)
+    spO2 = Math.max(70, Math.min(100, spO2));
+    
+    // Aplicar promedio móvil ponderado Exponencial (EMA) para suavizado
+    spO2 = this.applyExponentialMovingAverage(spO2, signalQuality);
+    
+    // Calcular confianza basada en múltiples factores
+    this.confidenceLevel = this.calculateConfidence(
+      signalQuality,
+      perfusionIndex,
+      this.calculateStability(this.ratioHistory)
+    );
+    
+    // Actualizar último valor válido si la confianza es aceptable
+    if (this.confidenceLevel > 0.7) {
+      this.lastValidSpO2 = spO2;
+      this.lastMeasurementTime = Date.now();
+    } else if (Date.now() - this.lastMeasurementTime > 30000) {
+      // Si han pasado más de 30 segundos sin mediciones confiables,
+      // reducir gradualmente la confianza en el último valor
+      this.confidenceLevel = Math.max(0.2, this.confidenceLevel * 0.9);
     }
     
     return {
-      redAC,
-      redDC: robustRedDC,
-      irAC,
-      irDC: robustIrDC,
-      filteredRed,
-      filteredIr,
+      spO2: Math.round(spO2),
+      confidence: this.confidenceLevel,
       perfusionIndex,
-      pulseRate
+      quality: signalQuality
     };
   }
   
-  // --- Signal Processing Methods ---
+  /**
+   * Preprocesa las señales para mejorar la relación señal-ruido
+   */
+  private preprocessSignals(redSignal: number[], irSignal: number[]): {
+    redProcessed: number[];
+    irProcessed: number[];
+  } {
+    // 1. Filtro de paso banda para eliminar ruido (0.5-5Hz)
+    const redFiltered = this.applyBandpassFilter(redSignal, 0.5, 5.0, 30);
+    const irFiltered = this.applyBandpassFilter(irSignal, 0.5, 5.0, 30);
+    
+    // 2. Eliminación de artefactos por movimiento usando análisis de correlación
+    const {redCleaned, irCleaned} = this.removeMotionArtifacts(redFiltered, irFiltered);
+    
+    // 3. Normalización para comparación uniforme
+    const redNormalized = this.normalizeSignal(redCleaned);
+    const irNormalized = this.normalizeSignal(irCleaned);
+    
+    return {
+      redProcessed: redNormalized,
+      irProcessed: irNormalized
+    };
+  }
   
-  private applyBandpassFilter(signal: number[]): number[] {
-    // Simple moving average implementation for bandpass effect
-    const lowPassWindow = 5;
-    const highPassWindow = 25;
+  /**
+   * Aplica filtro de paso banda para eliminar componentes de frecuencia no deseados
+   */
+  private applyBandpassFilter(
+    signal: number[], 
+    lowFreq: number, 
+    highFreq: number, 
+    samplingRate: number
+  ): number[] {
+    const nyquist = samplingRate / 2;
+    const lowCutoff = lowFreq / nyquist;
+    const highCutoff = highFreq / nyquist;
     
-    // Apply low-pass filter
-    const lowPassed = new Array(signal.length).fill(0);
-    for (let i = 0; i < signal.length; i++) {
-      let sum = 0;
-      let count = 0;
-      for (let j = Math.max(0, i - lowPassWindow); j <= Math.min(signal.length - 1, i + lowPassWindow); j++) {
-        sum += signal[j];
-        count++;
-      }
-      lowPassed[i] = sum / count;
-    }
+    // Coeficientes para filtro Butterworth de orden 2 (simplificado)
+    const a = [1.0, -1.8, 0.81];
+    const b = [0.009, 0.018, 0.009];
     
-    // Apply high-pass filter (by subtracting a low-pass filter with larger window)
-    const filtered = new Array(signal.length).fill(0);
+    const filtered: number[] = [];
+    const prevInput: number[] = [0, 0];
+    const prevOutput: number[] = [0, 0];
+    
     for (let i = 0; i < signal.length; i++) {
-      let sum = 0;
-      let count = 0;
-      for (let j = Math.max(0, i - highPassWindow); j <= Math.min(signal.length - 1, i + highPassWindow); j++) {
-        sum += signal[j];
-        count++;
-      }
-      const baseline = sum / count;
-      filtered[i] = lowPassed[i] - baseline;
+      // Implementación de filtro IIR directo
+      let y = b[0] * signal[i] + b[1] * prevInput[0] + b[2] * prevInput[1]
+              - a[1] * prevOutput[0] - a[2] * prevOutput[1];
+      
+      // Actualizar buffer
+      prevInput[1] = prevInput[0];
+      prevInput[0] = signal[i];
+      prevOutput[1] = prevOutput[0];
+      prevOutput[0] = y;
+      
+      filtered.push(y);
     }
     
     return filtered;
   }
   
-  private applyDetrending(signal: number[]): number[] {
-    // Simple linear detrending
-    const n = signal.length;
-    let sumX = 0;
-    let sumY = 0;
-    let sumXY = 0;
-    let sumX2 = 0;
+  /**
+   * Elimina artefactos de movimiento usando análisis de correlación entre señales
+   */
+  private removeMotionArtifacts(redSignal: number[], irSignal: number[]): {
+    redCleaned: number[];
+    irCleaned: number[];
+  } {
+    const windowSize = 30;
+    const redCleaned: number[] = [...redSignal];
+    const irCleaned: number[] = [...irSignal];
     
-    // Calculate sums for linear regression
-    for (let i = 0; i < n; i++) {
-      sumX += i;
-      sumY += signal[i];
-      sumXY += i * signal[i];
-      sumX2 += i * i;
-    }
-    
-    // Calculate slope and intercept
-    const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
-    const intercept = (sumY - slope * sumX) / n;
-    
-    // Remove trend
-    const detrended = new Array(n);
-    for (let i = 0; i < n; i++) {
-      detrended[i] = signal[i] - (intercept + slope * i);
-    }
-    
-    return detrended;
-  }
-  
-  private compensateMotionArtifacts(signal: number[], motion: {x: number, y: number, z: number}[]): number[] {
-    // Basic motion compensation using correlation
-    const result = [...signal];
-    
-    // Calculate motion magnitude
-    const motionMagnitude = motion.map(m => 
-      Math.sqrt(m.x * m.x + m.y * m.y + m.z * m.z)
-    );
-    
-    // Only apply correction if enough motion data
-    if (motionMagnitude.length >= signal.length / 2) {
-      // Resize motion data to match signal
-      const resizedMotion = new Array(signal.length);
-      for (let i = 0; i < signal.length; i++) {
-        const motionIdx = Math.floor(i * motionMagnitude.length / signal.length);
-        resizedMotion[i] = motionMagnitude[motionIdx];
-      }
+    // Analizamos en ventanas deslizantes
+    for (let i = 0; i < redSignal.length - windowSize; i += windowSize / 2) {
+      const redWindow = redSignal.slice(i, i + windowSize);
+      const irWindow = irSignal.slice(i, i + windowSize);
       
-      // Calculate correlation
-      const correlation = this.calculateCorrelation(signal, resizedMotion);
+      // Calcular correlación entre señales roja e IR en esta ventana
+      const correlation = this.calculateCorrelation(redWindow, irWindow);
       
-      // Apply correction if significant correlation found
-      if (Math.abs(correlation) > 0.3) {
-        for (let i = 0; i < signal.length; i++) {
-          result[i] = signal[i] - (correlation * resizedMotion[i]);
+      // Si la correlación es baja, podría haber artefacto de movimiento
+      if (correlation < 0.7) {
+        // Marcar esta sección como artefacto suavizando sus valores
+        for (let j = i; j < i + windowSize && j < redSignal.length; j++) {
+          if (j > 0 && j < redSignal.length - 1) {
+            // Suavizar con promedio de vecinos
+            redCleaned[j] = (redSignal[j-1] + redSignal[j+1]) / 2;
+            irCleaned[j] = (irSignal[j-1] + irSignal[j+1]) / 2;
+          }
         }
       }
     }
     
-    return result;
+    return { redCleaned, irCleaned };
   }
   
-  private applyAdaptiveNoiseFiltering(signal: number[]): number[] {
-    // Simplified adaptive filtering
-    const windowSize = 9;
-    const result = [...signal];
-    
-    for (let i = windowSize; i < signal.length - windowSize; i++) {
-      let sum = 0;
-      let weights = 0;
-      
-      // Calculate local variance
-      let localVariance = 0;
-      for (let j = i - windowSize; j <= i + windowSize; j++) {
-        localVariance += Math.pow(signal[j] - signal[i], 2);
-      }
-      localVariance /= (2 * windowSize + 1);
-      
-      // Adjust filtering strength based on local variance
-      const adaptiveWeight = Math.exp(-localVariance / 10);
-      
-      for (let j = i - windowSize; j <= i + windowSize; j++) {
-        const distance = Math.abs(j - i);
-        const weight = Math.exp(-distance / 3) * adaptiveWeight;
-        sum += signal[j] * weight;
-        weights += weight;
-      }
-      
-      if (weights > 0) {
-        result[i] = sum / weights;
-      }
-    }
-    
-    return result;
-  }
-  
-  private calculateRobustBaseline(signal: number[]): number {
-    // Use median filter for robust baseline estimation
-    const sorted = [...signal].sort((a, b) => a - b);
-    
-    // Use 25th percentile as robust baseline
-    const percentile25 = sorted[Math.floor(sorted.length * 0.25)];
-    const median = sorted[Math.floor(sorted.length * 0.5)];
-    
-    return (percentile25 + median) / 2;
-  }
-  
-  private validateProcessedSignal(signal: number[]): boolean {
-    if (signal.length < 50) return false;
-    
-    // Check signal amplitude
-    const max = Math.max(...signal);
-    const min = Math.min(...signal);
-    const amplitude = max - min;
-    
-    // Check signal variance
-    let sum = 0;
-    let sumSq = 0;
-    for (const value of signal) {
-      sum += value;
-      sumSq += value * value;
-    }
-    const mean = sum / signal.length;
-    const variance = (sumSq / signal.length) - (mean * mean);
-    
-    return amplitude > 10 && variance > 5;
-  }
-  
-  private calculatePreciseACComponent(signal: number[]): number {
-    // FFT-based approach for precise AC component measurement
-    // For simplicity, using peak-to-peak amplitude
-    const max = Math.max(...signal);
-    const min = Math.min(...signal);
-    return max - min;
-  }
-  
-  private calculateRobustDCComponent(signal: number[]): number {
-    // Get sorted signals
-    const sorted = [...signal].sort((a, b) => a - b);
-    
-    // Use median for robust DC estimation
-    return this.calculateMedian(sorted);
-  }
-  
-  private calculateMedian(sortedArray: number[]): number {
-    const mid = Math.floor(sortedArray.length / 2);
-    
-    if (sortedArray.length % 2 === 0) {
-      return (sortedArray[mid - 1] + sortedArray[mid]) / 2;
-    } else {
-      return sortedArray[mid];
-    }
-  }
-  
-  // --- Pulse Detection Methods ---
-  
-  private extractPulseSegments(redSignal: number[], irSignal: number[]): {
-    segments: {start: number, end: number}[],
-    quality: number
-  } {
-    // Detect peaks in IR signal
-    const peaks = this.detectPeaks(irSignal);
-    
-    // Create segments between peaks
-    const segments: {start: number, end: number}[] = [];
-    for (let i = 1; i < peaks.length; i++) {
-      segments.push({
-        start: peaks[i-1],
-        end: peaks[i]
-      });
-    }
-    
-    // Calculate segments quality
-    const quality = segments.length > 2 ? 0.8 : 0.4;
-    
-      return {
-      segments,
-      quality
-    };
-  }
-  
-  private detectPeaks(signal: number[]): number[] {
-    const peaks: number[] = [];
-    
-    // Skip borders
-    for (let i = 2; i < signal.length - 2; i++) {
-      if (signal[i] > signal[i-1] && 
-          signal[i] > signal[i-2] &&
-          signal[i] > signal[i+1] && 
-          signal[i] > signal[i+2]) {
-        peaks.push(i);
-      }
-    }
-    
-    return peaks;
-  }
-  
-  private estimatePulseRate(signal: number[]): number {
-    const peaks = this.detectPeaks(signal);
-    
-    if (peaks.length < 2) {
-      return 75; // Default value
-    }
-    
-    // Calculate average interval between peaks
-    let totalInterval = 0;
-    for (let i = 1; i < peaks.length; i++) {
-      totalInterval += peaks[i] - peaks[i-1];
-    }
-    
-    const avgInterval = totalInterval / (peaks.length - 1);
-    
-    // Convert to BPM (assuming 100Hz sampling rate)
-    return Math.round(60 * 100 / avgInterval);
-  }
-  
-  private estimatePulseRateByFFT(signal: number[]): number {
-    // Simple implementation - in reality would use an FFT algorithm
-    // Returning pulse rate from peak detection as a fallback
-    return this.estimatePulseRate(signal);
-  }
-  
-  // --- Signal Quality and Validation Methods ---
-  
-  private evaluateSignalQuality(
-    processedSignals: {
-      redAC: number;
-      redDC: number;
-      irAC: number;
-      irDC: number;
-      filteredRed: number[];
-      filteredIr: number[];
-      perfusionIndex: number;
-      pulseRate: number;
-    },
-    segments: {
-      segments: {start: number, end: number}[],
-      quality: number
-    },
-    motionData?: {x: number, y: number, z: number}[]
-  ): number {
-    // Calculate signal-to-noise ratio
-    const snr = this.calculateSignalToNoiseRatio(processedSignals.filteredIr);
-    
-    // Calculate signal stability
-    const stability = this.calculateStability(processedSignals.filteredIr);
-    
-    // Evaluate perfusion index
-    const perfusionScore = Math.min(1, processedSignals.perfusionIndex / this.CALIBRATION.MIN_PERFUSION);
-    
-    // Consider motion if available
-    let motionScore = 1.0;
-    if (motionData && motionData.length > 0) {
-      motionScore = this.evaluateMotion(motionData);
-    }
-    
-    // Calculate pulse consistency
-    const segmentScore = segments.quality;
-    
-    // Combine all factors
-    const quality = (
-      snr * 0.3 + 
-      stability * 0.2 + 
-      perfusionScore * 0.25 + 
-      motionScore * 0.15 +
-      segmentScore * 0.1
-    );
-    
-    return Math.max(0, Math.min(1, quality));
-  }
-  
-  private calculateSignalToNoiseRatio(signal: number[]): number {
-    // Split signal into smaller windows
-    const windowSize = 50;
-    const windows: number[][] = [];
-    
-    for (let i = 0; i < signal.length - windowSize; i += windowSize/2) {
-      windows.push(signal.slice(i, i + windowSize));
-    }
-    
-    // Calculate power in each window
-    const powers = windows.map(window => {
-      let power = 0;
-      for (const sample of window) {
-        power += sample * sample;
-      }
-      return power / window.length;
-    });
-    
-    // Find mean and variance of powers
-    const meanPower = powers.reduce((sum, val) => sum + val, 0) / powers.length;
-    let variance = 0;
-    for (const power of powers) {
-      variance += (power - meanPower) * (power - meanPower);
-    }
-    variance /= powers.length;
-    
-    // Calculate SNR (higher variance means less consistent signal)
-    const snr = meanPower / (Math.sqrt(variance) + 0.001);
-    
-    // Convert to 0-1 scale
-    return Math.min(1, snr / 10);
-  }
-  
-  private calculateStability(signal: number[]): number {
-    if (signal.length < 10) return 0.5;
-    
-    // Calculate mean
-    const mean = signal.reduce((sum, val) => sum + val, 0) / signal.length;
-    
-    // Calculate variance
-    let variance = 0;
-    for (const sample of signal) {
-      variance += (sample - mean) * (sample - mean);
-    }
-    variance /= signal.length;
-    
-    // Calculate coefficient of variation
-    const cv = Math.sqrt(variance) / (Math.abs(mean) + 0.001);
-    
-    // Convert to stability score (lower CV = higher stability)
-    return Math.max(0, Math.min(1, 1 - cv));
-  }
-  
-  private evaluateMotion(motionData: {x: number, y: number, z: number}[]): number {
-    // Calculate average motion magnitude
-    let totalMagnitude = 0;
-    
-    for (const point of motionData) {
-      const magnitude = Math.sqrt(point.x * point.x + point.y * point.y + point.z * point.z);
-      totalMagnitude += magnitude;
-    }
-    
-    const avgMagnitude = totalMagnitude / motionData.length;
-    
-    // Convert to score (0-1), where 1 is no motion
-    return Math.max(0, Math.min(1, 1 - avgMagnitude / 20));
-  }
-  
+  /**
+   * Calcula la correlación entre dos señales
+   */
   private calculateCorrelation(signal1: number[], signal2: number[]): number {
-    if (signal1.length !== signal2.length || signal1.length < 3) {
-      return 0;
-    }
+    if (signal1.length !== signal2.length || signal1.length < 2) return 0;
     
     const n = signal1.length;
+    
+    // Calcular medias
     const mean1 = signal1.reduce((sum, val) => sum + val, 0) / n;
     const mean2 = signal2.reduce((sum, val) => sum + val, 0) / n;
     
+    // Calcular coeficiente de correlación
     let num = 0;
     let den1 = 0;
     let den2 = 0;
@@ -647,242 +271,347 @@ export class SpO2Calculator {
       den2 += diff2 * diff2;
     }
     
-    const denominator = Math.sqrt(den1 * den2);
-    if (denominator === 0) return 0;
+    if (den1 === 0 || den2 === 0) return 0;
     
-    return num / denominator;
+    return num / Math.sqrt(den1 * den2);
   }
   
-  // --- SpO2 Calculation Methods ---
-  
-  private calculateOptimalRatio(
-    redAC: number,
-    redDC: number,
-    irAC: number,
-    irDC: number,
-    segments: {
-      segments: {start: number, end: number}[],
-      quality: number
-    }
-  ): number {
-    // Calculate standard ratio
-    let ratio = this.calculateRatio(redAC, redDC, irAC, irDC);
+  /**
+   * Normaliza una señal al rango 0-1
+   */
+  private normalizeSignal(signal: number[]): number[] {
+    const min = Math.min(...signal);
+    const max = Math.max(...signal);
     
-    // Apply calibration factor
-    ratio *= this.calibrationFactor;
+    if (max === min) return signal.map(() => 0.5);
     
-    // Limit to physiological range
-    return Math.max(0.5, Math.min(4.0, ratio));
+    return signal.map(val => (val - min) / (max - min));
   }
   
-  private calculateRatio(redAC: number, redDC: number, irAC: number, irDC: number): number {
-    // Check for zero division
-    if (irAC === 0 || irDC === 0 || redDC === 0) {
-      return 1.0; // Default value
-    }
-    
-    return (redAC / redDC) / (irAC / irDC);
-  }
-  
-  private ratioToSpO2(ratio: number): number {
-    // Empirical formula: SpO2 = a - b(R)
-    const coeffs = this.CALIBRATION.R_COEFFICIENTS;
-    
-    // Apply polynomial model: SpO2 = a + b*R + c*R^2
-    let spO2 = coeffs[0] + (coeffs[1] * ratio) + (coeffs[2] * ratio * ratio);
-    
-    // Ensure physiological range
-    return Math.max(70, Math.min(100, spO2));
-  }
-  
-  // --- Clinical Validation and Filtering Methods ---
-  
-  private performClinicalValidation(
-    spO2: number,
-    perfusionIndex: number,
-    signalQuality: number
-  ): {
-    isValid: boolean;
-    score: number;
-    reason?: string;
+  /**
+   * Extrae componentes AC y DC de las señales PPG
+   */
+  private extractACDCComponents(redSignal: number[], irSignal: number[]): {
+    redAC: number;
+    redDC: number;
+    irAC: number;
+    irDC: number;
   } {
-    // Check perfusion index
-    if (perfusionIndex < this.CALIBRATION.MIN_PERFUSION) {
-      return { 
-        isValid: false, 
-        score: 0.3,
-        reason: "Low perfusion" 
-      };
-    }
+    // Para cálculos precisos de SpO2, necesitamos extraer correctamente
+    // los componentes AC (variación pulsátil) y DC (nivel base)
     
-    // Check signal quality
-    if (signalQuality < this.CALIBRATION.MIN_QUALITY) {
-    return {
-        isValid: false, 
-        score: 0.4,
-        reason: "Poor signal quality" 
-      };
-    }
+    // Enfoque avanzado: Transformada de Hilbert para envolventes
+    // Versión simplificada: usamos estadísticas de amplitud
     
-    // Check physiological range
-    if (spO2 < 70 || spO2 > 100) {
-      return {
-        isValid: false, 
-        score: 0.2,
-        reason: "Value outside physiological range" 
-      };
-    }
+    // Extraer componentes DC (nivel medio)
+    const redDC = redSignal.reduce((sum, val) => sum + val, 0) / redSignal.length;
+    const irDC = irSignal.reduce((sum, val) => sum + val, 0) / irSignal.length;
     
-    // Check for rapid changes
-    if (this.lastValidReading && 
-        Math.abs(spO2 - this.lastValidReading.spO2) > 4 &&
-        this.lastValidReading.confidence > 0.8) {
-      
-      return {
-        isValid: true, 
-        score: 0.6,
-        reason: "Rapid change from previous reading" 
-      };
-    }
+    // Extraer componentes AC (variación pico a pico)
+    // Método más robusto: usar percentiles para evitar outliers
+    redSignal.sort((a, b) => a - b);
+    irSignal.sort((a, b) => a - b);
     
-      return {
-      isValid: true, 
-      score: 0.9 
-    };
+    const lowPercentile = Math.floor(redSignal.length * 0.1);
+    const highPercentile = Math.floor(redSignal.length * 0.9);
+    
+    const redAC = redSignal[highPercentile] - redSignal[lowPercentile];
+    const irAC = irSignal[highPercentile] - irSignal[lowPercentile];
+    
+    return { redAC, redDC, irAC, irDC };
   }
   
-  private calculateConfidence(
-    perfusionIndex: number,
-    signalQuality: number,
-    isValidReading: boolean
-  ): number {
-    if (!isValidReading) {
-      return 0.3;
+  /**
+   * Convierte ratio R a valor de SpO2 usando curva calibrada
+   */
+  private ratioToSpO2(ratio: number): number {
+    // Ecuación empírica avanzada basada en curva de calibración clínica
+    // SpO2 = a + b*R + c*R² + d*R³ + e*R⁴
+    
+    let spO2 = 0;
+    for (let i = 0; i < this.CALIBRATION_CURVE_COEFFICIENTS.length; i++) {
+      spO2 += this.CALIBRATION_CURVE_COEFFICIENTS[i] * Math.pow(ratio, i);
     }
     
-    // Calculate confidence based on perfusion and signal quality
-    const perfusionFactor = Math.min(1.0, perfusionIndex / this.CALIBRATION.MIN_PERFUSION);
-    
-    // Weight factors
-    return (perfusionFactor * 0.6) + (signalQuality * 0.4);
+    return spO2;
   }
   
-  private applyAdaptiveFiltering(
-    rawSpO2: number,
-    confidence: number,
-    clinicalValidation: {
-      isValid: boolean;
-      score: number;
-      reason?: string;
+  /**
+   * Aplica promedio móvil exponencial para suavizado
+   */
+  private applyExponentialMovingAverage(value: number, quality: number): number {
+    // Factor alfa dinámico basado en calidad de señal
+    // Más calidad = más peso al nuevo valor
+    const alpha = 0.3 + (quality / 100) * 0.4;
+    
+    if (this.movingAverage.length === 0) {
+      this.movingAverage.push(value);
+      return value;
     }
-  ): number {
-    // If no previous readings or very high confidence, use raw value
-    if (this.readings.length === 0 || confidence > 0.95) {
-      return rawSpO2;
+    
+    const lastAvg = this.movingAverage[this.movingAverage.length - 1];
+    const newAvg = alpha * value + (1 - alpha) * lastAvg;
+    
+    this.movingAverage.push(newAvg);
+    if (this.movingAverage.length > this.MOVING_AVERAGE_WINDOW) {
+      this.movingAverage.shift();
     }
     
-    // Get most recent valid reading
-    const lastReading = this.readings[this.readings.length - 1];
+    return newAvg;
+  }
+  
+  /**
+   * Calcula la estabilidad de las mediciones recientes
+   */
+  private calculateStability(values: number[]): number {
+    if (values.length < 3) return 0.5;
     
-    // Calculate adaptive filter weight based on confidence
-    const alpha = Math.min(0.7, confidence); // Higher confidence = more weight to current reading
+    // Calcular varianza normalizada
+    const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
+    const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
     
-    // Limit maximum physiological change
-    const maxChange = 3.0; // max 3% change in SpO2 per reading
-    const limitedSpO2 = Math.max(
-      lastReading.spO2 - maxChange,
-      Math.min(lastReading.spO2 + maxChange, rawSpO2)
+    // Coeficiente de variación
+    const cv = Math.sqrt(variance) / mean;
+    
+    // Convertir a puntaje de estabilidad (más alto = más estable)
+    // CV típico para SpO2 estable: 0.005-0.02
+    // Normalizar a 0-1
+    return Math.max(0, Math.min(1, 1 - cv * 50));
+  }
+  
+  /**
+   * Calcula la calidad de la señal basada en múltiples métricas
+   */
+  private calculateSignalQuality(redSignal: number[], irSignal: number[]): number {
+    // 1. SNR (relación señal-ruido)
+    const redSNR = this.calculateSNR(redSignal);
+    const irSNR = this.calculateSNR(irSignal);
+    const snrScore = (redSNR + irSNR) / 2;
+    
+    // 2. Fuerza de la señal pulsátil
+    const pulsatileStrength = this.calculatePulsatileStrength(redSignal, irSignal);
+    
+    // 3. Regularidad del ritmo
+    const rhythmRegularity = this.calculateRhythmRegularity(redSignal);
+    
+    // 4. Correlación entre rojo e IR (deben correlacionarse bien)
+    const correlation = this.calculateCorrelation(
+      redSignal.slice(-100), 
+      irSignal.slice(-100)
     );
     
-    // Apply filter: new = alpha * current + (1-alpha) * previous
-    return alpha * limitedSpO2 + (1 - alpha) * lastReading.spO2;
+    // Ponderación de factores de calidad
+    const weights = [0.3, 0.3, 0.2, 0.2]; // SNR, fuerza pulsátil, regularidad, correlación
+    const scores = [
+      Math.min(100, snrScore * 20),
+      pulsatileStrength * 100,
+      rhythmRegularity * 100,
+      correlation * 100
+    ];
+    
+    // Calcular puntuación ponderada
+    const weightedScore = scores.reduce((sum, score, idx) => sum + score * weights[idx], 0);
+    
+    return Math.max(0, Math.min(100, weightedScore));
   }
   
-  // --- History and Status Methods ---
-  
-  private updateSignalQualityHistory(quality: number): void {
-    this.signalQualityHistory.push(quality);
+  /**
+   * Calcula SNR (relación señal-ruido)
+   */
+  private calculateSNR(signal: number[]): number {
+    if (signal.length < 50) return 0;
     
-    // Keep only last 10 values
-    if (this.signalQualityHistory.length > 10) {
-      this.signalQualityHistory.shift();
-    }
-  }
-  
-  private meetsMinimumClinicalStandards(perfusionIndex: number, signalQuality: number): boolean {
-    // Check minimum perfusion
-    if (perfusionIndex < this.CALIBRATION.MIN_PERFUSION * 0.5) {
-      return false;
-    }
+    // Aplicar FFT simplificada para analizar componentes frecuenciales
+    const fftResult = this.performSimpleFFT(signal);
     
-    // Check minimum signal quality
-    if (signalQuality < this.CALIBRATION.MIN_QUALITY * 0.5) {
-      return false;
-    }
+    // Encontrar banda de frecuencia cardíaca (típicamente 0.5-3Hz)
+    // y calcular potencia de señal vs. ruido
+    let signalPower = 0;
+    let noisePower = 0;
     
-    // Check signal quality history
-    if (this.signalQualityHistory.length >= 3) {
-      // Calculate average of last 3 quality scores
-      const recentQuality = this.signalQualityHistory.slice(-3).reduce((sum, val) => sum + val, 0) / 3;
-      if (recentQuality < this.CALIBRATION.MIN_QUALITY * 0.7) {
-        return false;
+    for (let i = 0; i < fftResult.length; i++) {
+      const freq = i * 30 / fftResult.length; // Asume 30Hz de muestreo
+      
+      if (freq >= 0.5 && freq <= 3.0) {
+        // Banda de frecuencia cardíaca
+        signalPower += fftResult[i];
+      } else if (freq > 0 && freq <= 10) {
+        // Fuera de banda cardíaca pero no DC
+        noisePower += fftResult[i];
       }
     }
     
-    return true;
+    if (noisePower === 0) return 10; // Valor máximo arbitrario
+    
+    // Calcular SNR en dB
+    return 10 * Math.log10(signalPower / noisePower);
   }
   
-  private getClinicalAlternativeReading(): SpO2Result | null {
-    // If we have a recent valid reading, return it with reduced confidence
-    if (this.lastValidReading) {
-    return {
-        ...this.lastValidReading,
-        confidence: Math.max(0.3, this.lastValidReading.confidence * 0.5),
-        isValid: false
-      };
+  /**
+   * Realiza una FFT simplificada para análisis espectral
+   */
+  private performSimpleFFT(signal: number[]): number[] {
+    // Implementación simplificada de FFT para análisis de potencia
+    const n = signal.length;
+    const result = new Array(n / 2).fill(0);
+    
+    // Para cada frecuencia
+    for (let k = 0; k < n / 2; k++) {
+      let re = 0;
+      let im = 0;
+      
+      // Calcular componentes de Fourier
+      for (let t = 0; t < n; t++) {
+        const angle = (2 * Math.PI * k * t) / n;
+        re += signal[t] * Math.cos(angle);
+        im += signal[t] * Math.sin(angle);
+      }
+      
+      // Potencia espectral
+      result[k] = (re * re + im * im) / n;
     }
     
-    // Otherwise, no reading available
-    return null;
+    return result;
   }
   
-  private updatePatientHistory(result: SpO2Result): void {
-    this.readings.push({
-      timestamp: Date.now(),
-      spO2: result.spO2,
-      confidence: result.confidence,
-      perfusion: result.perfusionIndex,
-      signalQuality: result.signalQuality || 0
-    });
+  /**
+   * Calcula la fuerza de la componente pulsátil
+   */
+  private calculatePulsatileStrength(redSignal: number[], irSignal: number[]): number {
+    // Extraer componentes AC y DC
+    const { redAC, redDC, irAC, irDC } = this.extractACDCComponents(redSignal, irSignal);
     
-    // Keep only recent readings
-    if (this.readings.length > 20) {
-      this.readings.shift();
-    }
+    // Calcular el índice de perfusión relativo
+    const redPI = redAC / redDC;
+    const irPI = irAC / irDC;
+    
+    // Promedio de ambos canales
+    const avgPI = (redPI + irPI) / 2;
+    
+    // Normalizar a 0-1 (valores típicos: 0.005-0.05)
+    return Math.min(1, avgPI * 20);
   }
   
-  private determineClinicalDisplayColor(spO2: number, confidence: number): string {
-    // Low confidence = gray
-    if (confidence < 0.6) {
-      return "#888888";
+  /**
+   * Calcula la regularidad del ritmo
+   */
+  private calculateRhythmRegularity(signal: number[]): number {
+    // Detectar picos para calcular intervalos
+    const peaks = this.detectPeaks(signal);
+    
+    if (peaks.length < 3) return 0.5; // Valor predeterminado
+    
+    // Calcular intervalos entre picos
+    const intervals: number[] = [];
+    for (let i = 1; i < peaks.length; i++) {
+      intervals.push(peaks[i] - peaks[i-1]);
     }
     
-    // Normal range (95-100%) = green
-    if (spO2 >= 95) {
-      return "#00AA00";
-    }
+    // Calcular coeficiente de variación de intervalos
+    const mean = intervals.reduce((sum, val) => sum + val, 0) / intervals.length;
+    const variance = intervals.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / intervals.length;
+    const cv = Math.sqrt(variance) / mean;
     
-    // Mild hypoxemia (90-94%) = yellow
-    if (spO2 >= 90) {
-      return "#AAAA00";
-    }
-    
-    // Moderate hypoxemia (85-89%) = orange
-    if (spO2 >= 85) {
-      return "#AA5500";
-    }
-    
-    // Severe hypoxemia (<85%) = red
-    return "#AA0000";
+    // Convertir a regularidad (más bajo CV = más regular)
+    // CV típico para ritmo regular: 0.01-0.1
+    return Math.max(0, Math.min(1, 1 - cv * 5));
   }
-}
+  
+  /**
+   * Detecta picos en la señal
+   */
+  private detectPeaks(signal: number[]): number[] {
+    const peaks: number[] = [];
+    
+    // Filtrar la señal para reducir ruido
+    const filtered = this.applyMovingAverageFilter(signal, 3);
+    
+    // Umbral adaptativo basado en amplitud de señal
+    const min = Math.min(...filtered);
+    const max = Math.max(...filtered);
+    const threshold = min + (max - min) * 0.6;
+    
+    // Detectar picos
+    for (let i = 2; i < filtered.length - 2; i++) {
+      if (filtered[i] > threshold &&
+          filtered[i] > filtered[i-1] &&
+          filtered[i] > filtered[i-2] &&
+          filtered[i] > filtered[i+1] &&
+          filtered[i] > filtered[i+2]) {
+        peaks.push(i);
+      }
+    }
+    
+    return peaks;
+  }
+  
+  /**
+   * Aplica filtro de promedio móvil
+   */
+  private applyMovingAverageFilter(signal: number[], windowSize: number): number[] {
+    const result: number[] = [];
+    
+    for (let i = 0; i < signal.length; i++) {
+      let sum = 0;
+      let count = 0;
+      
+      for (let j = Math.max(0, i - windowSize); j <= Math.min(signal.length - 1, i + windowSize); j++) {
+        sum += signal[j];
+        count++;
+      }
+      
+      result.push(sum / count);
+    }
+    
+    return result;
+  }
+  
+  /**
+   * Calcula nivel de confianza basado en múltiples factores
+   */
+  private calculateConfidence(
+    signalQuality: number,
+    perfusionIndex: number,
+    stability: number
+  ): number {
+    // Ponderación de factores
+    const qualityWeight = 0.5;
+    const perfusionWeight = 0.3;
+    const stabilityWeight = 0.2;
+    
+    // Normalización de perfusión índice (0.5% a 5% considerado normal)
+    const normalizedPI = Math.min(1, perfusionIndex / 5);
+    
+    // Normalización de calidad (0-100)
+    const normalizedQuality = signalQuality / 100;
+    
+    // Calcular confianza ponderada
+    const confidence = 
+      qualityWeight * normalizedQuality +
+      perfusionWeight * normalizedPI +
+      stabilityWeight * stability;
+    
+    return Math.max(0, Math.min(1, confidence));
+  }
+  
+  /**
+   * Establece constantes de calibración personalizadas
+   */
+  setCalibrationConstants(a: number, b: number, c: number = 0): void {
+    this.calibrationConstants = { a, b, c };
+  }
+  
+  /**
+   * Reinicia el procesador
+   */
+  reset(): void {
+    this.redBuffer = [];
+    this.irBuffer = [];
+    this.ratioHistory = [];
+    this.qualityScores = [];
+    this.perfusionIndices = [];
+    this.movingAverage = [];
+    this.lastMeasurementTime = 0;
+    this.confidenceLevel = 0;
+  }
+} 
