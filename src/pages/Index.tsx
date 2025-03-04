@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -20,6 +19,7 @@ interface TemperatureData {
   value: number;
   trend: 'stable' | 'rising' | 'falling';
   location: string;
+  confidence?: number;
 }
 
 interface HemoglobinData {
@@ -274,7 +274,6 @@ const Index = () => {
         const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
         
         if (vitals) {
-          // Generate sample cholesterol and temperature data
           const cholesterolData = {
             totalCholesterol: 180 + Math.round(Math.random() * 40),
             hdl: 45 + Math.round(Math.random() * 15),
@@ -288,31 +287,24 @@ const Index = () => {
             location: 'peripheral'
           };
           
-          console.log("Vital signs data details:", {
-            spo2: vitals.spo2,
-            pressure: vitals.pressure,
-            arrhythmia: vitals.arrhythmiaStatus,
-            respiration: vitals.respiration,
-            glucose: vitals.glucose ? `${vitals.glucose.value} mg/dL (${vitals.glucose.trend || 'unknown'})` : 'No data',
-            hemoglobin: vitals.hemoglobin ? `${typeof vitals.hemoglobin === 'number' ? vitals.hemoglobin : vitals.hemoglobin.value} g/dL` : 'No data',
-            cholesterol: `Total: ${cholesterolData.totalCholesterol}, HDL: ${cholesterolData.hdl}, LDL: ${cholesterolData.ldl}`,
-            temperature: `${temperatureData.value.toFixed(1)}°C (${temperatureData.trend})`
-          });
-          
-          // Ensure we include all required properties to match VitalSignsState interface
           const updatedVitalSigns: VitalSignsState = {
-            ...vitals,
+            spo2: vitals.spo2 || 0,
+            pressure: vitals.pressure || "--/--",
+            arrhythmiaStatus: vitals.arrhythmiaStatus || "--",
+            respiration: vitals.respiration || { rate: 0, depth: 0, regularity: 0 },
+            hasRespirationData: !!vitals.respiration,
+            glucose: vitals.glucose || null,
+            hemoglobin: vitals.hemoglobin || null,
             isoCompliant: vitals.isoCompliant || false,
             calibrationStatus: vitals.calibrationStatus || 'uncalibrated',
             motionScore: vitals.motionScore || 0,
             cholesterol: cholesterolData,
             temperature: temperatureData,
-            hemoglobin: vitals.hemoglobin || null,
             lastArrhythmiaData: vitals.lastArrhythmiaData || null
           };
           
           setVitalSigns(updatedVitalSigns);
-          setArrhythmiaCount(vitals.arrhythmiaStatus.split('|')[1] || "--");
+          setArrhythmiaCount(vitals.arrhythmiaStatus?.split('|')[1] || "--");
           
           if (elapsedTime >= 15 && !finalValues) {
             const hemoglobinValue = typeof updatedVitalSigns.hemoglobin === 'number' ? 
@@ -335,21 +327,6 @@ const Index = () => {
               duration: 3000
             });
           }
-          
-          if (vitals.glucose && vitals.glucose.value > 0) {
-            console.log(`Glucose data received: ${vitals.glucose.value} mg/dL, trend: ${vitals.glucose.trend}`);
-          }
-          
-          const hemoglobinLog = typeof updatedVitalSigns.hemoglobin === 'number' ? 
-            updatedVitalSigns.hemoglobin : 
-            (updatedVitalSigns.hemoglobin?.value || 0);
-            
-          if (hemoglobinLog > 0) {
-            console.log(`Hemoglobin data received: ${hemoglobinLog} g/dL`);
-          }
-          
-          console.log(`Cholesterol data: Total: ${cholesterolData.totalCholesterol}, HDL: ${cholesterolData.hdl}, LDL: ${cholesterolData.ldl}`);
-          console.log(`Temperature data: ${temperatureData.value.toFixed(1)}°C (${temperatureData.trend})`);
         }
         
         setSignalQuality(lastSignal.quality);
@@ -470,23 +447,6 @@ const Index = () => {
               />
             </div>
           </div>
-
-          {isMonitoring && (
-            <div className="absolute bottom-[150px] left-0 right-0 text-center z-30 text-xs text-gray-400">
-              <span>
-                Resp Data: {vitalSigns.hasRespirationData ? 'Available' : 'Not available'} | 
-                Rate: {vitalSigns.respiration.rate} RPM | Depth: {vitalSigns.respiration.depth} | 
-                Glucose: {vitalSigns.glucose ? `${vitalSigns.glucose.value} mg/dL (${vitalSigns.glucose.trend || 'unknown'})` : 'Not available'} |
-                Hemoglobin: {typeof vitalSigns.hemoglobin === 'number' ? 
-                  `${vitalSigns.hemoglobin} g/dL` : 
-                  (vitalSigns.hemoglobin ? `${vitalSigns.hemoglobin.value} g/dL` : 'Not available')} |
-                ISO Compliant: {vitalSigns.isoCompliant ? 'Yes' : 'No'} |
-                Motion Score: {vitalSigns.motionScore || 0} |
-                Cholesterol: {vitalSigns.cholesterol ? `Total: ${vitalSigns.cholesterol.totalCholesterol}, HDL: ${vitalSigns.cholesterol.hdl}` : 'Not available'} |
-                Temperature: {vitalSigns.temperature ? `${vitalSigns.temperature.value.toFixed(1)}°C (${vitalSigns.temperature.trend})` : 'Not available'}
-              </span>
-            </div>
-          )}
 
           {isMonitoring && (
             <div className="absolute bottom-40 left-0 right-0 text-center z-30">
