@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -9,7 +8,7 @@ import PPGSignalMeter from "@/components/PPGSignalMeter";
 import PermissionsHandler from "@/components/PermissionsHandler";
 import { VitalSignsRisk } from '@/utils/vitalSignsRisk';
 import { toast } from "sonner";
-import { HemoglobinData } from "@/types/signal";
+import { CholesterolData, HemoglobinData } from "@/types/signal";
 
 interface VitalSigns {
   spo2: number;
@@ -31,7 +30,7 @@ interface VitalSigns {
     rmssd: number;
     rrVariation: number;
   } | null;
-  cholesterol?: {
+  cholesterol: {
     totalCholesterol: number;
     hdl: number;
     ldl: number;
