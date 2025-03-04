@@ -1,4 +1,3 @@
-
 import { createVitalSignsDataCollector } from "../utils/vitalSignsDataCollector";
 
 export class GlucoseProcessor {
@@ -30,9 +29,9 @@ export class GlucoseProcessor {
   };
   
   // Constants for physiological constraints
-  private PHYSIOLOGICAL_CONSTRAINTS = {
-    minValue: 60,
-    maxValue: 250,
+  private readonly PHYSIOLOGICAL_CONSTRAINTS = {
+    minValue: 70,
+    maxValue: 180,
     maxRateOfChange: 3 // mg/dL per minute
   };
   
@@ -524,7 +523,22 @@ export class GlucoseProcessor {
     
     return finalValue;
   }
-
+  
+  /**
+   * Apply physiological constraints to calculated glucose value
+   */
+  private applyPhysiologicalConstraints(glucoseValue: number): number {
+    // Limit to physiological range
+    let constrained = Math.max(
+      this.PHYSIOLOGICAL_CONSTRAINTS.minValue,
+      Math.min(this.PHYSIOLOGICAL_CONSTRAINTS.maxValue, glucoseValue)
+    );
+    
+    // Additional constraints logic can be added here
+    
+    return constrained;
+  }
+  
   /**
    * Procesa la señal PPG para calcular el nivel de glucosa en sangre
    * @param ppgValue - Valor PPG actual de la cámara
@@ -607,7 +621,7 @@ export class GlucoseProcessor {
     this.lastCalculatedValue = glucoseLevel;
     return glucoseLevel;
   }
-
+  
   /**
    * Actualiza el índice de perfusión
    */

@@ -48,15 +48,55 @@ export function calculateStandardDeviation(values: number[]): number {
 
 /**
  * Enhanced peak detection algorithm
+ * Returns indices of peaks, valleys, and overall signal quality
  */
-export function enhancedPeakDetection(values: number[], threshold = 0.5): number[] {
-  const peaks: number[] = [];
-  if (values.length < 3) return peaks;
+export function enhancedPeakDetection(values: number[], threshold = 0.5): { 
+  peakIndices: number[]; 
+  valleyIndices: number[]; 
+  signalQuality: number;
+} {
+  const peakIndices: number[] = [];
+  const valleyIndices: number[] = [];
+  
+  if (values.length < 3) {
+    return { 
+      peakIndices: [], 
+      valleyIndices: [], 
+      signalQuality: 0 
+    };
+  }
 
+  // Detect peaks
   for (let i = 1; i < values.length - 1; i++) {
     if (values[i] > values[i - 1] && values[i] > values[i + 1] && values[i] > threshold) {
-      peaks.push(i);
+      peakIndices.push(i);
+    }
+    // Detect valleys
+    if (values[i] < values[i - 1] && values[i] < values[i + 1]) {
+      valleyIndices.push(i);
     }
   }
-  return peaks;
+  
+  // Calculate signal quality (0-1)
+  let signalQuality = 0;
+  if (peakIndices.length > 1) {
+    // Calculate consistency of peak intervals
+    const intervals = [];
+    for (let i = 1; i < peakIndices.length; i++) {
+      intervals.push(peakIndices[i] - peakIndices[i-1]);
+    }
+    
+    const meanInterval = intervals.reduce((sum, val) => sum + val, 0) / intervals.length;
+    const intervalVariation = intervals.map(interval => Math.abs(interval - meanInterval) / meanInterval);
+    const avgVariation = intervalVariation.reduce((sum, val) => sum + val, 0) / intervalVariation.length;
+    
+    // Higher quality = lower variation
+    signalQuality = Math.max(0, Math.min(1, 1 - avgVariation));
+  }
+  
+  return { 
+    peakIndices, 
+    valleyIndices, 
+    signalQuality 
+  };
 }

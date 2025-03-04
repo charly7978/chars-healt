@@ -166,6 +166,29 @@ export class RespirationProcessor {
   }
   
   /**
+   * Estimate amplitude from PPG value with timestamp
+   */
+  private estimateAmplitudeFromPPG(ppgValue: number, timestamp: number): number {
+    // Simple estimation method - could be enhanced with sliding window
+    return Math.abs(ppgValue) * 100;
+  }
+  
+  /**
+   * Get last valid reading when no data is available
+   */
+  private getLastValidReading(): { 
+    rate: number;
+    depth: number;
+    regularity: number;
+  } {
+    return {
+      rate: 0,
+      depth: 0,
+      regularity: 0
+    };
+  }
+  
+  /**
    * Verificar si hay suficientes datos para mostrar información respiratoria
    */
   public hasValidData(): boolean {
