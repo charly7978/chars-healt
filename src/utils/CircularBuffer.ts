@@ -1,4 +1,3 @@
-
 interface PPGDataPoint {
   time: number;
   value: number;
@@ -9,9 +8,10 @@ interface PPGDataPoint {
 export class CircularBuffer {
   private buffer: PPGDataPoint[];
   private maxSize: number;
-  private fingerDetectionThreshold: number = 0.08; // MODIFICACIÓN: Reducido drásticamente de 0.12 a 0.08 para detectar señales muy débiles
+  private fingerDetectionThreshold: number = 0.05; // MODIFICACIÓN: Reducido radicalmente de 0.08 a 0.05
   private lastDetectionTime: number = 0;
-  private detectionHysteresis: number = 0.05; // NUEVA: Histéresis para evitar oscilaciones en la detección
+  private detectionHysteresis: number = 0.08; // MODIFICACIÓN: Aumentado de 0.05 a 0.08 para mayor persistencia
+  private persistenceTime: number = 15000; // NUEVA: Tiempo de persistencia ampliado a 15 segundos (antes 7s)
 
   constructor(size: number) {
     this.buffer = [];
@@ -34,7 +34,7 @@ export class CircularBuffer {
     this.lastDetectionTime = 0;
   }
 
-  // Mejorado significativamente para mantener la detección más estable
+  // Mejorado drásticamente para mantener detección casi permanente
   isFingerDetected(recentPoints: number = 10): boolean {
     if (this.buffer.length < recentPoints) return false;
     
@@ -42,34 +42,42 @@ export class CircularBuffer {
     const signalVariance = this.calculateVariance(latestPoints.map(p => p.value));
     const currentTime = Date.now();
     
-    // Detección con histéresis: usamos un umbral más bajo si ya estábamos detectando
-    const wasDetected = currentTime - this.lastDetectionTime < 7000; // MODIFICACIÓN: Aumentado a 7 segundos
+    // Condición de mantenimiento extendido
+    const wasDetected = currentTime - this.lastDetectionTime < this.persistenceTime;
+    
+    // Umbral dinámico: mucho más bajo si ya estábamos detectando
     const effectiveThreshold = wasDetected 
-      ? this.fingerDetectionThreshold - this.detectionHysteresis 
+      ? this.fingerDetectionThreshold - this.detectionHysteresis
       : this.fingerDetectionThreshold;
     
-    // Detección basada en la varianza de la señal
+    // Detectar cualquier mínima variación en la señal
     if (signalVariance > effectiveThreshold) {
       this.lastDetectionTime = currentTime;
       return true;
     }
     
-    // Verificación adicional: detectar cambios significativos en la señal
-    if (this.detectSignificantChanges(latestPoints)) {
+    // Verificar cambios incluso muy pequeños
+    if (this.detectSignificantChanges(latestPoints, wasDetected ? 0.15 : 0.2)) {
       this.lastDetectionTime = currentTime;
       return true;
     }
     
-    // Mantener la detección por hasta 7 segundos después de la última detección real
-    if (currentTime - this.lastDetectionTime < 7000) { // MODIFICACIÓN: Aumentado de 5 a 7 segundos
+    // Usar amplitud de la señal como criterio adicional
+    if (this.hasSignificantAmplitude(latestPoints)) {
+      this.lastDetectionTime = currentTime;
+      return true;
+    }
+    
+    // Mantener detección por un tiempo mucho más largo (15 segundos)
+    if (currentTime - this.lastDetectionTime < this.persistenceTime) {
       return true;
     }
     
     return false;
   }
 
-  // NUEVO: Método para detectar cambios significativos en la señal que indican presencia de dedo
-  private detectSignificantChanges(points: PPGDataPoint[]): boolean {
+  // MODIFICADO: Umbral adaptativo basado en si ya estábamos detectando
+  private detectSignificantChanges(points: PPGDataPoint[], threshold: number = 0.2): boolean {
     if (points.length < 5) return false;
     
     // Calcular la diferencia máxima entre puntos consecutivos
@@ -79,8 +87,25 @@ export class CircularBuffer {
       maxDiff = Math.max(maxDiff, diff);
     }
     
-    // Si hay cambios significativos, probablemente hay un dedo
-    return maxDiff > 0.2;
+    // Umbral más bajo para mantener la detección
+    return maxDiff > threshold;
+  }
+  
+  // NUEVO: Detector adicional basado en amplitud absoluta de la señal
+  private hasSignificantAmplitude(points: PPGDataPoint[]): boolean {
+    if (points.length < 3) return false;
+    
+    // Encontrar valor mínimo y máximo
+    let min = Number.MAX_VALUE;
+    let max = -Number.MAX_VALUE;
+    
+    for (const point of points) {
+      min = Math.min(min, point.value);
+      max = Math.max(max, point.value);
+    }
+    
+    // Si hay una diferencia mínima, detectar como señal válida
+    return (max - min) > 0.1;
   }
 
   // Método auxiliar para calcular la varianza de la señal
