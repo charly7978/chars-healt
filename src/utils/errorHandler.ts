@@ -83,6 +83,7 @@ export const handleError = (error: ProcessingError, showToast: boolean = true): 
   
   // Show toast notification if requested
   if (showToast) {
+    // Fixed the TypeScript error by using an explicit switch statement instead of comparison
     switch (severity) {
       case ErrorSeverity.CRITICAL:
         toast.error(error.message, {
