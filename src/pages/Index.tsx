@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -72,7 +73,8 @@ const Index = () => {
       value: 0,
       trend: 'stable' as const,
       location: 'peripheral'
-    }
+    },
+    lastArrhythmiaData: null
   });
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState("--");
@@ -207,7 +209,8 @@ const Index = () => {
         value: 0,
         trend: 'stable' as const,
         location: 'peripheral'
-      }
+      },
+      lastArrhythmiaData: null
     });
     setArrhythmiaCount("--");
     setSignalQuality(0);
@@ -271,6 +274,7 @@ const Index = () => {
         const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
         
         if (vitals) {
+          // Generate sample cholesterol and temperature data
           const cholesterolData = {
             totalCholesterol: 180 + Math.round(Math.random() * 40),
             hdl: 45 + Math.round(Math.random() * 15),
@@ -295,6 +299,7 @@ const Index = () => {
             temperature: `${temperatureData.value.toFixed(1)}°C (${temperatureData.trend})`
           });
           
+          // Ensure we include all required properties to match VitalSignsState interface
           const updatedVitalSigns: VitalSignsState = {
             ...vitals,
             isoCompliant: vitals.isoCompliant || false,
@@ -302,7 +307,8 @@ const Index = () => {
             motionScore: vitals.motionScore || 0,
             cholesterol: cholesterolData,
             temperature: temperatureData,
-            hemoglobin: vitals.hemoglobin || null
+            hemoglobin: vitals.hemoglobin || null,
+            lastArrhythmiaData: vitals.lastArrhythmiaData || null
           };
           
           setVitalSigns(updatedVitalSigns);
@@ -390,6 +396,7 @@ const Index = () => {
               arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
               cholesterol={vitalSigns.cholesterol}
               temperature={vitalSigns.temperature}
+              rawArrhythmiaData={vitalSigns.lastArrhythmiaData}
             />
           </div>
 

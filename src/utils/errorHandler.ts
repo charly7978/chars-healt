@@ -1,68 +1,61 @@
 
+/**
+ * ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION - NO ESTA PERMITIDO HACER MOVIMIENTOS POR CUENTA DE LA I.A SIN AUTORIZACION DEL USUARIO
+ */
 import { ProcessingError } from '../types/signal';
 
-// Simplemente redefino el enum aquí para evitar errores de importación
-enum ErrorSeverity {
-  INFO = 'INFO',
-  WARNING = 'WARNING',
-  ERROR = 'ERROR',
-  CRITICAL = 'CRITICAL'
-}
+type ErrorCallback = (error: ProcessingError) => void;
 
-export const handleProcessingError = (error: ProcessingError, callback?: (error: ProcessingError) => void): void => {
-  console.error(`[Processing Error] ${error.code}: ${error.message}`, error);
+/**
+ * Processes and logs errors from the signal processing pipeline
+ */
+export const handleProcessingError = (
+  error: ProcessingError,
+  errorCallback?: ErrorCallback
+): void => {
+  // Log error to console with appropriate level based on error code
+  console.error(`Signal Processing Error [${error.code}]: ${error.message}`);
   
-  if (error.details) {
-    console.error('Error details:', error.details);
-  }
+  // Extend the error object with severity information for the UI
+  let severity: 'low' | 'medium' | 'high' | 'critical' = 'medium';
   
-  // Manejo específico según el tipo de error
+  // Determine severity based on error code
   switch (error.code) {
-    case 'SIGNAL_QUALITY_LOW':
-      console.warn('Signal quality is too low for reliable processing');
+    case 'NO_FINGER_DETECTED':
+    case 'LOW_SIGNAL_QUALITY':
+    case 'CALIBRATION_NEEDED':
+      severity = 'low';
       break;
-    case 'CALIBRATION_REQUIRED':
-      console.warn('Calibration is required before processing');
+    case 'SIGNAL_PROCESSING_FAILURE':
+    case 'CALCULATION_ERROR':
+      severity = 'medium';
       break;
-    case 'FINGER_NOT_DETECTED':
-      console.info('No finger detected on the camera');
+    case 'HARDWARE_ERROR':
+    case 'CRITICAL_FAILURE':
+      severity = 'critical';
       break;
-    // Otros casos de error...
+    default:
+      severity = 'medium';
   }
   
-  // Manejo según la severidad
-  switch (error.severity) {
-    case ErrorSeverity.INFO:
-      // Solo información, no requiere acción
-      break;
-    case ErrorSeverity.WARNING:
-      // Advertencia, puede requerir atención del usuario
-      break;
-    case ErrorSeverity.ERROR:
-      // Error recuperable, pero requiere acción
-      break;
-    case ErrorSeverity.CRITICAL:
-      // Error crítico, requiere reinicio o intervención mayor
-      break;
-  }
-  
-  // Llamar al callback si existe
-  if (callback) {
-    callback(error);
-  }
-};
-
-export const createProcessingError = (
-  code: string,
-  message: string,
-  severity: ErrorSeverity,
-  details?: any
-): ProcessingError => {
-  return {
-    code,
-    message,
-    severity,
-    timestamp: new Date().toISOString(),
-    details
+  // Create extended error with severity
+  const extendedError: ProcessingError & { severity: string } = {
+    ...error,
+    severity
   };
+  
+  // Call error callback if provided
+  if (errorCallback) {
+    errorCallback(extendedError);
+  }
+  
+  // For critical errors, also log to a monitoring service if available
+  if (severity === 'critical') {
+    // In a real app, you might send this to a monitoring service
+    console.error('CRITICAL ERROR:', extendedError);
+  }
+  
+  // Record the timestamp in the log for debugging
+  const timestamp: string = new Date().toISOString();
+  console.log(`Error logged at: ${timestamp}`);
 };
