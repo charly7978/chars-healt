@@ -22,13 +22,6 @@ interface VitalSigns {
     value: number;
     trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
   };
-  cholesterol: {
-    total: number;
-    hdl: number;
-    ldl: number;
-    triglycerides: number;
-    lastUpdated: number;
-  };
   lastArrhythmiaData: {
     timestamp: number;
     rmssd: number;
@@ -47,13 +40,6 @@ const Index = () => {
     respiration: { rate: 0, depth: 0, regularity: 0 },
     hasRespirationData: false,
     glucose: { value: 0, trend: 'unknown' },
-    cholesterol: {
-      total: 0,
-      hdl: 0,
-      ldl: 0,
-      triglycerides: 0,
-      lastUpdated: Date.now()
-    },
     lastArrhythmiaData: null
   });
   const [heartRate, setHeartRate] = useState(0);
@@ -77,13 +63,6 @@ const Index = () => {
     glucose: {
       value: number;
       trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
-    },
-    cholesterol: {
-      total: number;
-      hdl: number;
-      ldl: number;
-      triglycerides: number;
-      lastUpdated: number;
     }
   } | null>(null);
   const [permissionsGranted, setPermissionsGranted] = useState(false);
@@ -220,8 +199,7 @@ const Index = () => {
         glucose: {
           value: avgGlucose > 0 ? avgGlucose : vitalSigns.glucose.value,
           trend: glucoseTrend
-        },
-        cholesterol: vitalSigns.cholesterol
+        }
       });
         
       hasValidValuesRef.current = true;
@@ -240,8 +218,7 @@ const Index = () => {
         spo2: vitalSigns.spo2,
         pressure: vitalSigns.pressure,
         respiration: vitalSigns.respiration,
-        glucose: vitalSigns.glucose,
-        cholesterol: vitalSigns.cholesterol
+        glucose: vitalSigns.glucose
       });
       hasValidValuesRef.current = true;
     }
@@ -374,13 +351,6 @@ const Index = () => {
       respiration: { rate: 0, depth: 0, regularity: 0 },
       hasRespirationData: false,
       glucose: { value: 0, trend: 'unknown' },
-      cholesterol: {
-        total: 0,
-        hdl: 0,
-        ldl: 0,
-        triglycerides: 0,
-        lastUpdated: Date.now()
-      },
       lastArrhythmiaData: null
     });
     setArrhythmiaCount("--");

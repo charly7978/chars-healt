@@ -13,10 +13,10 @@ interface VitalSignProps {
   trend?: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
 }
 
-const VitalSign: React.FC<VitalSignProps> = ({ 
-  label, 
-  value, 
-  unit, 
+const VitalSign: React.FC<VitalSignProps> = ({
+  label,
+  value,
+  unit,
   isFinalReading = false,
   secondaryValue,
   secondaryUnit,
@@ -305,8 +305,8 @@ const VitalSign: React.FC<VitalSignProps> = ({
                 </span>
                 {secondaryUnit && (
                   <span className="text-white/70 text-[10px]">{secondaryUnit}</span>
-                )}
-              </div>
+        )}
+      </div>
             )}
             
             {riskLabel && (
@@ -329,9 +329,9 @@ const VitalSign: React.FC<VitalSignProps> = ({
                 </svg>
               </div>
             </div>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
+        </div>
 
       {showDetail && (
         <VitalSignDetail

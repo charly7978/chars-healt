@@ -36,17 +36,17 @@ const PPGSignalMeter = ({
   const arrhythmiaCountRef = useRef<number>(0);
   
   // Optimized constants with SIGNIFICANTLY INCREASED dimensions for better visibility
-  const WINDOW_WIDTH_MS = 4000; // Visualization time window
+  const WINDOW_WIDTH_MS = 5000; // Visualization time window
   const CANVAS_WIDTH = 1000; // Increased from 700px to 1000px for much better readability
   const CANVAS_HEIGHT = 1100; // Increased from 900px to 1100px for much better vertical detail
   const GRID_SIZE_X = 100; // Grid cell width
   const GRID_SIZE_Y = 25; // Grid cell height
   const VERTICAL_SCALE = 42.0; // Signal amplification factor
-  const SMOOTHING_FACTOR = 1.5; // Wave smoothing factor
+  const SMOOTHING_FACTOR = 1.8; // Wave smoothing factor
   const TARGET_FPS = 60;
   const FRAME_TIME = 1000 / TARGET_FPS; // Optimized frame time calculation
   const BUFFER_SIZE = 650; // Signal history buffer size
-  const INVERT_SIGNAL = true; // Fixed to true - we need to invert the signal for display
+  const INVERT_SIGNAL = false;
   const PEAK_MIN_VALUE = 8.0; // Minimum threshold for peak detection
   const PEAK_DISTANCE_MS = 200; // Minimum time between peaks in milliseconds
 
@@ -209,10 +209,7 @@ const PPGSignalMeter = ({
 
     // Calculate normalized and scaled value
     const normalizedValue = smoothedValue - (baselineRef.current || 0);
-    
-    // Apply signal inversion here - this makes the peaks point up instead of down
-    // We're multiplying by -1 to invert for visualization
-    const scaledValue = INVERT_SIGNAL ? -normalizedValue * VERTICAL_SCALE : normalizedValue * VERTICAL_SCALE;
+    const scaledValue = normalizedValue * VERTICAL_SCALE;
     
     // Detect arrhythmia
     let isArrhythmia = false;
@@ -224,7 +221,7 @@ const PPGSignalMeter = ({
       arrhythmiaCountRef.current++;
     }
 
-    // Store the data point in the buffer - we're now handling inversion here
+    // Store the data point in the buffer
     const dataPoint: PPGDataPoint = {
       time: now,
       value: scaledValue,
@@ -257,8 +254,8 @@ const PPGSignalMeter = ({
         for (let i = 0; i < visiblePoints.length; i++) {
           const point = visiblePoints[i];
           const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-          // More accurate positioning relative to zero line - use INVERT_SIGNAL flag
-          const y = canvas.height * 0.6 - point.value; // We've already inverted the signal in scaledValue
+          // More accurate positioning relative to zero line
+          const y = canvas.height * 0.6 - point.value;
           
           if (firstPoint) {
             ctx.moveTo(x, y);
@@ -305,8 +302,7 @@ const PPGSignalMeter = ({
         const nextPoint1 = visiblePoints[i + 1];
         const nextPoint2 = visiblePoints[i + 2];
         
-        // Enhanced peak detection criteria - look for high points (positive peaks)
-        // Since we're now inverting the signal, high values mean peaks pointing upward
+        // Enhanced peak detection criteria
         if (point.value > prevPoint1.value && 
             point.value > prevPoint2.value && 
             point.value > nextPoint1.value && 
@@ -335,7 +331,7 @@ const PPGSignalMeter = ({
       for (const idx of maxPeakIndices) {
         const point = visiblePoints[idx];
         const x = canvas.width - ((now - point.time) * canvas.width / WINDOW_WIDTH_MS);
-        const y = canvas.height * 0.6 - point.value; // Point value is already inverted
+        const y = canvas.height * 0.6 - point.value;
         
         // Draw peak markers with improved visual cues
         ctx.beginPath();
