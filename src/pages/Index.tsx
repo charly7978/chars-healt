@@ -790,17 +790,6 @@ const Index = () => {
         </div>
       </div>
 
-      {isMonitoring && (
-        <div className="absolute bottom-[150px] left-0 right-0 text-center z-30 text-xs text-gray-400">
-          <span>
-            Resp Data: {vitalSigns.hasRespirationData ? 'Disponible' : 'No disponible'} | 
-            Rate: {vitalSigns.respiration.rate} RPM | Depth: {vitalSigns.respiration.depth} | 
-            Glucose: {vitalSigns.glucose ? `${vitalSigns.glucose.value} mg/dL (${vitalSigns.glucose.trend || 'unknown'})` : 'No disponible'} |
-            Hemoglobin: {vitalSigns.hemoglobin ? `${vitalSigns.hemoglobin} g/dL` : 'No disponible'}
-          </span>
-        </div>
-      )}
-
       <div className="absolute z-50" style={{ bottom: 0, left: 0, right: 0, height: '55px' }}>
         <div className="grid grid-cols-2 gap-px w-full h-full">
           <button 

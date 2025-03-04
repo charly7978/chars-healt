@@ -49,6 +49,12 @@ export interface GlucoseData {
   timeOffset: number; // Tiempo desde la última calibración (minutos)
 }
 
+export interface HemoglobinData {
+  value: number;     // Valor de hemoglobina en g/dL
+  confidence: number; // Nivel de confianza (0-100)
+  lastUpdated: number; // Timestamp de la última actualización
+}
+
 export interface HeartBeatResult {
   bpm: number;
   confidence: number;
