@@ -35,7 +35,7 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
   cholesterol,
   temperature
 }) => {
-  // Prevent UI from disappearing when finger is detected
+  // Always display signal regardless of finger detection
   const signalDisplay = (
     <div className="w-full h-full flex flex-col items-center justify-center">
       <div className="text-4xl font-bold text-green-500">

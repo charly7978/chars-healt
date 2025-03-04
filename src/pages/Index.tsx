@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -39,12 +38,13 @@ interface VitalSignsState {
   };
   hasRespirationData: boolean;
   glucose: any;
-  hemoglobin: HemoglobinData | number | null;
+  hemoglobin: HemoglobinData | null;
   isoCompliant: boolean;
   calibrationStatus: string;
   motionScore: number;
   cholesterol: CholesterolData;
   temperature: TemperatureData;
+  lastArrhythmiaData?: any;
 }
 
 const Index = () => {
