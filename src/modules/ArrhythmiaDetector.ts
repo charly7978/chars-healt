@@ -413,6 +413,7 @@ export class ArrhythmiaDetector {
     const irregularityThreshold = this.isAndroid ? 0.45 : 0.5; // Más sensible en Android
     const highIrregularity = irregularCount >= this.rrIntervals.length * irregularityThreshold;
     
+    // Fix: Don't use Boolean constructor as a function
     return highRMSSD && highVariation && highIrregularity;
   }
   
