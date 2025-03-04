@@ -1,5 +1,4 @@
-
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback, memo } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { CircularBuffer, PPGDataPoint } from '../utils/CircularBuffer';
 
@@ -390,10 +389,14 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
     };
   }, [renderSignal]);
 
+  const handleReset = useCallback(() => {
+    dataBufferRef.current = new CircularBuffer(BUFFER_SIZE);
+    onReset();
+  }, [onReset]);
+
   return (
-    <>
-      <div className="absolute top-0 right-1 z-30 flex items-center gap-2 rounded-lg p-2"
-           style={{ top: '5px', right: '5px' }}>
+    <div className="fixed inset-0 bg-gradient-to-b from-white to-slate-50/30">
+      <div className="absolute top-0 left-0 right-0 p-2 flex justify-between items-center bg-white/60 backdrop-blur-sm border-b border-slate-100 shadow-sm">
         <div className="w-[190px]">
           <div className={`h-1.5 w-full rounded-full bg-gradient-to-r ${getQualityColor(quality)} transition-all duration-1000 ease-in-out`}>
             <div
@@ -431,15 +434,15 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
         </div>
       </div>
 
-      <div className="absolute inset-0 w-full" style={{ height: '50vh', top: 0 }}>
-        <canvas
-          ref={canvasRef}
-          width={CANVAS_WIDTH}
-          height={CANVAS_HEIGHT}
-          className="w-full h-full"
-          style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 }}
-        />
-      </div>
+      <canvas
+        ref={canvasRef}
+        width={CANVAS_WIDTH}
+        height={CANVAS_HEIGHT}
+        className="w-full h-full"
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 }}
+        aria-label="PPG Signal Graph"
+        role="img"
+      />
       
       <div className="absolute" style={{ top: 'calc(50vh + 5px)', left: 0, right: 0, textAlign: 'center', zIndex: 30 }}>
         <h1 className="text-xl font-bold">
@@ -486,10 +489,27 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
           </div>
         </div>
       )}
-    </>
+
+      <div className="fixed bottom-0 left-0 right-0 h-[60px] grid grid-cols-2 gap-px bg-white/80 backdrop-blur-sm border-t border-slate-100">
+        <button 
+          onClick={onStartMeasurement}
+          className="w-full h-full bg-white/80 hover:bg-slate-50/80 text-xl font-bold text-slate-700 transition-all duration-300"
+          aria-label="Start measurement"
+        >
+          INICIAR
+        </button>
+        <button 
+          onClick={handleReset}
+          className="w-full h-full bg-white/80 hover:bg-slate-50/80 text-xl font-bold text-slate-700 transition-all duration-300"
+          aria-label="Reset measurement"
+        >
+          RESET
+        </button>
+      </div>
+    </div>
   );
 };
 
 // ESTA APPS ES DE MEDICION ULTRA REAL - PROHIBIDA CUALQUIER SIMULACION - NO ESTA PERMITIDO HACER MOVIMIENTOS POR CUENTA DE LA I.A SIN AUTORIZACION DEL USUARIO
 
-export default PPGSignalMeter;
+export default memo(PPGSignalMeter);
