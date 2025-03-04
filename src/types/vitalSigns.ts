@@ -7,7 +7,9 @@ export type VitalSignType =
   | "oxygenSaturation"
   | "glucose"
   | "arrhythmia"
-  | "hemoglobin";
+  | "hemoglobin"
+  | "cholesterol"
+  | "temperature";
 
 // Definir interfaces comunes
 export interface VitalSigns {
@@ -18,6 +20,18 @@ export interface VitalSigns {
   glucose: number | null;
   arrhythmia?: string | null;
   hemoglobin: number | null;
+  cholesterol?: { 
+    totalCholesterol: number; 
+    hdl: number; 
+    ldl: number; 
+    triglycerides: number; 
+  } | null;
+  temperature?: { 
+    value: number; 
+    location: string; 
+    trend: string; 
+    confidence: number; 
+  } | null;
 } 
 
 export interface VitalSignsData {
@@ -35,6 +49,21 @@ export interface VitalSignsData {
     trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
   };
   hemoglobin: number | null;
+  cholesterol?: { 
+    totalCholesterol: number; 
+    hdl: number; 
+    ldl: number; 
+    triglycerides: number; 
+  } | null;
+  temperature?: { 
+    value: number; 
+    location: string; 
+    trend: string; 
+    confidence: number; 
+  } | null;
+  isoCompliant?: boolean;
+  calibrationStatus?: string;
+  motionScore?: number;
   lastArrhythmiaData: {
     timestamp: number;
     rmssd: number;
