@@ -1,3 +1,4 @@
+
 /**
  * Utility functions for signal processing
  */
@@ -201,6 +202,7 @@ export const calculateHemoglobin = (
 ): number => {
   // Ensure we have valid data
   if (!redSignal || !irSignal || redSignal.length < 10 || irSignal.length < 10) {
+    console.log("Insufficient data for hemoglobin calculation");
     return 0;
   }
 
@@ -211,24 +213,47 @@ export const calculateHemoglobin = (
     const irAC = calculateAC(irSignal);
     const irDC = calculateDC(irSignal);
 
+    // Log raw values for debugging
+    console.log(`Hemoglobin calculation - redAC: ${redAC}, redDC: ${redDC}, irAC: ${irAC}, irDC: ${irDC}`);
+
+    // Avoid division by zero or very small values
+    if (redDC < 0.001 || irDC < 0.001 || irAC < 0.001) {
+      console.log("Invalid signal values for hemoglobin calculation");
+      return 0;
+    }
+
     // Calculate R value (ratio of ratios) used in pulse oximetry
     // R = (AC_red/DC_red)/(AC_ir/DC_ir)
     const R = (redAC / redDC) / (irAC / irDC);
+    
+    if (isNaN(R) || R <= 0) {
+      console.log("Invalid R ratio calculated:", R);
+      return 0;
+    }
+    
+    console.log(`Hemoglobin R ratio: ${R}`);
 
     // Apply Beer-Lambert based model for hemoglobin estimation
     // Coefficients based on empirical data and optical properties of hemoglobin
-    const a = 11.4; // Baseline for normal hemoglobin
-    const b = -7.8; // Coefficient for R ratio
-    const c = 2.2;  // Coefficient for squared term (non-linearity)
+    const a = 14.5; // Baseline for normal hemoglobin
+    const b = -9.8; // Coefficient for R ratio
+    const c = 2.7;  // Coefficient for squared term (non-linearity)
 
     // Calculate hemoglobin using polynomial model
     let hemoglobin = a + (b * R) + (c * Math.pow(R, 2));
+    
+    if (isNaN(hemoglobin)) {
+      console.log("Hemoglobin calculation resulted in NaN");
+      return 0;
+    }
 
     // Apply physiological limits (normal range for adults is ~12-17 g/dL)
     hemoglobin = Math.max(5.0, Math.min(22.0, hemoglobin));
 
     // Round to one decimal place for display
-    return Math.round(hemoglobin * 10) / 10;
+    const roundedValue = Math.round(hemoglobin * 10) / 10;
+    console.log(`Final hemoglobin value: ${roundedValue} g/dL`);
+    return roundedValue;
   } catch (error) {
     console.error("Error calculating hemoglobin:", error);
     return 0;

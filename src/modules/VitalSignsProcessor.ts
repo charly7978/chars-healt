@@ -24,6 +24,7 @@ export class VitalSignsProcessor {
   
   private redSignalBuffer: number[] = [];
   private irSignalBuffer: number[] = [];
+  private lastHemoglobinValue: number = 0;
 
   constructor() {
     this.spO2Calculator = new SpO2Calculator();
@@ -99,7 +100,15 @@ export class VitalSignsProcessor {
     let hemoglobin = null;
     if (this.redSignalBuffer.length > 50 && this.irSignalBuffer.length > 50) {
       hemoglobin = calculateHemoglobin(this.redSignalBuffer, this.irSignalBuffer);
-      console.log(`Calculated hemoglobin: ${hemoglobin} g/dL`);
+      if (hemoglobin > 0) {
+        this.lastHemoglobinValue = hemoglobin;
+        console.log(`Calculated hemoglobin: ${hemoglobin} g/dL`);
+      } else if (this.lastHemoglobinValue > 0) {
+        // Use last valid value if current calculation failed
+        hemoglobin = this.lastHemoglobinValue;
+      }
+    } else {
+      console.log(`Not enough data for hemoglobin calculation. Red buffer: ${this.redSignalBuffer.length}, IR buffer: ${this.irSignalBuffer.length}`);
     }
 
     const lastArrhythmiaData = arrhythmiaResult.detected ? {
@@ -185,6 +194,27 @@ export class VitalSignsProcessor {
     return smoothed;
   }
 
+  public updateSignalBuffers(redValue: number, irValue: number): void {
+    // Only add non-zero values to avoid skewing the calculation
+    if (redValue > 0 && irValue > 0) {
+      this.redSignalBuffer.push(redValue);
+      this.irSignalBuffer.push(irValue);
+      
+      // Keep the buffers at a reasonable size
+      if (this.redSignalBuffer.length > 500) {
+        this.redSignalBuffer.shift();
+      }
+      if (this.irSignalBuffer.length > 500) {
+        this.irSignalBuffer.shift();
+      }
+      
+      // Log buffer sizes occasionally for debugging
+      if (this.redSignalBuffer.length % 50 === 0) {
+        console.log(`Signal buffers size - Red: ${this.redSignalBuffer.length}, IR: ${this.irSignalBuffer.length}`);
+      }
+    }
+  }
+
   public reset(): void {
     console.log("VitalSignsProcessor: Resetting all processors");
     this.ppgValues = [];
@@ -200,22 +230,10 @@ export class VitalSignsProcessor {
     this.signalQuality = 0;
     this.redSignalBuffer = [];
     this.irSignalBuffer = [];
+    this.lastHemoglobinValue = 0;
   }
 
   private applySMAFilter(value: number): number {
     return applySMAFilter(this.ppgValues, value, this.SMA_WINDOW);
-  }
-
-  public updateSignalBuffers(redValue: number, irValue: number): void {
-    this.redSignalBuffer.push(redValue);
-    this.irSignalBuffer.push(irValue);
-    
-    // Keep the buffers at a reasonable size
-    if (this.redSignalBuffer.length > 500) {
-      this.redSignalBuffer.shift();
-    }
-    if (this.irSignalBuffer.length > 500) {
-      this.irSignalBuffer.shift();
-    }
   }
 }
