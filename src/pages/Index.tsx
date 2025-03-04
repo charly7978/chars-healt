@@ -810,121 +810,139 @@ const Index = () => {
       </div>
 
       <div className="absolute inset-0 z-10 flex flex-col">
-        <div className="flex-1 flex flex-col">
-          <div className="h-1/4">
-            <PPGSignalMeter 
-              value={isMonitoring ? lastSignal?.filteredValue || 0 : 0}
-              quality={isMonitoring ? signalQuality || 0 : 0}
-              isFingerDetected={isMonitoring ? lastSignal?.fingerDetected || false : false}
-              onStartMeasurement={startMonitoring}
-              onReset={handleReset}
-              arrhythmiaStatus={vitalSigns.arrhythmiaStatus || '--'}
-              rawArrhythmiaData={vitalSigns.lastArrhythmiaData || null}
-            />
-          </div>
+        <div className="flex-1">
+          <PPGSignalMeter 
+            value={isMonitoring ? lastSignal?.filteredValue || 0 : 0}
+            quality={isMonitoring ? signalQuality || 0 : 0}
+            isFingerDetected={isMonitoring ? lastSignal?.fingerDetected || false : false}
+            onStartMeasurement={startMonitoring}
+            onReset={handleReset}
+            arrhythmiaStatus={vitalSigns.arrhythmiaStatus || '--'}
+            rawArrhythmiaData={vitalSigns.lastArrhythmiaData || null}
+          />
+        </div>
 
-          <div className="h-3/4 px-1 pb-12">
-            <div className="grid grid-cols-3 grid-rows-3 gap-0.5 h-full">
-              <VitalSign 
-                label="FRECUENCIA CARDÍACA"
-                value={heartRate || "--"}
-                unit="BPM"
-                isFinalReading={measurementComplete && heartRate > 0}
-                trend={finalValues ? (finalValues.heartRate > heartRate ? 'rising' : finalValues.heartRate < heartRate ? 'falling' : 'stable') : 'stable'}
-              />
-              <VitalSign 
-                label="SPO2"
-                value={vitalSigns.spo2 || "--"}
-                unit="%"
-                isFinalReading={measurementComplete && vitalSigns.spo2 > 0}
-              />
-              <VitalSign 
-                label="PRESIÓN ARTERIAL"
-                value={vitalSigns.pressure}
-                unit="mmHg"
-                isFinalReading={measurementComplete && vitalSigns.pressure !== "--/--"}
-              />
-              <VitalSign 
-                label="ARRITMIAS"
-                value={vitalSigns.arrhythmiaStatus?.split('|')[0] || "--"}
-                unit=""
-                isFinalReading={measurementComplete && heartRate > 0}
-              />
-              <VitalSign 
-                label="RESPIRACIÓN"
-                value={vitalSigns.hasRespirationData ? vitalSigns.respiration.rate : "--"}
-                unit="RPM"
-                secondaryValue={vitalSigns.hasRespirationData ? vitalSigns.respiration.depth : "--"}
-                secondaryUnit="Prof."
-                isFinalReading={measurementComplete && vitalSigns.hasRespirationData}
-              />
-              <VitalSign 
-                label="GLUCOSA"
-                value={vitalSigns.glucose ? vitalSigns.glucose.value : "--"}
-                unit="mg/dL"
-                trend={vitalSigns.glucose ? vitalSigns.glucose.trend : undefined}
-                isFinalReading={measurementComplete && vitalSigns.glucose && vitalSigns.glucose.value > 0}
-              />
-              <VitalSign 
-                label="HEMOGLOBINA"
-                value={vitalSigns.hemoglobin && vitalSigns.hemoglobin.value > 0 ? vitalSigns.hemoglobin.value.toFixed(1) : "--"}
-                unit="g/dL"
-                isFinalReading={measurementComplete && vitalSigns.hemoglobin && vitalSigns.hemoglobin.value > 0}
-              />
-              <VitalSign 
-                label="COLESTEROL"
-                value={vitalSigns.cholesterol ? vitalSigns.cholesterol.totalCholesterol : "--"}
-                unit="mg/dL"
-                secondaryValue={vitalSigns.cholesterol ? vitalSigns.cholesterol.hdl : "--"}
-                secondaryUnit="HDL"
-                cholesterolData={vitalSigns.cholesterol ? {
-                  hdl: vitalSigns.cholesterol.hdl,
-                  ldl: vitalSigns.cholesterol.ldl,
-                  triglycerides: vitalSigns.cholesterol.triglycerides
-                } : undefined}
-                isFinalReading={measurementComplete && vitalSigns.cholesterol && vitalSigns.cholesterol.totalCholesterol > 0}
-              />
-              <VitalSign 
-                label="TEMPERATURA"
-                value={vitalSigns.temperature ? vitalSigns.temperature.value.toFixed(1) : "--"}
-                unit="°C"
-                temperatureLocation={vitalSigns.temperature ? vitalSigns.temperature.location : 'finger'}
-                temperatureTrend={vitalSigns.temperature ? vitalSigns.temperature.trend : 'stable'}
-                isFinalReading={measurementComplete && vitalSigns.temperature && vitalSigns.temperature.value > 0}
-              />
+        <div className="relative">
+          <div className="px-2 pb-16">
+            <div className="grid grid-cols-3 gap-2">
+              <div className="col-span-1">
+                <VitalSign 
+                  label="FRECUENCIA CARDÍACA"
+                  value={heartRate || "--"}
+                  unit="BPM"
+                  isFinalReading={measurementComplete && heartRate > 0}
+                  trend={finalValues ? (finalValues.heartRate > heartRate ? 'rising' : finalValues.heartRate < heartRate ? 'falling' : 'stable') : 'stable'}
+                />
+              </div>
+              <div className="col-span-1">
+                <VitalSign 
+                  label="SPO2"
+                  value={measurementComplete && finalValues ? finalValues.spo2 : vitalSigns.spo2 || "--"}
+                  unit="%"
+                  isFinalReading={measurementComplete && vitalSigns.spo2 > 0}
+                />
+              </div>
+              <div className="col-span-1">
+                <VitalSign 
+                  label="PRESIÓN ARTERIAL"
+                  value={measurementComplete && finalValues ? finalValues.pressure : vitalSigns.pressure}
+                  unit="mmHg"
+                  isFinalReading={measurementComplete && vitalSigns.pressure !== "--/--"}
+                />
+              </div>
+              <div className="col-span-1">
+                <VitalSign 
+                  label="ARRITMIAS"
+                  value={vitalSigns.arrhythmiaStatus?.split('|')[0] || "--"}
+                  unit=""
+                  isFinalReading={measurementComplete && heartRate > 0}
+                />
+              </div>
+              <div className="col-span-1">
+                <VitalSign 
+                  label="RESPIRACIÓN"
+                  value={vitalSigns.hasRespirationData ? vitalSigns.respiration.rate : "--"}
+                  unit="RPM"
+                  secondaryValue={vitalSigns.hasRespirationData ? vitalSigns.respiration.depth : "--"}
+                  secondaryUnit="Prof."
+                  isFinalReading={measurementComplete && vitalSigns.hasRespirationData}
+                />
+              </div>
+              <div className="col-span-1">
+                <VitalSign 
+                  label="GLUCOSA"
+                  value={vitalSigns.glucose ? vitalSigns.glucose.value : "--"}
+                  unit="mg/dL"
+                  trend={vitalSigns.glucose ? vitalSigns.glucose.trend : undefined}
+                  isFinalReading={measurementComplete && vitalSigns.glucose && vitalSigns.glucose.value > 0}
+                />
+              </div>
+              <div className="col-span-1">
+                <VitalSign 
+                  label="HEMOGLOBINA"
+                  value={vitalSigns.hemoglobin && vitalSigns.hemoglobin.value > 0 ? vitalSigns.hemoglobin.value.toFixed(1) : "--"}
+                  unit="g/dL"
+                  isFinalReading={measurementComplete && vitalSigns.hemoglobin && vitalSigns.hemoglobin.value > 0}
+                />
+              </div>
+              <div className="col-span-1">
+                <VitalSign 
+                  label="COLESTEROL"
+                  value={vitalSigns.cholesterol ? vitalSigns.cholesterol.totalCholesterol : "--"}
+                  unit="mg/dL"
+                  secondaryValue={vitalSigns.cholesterol ? vitalSigns.cholesterol.hdl : "--"}
+                  secondaryUnit="HDL"
+                  cholesterolData={vitalSigns.cholesterol ? {
+                    hdl: vitalSigns.cholesterol.hdl,
+                    ldl: vitalSigns.cholesterol.ldl,
+                    triglycerides: vitalSigns.cholesterol.triglycerides
+                  } : undefined}
+                  isFinalReading={measurementComplete && vitalSigns.cholesterol && vitalSigns.cholesterol.totalCholesterol > 0}
+                />
+              </div>
+              <div className="col-span-1">
+                <VitalSign 
+                  label="TEMPERATURA"
+                  value={vitalSigns.temperature ? vitalSigns.temperature.value.toFixed(1) : "--"}
+                  unit="°C"
+                  temperatureLocation={vitalSigns.temperature ? vitalSigns.temperature.location : 'finger'}
+                  temperatureTrend={vitalSigns.temperature ? vitalSigns.temperature.trend : 'stable'}
+                  isFinalReading={measurementComplete && vitalSigns.temperature && vitalSigns.temperature.value > 0}
+                />
+              </div>
             </div>
           </div>
 
           {isMonitoring && (
-            <div className="absolute bottom-20 left-0 right-0 text-center z-30">
+            <div className="absolute bottom-24 left-0 right-0 text-center z-30">
               <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 40s</span>
             </div>
           )}
-        </div>
 
-        <div className="h-[50px] grid grid-cols-2 gap-px bg-gray-900 fixed bottom-0 left-0 right-0 z-30">
-          <button 
-            onClick={startMonitoring}
-            className={`w-full h-full text-xl font-bold text-white active:bg-gray-800 ${!permissionsGranted ? 'bg-gray-600' : 'bg-black/80'}`}
-            disabled={!permissionsGranted}
-          >
-            {!permissionsGranted ? 'PERMISOS REQUERIDOS' : 'INICIAR'}
-          </button>
-          <button 
-            onClick={handleReset}
-            className="w-full h-full bg-black/80 text-xl font-bold text-white active:bg-gray-800"
-          >
-            RESET
-          </button>
-        </div>
-        
-        {!permissionsGranted && (
-          <div className="absolute bottom-24 left-0 right-0 text-center px-4 z-30">
-            <span className="text-lg font-medium text-red-400">
-              La aplicación necesita permisos de cámara para funcionar correctamente
-            </span>
+          <div className="h-[100px] grid grid-cols-2 gap-px bg-gray-900 mt-auto absolute bottom-0 left-0 right-0">
+            <button 
+              onClick={startMonitoring}
+              className={`w-full h-full text-3xl font-bold text-white active:bg-gray-800 ${!permissionsGranted ? 'bg-gray-600' : 'bg-black/80'}`}
+              disabled={!permissionsGranted}
+            >
+              {!permissionsGranted ? 'PERMISOS REQUERIDOS' : 'INICIAR'}
+            </button>
+            <button 
+              onClick={handleReset}
+              className="w-full h-full bg-black/80 text-3xl font-bold text-white active:bg-gray-800"
+            >
+              RESET
+            </button>
           </div>
-        )}
+          
+          {!permissionsGranted && (
+            <div className="absolute bottom-28 left-0 right-0 text-center px-4 z-30">
+              <span className="text-lg font-medium text-red-400">
+                La aplicación necesita permisos de cámara para funcionar correctamente
+              </span>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
