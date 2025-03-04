@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { PPGSignalProcessor } from '../modules/SignalProcessor';
 import { ProcessedSignal, ProcessingError } from '../types/signal';
@@ -5,7 +6,8 @@ import { CircularBuffer } from '../utils/CircularBuffer';
 import { 
   conditionPPGSignal, 
   enhancedPeakDetection, 
-  assessSignalQuality 
+  assessSignalQuality,
+  applySMAFilter
 } from '../utils/signalProcessingUtils';
 
 export const useSignalProcessor = () => {

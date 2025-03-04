@@ -1,3 +1,4 @@
+
 /**
  * PPG Data Point interface representing a single point in the PPG signal
  */
@@ -31,6 +32,7 @@ export class CircularBuffer {
   private calibrationPhase: boolean = true; // Initially in calibration phase
   private calibrationCounter: number = 0;
   private calibrationThreshold: number = 30; // Frames to calibrate
+  private invertSignal: boolean = true; // Set to true to invert the signal peaks
 
   /**
    * Creates a new CircularBuffer with the specified capacity
@@ -46,6 +48,14 @@ export class CircularBuffer {
    * @param point The PPG data point to add
    */
   push(point: PPGDataPoint): void {
+    // Apply signal inversion if needed
+    if (this.invertSignal) {
+      point = {
+        ...point,
+        value: -point.value
+      };
+    }
+    
     this.buffer[this.tail] = point;
     
     if (this.size === this.capacity) {
@@ -98,9 +108,12 @@ export class CircularBuffer {
       const filteredValue = rawValue; // During calibration, just use raw value
       this.filteredValuesBuffer.push(filteredValue);
       
+      // Apply inversion at the end of signal processing if needed
+      const processedValue = this.invertSignal ? -filteredValue : filteredValue;
+      
       return {
         time: timestamp,
-        value: filteredValue,
+        value: processedValue,
         isArrhythmia: false
       };
     }
@@ -212,10 +225,13 @@ export class CircularBuffer {
       }
     }
     
+    // Apply inversion at the end of signal processing if needed
+    const processedValue = this.invertSignal ? -filteredValue : filteredValue;
+    
     // Create and return the processed data point
     return {
       time: timestamp,
-      value: filteredValue,
+      value: processedValue,
       isArrhythmia: isArrhythmia
     };
   }

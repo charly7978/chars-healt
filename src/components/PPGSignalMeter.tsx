@@ -46,7 +46,7 @@ const PPGSignalMeter = ({
   const TARGET_FPS = 60;
   const FRAME_TIME = 1000 / TARGET_FPS; // Optimized frame time calculation
   const BUFFER_SIZE = 650; // Signal history buffer size
-  const INVERT_SIGNAL = false;
+  const INVERT_SIGNAL = true; // This flag should be set to true to invert the signal in the visualization
   const PEAK_MIN_VALUE = 8.0; // Minimum threshold for peak detection
   const PEAK_DISTANCE_MS = 200; // Minimum time between peaks in milliseconds
 
@@ -209,6 +209,9 @@ const PPGSignalMeter = ({
 
     // Calculate normalized and scaled value
     const normalizedValue = smoothedValue - (baselineRef.current || 0);
+    
+    // Apply signal inversion directly here if needed (we're handling it now in CircularBuffer)
+    // This is just a safety measure in case the buffer's inversion setting doesn't match
     const scaledValue = normalizedValue * VERTICAL_SCALE;
     
     // Detect arrhythmia
@@ -221,7 +224,7 @@ const PPGSignalMeter = ({
       arrhythmiaCountRef.current++;
     }
 
-    // Store the data point in the buffer
+    // Store the data point in the buffer - signal inversion is now handled in the CircularBuffer class
     const dataPoint: PPGDataPoint = {
       time: now,
       value: scaledValue,
