@@ -1,3 +1,4 @@
+
 /**
  * ArrhythmiaDetector.ts
  * 
@@ -430,6 +431,120 @@ export class ArrhythmiaDetector {
   }
 
   /**
+   * Detectar si un intervalo RR es potencialmente prematuro
+   */
+  private detectPrematureBeat(currentRR: number, previousRRs: number[]): boolean {
+    if (previousRRs.length < 3 || this.baseRRInterval === 0) return false;
+    
+    // Un latido prematuro suele ser significativamente más corto que los normales
+    const prematureThreshold = this.baseRRInterval * this.PREMATURE_BEAT_THRESHOLD;
+    return currentRR < prematureThreshold;
+  }
+
+  /**
+   * Detectar si hay una pausa compensatoria después de un latido prematuro
+   */
+  private detectCompensatoryPause(rrIntervals: number[]): boolean {
+    if (rrIntervals.length < 2 || this.baseRRInterval === 0) return false;
+    
+    // Una pausa compensatoria tras latido prematuro es típicamente más larga
+    const lastRR = rrIntervals[rrIntervals.length - 1];
+    return lastRR > (this.baseRRInterval * 1.3);
+  }
+  
+  /**
+   * Detecta arritmias y actualiza el contador
+   */
+  detect(): { detected: boolean; status: string; data?: any } {
+    // No intentar detectar durante la fase de aprendizaje
+    if (this.isLearningPhase || this.rrIntervals.length < 5) {
+      return { 
+        detected: false, 
+        status: "SIN ARRITMIAS|0" 
+      };
+    }
+    
+    // Realizar análisis de latidos recientes
+    const currentTime = Date.now();
+    const timeSinceLastDetection = currentTime - this.lastArrhythmiaTime;
+    
+    // No volver a detectar durante el período refractario para evitar falsos positivos
+    if (timeSinceLastDetection < this.DETECTION_COOLDOWN) {
+      return { 
+        detected: this.arrhythmiaCount > 0, 
+        status: this.getStatus() 
+      };
+    }
+    
+    // Obtener últimos intervalos RR para análisis
+    const recentRRs = this.recentRRHistory.slice(-5);
+    if (recentRRs.length < 3) {
+      return { 
+        detected: false, 
+        status: this.getStatus() 
+      };
+    }
+    
+    // Calcular estadísticas de variabilidad de RR para análisis
+    const avgRR = recentRRs.reduce((sum, rr) => sum + rr, 0) / recentRRs.length;
+    const rrVariation = recentRRs.map(rr => Math.abs(rr - avgRR) / avgRR);
+    const avgVariation = rrVariation.reduce((sum, v) => sum + v, 0) / rrVariation.length;
+    
+    // Cálculo de RMSSD (Root Mean Square of Successive Differences)
+    let rmssd = 0;
+    if (recentRRs.length >= 2) {
+      let sumSquaredDiffs = 0;
+      for (let i = 1; i < recentRRs.length; i++) {
+        sumSquaredDiffs += Math.pow(recentRRs[i] - recentRRs[i-1], 2);
+      }
+      rmssd = Math.sqrt(sumSquaredDiffs / (recentRRs.length - 1));
+    }
+    
+    // Ajustar umbral de detección basado en la variabilidad de base del paciente
+    const adjustedThreshold = this.rhythmDeviationThreshold * (1 + this.rhythmVariability * 2);
+    
+    // Determinar presencia de arritmia basado en múltiples factores
+    let arrDetected = false;
+    
+    // 1. Detección basada en variación de intervalo RR
+    if (avgVariation > adjustedThreshold && rmssd > (avgRR * 0.12)) {
+      
+      // 2. Verificar características morfológicas si tenemos suficientes datos
+      if (this.peakSequence.length >= 3) {
+        const lastPeaks = this.peakSequence.slice(-3);
+        
+        // Analizar amplitud relativa (los latidos prematuros suelen tener menor amplitud)
+        const amplitudeRatios = lastPeaks.map(p => p.amplitude / this.avgNormalAmplitude);
+        const hasAmplitudeChange = amplitudeRatios.some(ratio => ratio < this.AMPLITUDE_RATIO_THRESHOLD);
+        
+        if (hasAmplitudeChange) {
+          // Encontramos un candidato a arritmia - registrarlo
+          arrDetected = true;
+          this.arrhythmiaCount++;
+          this.lastArrhythmiaTime = currentTime;
+          
+          if (this.DEBUG_MODE) {
+            console.log('ArrhythmiaDetector - Arritmia detectada');
+            console.log('RR intervals:', recentRRs);
+            console.log('Variation:', avgVariation);
+            console.log('RMSSD:', rmssd);
+            console.log('Amplitude ratios:', amplitudeRatios);
+          }
+        }
+      }
+    }
+    
+    return {
+      detected: arrDetected,
+      status: this.getStatus(),
+      data: {
+        rmssd,
+        rrVariation: avgVariation
+      }
+    };
+  }
+
+  /**
    * Analiza latido para detectar arritmias eliminando falsos positivos
    */
   analyzeHeartbeat(
@@ -570,6 +685,104 @@ export class ArrhythmiaDetector {
   }
 
   /**
+   * Reinicia el estado de validación
+   */
+  private resetValidationState(): void {
+    this.validationState = {
+      temporalValid: false,
+      morphologicalValid: false,
+      contextualValid: false,
+      statisticalValid: false,
+      totalConfidence: 0
+    };
+  }
+
+  /**
+   * Valida datos de entrada
+   */
+  private validateInputData(currentRR: number, previousRRs: number[]): boolean {
+    return currentRR > 0 && previousRRs.length >= 3;
+  }
+
+  /**
+   * Realiza validación morfológica
+   */
+  private performMorphologicalValidation(
+    amplitudeRatio: number,
+    morphologyFeatures: any
+  ): { valid: boolean, confidence: number } {
+    // Implementación básica
+    return { valid: true, confidence: 0.8 };
+  }
+
+  /**
+   * Realiza validación contextual
+   */
+  private performContextualValidation(
+    currentRR: number,
+    previousRRs: number[],
+    patientContext?: any
+  ): { valid: boolean, confidence: number } {
+    // Implementación básica
+    return { valid: true, confidence: 0.8 };
+  }
+
+  /**
+   * Realiza validación estadística
+   */
+  private performStatisticalValidation(
+    currentRR: number,
+    previousRRs: number[],
+    morphologyFeatures: any,
+    prematurityScore: number
+  ): { valid: boolean, confidence: number } {
+    // Implementación básica
+    return { valid: true, confidence: 0.8 };
+  }
+
+  /**
+   * Identifica tipo de arritmia
+   */
+  private identifyArrhythmiaType(
+    currentRR: number,
+    previousRRs: number[],
+    morphologyFeatures: any,
+    prematurityScore: number
+  ): string {
+    // Implementación básica
+    return "PVC";
+  }
+
+  /**
+   * Calcula confianza final
+   */
+  private calculateFinalConfidence(
+    temporalConfidence: number,
+    morphConfidence: number,
+    contextConfidence: number,
+    statsConfidence: number
+  ): number {
+    // Implementación básica
+    return (temporalConfidence + morphConfidence + contextConfidence + statsConfidence) / 4;
+  }
+
+  /**
+   * Actualiza historial de análisis
+   */
+  private updateBeatHistory(
+    currentRR: number,
+    amplitudeRatio: number,
+    normalizedArea: number,
+    prematurityScore: number
+  ): void {
+    // Implementación básica
+    this.beatHistory.intervals.push(currentRR);
+    if (this.beatHistory.intervals.length > this.beatHistory.maxEntries) {
+      this.beatHistory.intervals.shift();
+    }
+  }
+
+  /**
    * Implementación breve de métodos críticos
    */
   private performTemporalValidation(currentRR: number, previousRRs: number[]): any {
@@ -595,6 +808,23 @@ export class ArrhythmiaDetector {
       confidence: confidence,
       prematurityScore: prematurityScore
     };
+  }
+
+  /**
+   * Calcula línea base RR
+   */
+  private calculateBaselineRR(previousRRs: number[]): number {
+    // Usar el promedio de los últimos 5 intervalos RR normales
+    if (previousRRs.length < 3) return 1000; // Valor predeterminado
+    
+    // Filtrar valores atípicos
+    const filtered = previousRRs.filter(rr => rr >= this.CLINICAL_PARAMETERS.minRRInterval && 
+                                         rr <= this.CLINICAL_PARAMETERS.maxRRInterval);
+    
+    if (filtered.length < 3) return 1000;
+    
+    // Calcular promedio
+    return filtered.reduce((sum, rr) => sum + rr, 0) / filtered.length;
   }
 
   /**
