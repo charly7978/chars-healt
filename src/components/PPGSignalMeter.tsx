@@ -36,11 +36,11 @@ const PPGSignalMeter = ({
   const arrhythmiaCountRef = useRef<number>(0);
   
   // Optimized constants with SIGNIFICANTLY INCREASED dimensions for better visibility
-  const WINDOW_WIDTH_MS = 4000; // Visualization time window
+  const WINDOW_WIDTH_MS = 3500; // Visualization time window
   const CANVAS_WIDTH = 1000; // Increased from 700px to 1000px for much better readability
   const CANVAS_HEIGHT = 1100; // Increased from 900px to 1100px for much better vertical detail
-  const GRID_SIZE_X = 100; // Grid cell width
-  const GRID_SIZE_Y = 25; // Grid cell height
+  const GRID_SIZE_X = 25; // Grid cell width
+  const GRID_SIZE_Y = 10; // Grid cell height
   const VERTICAL_SCALE = 35.0; // Signal amplification factor
   const SMOOTHING_FACTOR = 1.8; // Wave smoothing factor
   const TARGET_FPS = 60;
