@@ -1,3 +1,4 @@
+
 // Definir un único conjunto de tipos para toda la aplicación
 export type VitalSignType = 
   | "heartRate" 
@@ -5,7 +6,8 @@ export type VitalSignType =
   | "respiration" 
   | "oxygenSaturation"
   | "glucose"
-  | "arrhythmia";
+  | "arrhythmia"
+  | "hemoglobin";
 
 // Definir interfaces comunes
 export interface VitalSigns {
@@ -15,6 +17,7 @@ export interface VitalSigns {
   oxygenSaturation: number | null;
   glucose: number | null;
   arrhythmia?: string | null;
+  hemoglobin: number | null;
 } 
 
 export interface VitalSignsData {
@@ -30,6 +33,11 @@ export interface VitalSignsData {
   glucose: {
     value: number;
     trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
+  };
+  hemoglobin: number | null;
+  lastArrhythmiaData: {
+    timestamp: number;
+    rmssd: number;
+    rrVariation: number;
   } | null;
-  hemoglobin: number | null; // Add hemoglobin field
 }
