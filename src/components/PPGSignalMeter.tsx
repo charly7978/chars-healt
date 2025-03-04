@@ -46,43 +46,35 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
   const BUFFER_SIZE = 300;
   const INVERT_SIGNAL = false;
 
-  // Calibración médica profesional
   const medicalGradeSettings = {
-    // Escalas de calibración física
-    timeScale: 25,        // mm/s - Estándar en electrocardiogramas médicos
-    amplitudeScale: 10,   // mm/mV - Estándar en electrocardiogramas médicos
-    pixelsPerMm: 4,       // Conversión píxel-milímetro para precisión
-    
-    // Parámetros de visualización
-    gridMajorInterval: 5, // Intervalos de cuadrícula principal (5mm estándar)
-    gridMinorInterval: 1, // Intervalos de cuadrícula secundaria (1mm estándar)
-    
-    // Calibración de la señal
-    scaleFactorY: 3.2,    // Amplificación vertical calibrada
-    scaleFactorX: 1.0,    // Escala horizontal
-    medianFilterSize: 3,  // Suavizado médico (conserva formas de onda críticas)
-    
-    // Optimización visual
-    lineWidth: 1.5,       // Grosor de línea para visualización óptima
-    waveColor: {          // Colores médicos calibrados
-      good: '#00C853',    // Verde médico para señal óptima
-      moderate: '#FFD600',// Amarillo para señal moderada
-      poor: '#FF3D00'     // Rojo para señal deficiente
+    timeScale: 25,
+    amplitudeScale: 10,
+    pixelsPerMm: 4,
+
+    gridMajorInterval: 5,
+    gridMinorInterval: 1,
+
+    scaleFactorY: 3.2,
+    scaleFactorX: 1.0,
+    medianFilterSize: 3,
+
+    lineWidth: 1.5,
+    waveColor: {
+      good: '#00C853',
+      moderate: '#FFD600',
+      poor: '#FF3D00'
     }
   };
-  
-  // Sistema de memoria para renderizado eficiente
+
   const previousPointsRef = useRef<Array<{x: number, y: number}>>([]);
   const targetFPS = 60;
   const msPerFrame = 1000 / targetFPS;
   
-  // Buffer optimizado para análisis de picos
   const peaksRef = useRef<number[]>([]);
-  
-  // Control de memoria y rendimiento
+
   const memoryOptimization = {
-    maxSignalLength: 300, // Limitar longitud para rendimiento
-    cullFactor: 0.8       // Factor de recorte al alcanzar el máximo
+    maxSignalLength: 300,
+    cullFactor: 0.8
   };
 
   useEffect(() => {
