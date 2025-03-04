@@ -72,15 +72,15 @@ const VitalSign: React.FC<VitalSignProps> = ({
     }
   };
 
-  // Estilo para display ancho especial de colesterol
+  // Style for the card - using black background for all cards
   const cardClassName = isWideDisplay 
-    ? "p-2 flex flex-col space-y-1 h-full shadow-sm border border-gray-200 hover:border-blue-300 transition-colors col-span-2" 
-    : "p-2 flex flex-col space-y-1 h-full shadow-sm border border-gray-200 hover:border-blue-300 transition-colors";
+    ? "p-2 flex flex-col space-y-1 h-full shadow-sm border border-gray-800 bg-black col-span-2" 
+    : "p-2 flex flex-col space-y-1 h-full shadow-sm border border-gray-800 bg-black";
 
   return (
     <Card className={cardClassName}>
       <div className="flex justify-between items-start">
-        <h3 className="text-xs font-semibold text-gray-700 dark:text-gray-300">{label}</h3>
+        <h3 className="text-xs font-semibold text-white">{label}</h3>
         {trend && (
           <Badge variant="outline" className={`text-[10px] px-1 py-0 ${getTrendColor()}`}>
             {getTrendIcon()} {trend.replace('_', ' ')}
@@ -92,58 +92,58 @@ const VitalSign: React.FC<VitalSignProps> = ({
         <div className="grid grid-cols-2 gap-2 w-full">
           <div className="flex flex-col">
             <div className="flex items-baseline space-x-1">
-              <span className="text-xl font-bold tracking-tighter">{value}</span>
-              <span className="text-xs text-gray-600 dark:text-gray-400">{unit}</span>
+              <span className="text-xl font-bold tracking-tighter text-white">{value}</span>
+              <span className="text-xs text-gray-400">{unit}</span>
             </div>
-            <span className="text-[10px] text-gray-600">Total</span>
+            <span className="text-[10px] text-gray-400">Total</span>
           </div>
           
           <div className="flex flex-col space-y-1">
             <div className="flex items-baseline justify-between">
-              <span className="text-[10px] text-gray-600">HDL:</span>
-              <span className="text-sm font-medium">{cholesterolData.hdl} mg/dL</span>
+              <span className="text-[10px] text-gray-400">HDL:</span>
+              <span className="text-sm font-medium text-white">{cholesterolData.hdl} mg/dL</span>
             </div>
             <div className="flex items-baseline justify-between">
-              <span className="text-[10px] text-gray-600">LDL:</span>
-              <span className="text-sm font-medium">{cholesterolData.ldl} mg/dL</span>
+              <span className="text-[10px] text-gray-400">LDL:</span>
+              <span className="text-sm font-medium text-white">{cholesterolData.ldl} mg/dL</span>
             </div>
             <div className="flex items-baseline justify-between">
-              <span className="text-[10px] text-gray-600">TG:</span>
-              <span className="text-sm font-medium">{cholesterolData.triglycerides} mg/dL</span>
+              <span className="text-[10px] text-gray-400">TG:</span>
+              <span className="text-sm font-medium text-white">{cholesterolData.triglycerides} mg/dL</span>
             </div>
           </div>
         </div>
       ) : (
         <>
           <div className="flex items-baseline space-x-1">
-            <span className="text-2xl font-bold tracking-tighter">{value}</span>
-            <span className="text-xs text-gray-600 dark:text-gray-400">{unit}</span>
+            <span className="text-2xl font-bold tracking-tighter text-white">{value}</span>
+            <span className="text-xs text-gray-400">{unit}</span>
           </div>
           {secondaryValue && secondaryUnit && (
             <div className="flex items-baseline space-x-1">
-              <span className="text-sm font-medium tracking-tighter">{secondaryValue}</span>
-              <span className="text-[10px] text-gray-600 dark:text-gray-400">{secondaryUnit}</span>
+              <span className="text-sm font-medium tracking-tighter text-white">{secondaryValue}</span>
+              <span className="text-[10px] text-gray-400">{secondaryUnit}</span>
             </div>
           )}
           {cholesterolData && !isWideDisplay && (
             <div className="flex flex-col mt-1 space-y-0.5">
               <div className="flex items-baseline justify-between">
-                <span className="text-[10px] text-gray-600">HDL:</span>
-                <span className="text-[10px] font-medium">{cholesterolData.hdl} mg/dL</span>
+                <span className="text-[10px] text-gray-400">HDL:</span>
+                <span className="text-[10px] font-medium text-white">{cholesterolData.hdl} mg/dL</span>
               </div>
               <div className="flex items-baseline justify-between">
-                <span className="text-[10px] text-gray-600">LDL:</span>
-                <span className="text-[10px] font-medium">{cholesterolData.ldl} mg/dL</span>
+                <span className="text-[10px] text-gray-400">LDL:</span>
+                <span className="text-[10px] font-medium text-white">{cholesterolData.ldl} mg/dL</span>
               </div>
               <div className="flex items-baseline justify-between">
-                <span className="text-[10px] text-gray-600">TG:</span>
-                <span className="text-[10px] font-medium">{cholesterolData.triglycerides} mg/dL</span>
+                <span className="text-[10px] text-gray-400">TG:</span>
+                <span className="text-[10px] font-medium text-white">{cholesterolData.triglycerides} mg/dL</span>
               </div>
             </div>
           )}
           {temperatureLocation && (
             <div className="flex items-baseline space-x-1">
-              <span className="text-[10px] text-gray-600 dark:text-gray-400">
+              <span className="text-[10px] text-gray-400">
                 {temperatureLocation === 'finger' ? 'Dedo' : 
                  temperatureLocation === 'wrist' ? 'Muñeca' : 
                  temperatureLocation === 'forehead' ? 'Frente' : 'Desconocido'}
