@@ -841,4 +841,15 @@ const Index = () => {
             </p>
             <button 
               onClick={() => window.location.reload()}
-              className="bg-white text-red-
+              className="bg-white text-red-900 px-4 py-2 rounded font-medium hover:bg-gray-100"
+            >
+              Reintentar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default Index;
