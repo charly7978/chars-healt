@@ -1,94 +1,41 @@
 import { toast } from 'sonner';
+import { ErrorSeverity } from '../types/error';
 
-export enum ErrorSeverity {
-    INFO = 'info',
-    WARNING = 'warning',
-    ERROR = 'error',
-    CRITICAL = 'critical'
-}
+export const handleError = (error: Error | string, severity: ErrorSeverity = ErrorSeverity.ERROR, context?: string): void => {
+  const errorMessage = typeof error === 'string' ? error : error.message;
 
-interface ErrorDetails {
-    message: string;
-    severity: ErrorSeverity;
-    code?: string;
-    timestamp?: number;
-    metadata?: any;
-}
+  if (context) {
+    console.error(`[${context}] ${errorMessage}`);
+  } else {
+    console.error(errorMessage);
+  }
 
-const logErrorToConsole = (errorDetails: ErrorDetails) => {
-    const { message, severity, code, timestamp, metadata } = errorDetails;
-    const logEntry = `[${severity.toUpperCase()}] ${message} ${code ? `(Code: ${code})` : ''} ${timestamp ? `(Timestamp: ${timestamp})` : ''} ${metadata ? `(Metadata: ${JSON.stringify(metadata)})` : ''}`;
+  switch (severity) {
+    case ErrorSeverity.INFO:
+      console.info(`[INFO] ${errorMessage}`);
+      toast(errorMessage, { position: 'bottom-right', duration: 5000 });
+      break;
+    case ErrorSeverity.WARNING:
+      console.warn(`[WARNING] ${errorMessage}`);
+      toast.warning(errorMessage, { position: 'bottom-right', duration: 5000 });
+      break;
+    case ErrorSeverity.ERROR:
+      console.error(`[ERROR] ${errorMessage}`);
+      toast.error(errorMessage, { position: 'bottom-right', duration: 5000 });
+      break;
+    case ErrorSeverity.CRITICAL:
+      console.error(`[CRITICAL] ${errorMessage}`);
+      toast.error(errorMessage, { position: 'bottom-right', duration: 8000 });
+      break;
+    default:
+      console.error(`[UNKNOWN_SEVERITY] ${errorMessage}`);
+      toast.error(errorMessage, { position: 'bottom-right', duration: 5000 });
+  }
 
-    switch (severity) {
-        case ErrorSeverity.CRITICAL:
-            console.error(logEntry);
-            break;
-        case ErrorSeverity.ERROR:
-            console.error(logEntry);
-            break;
-        case ErrorSeverity.WARNING:
-            console.warn(logEntry);
-            break;
-        case ErrorSeverity.INFO:
-            console.info(logEntry);
-            break;
-        default:
-            console.log(logEntry);
-    }
+  // Additional error logging or recovery logic can be added here
 };
 
-const displayToastNotification = (errorDetails: ErrorDetails) => {
-    const { message, severity } = errorDetails;
-
-    switch (severity) {
-        case ErrorSeverity.CRITICAL:
-            toast.error(message, { duration: 10000 });
-            break;
-        case ErrorSeverity.ERROR:
-            toast.error(message, { duration: 5000 });
-            break;
-        case ErrorSeverity.WARNING:
-            toast.warn(message, { duration: 3000 });
-            break;
-        case ErrorSeverity.INFO:
-            toast.message(message, { duration: 2000 });
-            break;
-        default:
-            toast(message, { duration: 2000 });
-    }
-};
-
-export const handleError = (errorDetails: ErrorDetails) => {
-    logErrorToConsole(errorDetails);
-    displayToastNotification(errorDetails);
-
-    const { severity } = errorDetails;
-
-    // Reemplazar la comparación directa con un switch statement
-    switch (severity) {
-      case ErrorSeverity.WARNING:
-      case ErrorSeverity.ERROR:
-      case ErrorSeverity.CRITICAL:
-        // Lógica para manejo de errores críticos
-        break;
-      case ErrorSeverity.INFO:
-        // Lógica para manejo de información
-        break;
-      default:
-        // Manejo predeterminado
-        break;
-    }
-};
-
-export const throwError = (message: string, severity: ErrorSeverity, code?: string, metadata?: any): never => {
-    const errorDetails: ErrorDetails = {
-        message,
-        severity,
-        code,
-        timestamp: Date.now(),
-        metadata
-    };
-
-    handleError(errorDetails);
-    throw new Error(message);
+export const logError = (error: Error | string, context?: string): void => {
+  const errorMessage = typeof error === 'string' ? error : error.message;
+  console.error(`[LOG] ${context ? `[${context}] ` : ''}${errorMessage}`);
 };

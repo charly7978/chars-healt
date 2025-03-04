@@ -1,3 +1,4 @@
+
 import React from 'react';
 
 interface CholesterolData {
@@ -34,12 +35,30 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
   cholesterol,
   temperature
 }) => {
-  // Existing component implementation
-  // Add cholesterol and temperature display logic where needed
+  // Prevent UI from disappearing when finger is detected
+  const signalDisplay = (
+    <div className="w-full h-full flex flex-col items-center justify-center">
+      <div className="text-4xl font-bold text-green-500">
+        {Math.round(value * 100) / 100}
+      </div>
+      <div className="mt-2 text-sm text-gray-400">
+        Signal Quality: {Math.round(quality * 100)}%
+      </div>
+      <div className="mt-2 text-sm text-gray-400">
+        {isFingerDetected ? 'Finger Detected' : 'Place finger on camera'}
+      </div>
+      {arrhythmiaStatus && arrhythmiaStatus !== "--" && (
+        <div className="mt-2 text-sm text-amber-400">
+          Arrhythmia: {arrhythmiaStatus}
+        </div>
+      )}
+    </div>
+  );
   
   return (
     <div className="w-full h-full relative">
-      {/* Existing component render logic */}
+      {/* Always show the signal display regardless of finger detection */}
+      {signalDisplay}
       
       {/* Display cholesterol data if available */}
       {cholesterol && cholesterol.totalCholesterol > 0 && (
@@ -47,6 +66,7 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
           <div className="text-green-400">Cholesterol: {cholesterol.totalCholesterol} mg/dL</div>
           <div className="text-blue-400">HDL: {cholesterol.hdl} mg/dL</div>
           <div className="text-yellow-400">LDL: {cholesterol.ldl} mg/dL</div>
+          <div className="text-orange-400">Triglycerides: {cholesterol.triglycerides} mg/dL</div>
         </div>
       )}
       
@@ -59,11 +79,10 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
             'text-white'
           }`}>
             Temp: {temperature.value.toFixed(1)}°C {temperature.trend === 'rising' ? '↑' : temperature.trend === 'falling' ? '↓' : '→'}
+            <div className="text-gray-400 text-[10px]">Location: {temperature.location}</div>
           </div>
         </div>
       )}
-      
-      {/* Rest of the component */}
     </div>
   );
 };
