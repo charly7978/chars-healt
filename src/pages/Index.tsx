@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -8,49 +7,15 @@ import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import PermissionsHandler from "@/components/PermissionsHandler";
 import { VitalSignsRisk } from '@/utils/vitalSignsRisk';
-import { CholesterolData } from "@/types/signal";
-
-interface VitalSigns {
-  spo2: number;
-  pressure: string;
-  arrhythmiaStatus: string;
-  respiration: {
-    rate: number;
-    depth: number;
-    regularity: number;
-  };
-  hasRespirationData: boolean;
-  glucose: {
-    value: number;
-    trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
-  };
-  lipids: {
-    totalCholesterol: number;
-    hdl: number;
-    ldl: number;
-    triglycerides: number;
-  } | null;
-  lastArrhythmiaData: {
-    timestamp: number;
-    rmssd: number;
-    rrVariation: number;
-  } | null;
-}
+import { toast } from "sonner";
+import { VitalSignsProcessorResult } from "@/types/signal";
+import { VitalSigns, initialVitalSigns } from '../types/VitalSigns';
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [signalQuality, setSignalQuality] = useState(0);
-  const [vitalSigns, setVitalSigns] = useState<VitalSigns>({ 
-    spo2: 0, 
-    pressure: "--/--",
-    arrhythmiaStatus: "--",
-    respiration: { rate: 0, depth: 0, regularity: 0 },
-    hasRespirationData: false,
-    glucose: { value: 0, trend: 'unknown' },
-    lipids: null,
-    lastArrhythmiaData: null
-  });
+  const [vitalSigns, setVitalSigns] = useState<VitalSigns>(initialVitalSigns);
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState<string | number>("--");
   const [elapsedTime, setElapsedTime] = useState(0);
@@ -73,15 +38,13 @@ const Index = () => {
       value: number;
       trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
     },
-    lipids: {
-      totalCholesterol: number;
-      hdl: number;
-      ldl: number;
-      triglycerides: number;
-    } | null
+    hemoglobin: number | null
   } | null>(null);
-  const [permissionsGranted, setPermissionsGranted] = useState(false);
+  const [hasPermissions, setHasPermissions] = useState(false);
   const measurementTimerRef = useRef<number | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const contextRef = useRef<CanvasRenderingContext2D | null>(null);
   
   const allHeartRateValuesRef = useRef<number[]>([]);
   const allSpo2ValuesRef = useRef<number[]>([]);
@@ -90,32 +53,23 @@ const Index = () => {
   const allRespirationRateValuesRef = useRef<number[]>([]);
   const allRespirationDepthValuesRef = useRef<number[]>([]);
   const allGlucoseValuesRef = useRef<number[]>([]);
-  const allLipidValuesRef = useRef<{
-    totalCholesterol: number[];
-    hdl: number[];
-    ldl: number[];
-    triglycerides: number[];
-  }>({
-    totalCholesterol: [],
-    hdl: [],
-    ldl: [],
-    triglycerides: []
-  });
+  const allHemoglobinValuesRef = useRef<number[]>([]);
   
   const hasValidValuesRef = useRef(false);
   
-  const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
+  const { startProcessing, stopProcessing, processFrame, lastSignal } = useSignalProcessor();
   const { processSignal: processHeartBeat, reset: resetHeartBeat } = useHeartBeatProcessor();
   const { processSignal: processVitalSigns, reset: resetVitalSigns } = useVitalSignsProcessor();
 
   const handlePermissionsGranted = () => {
-    console.log("Permisos concedidos correctamente");
-    setPermissionsGranted(true);
+    console.log("Permisos concedidos");
+    setHasPermissions(true);
   };
 
   const handlePermissionsDenied = () => {
-    console.log("Permisos denegados - funcionalidad limitada");
-    setPermissionsGranted(false);
+    console.log("Permisos denegados");
+    setHasPermissions(false);
+    toast.error("Se requieren permisos de cámara para el funcionamiento");
   };
 
   const calculateFinalValues = () => {
@@ -129,7 +83,7 @@ const Index = () => {
       const validRespRates = allRespirationRateValuesRef.current.filter(v => v > 0);
       const validRespDepths = allRespirationDepthValuesRef.current.filter(v => v > 0);
       const validGlucoseValues = allGlucoseValuesRef.current.filter(v => v > 0);
-      const validLipidValues = allLipidValuesRef.current.totalCholesterol.filter(v => v > 0);
+      const validHemoglobinValues = allHemoglobinValuesRef.current.filter(v => v > 0);
       
       console.log("Valores acumulados para promedios:", {
         heartRateValues: validHeartRates.length,
@@ -139,7 +93,7 @@ const Index = () => {
         respirationRates: validRespRates.length,
         respirationDepths: validRespDepths.length,
         glucoseValues: validGlucoseValues.length,
-        lipidValues: validLipidValues.length
+        hemoglobinValues: validHemoglobinValues.length
       });
       
       let avgHeartRate = 0;
@@ -183,37 +137,12 @@ const Index = () => {
       } else {
         avgGlucose = vitalSigns.glucose.value;
       }
-      
-      let finalLipids = null;
-      if (allLipidValuesRef.current.totalCholesterol.length > 0) {
-        const avgTotalCholesterol = Math.round(
-          allLipidValuesRef.current.totalCholesterol.reduce((a, b) => a + b, 0) / 
-          allLipidValuesRef.current.totalCholesterol.length
-        );
-        
-        const avgHDL = Math.round(
-          allLipidValuesRef.current.hdl.reduce((a, b) => a + b, 0) / 
-          allLipidValuesRef.current.hdl.length
-        );
-        
-        const avgLDL = Math.round(
-          allLipidValuesRef.current.ldl.reduce((a, b) => a + b, 0) / 
-          allLipidValuesRef.current.ldl.length
-        );
-        
-        const avgTriglycerides = Math.round(
-          allLipidValuesRef.current.triglycerides.reduce((a, b) => a + b, 0) / 
-          allLipidValuesRef.current.triglycerides.length
-        );
-        
-        finalLipids = {
-          totalCholesterol: avgTotalCholesterol,
-          hdl: avgHDL,
-          ldl: avgLDL,
-          triglycerides: avgTriglycerides
-        };
+
+      let avgHemoglobin = null;
+      if (validHemoglobinValues.length > 0) {
+        avgHemoglobin = Math.round(validHemoglobinValues.reduce((a, b) => a + b, 0) / validHemoglobinValues.length);
       } else {
-        finalLipids = vitalSigns.lipids;
+        avgHemoglobin = vitalSigns.hemoglobin.value;
       }
       
       console.log("PROMEDIOS REALES calculados:", {
@@ -222,7 +151,7 @@ const Index = () => {
         pressure: finalBPString,
         respiration: { rate: avgRespRate, depth: avgRespDepth },
         glucose: avgGlucose,
-        lipids: finalLipids
+        hemoglobin: avgHemoglobin
       });
       
       let glucoseTrend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown' = 'unknown';
@@ -261,7 +190,7 @@ const Index = () => {
           value: avgGlucose > 0 ? avgGlucose : vitalSigns.glucose.value,
           trend: glucoseTrend
         },
-        lipids: finalLipids
+        hemoglobin: avgHemoglobin
       });
         
       hasValidValuesRef.current = true;
@@ -273,12 +202,7 @@ const Index = () => {
       allRespirationRateValuesRef.current = [];
       allRespirationDepthValuesRef.current = [];
       allGlucoseValuesRef.current = [];
-      allLipidValuesRef.current = {
-        totalCholesterol: [],
-        hdl: [],
-        ldl: [],
-        triglycerides: []
-      };
+      allHemoglobinValuesRef.current = [];
     } catch (error) {
       console.error("Error en calculateFinalValues:", error);
       setFinalValues({
@@ -287,130 +211,28 @@ const Index = () => {
         pressure: vitalSigns.pressure,
         respiration: vitalSigns.respiration,
         glucose: vitalSigns.glucose,
-        lipids: vitalSigns.lipids
+        hemoglobin: vitalSigns.hemoglobin.value
       });
       hasValidValuesRef.current = true;
     }
   };
 
   const startMonitoring = () => {
-    if (!permissionsGranted) {
-      console.log("No se puede iniciar sin permisos");
+    if (!hasPermissions) {
+      toast.error("Se requieren permisos de cámara");
       return;
     }
-    
-    if (!isMonitoring && lastSignal?.quality < 50) {
-      console.log("Señal insuficiente para iniciar medición", lastSignal?.quality);
-      return;
-    }
-    
-    if (isMonitoring) {
-      stopMonitoringOnly();
-    } else {
-      prepareProcessorsOnly();
-      
-      setIsMonitoring(true);
-      setIsCameraOn(true);
-      startProcessing();
-      setElapsedTime(0);
-      setMeasurementComplete(false);
-      
-      allHeartRateValuesRef.current = [];
-      allSpo2ValuesRef.current = [];
-      allSystolicValuesRef.current = [];
-      allDiastolicValuesRef.current = [];
-      allRespirationRateValuesRef.current = [];
-      allRespirationDepthValuesRef.current = [];
-      allGlucoseValuesRef.current = [];
-      allLipidValuesRef.current = {
-        totalCholesterol: [],
-        hdl: [],
-        ldl: [],
-        triglycerides: []
-      };
-      
-      if (measurementTimerRef.current) {
-        clearInterval(measurementTimerRef.current);
-        measurementTimerRef.current = null;
-      }
-      
-      measurementTimerRef.current = window.setInterval(() => {
-        setElapsedTime(prev => {
-          if (prev >= 40) {
-            stopMonitoringOnly();
-            return 40;
-          }
-          return prev + 1;
-        });
-      }, 1000);
-    }
-  };
 
-  const prepareProcessorsOnly = () => {
-    console.log("Preparando SOLO procesadores (displays intactos)");
-    
-    setElapsedTime(0);
-    
+    console.log("Iniciando monitoreo");
+    setIsMonitoring(true);
+    startProcessing();
     resetHeartBeat();
     resetVitalSigns();
-    VitalSignsRisk.resetHistory();
   };
 
-  const stopMonitoringOnly = () => {
-    try {
-      console.log("Deteniendo SOLO monitorización (displays intactos)");
-      
-      setIsMonitoring(false);
-      setIsCameraOn(false);
-      stopProcessing();
-      setMeasurementComplete(true);
-      
-      try {
-        if (heartRate > 0) {
-          VitalSignsRisk.getBPMRisk(heartRate, true);
-        }
-      } catch (err) {
-        console.error("Error al evaluar riesgo BPM:", err);
-      }
-      
-      try {
-        if (vitalSigns.pressure !== "--/--" && vitalSigns.pressure !== "0/0") {
-          VitalSignsRisk.getBPRisk(vitalSigns.pressure, true);
-        }
-      } catch (err) {
-        console.error("Error al evaluar riesgo BP:", err);
-      }
-      
-      try {
-        if (vitalSigns.spo2 > 0) {
-          VitalSignsRisk.getSPO2Risk(vitalSigns.spo2, true);
-        }
-      } catch (err) {
-        console.error("Error al evaluar riesgo SPO2:", err);
-      }
-      
-      calculateFinalValues();
-      
-      if (measurementTimerRef.current) {
-        clearInterval(measurementTimerRef.current);
-        measurementTimerRef.current = null;
-      }
-    } catch (error) {
-      console.error("Error en stopMonitoringOnly:", error);
-      if (measurementTimerRef.current) {
-        clearInterval(measurementTimerRef.current);
-        measurementTimerRef.current = null;
-      }
-      setIsMonitoring(false);
-      setIsCameraOn(false);
-    }
-  };
-
-  const handleReset = () => {
-    console.log("RESET COMPLETO solicitado");
-    
+  const stopMonitoring = () => {
+    console.log("Deteniendo monitoreo");
     setIsMonitoring(false);
-    setIsCameraOn(false);
     stopProcessing();
     
     if (measurementTimerRef.current) {
@@ -419,16 +241,7 @@ const Index = () => {
     }
     
     setHeartRate(0);
-    setVitalSigns({ 
-      spo2: 0, 
-      pressure: "--/--",
-      arrhythmiaStatus: "--",
-      respiration: { rate: 0, depth: 0, regularity: 0 },
-      hasRespirationData: false,
-      glucose: { value: 0, trend: 'unknown' },
-      lipids: null,
-      lastArrhythmiaData: null
-    });
+    setVitalSigns(initialVitalSigns);
     setArrhythmiaCount("--");
     setLastArrhythmiaData(null);
     setElapsedTime(0);
@@ -448,12 +261,7 @@ const Index = () => {
     allRespirationRateValuesRef.current = [];
     allRespirationDepthValuesRef.current = [];
     allGlucoseValuesRef.current = [];
-    allLipidValuesRef.current = {
-      totalCholesterol: [],
-      hdl: [],
-      ldl: [],
-      triglycerides: []
-    };
+    allHemoglobinValuesRef.current = [];
   };
 
   const handleStreamReady = (stream: MediaStream) => {
@@ -633,15 +441,14 @@ const Index = () => {
             allHeartRateValuesRef.current.push(heartBeatResult.bpm);
           }
           
-          const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
+          const vitals: VitalSignsProcessorResult = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
           if (vitals) {
             console.log("Raw vital signs data:", JSON.stringify(vitals));
             
             if (vitals.spo2 > 0) {
               setVitalSigns(current => ({
                 ...current,
-                spo2: vitals.spo2,
-                lipids: current.lipids,
+                spo2: vitals.spo2
               }));
               allSpo2ValuesRef.current.push(vitals.spo2);
             }
@@ -649,8 +456,7 @@ const Index = () => {
             if (vitals.pressure !== "--/--" && vitals.pressure !== "0/0") {
               setVitalSigns(current => ({
                 ...current,
-                pressure: vitals.pressure,
-                lipids: current.lipids,
+                pressure: vitals.pressure
               }));
               
               const [systolic, diastolic] = vitals.pressure.split('/').map(Number);
@@ -662,8 +468,7 @@ const Index = () => {
             
             setVitalSigns(current => ({
               ...current,
-              arrhythmiaStatus: vitals.arrhythmiaStatus,
-              lipids: current.lipids,
+              arrhythmiaStatus: vitals.arrhythmiaStatus
             }));
             
             if (vitals.hasRespirationData && vitals.respiration) {
@@ -671,8 +476,7 @@ const Index = () => {
               setVitalSigns(current => ({
                 ...current,
                 respiration: vitals.respiration,
-                hasRespirationData: true,
-                lipids: current.lipids,
+                hasRespirationData: true
               }));
               
               if (vitals.respiration.rate > 0) {
@@ -684,52 +488,44 @@ const Index = () => {
               }
             }
             
-            console.log("Glucose data from vitals:", vitals.glucose ? 
-              `${vitals.glucose.value} mg/dL (${vitals.glucose.trend})` : 
-              'No hay datos de glucosa');
-            
-            if (vitals.glucose && vitals.glucose.value > 0) {
+            if (vitals.glucose) {
               console.log("Actualizando UI con datos de glucosa:", vitals.glucose);
               setVitalSigns(current => ({
                 ...current,
-                glucose: vitals.glucose,
-                lipids: current.lipids,
+                glucose: vitals.glucose
               }));
               
-              allGlucoseValuesRef.current.push(vitals.glucose.value);
+              if (vitals.glucose.value > 0) {
+                allGlucoseValuesRef.current.push(vitals.glucose.value);
+              }
             }
-            
-            if (vitals.lipids) {
-              console.log("Actualizando UI con datos de lípidos:", vitals.lipids);
+
+            if (vitals.hemoglobin) {
+              console.log(`Hemoglobin data received: ${vitals.hemoglobin.value} g/dL (confidence: ${vitals.hemoglobin.confidence}%)`);
               setVitalSigns(current => ({
                 ...current,
-                lipids: vitals.lipids
+                hemoglobin: vitals.hemoglobin
               }));
-              
-              if (vitals.lipids.totalCholesterol > 0) {
-                allLipidValuesRef.current.totalCholesterol.push(vitals.lipids.totalCholesterol);
-              }
-              if (vitals.lipids.hdl > 0) {
-                allLipidValuesRef.current.hdl.push(vitals.lipids.hdl);
-              }
-              if (vitals.lipids.ldl > 0) {
-                allLipidValuesRef.current.ldl.push(vitals.lipids.ldl);
-              }
-              if (vitals.lipids.triglycerides > 0) {
-                allLipidValuesRef.current.triglycerides.push(vitals.lipids.triglycerides);
-              }
+              allHemoglobinValuesRef.current.push(vitals.hemoglobin.value);
             }
             
             if (vitals.lastArrhythmiaData) {
               setLastArrhythmiaData(vitals.lastArrhythmiaData);
               setVitalSigns(current => ({
                 ...current,
-                lastArrhythmiaData: vitals.lastArrhythmiaData,
-                lipids: current.lipids,
+                lastArrhythmiaData: vitals.lastArrhythmiaData
               }));
               
               const [status, count] = vitals.arrhythmiaStatus.split('|');
               setArrhythmiaCount(count || "0");
+            }
+
+            if (vitals.cholesterol) {
+              console.log(`Lipid data received: Total=${vitals.cholesterol.totalCholesterol}, HDL=${vitals.cholesterol.hdl}, LDL=${vitals.cholesterol.ldl}, TG=${vitals.cholesterol.triglycerides}`);
+              setVitalSigns(current => ({
+                ...current,
+                cholesterol: vitals.cholesterol
+              }));
             }
           }
         
@@ -750,6 +546,53 @@ const Index = () => {
     };
   }, []);
 
+  useEffect(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 640;
+    canvas.height = 480;
+    canvasRef.current = canvas;
+
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+      stopMonitoring();
+    };
+  }, []);
+
+  const updateVitals = (vitals: Partial<VitalSigns>) => {
+    setVitalSigns(current => ({
+      ...current,
+      ...vitals
+    }));
+  };
+
+  const processVitalSignsData = (data: any) => {
+    const newVitals: Partial<VitalSigns> = {
+      spo2: data.spo2,
+      pressure: data.pressure,
+      arrhythmiaStatus: data.arrhythmiaStatus,
+      respiration: data.respiration,
+      glucose: data.glucose,
+      hemoglobin: data.hemoglobin,
+      lastArrhythmiaData: data.lastArrhythmiaData,
+      cholesterol: data.cholesterol
+    };
+    
+    updateVitals(newVitals);
+  };
+
+  const resetVitals = () => {
+    setVitalSigns(initialVitalSigns);
+  };
+
+  if (!hasPermissions) {
+    return <PermissionsHandler 
+      onPermissionsGranted={handlePermissionsGranted}
+      onPermissionsDenied={handlePermissionsDenied}
+    />;
+  }
+
   return (
     <div 
       className="fixed inset-0 flex flex-col bg-black" 
@@ -767,104 +610,100 @@ const Index = () => {
         paddingLeft: 'var(--sal)',
       }}
     >
-      <PermissionsHandler 
-        onPermissionsGranted={handlePermissionsGranted}
-        onPermissionsDenied={handlePermissionsDenied}
+      <CameraView 
+        onStreamReady={handleStreamReady}
+        isMonitoring={isMonitoring}
+        isFingerDetected={lastSignal?.fingerDetected}
+        signalQuality={signalQuality}
       />
       
-      <div className="absolute inset-0 z-0">
-        <CameraView 
-          onStreamReady={handleStreamReady}
-          isMonitoring={isCameraOn && permissionsGranted}
-          isFingerDetected={isMonitoring ? lastSignal?.fingerDetected : false}
-          signalQuality={isMonitoring ? signalQuality : 0}
-        />
-        <div 
-          className="absolute inset-0" 
-          style={{ 
-            backgroundColor: 'rgba(0, 0, 0, 0.8)', 
-            backdropFilter: 'blur(2px)' 
-          }} 
-        />
-      </div>
-
       <div className="absolute inset-0 z-10">
         <PPGSignalMeter 
-          value={isMonitoring ? lastSignal?.filteredValue || 0 : 0}
-          quality={isMonitoring ? lastSignal?.quality || 0 : 0}
-          isFingerDetected={isMonitoring ? lastSignal?.fingerDetected || false : false}
+          value={lastSignal?.filteredValue || 0}
+          quality={signalQuality}
+          isFingerDetected={lastSignal?.fingerDetected}
           onStartMeasurement={startMonitoring}
-          onReset={handleReset}
+          onReset={stopMonitoring}
           arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
           rawArrhythmiaData={lastArrhythmiaData}
-          lipidData={vitalSigns.lipids}
         />
       </div>
       
-      <div className="absolute z-20" style={{ bottom: '55px', left: 0, right: 0, padding: '0 8px' }}>
+      <div className="absolute z-20" style={{ bottom: '70px', left: 0, right: 0, padding: '0 10px' }}>
         <div className="p-1 rounded-lg">
-          <div className="grid grid-cols-3 gap-1 sm:grid-cols-6">
+          <div className="grid grid-cols-3 gap-1" style={{ maxHeight: '35vh', overflow: 'auto' }}>
             <VitalSign 
-              label="FRECUENCIA CARDÍACA"
-              value={finalValues ? finalValues.heartRate : heartRate || "--"}
+              label="HEART RATE"
+              value={heartRate || "--"}
               unit="BPM"
-              isFinalReading={measurementComplete}
             />
             <VitalSign 
               label="SPO2"
-              value={finalValues ? finalValues.spo2 : vitalSigns.spo2 || "--"}
+              value={vitalSigns.spo2 || "--"}
               unit="%"
-              isFinalReading={measurementComplete}
             />
             <VitalSign 
-              label="PRESIÓN ARTERIAL"
-              value={finalValues ? finalValues.pressure : vitalSigns.pressure}
+              label="BLOOD PRESSURE"
+              value={vitalSigns.pressure}
               unit="mmHg"
-              isFinalReading={measurementComplete}
             />
             <VitalSign 
-              label="ARRITMIAS"
+              label="ARRHYTHMIAS"
               value={vitalSigns.arrhythmiaStatus}
-              isFinalReading={measurementComplete}
+              unit=""
             />
             <VitalSign 
-              label="GLUCOSA"
-              value={finalValues ? finalValues.glucose.value : vitalSigns.glucose.value || "--"}
-              unit="mg/dL"
-              trend={finalValues ? finalValues.glucose.trend : vitalSigns.glucose.trend}
-              isFinalReading={measurementComplete}
+              label="RESPIRATION"
+              value={vitalSigns.hasRespirationData ? vitalSigns.respiration.rate : "--"}
+              unit="RPM"
+              secondaryValue={vitalSigns.hasRespirationData ? vitalSigns.respiration.depth : "--"}
+              secondaryUnit="Depth"
             />
             <VitalSign 
-              label="LÍPIDOS"
-              value={vitalSigns.lipids ? vitalSigns.lipids.totalCholesterol : "--"}
+              label="GLUCOSE"
+              value={vitalSigns.glucose ? vitalSigns.glucose.value : "--"}
               unit="mg/dL"
-              secondaryValue={vitalSigns.lipids ? `HDL: ${vitalSigns.lipids.hdl}` : "--"}
-              isFinalReading={measurementComplete}
+            />
+            <VitalSign 
+              label="HEMOGLOBIN"
+              value={vitalSigns.hemoglobin ? vitalSigns.hemoglobin.value : "--"}
+              unit="g/dL"
+            />
+            <VitalSign 
+              label="CHOLESTEROL"
+              value={vitalSigns.cholesterol ? vitalSigns.cholesterol.totalCholesterol || "--" : "--"}
+              unit="mg/dL"
+              cholesterolData={vitalSigns.cholesterol ? {
+                hdl: vitalSigns.cholesterol.hdl,
+                ldl: vitalSigns.cholesterol.ldl,
+                triglycerides: vitalSigns.cholesterol.triglycerides,
+                confidence: vitalSigns.cholesterol.confidence
+              } : undefined}
             />
           </div>
         </div>
       </div>
 
-      <div className="absolute z-50" style={{ bottom: 0, left: 0, right: 0, height: '45px' }}>
+      <div className="absolute z-50" style={{ bottom: 0, left: 0, right: 0, height: '55px' }}>
         <div className="grid grid-cols-2 gap-px w-full h-full">
           <button 
             onClick={startMonitoring}
             className="w-full h-full text-xl font-bold text-white transition-colors duration-200"
-            disabled={!permissionsGranted}
+            disabled={!hasPermissions}
             style={{ 
-              backgroundImage: !permissionsGranted 
+              backgroundImage: !hasPermissions 
                 ? 'linear-gradient(135deg, #64748b, #475569, #334155)'
                 : isMonitoring 
                   ? 'linear-gradient(135deg, #f87171, #dc2626, #b91c1c)' 
                   : 'linear-gradient(135deg, #3b82f6, #2563eb, #1d4ed8)',
               textShadow: '0px 1px 3px rgba(0, 0, 0, 0.3)',
-              opacity: !permissionsGranted ? 0.7 : 1
+              opacity: !hasPermissions ? 0.7 : 1
             }}
           >
-            {!permissionsGranted ? 'PERMISOS REQUERIDOS' : (isMonitoring ? 'DETENER' : 'INICIAR')}
+            {!hasPermissions ? 'PERMISOS REQUERIDOS' : (isMonitoring ? 'DETENER' : 'INICIAR')}
           </button>
           <button 
-            onClick={handleReset}
+            onClick={stopMonitoring}
             className="w-full h-full text-xl font-bold text-white transition-colors duration-200"
             style={{ 
               backgroundImage: 'linear-gradient(135deg, #64748b, #475569, #334155)',
@@ -875,23 +714,6 @@ const Index = () => {
           </button>
         </div>
       </div>
-      
-      {!permissionsGranted && (
-        <div className="absolute z-50 top-1/2 left-0 right-0 text-center px-4 transform -translate-y-1/2">
-          <div className="bg-red-900/80 backdrop-blur-sm p-4 rounded-lg mx-auto max-w-md">
-            <h3 className="text-xl font-bold text-white mb-2">Permisos necesarios</h3>
-            <p className="text-white/90 mb-4">
-              Esta aplicación necesita acceso a la cámara para medir tus signos vitales.
-            </p>
-            <button 
-              onClick={() => window.location.reload()}
-              className="bg-white text-red-900 font-bold py-2 px-4 rounded"
-            >
-              Reintentar
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

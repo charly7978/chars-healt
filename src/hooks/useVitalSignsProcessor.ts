@@ -6,7 +6,7 @@ import { createVitalSignsDataCollector } from '../utils/vitalSignsDataCollector'
 import { useSignalHistory } from './useSignalHistory';
 import { VitalSignsRisk } from '../utils/vitalSignsRisk';
 import { RespirationProcessor } from '../modules/RespirationProcessor';
-import { GlucoseData } from '../types/signal';
+import { GlucoseData, VitalSignsProcessorResult } from '../types/signal';
 import { GlucoseProcessor } from '../modules/GlucoseProcessor';
 
 // Constants for advanced glucose detection algorithm
@@ -413,7 +413,7 @@ export const useVitalSignsProcessor = () => {
   /**
    * Process a new signal value and update all vitals
    */
-  const processSignal = useCallback((value: number, rrData?: { intervals: number[], lastPeakTime: number | null, amplitudes?: number[] }) => {
+  const processSignal = useCallback((value: number, rrData?: { intervals: number[], lastPeakTime: number | null, amplitudes?: number[] }): VitalSignsProcessorResult => {
     const processor = getProcessor();
     const respirationProcessor = getRespirationProcessor();
     const glucoseProcessor = getGlucoseProcessor();
@@ -548,14 +548,22 @@ export const useVitalSignsProcessor = () => {
     }
     
     // Always return the same object structure with lastArrhythmiaData (which may be null)
-    const vitalsData = {
+    const vitalsData: VitalSignsProcessorResult = {
       spo2: result.spo2,
       pressure: stabilizedBP,
       arrhythmiaStatus,
       respiration: respirationResult,
       hasRespirationData: respirationProcessor.hasValidData(),
       glucose: glucoseData,
-      lastArrhythmiaData
+      hemoglobin: null, // Will be updated if data is available
+      lastArrhythmiaData,
+      cholesterol: {
+        totalCholesterol: 0,
+        hdl: 0,
+        ldl: 0,
+        triglycerides: 0,
+        confidence: 0
+      }
     };
     
     // Log the full vitals data for debugging

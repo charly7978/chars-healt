@@ -164,14 +164,6 @@ export class HeartBeatProcessor {
     filteredValue: number;
     arrhythmiaCount: number;
     amplitude?: number;
-    perfusionIndex?: number;
-    pulsePressure?: number;
-    rrData?: {
-      intervals: number[];
-      lastPeakTime: number | null;
-      amplitudes?: number[];
-      advancedRRIntervals?: number[];
-    };
   } {
     // Filtros sucesivos para mejorar la señal
     const medVal = this.medianFilter(value);
@@ -183,28 +175,21 @@ export class HeartBeatProcessor {
       this.signalBuffer.shift();
     }
 
-    this.baseline = this.baseline * this.BASELINE_FACTOR + smoothed * (1 - this.BASELINE_FACTOR);
-    const normalizedValue = smoothed - this.baseline;
-    this.autoResetIfSignalIsLow(Math.abs(normalizedValue));
-
     if (this.signalBuffer.length < 30) {
       return {
         bpm: 0,
         confidence: 0,
         isPeak: false,
         filteredValue: smoothed,
-        arrhythmiaCount: 0,
-        amplitude: Math.abs(normalizedValue),
-        perfusionIndex: 0,
-        pulsePressure: 0,
-        rrData: {
-          intervals: [],
-          lastPeakTime: null,
-          amplitudes: [],
-          advancedRRIntervals: []
-        }
+        arrhythmiaCount: 0
       };
     }
+
+    this.baseline =
+      this.baseline * this.BASELINE_FACTOR + smoothed * (1 - this.BASELINE_FACTOR);
+
+    const normalizedValue = smoothed - this.baseline;
+    this.autoResetIfSignalIsLow(Math.abs(normalizedValue));
 
     this.values.push(smoothed);
     if (this.values.length > 3) {
@@ -223,26 +208,6 @@ export class HeartBeatProcessor {
     // Confirmación de picos más rigurosa
     const isConfirmedPeak = this.confirmPeak(isPeak, normalizedValue, confidence);
 
-    // Calculate perfusion index and pulse pressure
-    const perfusionIndex = Math.abs(normalizedValue) / (this.baseline || 1);
-    const pulsePressure = Math.abs(normalizedValue) * 2;
-
-    // Calculate advanced RR intervals
-    let advancedRRIntervals: number[] = [];
-    if (this.signalBuffer.length >= 30) {
-      const peaks = this.signalBuffer.map((val, idx) => {
-        const prev = this.signalBuffer[idx - 1] || val;
-        const next = this.signalBuffer[idx + 1] || val;
-        return val > prev && val > next ? idx : -1;
-      }).filter(idx => idx !== -1);
-
-      if (peaks.length >= 2) {
-        advancedRRIntervals = peaks.slice(1).map((peak, idx) => {
-          return (peak - peaks[idx]) * (1000 / this.SAMPLE_RATE);
-        });
-      }
-    }
-
     if (isConfirmedPeak && !this.isInWarmup()) {
       const now = Date.now();
       const timeSinceLastPeak = this.lastPeakTime
@@ -252,7 +217,7 @@ export class HeartBeatProcessor {
       if (timeSinceLastPeak >= this.MIN_PEAK_TIME_MS) {
         this.previousPeakTime = this.lastPeakTime;
         this.lastPeakTime = now;
-        this.playBeep(0.12);
+        this.playBeep(0.12); // Suena beep cuando se confirma pico
         this.updateBPM();
       }
     }
@@ -263,15 +228,7 @@ export class HeartBeatProcessor {
       isPeak: isConfirmedPeak && !this.isInWarmup(),
       filteredValue: smoothed,
       arrhythmiaCount: 0,
-      amplitude: Math.abs(normalizedValue),
-      perfusionIndex,
-      pulsePressure,
-      rrData: {
-        intervals: this.getRRIntervals().intervals,
-        lastPeakTime: this.lastPeakTime,
-        amplitudes: [Math.abs(normalizedValue)],
-        advancedRRIntervals
-      }
+      amplitude: Math.abs(normalizedValue) // Adding amplitude for respiration monitoring
     };
   }
 
