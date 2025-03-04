@@ -103,9 +103,7 @@ export class VitalSignsProcessor {
       pressure,
       arrhythmiaStatus: arrhythmiaResult.status,
       lastArrhythmiaData,
-      glucose,
-      respiration: { rate: 0, depth: 0, regularity: 0 },
-      hasRespirationData: false
+      glucose
     };
   }
 
