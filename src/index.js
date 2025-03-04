@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -272,11 +271,12 @@ const Index = () => {
               onStartMeasurement={startMonitoring}
               onReset={stopMonitoring}
               arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
+              rawArrhythmiaData={vitalSigns.lastArrhythmiaData}
             />
           </div>
 
           <div className="absolute bottom-[200px] left-0 right-0 px-4 z-30">
-            <div className="grid grid-cols-7 gap-2">
+            <div className="grid grid-cols-9 gap-2">
               <VitalSign 
                 label="HEART RATE"
                 value={heartRate || "--"}
@@ -323,18 +323,30 @@ const Index = () => {
                 unit="g/dL"
                 isFinalReading={vitalSigns.hemoglobin && vitalSigns.hemoglobin > 0 && elapsedTime >= 15}
               />
+              <VitalSign 
+                label="CHOLESTEROL"
+                value={vitalSigns.cholesterol && vitalSigns.cholesterol.totalCholesterol > 0 ? 
+                  `${vitalSigns.cholesterol.totalCholesterol} mg/dL (HDL:${vitalSigns.cholesterol.hdl}/LDL:${vitalSigns.cholesterol.ldl})` : 'Calculando...'}
+                unit=""
+                isFinalReading={vitalSigns.cholesterol && vitalSigns.cholesterol.totalCholesterol > 0 && elapsedTime >= 15}
+              />
+              <VitalSign 
+                label="TEMPERATURE"
+                value={vitalSigns.temperature && vitalSigns.temperature.value > 0 ? 
+                  `${vitalSigns.temperature.value.toFixed(1)}°C (${vitalSigns.temperature.confidence}%)` : 'Calculando...'}
+                unit=""
+                isFinalReading={vitalSigns.temperature && vitalSigns.temperature.value > 0 && elapsedTime >= 15}
+              />
             </div>
           </div>
 
           {isMonitoring && (
             <div className="absolute bottom-[150px] left-0 right-0 text-center z-30 text-xs text-gray-400">
               <span>
-                Resp Data: {vitalSigns.hasRespirationData ? 'Available' : 'Not available'} | 
-                Rate: {vitalSigns.respiration.rate} RPM | Depth: {vitalSigns.respiration.depth} | 
-                Glucose: {vitalSigns.glucose ? `${vitalSigns.glucose.value} mg/dL (${vitalSigns.glucose.trend || 'unknown'})` : 'Not available'} |
-                Hemoglobin: {vitalSigns.hemoglobin ? `${vitalSigns.hemoglobin} g/dL` : 'Not available'} |
-                ISO Compliant: {vitalSigns.isoCompliant ? 'Yes' : 'No'} |
-                Motion Score: {vitalSigns.motionScore || 0}
+                Col: {vitalSigns.cholesterol && vitalSigns.cholesterol.totalCholesterol > 0 ? 
+                  `${vitalSigns.cholesterol.totalCholesterol} mg/dL (HDL:${vitalSigns.cholesterol.hdl}/LDL:${vitalSigns.cholesterol.ldl})` : 'Calculando...'} | 
+                Temp: {vitalSigns.temperature && vitalSigns.temperature.value > 0 ? 
+                  `${vitalSigns.temperature.value.toFixed(1)}°C (${vitalSigns.temperature.confidence}%)` : 'Calculando...'}
               </span>
             </div>
           )}
@@ -345,17 +357,17 @@ const Index = () => {
             </div>
           )}
 
-          <div className="h-[60px] grid grid-cols-2 gap-px bg-gray-900 mt-auto relative z-30">
+          <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 mt-auto relative z-30">
             <button 
               onClick={startMonitoring}
-              className={`w-full h-full text-xl font-bold text-white active:bg-gray-800 ${!permissionsGranted ? 'bg-gray-600' : 'bg-black/80'}`}
+              className={`w-full h-full text-2xl font-bold text-white active:bg-gray-800 ${!permissionsGranted ? 'bg-gray-600' : 'bg-black/80'}`}
               disabled={!permissionsGranted}
             >
-              {!permissionsGranted ? 'PERMISSIONS REQUIRED' : 'START'}
+              {!permissionsGranted ? 'PERMISOS REQUERIDOS' : 'INICIAR'}
             </button>
             <button 
               onClick={stopMonitoring}
-              className="w-full h-full bg-black/80 text-xl font-bold text-white active:bg-gray-800"
+              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
             >
               RESET
             </button>
@@ -364,7 +376,7 @@ const Index = () => {
           {!permissionsGranted && (
             <div className="absolute bottom-20 left-0 right-0 text-center px-4 z-30">
               <span className="text-lg font-medium text-red-400">
-                The application needs camera permissions to function correctly
+                La aplicación necesita permisos de cámara para funcionar correctamente
               </span>
             </div>
           )}
