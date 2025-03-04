@@ -8,6 +8,7 @@ export const createVitalSignsDataCollector = () => {
   const respirationDepths: number[] = [];
   const glucoseValues: number[] = [];
   const glucoseTimestamps: number[] = [];
+  const hemoglobinValues: number[] = [];
   
   return {
     /**
@@ -54,6 +55,18 @@ export const createVitalSignsDataCollector = () => {
         respirationDepths.push(value);
         if (respirationDepths.length > 10) {
           respirationDepths.shift();
+        }
+      }
+    },
+    
+    /**
+     * Add hemoglobin value to collection
+     */
+    addHemoglobin: (value: number) => {
+      if (value >= 8 && value <= 20) {
+        hemoglobinValues.push(value);
+        if (hemoglobinValues.length > 10) {
+          hemoglobinValues.shift();
         }
       }
     },
@@ -160,6 +173,15 @@ export const createVitalSignsDataCollector = () => {
     },
     
     /**
+     * Get average hemoglobin from collected values
+     */
+    getAverageHemoglobin: (): number => {
+      if (hemoglobinValues.length === 0) return 0;
+      const sum = hemoglobinValues.reduce((acc, val) => acc + val, 0);
+      return Math.round((sum / hemoglobinValues.length) * 10) / 10; // Round to 1 decimal place
+    },
+    
+    /**
      * Get average glucose from collected values
      * Returns a more reliable average with temporal weighting
      */
@@ -242,6 +264,7 @@ export const createVitalSignsDataCollector = () => {
       respirationDepths.length = 0;
       glucoseValues.length = 0;
       glucoseTimestamps.length = 0;
+      hemoglobinValues.length = 0;
     }
   };
 };
