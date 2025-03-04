@@ -354,18 +354,18 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
       {/* Contenedor principal */}
       <div className="fixed inset-0 pt-16 pb-14 flex flex-col">
         {/* Gráfico */}
-        <div className="flex-1 relative overflow-hidden">
+        <div className="flex-1 relative overflow-hidden pt-4">
           <canvas
             ref={canvasRef}
             width={CANVAS_WIDTH}
             height={CANVAS_HEIGHT}
-            className="absolute top-0 left-0 w-full h-full scale-[0.8] origin-top"
+            className="absolute top-4 left-0 w-full h-[calc(100%-2rem)] scale-[0.8] origin-top"
             style={{ imageRendering: 'crisp-edges' }}
           />
         </div>
 
         {/* Displays médicos */}
-        <div className="h-32 px-4 py-2 grid grid-cols-3 gap-4">
+        <div className="h-32 px-4 py-2 grid grid-cols-3 gap-4 bg-[#051527]/90 backdrop-blur-sm z-10">
           {arrhythmiaStatus && (
             <div className="bg-[#051527]/90 backdrop-blur-sm rounded-lg p-4 border border-blue-900/30">
               <h3 className="text-sm font-semibold text-white mb-2">Estado Cardíaco</h3>
