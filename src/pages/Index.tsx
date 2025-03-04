@@ -754,6 +754,7 @@ const Index = () => {
             <VitalSign 
               label="ARRITMIAS"
               value={vitalSigns.arrhythmiaStatus}
+              unit=""
               isFinalReading={measurementComplete}
             />
             <VitalSign 
