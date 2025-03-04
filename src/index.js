@@ -23,7 +23,9 @@ const Index = () => {
     hemoglobin: null,
     isoCompliant: false,
     calibrationStatus: 'uncalibrated',
-    motionScore: 0
+    motionScore: 0,
+    cholesterol: null,
+    temperature: null
   });
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState("--");
@@ -203,7 +205,9 @@ const Index = () => {
             hemoglobin: vitals.hemoglobin ? `${vitals.hemoglobin} g/dL` : 'No data',
             isoCompliant: vitals.isoCompliant ? 'Yes' : 'No',
             calibrationStatus: vitals.calibrationStatus,
-            motionScore: vitals.motionScore || 0
+            motionScore: vitals.motionScore || 0,
+            cholesterol: vitals.cholesterol ? `Total: ${vitals.cholesterol.totalCholesterol} mg/dL` : 'No data',
+            temperature: vitals.temperature ? `${vitals.temperature.value}°C` : 'No data'
           });
           
           setVitalSigns(vitals);
@@ -215,6 +219,14 @@ const Index = () => {
           
           if (vitals.hemoglobin && vitals.hemoglobin > 0) {
             console.log(`Hemoglobin data received: ${vitals.hemoglobin} g/dL`);
+          }
+          
+          if (vitals.cholesterol && vitals.cholesterol.totalCholesterol > 0) {
+            console.log(`Cholesterol data received: ${vitals.cholesterol.totalCholesterol} mg/dL`);
+          }
+          
+          if (vitals.temperature && vitals.temperature.value > 0) {
+            console.log(`Temperature data received: ${vitals.temperature.value}°C`);
           }
         }
         
@@ -333,17 +345,17 @@ const Index = () => {
             </div>
           )}
 
-          <div className="h-[80px] grid grid-cols-2 gap-px bg-gray-900 mt-auto relative z-30">
+          <div className="h-[60px] grid grid-cols-2 gap-px bg-gray-900 mt-auto relative z-30">
             <button 
               onClick={startMonitoring}
-              className={`w-full h-full text-2xl font-bold text-white active:bg-gray-800 ${!permissionsGranted ? 'bg-gray-600' : 'bg-black/80'}`}
+              className={`w-full h-full text-xl font-bold text-white active:bg-gray-800 ${!permissionsGranted ? 'bg-gray-600' : 'bg-black/80'}`}
               disabled={!permissionsGranted}
             >
               {!permissionsGranted ? 'PERMISSIONS REQUIRED' : 'START'}
             </button>
             <button 
               onClick={stopMonitoring}
-              className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
+              className="w-full h-full bg-black/80 text-xl font-bold text-white active:bg-gray-800"
             >
               RESET
             </button>
