@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Badge } from './ui/badge';
 import { Card } from './ui/card';
@@ -71,50 +70,50 @@ const VitalSign: React.FC<VitalSignProps> = ({
   };
 
   return (
-    <Card className="p-2 flex flex-col space-y-1 h-full shadow-sm border border-gray-200 hover:border-blue-300 transition-colors">
+    <Card className="p-2 flex flex-col space-y-1 h-[120px] shadow-sm border border-gray-200 hover:border-blue-300 transition-colors bg-black/40 backdrop-blur-sm">
       <div className="flex justify-between items-start">
-        <h3 className="text-xs font-semibold text-gray-700 dark:text-gray-300">{label}</h3>
+        <h3 className="text-[10px] font-semibold text-gray-300">{label}</h3>
         {trend && (
-          <Badge variant="outline" className={`text-[10px] px-1 py-0 ${getTrendColor()}`}>
+          <Badge variant="outline" className={`text-[8px] px-1 py-0 ${getTrendColor()}`}>
             {getTrendIcon()} {trend.replace('_', ' ')}
           </Badge>
         )}
       </div>
-      <div className="flex items-baseline space-x-1">
-        <span className="text-2xl font-bold tracking-tighter">{value}</span>
-        <span className="text-xs text-gray-600 dark:text-gray-400">{unit}</span>
+      <div className="flex items-baseline space-x-1 justify-center flex-1">
+        <span className="text-xl font-bold tracking-tighter text-white">{value}</span>
+        <span className="text-[10px] text-gray-400">{unit}</span>
       </div>
       {secondaryValue && secondaryUnit && (
-        <div className="flex items-baseline space-x-1">
-          <span className="text-sm font-medium tracking-tighter">{secondaryValue}</span>
-          <span className="text-[10px] text-gray-600 dark:text-gray-400">{secondaryUnit}</span>
+        <div className="flex items-baseline space-x-1 justify-center">
+          <span className="text-sm font-medium tracking-tighter text-gray-300">{secondaryValue}</span>
+          <span className="text-[8px] text-gray-400">{secondaryUnit}</span>
         </div>
       )}
       {cholesterolData && (
         <div className="flex flex-col mt-1 space-y-0.5">
           <div className="flex items-baseline justify-between">
-            <span className="text-[10px] text-gray-600">HDL:</span>
-            <span className="text-[10px] font-medium">{cholesterolData.hdl} mg/dL</span>
+            <span className="text-[8px] text-gray-400">HDL:</span>
+            <span className="text-[8px] font-medium text-gray-300">{cholesterolData.hdl} mg/dL</span>
           </div>
           <div className="flex items-baseline justify-between">
-            <span className="text-[10px] text-gray-600">LDL:</span>
-            <span className="text-[10px] font-medium">{cholesterolData.ldl} mg/dL</span>
+            <span className="text-[8px] text-gray-400">LDL:</span>
+            <span className="text-[8px] font-medium text-gray-300">{cholesterolData.ldl} mg/dL</span>
           </div>
           <div className="flex items-baseline justify-between">
-            <span className="text-[10px] text-gray-600">TG:</span>
-            <span className="text-[10px] font-medium">{cholesterolData.triglycerides} mg/dL</span>
+            <span className="text-[8px] text-gray-400">TG:</span>
+            <span className="text-[8px] font-medium text-gray-300">{cholesterolData.triglycerides} mg/dL</span>
           </div>
         </div>
       )}
       {temperatureLocation && (
-        <div className="flex items-baseline space-x-1">
-          <span className="text-[10px] text-gray-600 dark:text-gray-400">
+        <div className="flex items-baseline space-x-1 justify-center">
+          <span className="text-[8px] text-gray-400">
             {temperatureLocation === 'finger' ? 'Dedo' : 
              temperatureLocation === 'wrist' ? 'Muñeca' : 
              temperatureLocation === 'forehead' ? 'Frente' : 'Desconocido'}
           </span>
           {temperatureTrend && (
-            <Badge variant="outline" className="text-[8px] px-1 py-0 bg-sky-100 text-sky-800">
+            <Badge variant="outline" className="text-[8px] px-1 py-0 bg-sky-100/10 text-sky-300">
               {getTrendIcon()} {temperatureTrend.replace('_', ' ')}
             </Badge>
           )}
@@ -122,7 +121,7 @@ const VitalSign: React.FC<VitalSignProps> = ({
       )}
       {isFinalReading && (
         <div className="mt-auto">
-          <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px]">
+          <Badge variant="outline" className="bg-emerald-950/50 text-emerald-400 border-emerald-800/50 text-[8px]">
             Medición Final
           </Badge>
         </div>

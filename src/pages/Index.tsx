@@ -768,7 +768,7 @@ const Index = () => {
       
       <div className="absolute z-20" style={{ bottom: '65px', left: 0, right: 0, padding: '0 10px' }}>
         <div className="p-1 rounded-lg">
-          <div className="grid grid-cols-9 gap-2">
+          <div className="grid grid-cols-3 gap-1.5" style={{ maxHeight: '45vh', overflow: 'auto' }}>
             <VitalSign 
               label="HEART RATE"
               value={heartRate || "--"}
