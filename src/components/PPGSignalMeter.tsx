@@ -36,10 +36,10 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
   
   const WINDOW_WIDTH_MS = 2800;
   const CANVAS_WIDTH = 350;
-  const CANVAS_HEIGHT = 550;
+  const CANVAS_HEIGHT = 650;
   const GRID_SIZE_X = 40;
   const GRID_SIZE_Y = 10;
-  const verticalScale = 19.0;
+  const verticalScale = 79.0;
   const SMOOTHING_FACTOR = 1.5;
   const TARGET_FPS = 90;
   const FRAME_TIME = 1500 / TARGET_FPS;
