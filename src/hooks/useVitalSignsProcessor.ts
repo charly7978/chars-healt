@@ -680,37 +680,6 @@ export const useVitalSignsProcessor = () => {
     return vitalsData;
   }, [getProcessor, getRespirationProcessor, getGlucoseProcessor, arrhythmiaAnalyzer, signalHistory, processGlucoseSignal]);
 
-  useEffect(() => {
-    if (dataCollector.current) {
-      // Add hemoglobin methods if they don't exist
-      if (!dataCollector.current.hemoglobinValues) {
-        dataCollector.current.hemoglobinValues = [];
-      }
-      
-      if (!dataCollector.current.addHemoglobin) {
-        dataCollector.current.addHemoglobin = function(value) {
-          if (!this.hemoglobinValues) {
-            this.hemoglobinValues = [];
-          }
-          this.hemoglobinValues.push(value);
-          if (this.hemoglobinValues.length > 10) {
-            this.hemoglobinValues.shift();
-          }
-        };
-      }
-      
-      if (!dataCollector.current.getAverageHemoglobin) {
-        dataCollector.current.getAverageHemoglobin = function() {
-          if (!this.hemoglobinValues || this.hemoglobinValues.length === 0) {
-            return 0;
-          }
-          const sum = this.hemoglobinValues.reduce((acc, val) => acc + val, 0);
-          return Math.round((sum / this.hemoglobinValues.length) * 10) / 10;
-        };
-      }
-    }
-  }, []);
-
   /**
    * Reset all processors
    */
