@@ -13,6 +13,7 @@ export interface ProcessedSignal {
     width: number;
     height: number;
   };
+  isPeak?: boolean; // Added isPeak property
 }
 
 export interface ProcessingError {
@@ -51,9 +52,13 @@ export interface HeartBeatResult {
   arrhythmiaCount: number;
   amplitude?: number;
   isLearningPhase?: boolean;
+  perfusionIndex?: number; // Added perfusion index
+  pulsePressure?: number;  // Added pulse pressure
   rrData?: {
     intervals: number[];
     lastPeakTime: number | null;
+    amplitudes?: number[];
+    advancedRRIntervals?: number[]; // Advanced RR intervals
   };
 }
 
@@ -87,9 +92,30 @@ export interface PPGProcessedResult {
   fingerDetected: boolean;
 }
 
+// New advanced cardiac analysis types
+export interface CardiacAnalysisResult {
+  heartRate: number;
+  rrIntervals: number[];
+  peakIndices: number[];
+  valleyIndices: number[];
+  signalQuality: number;
+  pulsePressure?: number;
+  perfusionIndex?: number;
+  hrvMetrics?: HeartRateVariabilityMetrics;
+}
+
+export interface HeartRateVariabilityMetrics {
+  sdnn: number;    // Standard deviation of NN intervals
+  rmssd: number;   // Root mean square of successive differences
+  pnn50: number;   // Proportion of NN50 divided by total number of NNs
+  lf: number;      // Low frequency power
+  hf: number;      // High frequency power
+  lfHfRatio: number; // LF/HF ratio
+}
+
 declare global {
   interface Window {
     heartBeatProcessor: HeartBeatProcessor;
-    gc?: () => void; // Añadir definición para garbage collector
+    gc?: () => void; // Garbage collector definition
   }
 }

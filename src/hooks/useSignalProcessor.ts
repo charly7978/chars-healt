@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { PPGSignalProcessor } from '../modules/SignalProcessor';
 import { ProcessedSignal, ProcessingError } from '../types/signal';
@@ -6,7 +7,8 @@ import {
   conditionPPGSignal, 
   enhancedPeakDetection, 
   assessSignalQuality,
-  applySMAFilter
+  applySMAFilter,
+  panTompkinsAdaptedForPPG
 } from '../utils/signalProcessingUtils';
 
 export const useSignalProcessor = () => {
@@ -22,11 +24,11 @@ export const useSignalProcessor = () => {
   const calibrationThresholdRef = useRef<number>(30); // 30 frames (~1s at 30fps)
   
   useEffect(() => {
-    console.log("useSignalProcessor: Creando nueva instancia del procesador");
+    console.log("useSignalProcessor: Creating new processor instance");
     processorRef.current = new PPGSignalProcessor();
     
     processorRef.current.onSignalReady = (signal: ProcessedSignal) => {
-      console.log("useSignalProcessor: Señal recibida:", {
+      console.log("useSignalProcessor: Signal received:", {
         timestamp: signal.timestamp,
         quality: signal.quality,
         filteredValue: signal.filteredValue
@@ -36,17 +38,17 @@ export const useSignalProcessor = () => {
     };
 
     processorRef.current.onError = (error: ProcessingError) => {
-      console.error("useSignalProcessor: Error recibido:", error);
+      console.error("useSignalProcessor: Error received:", error);
       setError(error);
     };
 
-    console.log("useSignalProcessor: Iniciando procesador");
+    console.log("useSignalProcessor: Initializing processor");
     processorRef.current.initialize().catch(error => {
-      console.error("useSignalProcessor: Error de inicialización:", error);
+      console.error("useSignalProcessor: Initialization error:", error);
     });
 
     return () => {
-      console.log("useSignalProcessor: Limpiando y destruyendo procesador");
+      console.log("useSignalProcessor: Cleaning up processor");
       if (processorRef.current) {
         processorRef.current.stop();
         processorRef.current.onSignalReady = null;
@@ -61,7 +63,7 @@ export const useSignalProcessor = () => {
   }, []);
 
   const startProcessing = useCallback(() => {
-    console.log("useSignalProcessor: Iniciando procesamiento");
+    console.log("useSignalProcessor: Starting processing");
     if (processorRef.current) {
       setIsProcessing(true);
       processorRef.current.start();
@@ -74,7 +76,7 @@ export const useSignalProcessor = () => {
   }, []);
 
   const stopProcessing = useCallback(() => {
-    console.log("useSignalProcessor: Deteniendo procesamiento");
+    console.log("useSignalProcessor: Stopping processing");
     if (processorRef.current) {
       processorRef.current.stop();
     }
@@ -85,15 +87,15 @@ export const useSignalProcessor = () => {
 
   const calibrate = useCallback(async () => {
     try {
-      console.log("useSignalProcessor: Iniciando calibración");
+      console.log("useSignalProcessor: Starting calibration");
       if (processorRef.current) {
         await processorRef.current.calibrate();
-        console.log("useSignalProcessor: Calibración exitosa");
+        console.log("useSignalProcessor: Calibration successful");
         return true;
       }
       return false;
     } catch (error) {
-      console.error("useSignalProcessor: Error de calibración:", error);
+      console.error("useSignalProcessor: Calibration error:", error);
       return false;
     }
   }, []);
@@ -119,7 +121,7 @@ export const useSignalProcessor = () => {
             calibrationCounterRef.current++;
             if (calibrationCounterRef.current >= calibrationThresholdRef.current) {
               isCalibrationPhaseRef.current = false;
-              console.log("useSignalProcessor: Calibración automática completada");
+              console.log("useSignalProcessor: Automatic calibration completed");
             }
             return;
           }
@@ -133,13 +135,34 @@ export const useSignalProcessor = () => {
           };
           signalBufferRef.current.push(dataPoint);
           
+          // Get signal values for cardiac analysis
           const signalValues = signalBufferRef.current.getPoints().map(p => p.value);
           
-          if (signalValues.length >= 30) {
-            const peakInfo = enhancedPeakDetection(signalValues);
-            const quality = peakInfo.signalQuality;
+          if (signalValues.length >= 90) { // At least 3 seconds of data for reliable analysis
+            // Apply the advanced cardiac algorithm (Pan-Tompkins adapted for PPG)
+            // Choose the most reliable algorithm based on signal characteristics
+            const signalMean = signalValues.reduce((sum, val) => sum + val, 0) / signalValues.length;
+            const signalMax = Math.max(...signalValues);
+            const signalMin = Math.min(...signalValues);
+            const signalRange = signalMax - signalMin;
             
+            let cardiacAnalysis;
+            
+            // Use enhanced peak detection for typical PPG signals
+            if (signalRange / signalMean > 0.1) { // Good signal-to-noise ratio
+              cardiacAnalysis = enhancedPeakDetection(signalValues);
+              console.log("Using enhanced peak detection algorithm");
+            } else { // For lower quality signals, use the Pan-Tompkins algorithm 
+              cardiacAnalysis = panTompkinsAdaptedForPPG(signalValues);
+              console.log("Using Pan-Tompkins algorithm for noisy signal");
+            }
+            
+            const quality = cardiacAnalysis.signalQuality;
             const fingerDetected = quality > 20 && lastSignal.fingerDetected;
+            
+            // Check if current point is a peak
+            const currentIndex = signalValues.length - 1;
+            const isPeak = cardiacAnalysis.peakIndices.includes(currentIndex);
             
             const enhancedSignal: ProcessedSignal = {
               timestamp: lastSignal.timestamp,
@@ -147,26 +170,31 @@ export const useSignalProcessor = () => {
               filteredValue: enhancedValue,
               quality: quality,
               fingerDetected: fingerDetected,
-              roi: lastSignal.roi
+              roi: lastSignal.roi,
+              isPeak: isPeak
             };
             
             setLastSignal(enhancedSignal);
             
+            // Pass to heart beat processor if available
             if (window.heartBeatProcessor) {
               window.heartBeatProcessor.processSignal(enhancedValue);
+            }
+            
+            // Log cardiac analysis results for debugging
+            if (cardiacAnalysis.heartRate) {
+              console.log(`Cardiac analysis: HR=${cardiacAnalysis.heartRate}, quality=${quality}%`);
             }
           }
         }
       } catch (error) {
-        console.error("useSignalProcessor: Error procesando frame:", error);
+        console.error("useSignalProcessor: Error processing frame:", error);
       }
-    } else {
-      console.log("useSignalProcessor: Frame ignorado (no está procesando)");
     }
   }, [isProcessing, lastSignal]);
 
   const cleanMemory = useCallback(() => {
-    console.log("useSignalProcessor: Limpieza agresiva de memoria");
+    console.log("useSignalProcessor: Aggressive memory cleanup");
     if (processorRef.current) {
       processorRef.current.stop();
     }
@@ -179,9 +207,9 @@ export const useSignalProcessor = () => {
     if (window.gc) {
       try {
         window.gc();
-        console.log("useSignalProcessor: Garbage collection solicitada");
+        console.log("useSignalProcessor: Garbage collection requested");
       } catch (e) {
-        console.log("useSignalProcessor: Garbage collection no disponible");
+        console.log("useSignalProcessor: Garbage collection unavailable");
       }
     }
   }, []);
