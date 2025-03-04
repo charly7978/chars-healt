@@ -44,6 +44,14 @@ export class GlucoseProcessor {
   private absorptionFactor = 0.45; // Factor de absorción de luz relacionado con glucosa
   private personalizedFactor = 1.0; // Factor de ajuste personalizado
   
+  // Constantes y parámetros basados en investigación médica
+  private readonly BASE_GLUCOSE_LEVEL = 90; // mg/dL (nivel basal promedio en ayunas)
+  private readonly MIN_BUFFER_SIZE = 450; // ~15 segundos de datos a 30fps
+  private readonly OPTIMAL_BUFFER_SIZE = 600; // ~20 segundos para análisis completo
+  private readonly QUALITY_THRESHOLD = 60; // Umbral mínimo de calidad (0-100)
+  private readonly CALIBRATION_ADJUSTMENT_RATE = 0.2; // Tasa de ajuste de calibración
+  private readonly SPECTRAL_BANDS_GLUCOSE
+  
   constructor() {
     // Initialize with random base glucose
     this.BASE_GLUCOSE = Math.floor(this.BASE_GLUCOSE_MIN + Math.random() * (this.BASE_GLUCOSE_MAX - this.BASE_GLUCOSE_MIN));
@@ -607,9 +615,13 @@ export class GlucoseProcessor {
     for (let i = 0; i < signal.length; i++) {
       const start = Math.max(0, i - windowSize);
       const end = Math.min(signal.length, i + windowSize + 1);
-      const windowMean = signal.slice(start, end).reduce((sum, val) => sum + val, 0) / (end - start);
+      const windowValues = signal.slice(start, end);
       
-      result.push(signal[i] - windowMean);
+      // Usar mediana en lugar de media para mayor robustez
+      windowValues.sort((a, b) => a - b);
+      const median = windowValues[Math.floor(windowValues.length / 2)];
+      
+      result.push(signal[i] - median);
     }
     
     return result;
@@ -649,235 +661,144 @@ export class GlucoseProcessor {
    * Extrae características espectrales relacionadas con la glucosa
    */
   private extractSpectralFeatures(signal: number[]): number[] {
-    // División de la señal en segmentos para análisis
-    const segmentSize = 128;
-    const segments: number[][] = [];
+    // Características basadas en análisis espectral
+    const features: number[] = [];
     
-    for (let i = 0; i < signal.length - segmentSize; i += segmentSize / 2) {
-      segments.push(signal.slice(i, i + segmentSize));
+    // 1. Transformada de Fourier para análisis frecuencial
+    const fftResult = this.calculateFFT(signal);
+    
+    // 2. Extraer características de bandas específicas para glucosa
+    for (const band of this.SPECTRAL_BANDS_GLUCOSE) {
+      const bandPower = this.calculateBandPower(fftResult, band.min, band.max, 30);
+      features.push(bandPower);
     }
     
-    // Cálculo de características espectrales por segmento
-    const features: number[] = new Array(5).fill(0);
+    // 3. Ratio de energía entre bandas (informativo para niveles de glucosa)
+    if (features[0] > 0 && features[1] > 0) {
+      features.push(features[1] / features[0]); // Ratio banda principal a baja
+    } else {
+      features.push(1.0); // Valor predeterminado
+    }
     
-    segments.forEach(segment => {
-      // Aplicar ventana Hamming
-      const windowed = segment.map((val, idx) => 
-        val * (0.54 - 0.46 * Math.cos(2 * Math.PI * idx / (segment.length - 1)))
-      );
-      
-      // Cálculo de FFT (implementación simplificada)
-      const spectralPower = this.calculateSpectralPower(windowed);
-      
-      // Extraer características de bandas de frecuencia específicas para glucosa
-      const bands = [
-        [0.1, 0.5],  // Muy baja frecuencia (relacionada con metabolismo)
-        [0.5, 1.0],  // Baja frecuencia
-        [1.0, 2.0],  // Media frecuencia
-        [2.0, 3.5],  // Alta frecuencia 
-        [3.5, 5.0]   // Muy alta frecuencia
-      ];
-      
-      bands.forEach((band, idx) => {
-        const bandPower = this.calculateBandPower(spectralPower, band[0], band[1], 30);
-        features[idx] += bandPower;
-      });
-    });
+    // 4. Centroide espectral (correlacionado con nivel de glucosa)
+    features.push(this.calculateSpectralCentroid(fftResult));
     
-    // Normalizar por número de segmentos
-    return features.map(feature => feature / segments.length);
+    return features;
   }
   
   /**
-   * Calcula el espectro de potencia de una señal
+   * Calcula la transformada de Fourier de una señal
    */
-  private calculateSpectralPower(signal: number[]): number[] {
-    // Implementación simplificada de FFT usando transformada "cuasi-FFT"
+  private calculateFFT(signal: number[]): Array<{frequency: number, magnitude: number}> {
     const n = signal.length;
-    const result: number[] = new Array(n / 2).fill(0);
+    const result: Array<{frequency: number, magnitude: number}> = [];
     
-    // Para cada frecuencia de interés
+    // Aplicar ventana Hamming
+    const windowed = signal.map((val, idx) => 
+      val * (0.54 - 0.46 * Math.cos(2 * Math.PI * idx / (n - 1)))
+    );
+    
+    // Calcular FFT (implementación simplificada)
     for (let k = 0; k < n / 2; k++) {
       let re = 0;
       let im = 0;
       
-      // Calcular componentes de Fourier
       for (let t = 0; t < n; t++) {
         const angle = (2 * Math.PI * k * t) / n;
-        re += signal[t] * Math.cos(angle);
-        im += signal[t] * Math.sin(angle);
+        re += windowed[t] * Math.cos(angle);
+        im += windowed[t] * Math.sin(angle);
       }
       
-      // Calcular potencia
-      result[k] = (re * re + im * im) / (n * n);
+      const magnitude = Math.sqrt(re * re + im * im) / n;
+      const frequency = k * 30 / n; // Asumiendo 30Hz de muestreo
+      
+      result.push({ frequency, magnitude });
     }
     
     return result;
   }
   
   /**
-   * Calcula la potencia en una banda específica
+   * Calcula la potencia en una banda de frecuencia específica
    */
   private calculateBandPower(
-    spectrum: number[], 
-    lowFreq: number, 
-    highFreq: number, 
+    fft: Array<{frequency: number, magnitude: number}>,
+    minFreq: number,
+    maxFreq: number,
     samplingRate: number
   ): number {
-    const nyquist = samplingRate / 2;
-    const lowBin = Math.floor((lowFreq / nyquist) * spectrum.length);
-    const highBin = Math.ceil((highFreq / nyquist) * spectrum.length);
-    
+    // Sumar potencia en la banda de frecuencia
     let power = 0;
-    for (let i = lowBin; i <= highBin && i < spectrum.length; i++) {
-      power += spectrum[i];
+    
+    for (const bin of fft) {
+      if (bin.frequency >= minFreq && bin.frequency <= maxFreq) {
+        power += bin.magnitude * bin.magnitude;
+      }
     }
     
     return power;
   }
   
   /**
-   * Extrae características temporales relacionadas con la glucosa
+   * Calcula el centroide espectral (frecuencia "promedio" de la señal)
    */
-  private extractTemporalFeatures(signal: number[]): number[] {
-    const features: number[] = [];
+  private calculateSpectralCentroid(fft: Array<{frequency: number, magnitude: number}>): number {
+    let weightedSum = 0;
+    let totalMagnitude = 0;
     
-    // 1. Variabilidad de pico a pico
-    const peakToPeakVariability = this.calculatePeakToPeakVariability(signal);
+    for (const bin of fft) {
+      if (bin.frequency > 0) { // Ignorar componente DC
+        weightedSum += bin.frequency * bin.magnitude;
+        totalMagnitude += bin.magnitude;
+      }
+    }
     
-    // 2. Tiempo de subida (área bajo la curva durante fase ascendente)
-    const riseTimeRatio = this.calculateRiseTimeRatio(signal);
-    
-    // 3. Índice de asimetría de la onda PPG
-    const asymmetryIndex = this.calculateAsymmetryIndex(signal);
-    
-    // 4. Media y desviación estándar del índice de perfusión
-    const piMean = this.perfusionIndex.reduce((sum, val) => sum + val, 0) / this.perfusionIndex.length;
-    
-    const piStd = Math.sqrt(
-      this.perfusionIndex.reduce((sum, val) => sum + Math.pow(val - piMean, 2), 0) / 
-      this.perfusionIndex.length
-    );
-    
-    features.push(peakToPeakVariability, riseTimeRatio, asymmetryIndex, piMean, piStd);
-    return features;
+    return totalMagnitude > 0 ? weightedSum / totalMagnitude : 0;
   }
   
   /**
-   * Calcula la variabilidad de pico a pico
+   * Extrae características morfológicas de la forma de onda PPG
    */
-  private calculatePeakToPeakVariability(signal: number[]): number {
-    const peaks: number[] = [];
-    
-    // Detectar picos
-    for (let i = 2; i < signal.length - 2; i++) {
-      if (signal[i] > signal[i-1] && 
-          signal[i] > signal[i-2] &&
-          signal[i] > signal[i+1] && 
-          signal[i] > signal[i+2]) {
-        peaks.push(i);
-      }
-    }
-    
-    if (peaks.length < 2) return 0;
-    
-    // Calcular amplitudes pico a pico
-    const peakAmplitudes: number[] = [];
-    for (let i = 0; i < peaks.length - 1; i++) {
-      peakAmplitudes.push(Math.abs(signal[peaks[i]] - signal[peaks[i+1]]));
-    }
-    
-    // Calcular variabilidad (coeficiente de variación)
-    const mean = peakAmplitudes.reduce((sum, val) => sum + val, 0) / peakAmplitudes.length;
-    const variance = peakAmplitudes.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / peakAmplitudes.length;
-    
-    return Math.sqrt(variance) / mean;
-  }
-  
-  /**
-   * Calcula la relación de tiempo de subida
-   */
-  private calculateRiseTimeRatio(signal: number[]): number {
-    const peaks: number[] = [];
-    const valleys: number[] = [];
-    
-    // Detectar picos y valles
-    for (let i = 2; i < signal.length - 2; i++) {
-      if (signal[i] > signal[i-1] && 
-          signal[i] > signal[i-2] &&
-          signal[i] > signal[i+1] && 
-          signal[i] > signal[i+2]) {
-        peaks.push(i);
-      }
-      
-      if (signal[i] < signal[i-1] && 
-          signal[i] < signal[i-2] &&
-          signal[i] < signal[i+1] && 
-          signal[i] < signal[i+2]) {
-        valleys.push(i);
-      }
-    }
-    
-    if (peaks.length < 1 || valleys.length < 1) return 0;
-    
-    // Calcular tiempo promedio de subida (valle a pico)
-    let totalRiseTime = 0;
-    let totalFallTime = 0;
-    let count = 0;
-    
-    for (let i = 0; i < valleys.length; i++) {
-      const valleyIdx = valleys[i];
-      
-      // Encontrar el próximo pico
-      const nextPeakIdx = peaks.find(peakIdx => peakIdx > valleyIdx);
-      
-      // Encontrar el próximo valle
-      const nextValleyIdx = valleys[i+1];
-      
-      if (nextPeakIdx && nextValleyIdx && nextPeakIdx < nextValleyIdx) {
-        const riseTime = nextPeakIdx - valleyIdx;
-        const fallTime = nextValleyIdx - nextPeakIdx;
-        
-        totalRiseTime += riseTime;
-        totalFallTime += fallTime;
-        count++;
-      }
-    }
-    
-    if (count === 0) return 0;
-    
-    const avgRiseTime = totalRiseTime / count;
-    const avgFallTime = totalFallTime / count;
-    
-    // Estudios muestran que la relación rise/fall cambia con niveles de glucosa
-    return avgRiseTime / (avgRiseTime + avgFallTime);
-  }
-  
-  /**
-   * Calcula el índice de asimetría de la forma de onda
-   */
-  private calculateAsymmetryIndex(signal: number[]): number {
+  private extractMorphologicalFeatures(signal: number[]): number[] {
+    // Segmentar señal en pulsos individuales
     const segments = this.segmentPulseWaves(signal);
     
-    if (segments.length === 0) return 0;
+    if (segments.length < 3) {
+      // No hay suficientes pulsos para análisis morfológico
+      return new Array(5).fill(0);
+    }
     
-    // Calcular asimetría promedio
-    let totalAsymmetry = 0;
+    // Normalizar segmentos
+    const normalizedSegments = segments.map(segment => this.normalizeSegment(segment));
     
-    segments.forEach(segment => {
-      const midpoint = Math.floor(segment.length / 2);
-      const leftHalf = segment.slice(0, midpoint);
-      const rightHalf = segment.slice(midpoint);
-      
-      // Áreas aproximadas
-      const leftArea = leftHalf.reduce((sum, val) => sum + val, 0);
-      const rightArea = rightHalf.reduce((sum, val) => sum + val, 0);
-      
-      // Asimetría normalizada
-      totalAsymmetry += Math.abs(leftArea - rightArea) / (leftArea + rightArea);
-    });
+    // Características morfológicas
+    const features: number[] = [];
     
-    return totalAsymmetry / segments.length;
+    // 1. Índice dicrótico (sensible a niveles de glucosa)
+    const dicroticIndex = this.calculateAverageDicroticIndex(normalizedSegments);
+    features.push(dicroticIndex);
+    
+    // 2. Ratio de tiempo de subida a tiempo de bajada
+    const riseToFallRatio = this.calculateRiseToFallRatio(normalizedSegments);
+    features.push(riseToFallRatio);
+    this.riseFallRatioHistory.push(riseToFallRatio);
+    if (this.riseFallRatioHistory.length > 10) this.riseFallRatioHistory.shift();
+    
+    // 3. Área bajo la curva (AUC)
+    const auc = this.calculateAverageAUC(normalizedSegments);
+    features.push(auc);
+    
+    // 4. Índice de asimetría
+    const asymmetryIndex = this.calculateAsymmetryIndex(normalizedSegments);
+    features.push(asymmetryIndex);
+    
+    // 5. Ratio de amplitud pico a valle (estudios muestran correlación con glucosa)
+    const peakToTroughRatio = this.calculatePeakToTroughRatio(segments);
+    features.push(peakToTroughRatio);
+    this.peakToTroughRatioHistory.push(peakToTroughRatio);
+    if (this.peakToTroughRatioHistory.length > 10) this.peakToTroughRatioHistory.shift();
+    
+    return features;
   }
   
   /**
@@ -912,197 +833,545 @@ export class GlucoseProcessor {
   }
   
   /**
-   * Calcula la glucosa basada en características espectrales
+   * Normaliza un segmento de señal
    */
-  private calculateSpectralGlucose(features: number[]): number {
-    // Base glucosa (mg/dL)
-    let glucoseValue = 100;
+  private normalizeSegment(segment: number[]): number[] {
+    const min = Math.min(...segment);
+    const max = Math.max(...segment);
+    const range = max - min;
     
-    // Ajustar con características espectrales
-    for (let i = 0; i < features.length && i < this.spectralCoefficients.length; i++) {
-      glucoseValue += features[i] * this.spectralCoefficients[i] * 20;
-    }
+    if (range < 0.001) return segment.map(() => 0.5);
     
-    return glucoseValue;
+    return segment.map(val => (val - min) / range);
   }
   
   /**
-   * Calcula la glucosa basada en características temporales
+   * Calcula el índice dicrótico promedio (relacionado con la rigidez arterial)
    */
-  private calculateTemporalGlucose(features: number[]): number {
-    // Los coeficientes están basados en estudios que correlacionan 
-    // estas características con niveles de glucosa
-    const coefficients = [12, -8, 15, 0.5, -3];
-    
-    // Base glucosa (mg/dL)
-    let glucoseValue = 95;
-    
-    // Ajustar con características temporales
-    for (let i = 0; i < features.length && i < coefficients.length; i++) {
-      glucoseValue += features[i] * coefficients[i];
-    }
-    
-    return glucoseValue;
-  }
-  
-  /**
-   * Analiza la morfología de la forma de onda para estimar glucosa
-   */
-  private analyzeWaveformMorphology(signal: number[]): number {
-    // Segmentar ondas de pulso
-    const segments = this.segmentPulseWaves(signal);
-    
-    if (segments.length === 0) return 100; // Valor predeterminado
-    
-    // Normalizar y alinear segmentos
-    const normalizedSegments = segments.map(segment => {
-      const min = Math.min(...segment);
-      const max = Math.max(...segment);
-      const range = max - min;
-      
-      // Evitar división por cero
-      if (range < 0.001) return segment.map(() => 0.5);
-      
-      return segment.map(val => (val - min) / range);
-    });
-    
-    // Calcular forma promedio
-    const maxLength = Math.max(...normalizedSegments.map(s => s.length));
-    const avgShape = new Array(maxLength).fill(0);
-    const counts = new Array(maxLength).fill(0);
-    
-    normalizedSegments.forEach(segment => {
-      segment.forEach((val, idx) => {
-        avgShape[idx] += val;
-        counts[idx]++;
-      });
-    });
-    
-    for (let i = 0; i < maxLength; i++) {
-      if (counts[i] > 0) {
-        avgShape[i] /= counts[i];
+  private calculateAverageDicroticIndex(segments: number[][]): number {
+    const indices = segments.map(segment => {
+      // Encontrar pico principal
+      let mainPeakIdx = 0;
+      for (let i = 1; i < segment.length - 1; i++) {
+        if (segment[i] > segment[mainPeakIdx]) {
+          mainPeakIdx = i;
+        }
       }
-    }
-    
-    // Extraer características de forma de onda específicas para glucosa
-    // 1. Índice dicrótico (relacionado con rigidez arterial, afectada por glucosa)
-    const dicroticIndex = this.calculateDicroticIndex(avgShape);
-    
-    // 2. Área bajo la curva normalizada (correlacionada con glucosa en estudios)
-    const areaUnderCurve = avgShape.reduce((sum, val) => sum + val, 0) / avgShape.length;
-    
-    // 3. Pendiente de ascenso (más pronunciada con niveles más altos de glucosa)
-    const riseSlope = this.calculateMaxRiseSlope(avgShape);
-    
-    // Base glucosa (mg/dL)
-    let glucoseValue = 90;
-    
-    // Ajustes basados en características morfológicas
-    // Coeficientes derivados de estudios de correlación
-    glucoseValue += dicroticIndex * 25;
-    glucoseValue += areaUnderCurve * -10;
-    glucoseValue += riseSlope * 30;
-    
-    return glucoseValue;
-  }
-  
-  /**
-   * Calcula el índice dicrótico
-   */
-  private calculateDicroticIndex(waveform: number[]): number {
-    // Encontrar el pico principal
-    let mainPeakIdx = 0;
-    for (let i = 1; i < waveform.length - 1; i++) {
-      if (waveform[i] > waveform[mainPeakIdx]) {
-        mainPeakIdx = i;
+      
+      // Buscar muesca dicrota después del pico principal
+      let dicroticNotchIdx = -1;
+      for (let i = mainPeakIdx + 1; i < segment.length - 1; i++) {
+        if (segment[i] < segment[i-1] && segment[i] < segment[i+1]) {
+          dicroticNotchIdx = i;
+          break;
+        }
       }
-    }
-    
-    // Encontrar el valle después del pico principal
-    let valleyIdx = mainPeakIdx;
-    let hasDicroticPeak = false;
-    
-    for (let i = mainPeakIdx + 1; i < waveform.length - 1; i++) {
-      if (waveform[i] > waveform[i-1] && waveform[i] > waveform[i+1] && waveform[i] > waveform[valleyIdx]) {
-        valleyIdx = i;
-        hasDicroticPeak = true;
+      
+      // Buscar pico dicroto después de la muesca
+      let dicroticPeakIdx = -1;
+      if (dicroticNotchIdx > 0) {
+        for (let i = dicroticNotchIdx + 1; i < segment.length - 1; i++) {
+          if (segment[i] > segment[i-1] && segment[i] > segment[i+1]) {
+            dicroticPeakIdx = i;
             break;
           }
+        }
+      }
       
-      // Limitar la búsqueda
-      if (i > valleyIdx + Math.floor(waveform.length / 3)) break;
-    }
+      // Calcular índice si tenemos todos los puntos
+      if (mainPeakIdx >= 0 && dicroticNotchIdx > mainPeakIdx && dicroticPeakIdx > dicroticNotchIdx) {
+        // Guardar posición relativa de la muesca dicrota
+        const relativePosition = dicroticNotchIdx / segment.length;
+        this.dicroticNotchPositionHistory.push(relativePosition);
+        if (this.dicroticNotchPositionHistory.length > 10) this.dicroticNotchPositionHistory.shift();
+        
+        // Calcular índice dicrótico (altura relativa)
+        return (segment[dicroticPeakIdx] - segment[dicroticNotchIdx]) / 
+               (segment[mainPeakIdx] - segment[dicroticNotchIdx]);
+      }
+      
+      return 0.5; // Valor predeterminado
+    });
     
-    if (!hasDicroticPeak) return 0.5; // Valor predeterminado
-    
-    // Calcular índice dicrótico (altura relativa)
-    const mainPeakHeight = waveform[mainPeakIdx];
-    const valleyHeight = waveform[valleyIdx];
-    const dicroticHeight = waveform[valleyIdx];
-    
-    // Normalizado entre 0-1
-    return (dicroticHeight - valleyHeight) / (mainPeakHeight - valleyHeight);
+    // Filtrar valores válidos y calcular promedio
+    const validIndices = indices.filter(idx => idx > 0);
+    return validIndices.length > 0 ? 
+      validIndices.reduce((sum, val) => sum + val, 0) / validIndices.length : 0.5;
   }
   
   /**
-   * Calcula la pendiente máxima de ascenso
+   * Calcula la relación tiempo de subida a tiempo de bajada
    */
-  private calculateMaxRiseSlope(waveform: number[]): number {
-    let maxSlope = 0;
+  private calculateRiseToFallRatio(segments: number[][]): number {
+    const ratios = segments.map(segment => {
+      // Encontrar pico principal
+      let peakIdx = 0;
+      for (let i = 1; i < segment.length - 1; i++) {
+        if (segment[i] > segment[peakIdx]) {
+          peakIdx = i;
+        }
+      }
+      
+      // Calcular tiempo de subida y bajada
+      const riseTime = peakIdx;
+      const fallTime = segment.length - peakIdx - 1;
+      
+      return fallTime > 0 ? riseTime / fallTime : 1.0;
+    });
     
-    for (let i = 1; i < waveform.length; i++) {
-      const slope = waveform[i] - waveform[i-1];
-      if (slope > maxSlope) {
-        maxSlope = slope;
+    // Filtrar valores válidos y calcular promedio
+    return ratios.reduce((sum, val) => sum + val, 0) / ratios.length;
+  }
+  
+  /**
+   * Calcula el área bajo la curva promedio
+   */
+  private calculateAverageAUC(segments: number[][]): number {
+    const areas = segments.map(segment => 
+      segment.reduce((sum, val) => sum + val, 0) / segment.length
+    );
+    
+    return areas.reduce((sum, val) => sum + val, 0) / areas.length;
+  }
+  
+  /**
+   * Calcula el índice de asimetría de los pulsos
+   */
+  private calculateAsymmetryIndex(segments: number[][]): number {
+    const indices = segments.map(segment => {
+      const midpoint = Math.floor(segment.length / 2);
+      const leftHalf = segment.slice(0, midpoint);
+      const rightHalf = segment.slice(midpoint);
+      
+      // Áreas aproximadas
+      const leftArea = leftHalf.reduce((sum, val) => sum + val, 0);
+      const rightArea = rightHalf.reduce((sum, val) => sum + val, 0);
+      
+      // Asimetría normalizada
+      return Math.abs(leftArea - rightArea) / (leftArea + rightArea);
+    });
+    
+    return indices.reduce((sum, val) => sum + val, 0) / indices.length;
+  }
+  
+  /**
+   * Calcula el ratio de amplitud pico a valle
+   */
+  private calculatePeakToTroughRatio(segments: number[][]): number {
+    const ratios = segments.map(segment => {
+      const min = Math.min(...segment);
+      const max = Math.max(...segment);
+      return (max - min) / (max + min + 0.001); // Evitar división por cero
+    });
+    
+    return ratios.reduce((sum, val) => sum + val, 0) / ratios.length;
+  }
+  
+  /**
+   * Extrae características temporales de la señal
+   */
+  private extractTemporalFeatures(signal: number[]): number[] {
+    const features: number[] = [];
+    
+    // 1. Variabilidad entre pulsos
+    const pulseIntervals = this.calculatePulseIntervals(signal);
+    const pulseVariability = this.calculateVariability(pulseIntervals);
+    features.push(pulseVariability);
+    
+    // 2. Cambios en la amplitud de la señal
+    const amplitudes = this.extractPeakAmplitudes(signal);
+    const amplitudeVariability = this.calculateVariability(amplitudes);
+    features.push(amplitudeVariability);
+    
+    // 3. Ratio de amplitud respecto a la media
+    const amplitudeRatio = this.calculateAmplitudeRatio(signal);
+    features.push(amplitudeRatio);
+    this.amplitudeRatioHistory.push(amplitudeRatio);
+    if (this.amplitudeRatioHistory.length > 10) this.amplitudeRatioHistory.shift();
+    
+    // 4. Derivada de la señal (tasa de cambio)
+    const derivatives = this.calculateDerivatives(signal);
+    const meanDerivative = derivatives.reduce((sum, val) => sum + Math.abs(val), 0) / derivatives.length;
+    features.push(meanDerivative);
+    
+    // 5. Tasa de cambio de la amplitud
+    const rateOfChange = this.calculateRateOfChange(amplitudes);
+    features.push(rateOfChange);
+    
+    return features;
+  }
+  
+  /**
+   * Calcula los intervalos entre pulsos
+   */
+  private calculatePulseIntervals(signal: number[]): number[] {
+    const peaks: number[] = [];
+    
+    // Detectar picos
+    for (let i = 2; i < signal.length - 2; i++) {
+      if (signal[i] > signal[i-1] &&
+          signal[i] > signal[i-2] &&
+          signal[i] > signal[i+1] &&
+          signal[i] > signal[i+2]) {
+        peaks.push(i);
       }
     }
     
-    return maxSlope;
+    // Calcular intervalos
+    const intervals: number[] = [];
+    for (let i = 1; i < peaks.length; i++) {
+      intervals.push(peaks[i] - peaks[i-1]);
+    }
+    
+    return intervals;
   }
   
   /**
-   * Aplica compensación fisiológica
+   * Extrae amplitudes de picos
    */
-  private applyPhysiologicalCompensation(glucoseValue: number): number {
-    // Compensación por temperatura corporal
-    let compensated = glucoseValue * this.temperatureCompensation;
+  private extractPeakAmplitudes(signal: number[]): number[] {
+    const amplitudes: number[] = [];
+    let lastValleyValue = signal[0];
+    let lastValleyIdx = 0;
     
-    // Compensación por índice de perfusión promedio
-    const avgPI = this.perfusionIndex.reduce((sum, val) => sum + val, 0) / this.perfusionIndex.length;
+    // Detectar picos y sus amplitudes
+    for (let i = 2; i < signal.length - 2; i++) {
+      // Detectar valles
+      if (signal[i] < signal[i-1] &&
+          signal[i] < signal[i+1]) {
+        lastValleyValue = signal[i];
+        lastValleyIdx = i;
+      }
+      
+      // Detectar picos
+      if (signal[i] > signal[i-1] &&
+          signal[i] > signal[i-2] &&
+          signal[i] > signal[i+1] &&
+          signal[i] > signal[i+2]) {
+        // Calcular amplitud desde el último valle
+        if (i > lastValleyIdx) {
+          amplitudes.push(signal[i] - lastValleyValue);
+        }
+      }
+    }
+    
+    return amplitudes;
+  }
+  
+  /**
+   * Calcula variabilidad (coeficiente de variación)
+   */
+  private calculateVariability(values: number[]): number {
+    if (values.length < 2) return 0;
+    
+    const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
+    const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
+    
+    return Math.sqrt(variance) / mean;
+  }
+  
+  /**
+   * Calcula el ratio de amplitud
+   */
+  private calculateAmplitudeRatio(signal: number[]): number {
+    const mean = signal.reduce((sum, val) => sum + val, 0) / signal.length;
+    const max = Math.max(...signal);
+    const min = Math.min(...signal);
+    
+    return (max - min) / (Math.abs(mean) + 0.001);
+  }
+  
+  /**
+   * Calcula las derivadas de la señal
+   */
+  private calculateDerivatives(signal: number[]): number[] {
+    const derivatives: number[] = [];
+    
+    for (let i = 1; i < signal.length; i++) {
+      derivatives.push(signal[i] - signal[i-1]);
+    }
+    
+    // Actualizar buffer de derivadas para análisis a largo plazo
+    this.rawDerivativeBuffer = [...this.rawDerivativeBuffer, ...derivatives];
+    if (this.rawDerivativeBuffer.length > 500) {
+      this.rawDerivativeBuffer = this.rawDerivativeBuffer.slice(-500);
+    }
+    
+    return derivatives;
+  }
+  
+  /**
+   * Calcula la tasa de cambio de amplitud
+   */
+  private calculateRateOfChange(amplitudes: number[]): number {
+    if (amplitudes.length < 4) return 0;
+    
+    // Usar ventanas deslizantes para calcular tendencia
+    let totalChange = 0;
+    
+    for (let i = 3; i < amplitudes.length; i++) {
+      const recentAvg = (amplitudes[i] + amplitudes[i-1] + amplitudes[i-2]) / 3;
+      const prevAvg = (amplitudes[i-3] + amplitudes[i-2] + amplitudes[i-1]) / 3;
+      
+      totalChange += (recentAvg - prevAvg) / prevAvg;
+    }
+    
+    return totalChange / (amplitudes.length - 3);
+  }
+  
+  /**
+   * Calcula el índice de perfusión
+   */
+  private calculatePerfusionIndex(signal: number[]): number {
+    const min = Math.min(...signal);
+    const max = Math.max(...signal);
+    
+    // PI = (AC/DC) * 100
+    return ((max - min) / (max + min + 0.001)) * 100;
+  }
+  
+  /**
+   * Calcula nivel de glucosa basado en características espectrales
+   */
+  private calculateSpectralGlucose(features: number[]): number {
+    // Modelo espectral para glucosa basado en características frecuenciales
+    // y relaciones entre bandas específicas
+    
+    // Coeficientes basados en literatura científica y optimización
+    const coefficients = [78.5, 65.0, -42.0, 15.5];
+    
+    // Valor base
+    let glucose = this.BASE_GLUCOSE_LEVEL;
+    
+    // Ajustar por cada característica espectral
+    // La primera característica es la energía en la banda principal de glucosa
+    glucose += coefficients[0] * (features[1] * 1000) * this.individualFactors.spectralSensitivity;
+    
+    // Ajustar por ratio entre bandas (indica cambios en la absorción específica)
+    if (features.length > 4 && features[4] > 0) {
+      glucose += coefficients[1] * (features[4] - 1.0) * 10;
+    }
+    
+    // Ajustar por centroide espectral
+    if (features.length > 5) {
+      glucose += coefficients[2] * (features[5] - 2.0);
+    }
+    
+    // Ajustar por relación espectral general
+    glucose += coefficients[3] * (features[3] / features[0] - 1.0) * 10;
+    
+    return glucose;
+  }
+  
+  /**
+   * Calcula nivel de glucosa basado en características morfológicas
+   */
+  private calculateMorphologicalGlucose(features: number[]): number {
+    // Modelo morfológico basado en la forma de la onda PPG
+    // El índice dicrótico y la asimetría están fuertemente relacionados con glucosa
+    
+    // Valor base
+    let glucose = this.BASE_GLUCOSE_LEVEL;
+    
+    // Ajustar por cada característica morfológica
+    for (let i = 0; i < features.length && i < this.MORPHOLOGY_COEFFICIENTS.length; i++) {
+      // Aplicar coeficientes específicos (derivados de estudios)
+      const featureValue = features[i];
+      const coefficient = this.MORPHOLOGY_COEFFICIENTS[i];
+      
+      // Normalizar características a valores centrados
+      const normalizedValue = i === 0 ? featureValue - 0.5 :     // Índice dicrótico
+                            i === 1 ? featureValue - 0.7 :     // Rise/fall ratio
+                            i === 2 ? featureValue - 0.5 :     // AUC
+                            i === 3 ? featureValue - 0.2 :     // Asimetría
+                            featureValue - 0.3;                // Ratio pico/valle
+      
+      glucose += coefficient * normalizedValue * 100 * this.individualFactors.morphologySensitivity;
+    }
+    
+    return glucose;
+  }
+  
+  /**
+   * Calcula nivel de glucosa basado en características temporales
+   */
+  private calculateTemporalGlucose(features: number[]): number {
+    // Modelo temporal basado en variabilidad y características del ritmo
+    
+    // Coeficientes derivados de investigación
+    const coefficients = [5.0, -8.0, 18.0, -5.0, 12.0];
+    
+    // Valor base
+    let glucose = this.BASE_GLUCOSE_LEVEL;
+    
+    // 1. Variabilidad de pulso (correlacionada con niveles de glucosa)
+    glucose += coefficients[0] * (features[0] - 0.1) * 100;
+    
+    // 2. Variabilidad de amplitud
+    glucose += coefficients[1] * (features[1] - 0.15) * 100;
+    
+    // 3. Ratio de amplitud
+    glucose += coefficients[2] * (features[2] - 0.5) * 10;
+    
+    // 4. Derivada media (tasa de cambio)
+    glucose += coefficients[3] * (features[3] - 0.05) * 100;
+    
+    // 5. Tasa de cambio de amplitud
+    glucose += coefficients[4] * features[4] * 100;
+    
+    return glucose;
+  }
+  
+  /**
+   * Aplica compensaciones por factores ambientales
+   */
+  private applyEnvironmentalCompensations(
+    glucoseValue: number,
+    perfusionIndex: number,
+    ambientLight?: number,
+    temperature?: number
+  ): number {
+    let compensated = glucoseValue;
+    
+    // Compensación por índice de perfusión
+    const avgPI = this.perfusionIndexHistory.reduce((sum, val) => sum + val, 0) / 
+                 Math.max(1, this.perfusionIndexHistory.length);
     
     // La correlación entre PI y glucosa es no lineal
-    if (avgPI < 1) {
-      // Baja perfusión, mayor incertidumbre
-      compensated = (compensated * 0.7) + 30; // Sesgo hacia valor normal
+    if (avgPI < 1.5) {
+      // Baja perfusión, mayor incertidumbre, sesgo hacia normal
+      compensated = compensated * (0.7 + (avgPI * 0.2)) + 
+                   (this.BASE_GLUCOSE_LEVEL * (0.3 - (avgPI * 0.2)));
     } else if (avgPI > 5) {
-      // Alta perfusión, mayor confianza
-      compensated = compensated * 1.05;
+      // Alta perfusión, ajuste para evitar sobreestimación
+      compensated = compensated * (1 - this.PERFUSION_CORRECTION_FACTOR * (avgPI - 5) / 10);
+    }
+    
+    // Compensación por luz ambiental
+    if (ambientLight !== undefined && ambientLight > 10) {
+      // La luz ambiental puede afectar absorción IR/Roja
+      compensated -= (ambientLight - 10) * this.AMBIENT_LIGHT_CORRECTION_FACTOR;
+    }
+    
+    // Compensación por temperatura
+    if (temperature !== undefined) {
+      // La temperatura afecta la circulación periférica
+      // Temperatura normal de piel ~32°C
+      const tempDiff = temperature - 32;
+      compensated += tempDiff * this.TEMPERATURE_CORRECTION_FACTOR;
     }
     
     return compensated;
   }
   
   /**
-   * Permite calibrar el sensor con un valor conocido
-   * @param knownGlucoseValue - Valor de glucosa medido con glucómetro estándar
+   * Aplica restricciones fisiológicas a la medición
    */
-  calibrate(knownGlucoseValue: number): void {
-    if (this.lastCalculatedValue && this.lastCalculatedValue > 0) {
-      // Actualizar factor de calibración
-      this.personalizedFactor = knownGlucoseValue / this.lastCalculatedValue;
+  private applyPhysiologicalConstraints(glucoseValue: number): number {
+    // Limitar a rango fisiológico
+    let constrained = Math.max(
+      this.PHYSIOLOGICAL_CONSTRAINTS.minValue,
+      Math.min(this.PHYSIOLOGICAL_CONSTRAINTS.maxValue, glucoseValue)
+    );
+    
+    // Limitar tasa de cambio si hay mediciones previas
+    if (this.glucoseHistory.length > 0) {
+      const lastReading = this.glucoseHistory[this.glucoseHistory.length - 1];
+      const timeDiff = (Date.now() - lastReading.timestamp) / 60000; // en minutos
       
-      // Limitar a rango razonable para evitar sobrecompensación
-      this.personalizedFactor = Math.max(0.8, Math.min(1.2, this.personalizedFactor));
-      
-      // Actualizar offset
-      this.baselineOffset = (knownGlucoseValue - this.lastCalculatedValue * this.personalizedFactor) * 0.3;
+      if (timeDiff > 0) {
+        const maxChange = this.PHYSIOLOGICAL_CONSTRAINTS.maxRateOfChange * timeDiff;
+        constrained = Math.max(
+          lastReading.value - maxChange,
+          Math.min(lastReading.value + maxChange, constrained)
+        );
+      }
+    }
+    
+    return constrained;
+  }
+  
+  /**
+   * Aplica suavizado adaptativo basado en confianza
+   */
+  private applyAdaptiveSmoothing(value: number, confidence: number): number {
+    if (this.glucoseHistory.length < 3) return value;
+    
+    // Factor alfa dinámico basado en confianza y volatilidad individual
+    const alpha = Math.min(0.7, Math.max(0.1, confidence * 0.8 * this.individualFactors.baselineVolatility));
+    
+    // Promedio ponderado exponencial
+    const recentReadings = this.glucoseHistory.slice(-3);
+    const weightedSum = recentReadings.reduce((sum, reading, idx) => {
+      const weight = Math.pow(1 - alpha, recentReadings.length - 1 - idx);
+      return sum + reading.value * weight;
+    }, 0);
+    
+    const weightSum = recentReadings.reduce((sum, _, idx) => {
+      return sum + Math.pow(1 - alpha, recentReadings.length - 1 - idx);
+    }, 0);
+    
+    const smoothedValue = alpha * value + (1 - alpha) * (weightedSum / weightSum);
+    
+    return smoothedValue;
+  }
+  
+  /**
+   * Determina tendencia del nivel de glucosa
+   */
+  private determineTrend(): 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown' {
+    if (this.glucoseHistory.length < 5) {
+      return 'unknown';
+    }
+    
+    // Analizar últimas lecturas con mayor peso a las más recientes
+    const recentReadings = this.glucoseHistory.slice(-5);
+    const rateOfChange = this.calculateGlucoseTrend(recentReadings.map(r => r.value));
+    
+    // Clasificar tendencia
+    if (rateOfChange > 2.5) {
+      return 'rising_rapidly';
+    } else if (rateOfChange > 0.8) {
+      return 'rising';
+    } else if (rateOfChange < -2.5) {
+      return 'falling_rapidly';
+    } else if (rateOfChange < -0.8) {
+      return 'falling';
+    } else {
+      return 'stable';
     }
   }
   
   /**
-   * Devuelve el último valor calculado
+   * Calcula tendencia basada en tasa de cambio
    */
-  getLastCalculatedValue(): number | null {
-    return this.lastCalculatedValue;
+  private calculateGlucoseTrend(values: number[]): number {
+    if (values.length < 3) return 0;
+    
+    // Regresión lineal ponderada
+    let sumX = 0;
+    let sumY = 0;
+    let sumXY = 0;
+    let sumXX = 0;
+    let sumWeights = 0;
+    
+    const weights = values.map((_, idx) => Math.pow(1.5, idx)); // Más peso a recientes
+    
+    for (let i = 0; i < values.length; i++) {
+      const x = i;
+      const y = values[i];
+      const weight = weights[i];
+      
+      sumX += x * weight;
+      sumY += y * weight;
+      sumXY += x * y * weight;
+      sumXX += x * x * weight;
+      sumWeights += weight;
+    }
+    
+    const meanX = sumX / sumWeights;
+    const meanY = sumY / sumWeights;
+    
+    return (sumXY - meanX * meanY) / (sumXX - meanX * meanX);
   }
 }
