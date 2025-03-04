@@ -221,6 +221,14 @@ const Index = () => {
           if (vitals.hemoglobin && vitals.hemoglobin > 0) {
             console.log(`Hemoglobin data received: ${vitals.hemoglobin} g/dL`);
           }
+          
+          if (vitals.cholesterol && vitals.cholesterol.totalCholesterol > 0) {
+            console.log(`Cholesterol data received: Total: ${vitals.cholesterol.totalCholesterol} mg/dL, HDL: ${vitals.cholesterol.hdl}, LDL: ${vitals.cholesterol.ldl}`);
+          }
+          
+          if (vitals.temperature && vitals.temperature.value > 0) {
+            console.log(`Temperature data received: ${vitals.temperature.value}°C, location: ${vitals.temperature.location}, trend: ${vitals.temperature.trend}`);
+          }
         }
         
         setSignalQuality(lastSignal.quality);
@@ -265,6 +273,9 @@ const Index = () => {
               onStartMeasurement={startMonitoring}
               onReset={stopMonitoring}
               arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
+              rawArrhythmiaData={vitalSigns.lastArrhythmiaData}
+              cholesterolData={vitalSigns.cholesterol}
+              temperatureData={vitalSigns.temperature}
             />
           </div>
 
