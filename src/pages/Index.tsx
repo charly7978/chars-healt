@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -97,7 +98,7 @@ const Index = () => {
     cholesterol: CholesterolData | null,
     temperature: TemperatureData | null
   } | null>(null);
-  const measurementTimerRef = useRef(null);
+  const measurementTimerRef = useRef<NodeJS.Timeout | null>(null);
   
   const { startProcessing, stopProcessing, lastSignal, processFrame } = useSignalProcessor();
   const { processSignal: processHeartBeat } = useHeartBeatProcessor();
@@ -118,12 +119,12 @@ const Index = () => {
     try {
       if (elem.requestFullscreen) {
         await elem.requestFullscreen();
-      } else if (elem.webkitRequestFullscreen) {
-        await elem.webkitRequestFullscreen();
-      } else if (elem.mozRequestFullScreen) {
-        await elem.mozRequestFullScreen();
-      } else if (elem.msRequestFullscreen) {
-        await elem.msRequestFullscreen();
+      } else if (elem['webkitRequestFullscreen']) {
+        await elem['webkitRequestFullscreen']();
+      } else if (elem['mozRequestFullScreen']) {
+        await elem['mozRequestFullScreen']();
+      } else if (elem['msRequestFullscreen']) {
+        await elem['msRequestFullscreen']();
       }
     } catch (err) {
       console.log('Error al entrar en pantalla completa:', err);
@@ -131,7 +132,7 @@ const Index = () => {
   };
 
   useEffect(() => {
-    const preventScroll = (e) => e.preventDefault();
+    const preventScroll = (e: Event) => e.preventDefault();
     
     const lockOrientation = async () => {
       try {
@@ -170,7 +171,7 @@ const Index = () => {
       clearInterval(measurementTimerRef.current);
     }
     
-    measurementTimerRef.current = window.setInterval(() => {
+    measurementTimerRef.current = setInterval(() => {
       setElapsedTime(prev => {
         if (prev >= 30) {
           stopMonitoring();
@@ -221,7 +222,7 @@ const Index = () => {
     }
   };
 
-  const handleStreamReady = (stream) => {
+  const handleStreamReady = (stream: MediaStream) => {
     if (!isMonitoring) return;
     
     const videoTrack = stream.getVideoTracks()[0];
@@ -440,7 +441,7 @@ const Index = () => {
               />
               <VitalSign 
                 label="TEMPERATURE"
-                value={vitalSigns.temperature ? vitalSigns.temperature.value : "--"}
+                value={vitalSigns.temperature ? vitalSigns.temperature.value.toFixed(1) : "--"}
                 unit="°C"
                 trend={vitalSigns.temperature ? vitalSigns.temperature.trend : undefined}
                 isFinalReading={vitalSigns.temperature && vitalSigns.temperature.value > 0 && elapsedTime >= 15}

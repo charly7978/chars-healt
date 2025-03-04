@@ -12,6 +12,7 @@ interface TemperatureData {
   value: number;
   trend: 'stable' | 'rising' | 'falling';
   location: string;
+  confidence?: number;
 }
 
 export interface PPGSignalMeterProps {
