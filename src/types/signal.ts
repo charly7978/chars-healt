@@ -1,4 +1,3 @@
-
 import { VitalSigns } from './VitalSigns';
 
 export interface ProcessedSignal {

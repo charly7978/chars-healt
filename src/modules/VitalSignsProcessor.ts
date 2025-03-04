@@ -78,6 +78,7 @@ export class VitalSignsProcessor {
       this.spO2Calculator.calibrate();
     }
 
+    // Fix the arrhythmia detection call
     const arrhythmiaResult = this.arrhythmiaDetector.detect ? 
       this.arrhythmiaDetector.detect() : 
       { detected: false, status: "Normal", data: null };

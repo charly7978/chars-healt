@@ -18,7 +18,9 @@ export const useHeartBeatProcessor = () => {
       console.log('useHeartBeatProcessor: Creating new HeartBeatProcessor instance');
       processorRef.current = new HeartBeatProcessor();
       // Make it globally accessible for debugging
-      (window as any).heartBeatProcessor = processorRef.current;
+      if (window) {
+        (window as any).heartBeatProcessor = processorRef.current;
+      }
     }
     return processorRef.current;
   }, []);
@@ -104,7 +106,7 @@ export const useHeartBeatProcessor = () => {
         amplitude: result.amplitude,
         perfusionIndex: result.perfusionIndex || (advancedAnalysis?.perfusionIndex || 0),
         pulsePressure: result.pulsePressure || (advancedAnalysis?.pulsePressure || 0)
-      };
+      } as HeartBeatResult;
     } catch (error) {
       console.error('Error processing signal:', error);
       return {
@@ -113,7 +115,7 @@ export const useHeartBeatProcessor = () => {
         isPeak: false,
         rrData: { intervals: [], lastPeakTime: null, amplitudes: [], advancedRRIntervals: [] },
         amplitude: undefined
-      };
+      } as HeartBeatResult;
     }
   }, [getProcessor]);
   

@@ -354,7 +354,7 @@ export class ArrhythmiaDetector {
         }
       }
       
-      // Usar el mejor patrón para predecir el próximo latido
+      // Usar el mejor patrón para predecir el siguiente latido
       const nextPredictedInterval = bestPattern[0]; // Tomar primer elemento del patrón
       this.expectedNextBeatTime = lastPeakTime + nextPredictedInterval;
     }
@@ -639,6 +639,109 @@ export class ArrhythmiaDetector {
 
     // Ritmo normal
     return this.createResult(false, 'RITMO_NORMAL');
+  }
+
+  /**
+   * Detect arrhythmias based on current state
+   * @returns Object with detection status and data
+   */
+  detect(): { detected: boolean; status: string; data: { rmssd: number; rrVariation: number } | null } {
+    const currentTime = Date.now();
+    
+    // Skip detection during learning phase
+    if (this.isLearningPhase()) {
+      return { 
+        detected: false, 
+        status: "Normal", 
+        data: null
+      };
+    }
+    
+    // If we don't have enough data yet
+    if (this.rrIntervals.length < 4 || this.peakSequence.length < 4) {
+      return { 
+        detected: false, 
+        status: "Normal", 
+        data: null 
+      };
+    }
+    
+    // Check if we're in detection cooldown period
+    if (currentTime - this.lastArrhythmiaTime < this.DETECTION_COOLDOWN) {
+      return { 
+        detected: false, 
+        status: "Normal", 
+        data: null 
+      };
+    }
+    
+    // Look for premature beat patterns in our peak sequence
+    let arrhythmiaDetected = false;
+    let patternFound = false;
+    
+    for (let i = 1; i < this.peakSequence.length; i++) {
+      const current = this.peakSequence[i];
+      
+      // Check specifically for 'premature' type beats that we've classified
+      if (current.type === 'premature') {
+        patternFound = true;
+        arrhythmiaDetected = true;
+        break;
+      }
+    }
+    
+    // If no specific premature beats found, check for rhythm disruptions
+    if (!patternFound && this.baseRRInterval > 0 && this.recentRRHistory.length >= 3) {
+      // Calculate rhythm metrics
+      this.calculateRhythmMetrics();
+      
+      // Check if RR variation exceeds our threshold for arrhythmia
+      if (this.rrVariation > this.RHYTHM_DEVIATION_THRESHOLD) {
+        arrhythmiaDetected = true;
+      }
+    }
+    
+    // Update detection status
+    if (arrhythmiaDetected) {
+      this.arrhythmiaDetected = true;
+      this.lastArrhythmiaTime = currentTime;
+      this.arrhythmiaCount++;
+      
+      return { 
+        detected: true, 
+        status: "Arritmia detectada", 
+        data: {
+          rmssd: this.rmssd,
+          rrVariation: this.rrVariation
+        }
+      };
+    }
+    
+    return { 
+      detected: false, 
+      status: "Normal", 
+      data: null 
+    };
+  }
+  
+  /**
+   * Calculate rhythm metrics for arrhythmia detection
+   */
+  private calculateRhythmMetrics(): void {
+    if (this.recentRRHistory.length < 3) return;
+    
+    // Calculate RMSSD (Root Mean Square of Successive Differences)
+    let sumSquaredDiffs = 0;
+    for (let i = 1; i < this.recentRRHistory.length; i++) {
+      const diff = this.recentRRHistory[i] - this.recentRRHistory[i-1];
+      sumSquaredDiffs += diff * diff;
+    }
+    this.rmssd = Math.sqrt(sumSquaredDiffs / (this.recentRRHistory.length - 1));
+    
+    // Calculate RR variation as percentage
+    if (this.baseRRInterval > 0) {
+      this.rrVariation = this.rmssd / this.baseRRInterval;
+    }
   }
 
   /**
