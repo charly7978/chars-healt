@@ -823,8 +823,8 @@ const Index = () => {
             />
           </div>
 
-          <div className="h-3/4 px-1 pb-16">
-            <div className="grid grid-cols-3 grid-rows-3 gap-1 h-full">
+          <div className="h-3/4 px-1 pb-12">
+            <div className="grid grid-cols-3 grid-rows-3 gap-0.5 h-full">
               <VitalSign 
                 label="FRECUENCIA CARDÍACA"
                 value={heartRate || "--"}
@@ -902,17 +902,17 @@ const Index = () => {
           )}
         </div>
 
-        <div className="h-[70px] grid grid-cols-2 gap-px bg-gray-900 fixed bottom-0 left-0 right-0 z-30">
+        <div className="h-[50px] grid grid-cols-2 gap-px bg-gray-900 fixed bottom-0 left-0 right-0 z-30">
           <button 
             onClick={startMonitoring}
-            className={`w-full h-full text-2xl font-bold text-white active:bg-gray-800 ${!permissionsGranted ? 'bg-gray-600' : 'bg-black/80'}`}
+            className={`w-full h-full text-xl font-bold text-white active:bg-gray-800 ${!permissionsGranted ? 'bg-gray-600' : 'bg-black/80'}`}
             disabled={!permissionsGranted}
           >
             {!permissionsGranted ? 'PERMISOS REQUERIDOS' : 'INICIAR'}
           </button>
           <button 
             onClick={handleReset}
-            className="w-full h-full bg-black/80 text-2xl font-bold text-white active:bg-gray-800"
+            className="w-full h-full bg-black/80 text-xl font-bold text-white active:bg-gray-800"
           >
             RESET
           </button>
