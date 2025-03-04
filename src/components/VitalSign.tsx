@@ -147,9 +147,9 @@ const VitalSign: React.FC<VitalSignProps> = ({
   };
 
   return (
-    <Card className="p-3 flex flex-row items-center bg-black/60 text-white border border-gray-800 rounded-md overflow-hidden relative h-32">
+    <Card className="p-2 flex flex-row items-center bg-black/60 text-white border border-gray-800 rounded-md overflow-hidden relative h-24">
       <div className="flex-shrink-0 mr-2">
-        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide truncate max-w-24">{label}</h3>
+        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide truncate max-w-24">{label}</h3>
       </div>
       
       {label.toLowerCase().includes('arritmia') || label.toLowerCase().includes('arrhythmia') ? (
@@ -163,26 +163,26 @@ const VitalSign: React.FC<VitalSignProps> = ({
         </div>
       ) : (
         <div className="flex items-center space-x-1 flex-grow">
-          <span className={`text-4xl font-bold ${getValueColor()}`}>{value}</span>
-          <span className="text-base text-gray-400">{unit}</span>
+          <span className={`text-2xl font-bold ${getValueColor()}`}>{value}</span>
+          <span className="text-xs text-gray-400">{unit}</span>
           
           {secondaryValue && secondaryUnit && (
             <div className="flex items-center space-x-1 ml-2">
-              <span className={`text-xl font-medium ${label.toLowerCase().includes('respiración') ? 'text-red-400' : 'text-gray-300'}`}>
+              <span className={`text-lg font-medium ${label.toLowerCase().includes('respiración') ? 'text-red-400' : 'text-gray-300'}`}>
                 {secondaryValue}
               </span>
-              <span className="text-sm text-gray-400">{secondaryUnit}</span>
+              <span className="text-xs text-gray-400">{secondaryUnit}</span>
             </div>
           )}
           
           {cholesterolData && (
-            <div className="flex items-center text-sm ml-2">
+            <div className="flex items-center text-xs ml-2">
               <span className="text-gray-400">H:<span className="text-yellow-300">{cholesterolData.hdl}</span> L:<span className="text-yellow-300">{cholesterolData.ldl}</span></span>
             </div>
           )}
           
           {temperatureLocation && (
-            <div className="text-sm ml-2">
+            <div className="text-xs ml-2">
               <span className="text-gray-400">{temperatureLocation}</span>
             </div>
           )}
