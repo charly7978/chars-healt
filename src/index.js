@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -7,7 +8,6 @@ import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import PermissionsHandler from "@/components/PermissionsHandler";
 import { toast } from "sonner";
-import { VitalSigns } from "@/types/vitalSigns";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -21,10 +21,9 @@ const Index = () => {
     hasRespirationData: false,
     glucose: null,
     hemoglobin: null,
-    lastArrhythmiaData: null,
-    cholesterol: null,
-    temperature: null,
-    isoCompliant: false
+    isoCompliant: false,
+    calibrationStatus: 'uncalibrated',
+    motionScore: 0
   });
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState("--");
@@ -129,10 +128,9 @@ const Index = () => {
       hasRespirationData: false,
       glucose: null,
       hemoglobin: null,
-      lastArrhythmiaData: null,
-      cholesterol: null,
-      temperature: null,
-      isoCompliant: false
+      isoCompliant: false,
+      calibrationStatus: 'uncalibrated',
+      motionScore: 0
     });
     setArrhythmiaCount("--");
     setSignalQuality(0);
@@ -202,20 +200,21 @@ const Index = () => {
             arrhythmia: vitals.arrhythmiaStatus,
             respiration: vitals.respiration,
             glucose: vitals.glucose ? `${vitals.glucose.value} mg/dL (${vitals.glucose.trend})` : 'No data',
-            hemoglobin: vitals.hemoglobin ? `${vitals.hemoglobin.value} g/dL` : 'No data',
-            cholesterol: vitals.cholesterol ? `${vitals.cholesterol.totalCholesterol} mg/dL` : 'No data',
-            temperature: vitals.temperature ? `${vitals.temperature.value}°C` : 'No data'
+            hemoglobin: vitals.hemoglobin ? `${vitals.hemoglobin} g/dL` : 'No data',
+            isoCompliant: vitals.isoCompliant ? 'Yes' : 'No',
+            calibrationStatus: vitals.calibrationStatus,
+            motionScore: vitals.motionScore || 0
           });
           
           setVitalSigns(vitals);
           setArrhythmiaCount(vitals.arrhythmiaStatus.split('|')[1] || "--");
           
-          if (vitals.cholesterol && vitals.cholesterol.totalCholesterol > 0) {
-            console.log(`Cholesterol data received: ${vitals.cholesterol.totalCholesterol} mg/dL, HDL: ${vitals.cholesterol.hdl}, LDL: ${vitals.cholesterol.ldl}`);
+          if (vitals.glucose && vitals.glucose.value > 0) {
+            console.log(`Glucose data received: ${vitals.glucose.value} mg/dL, trend: ${vitals.glucose.trend}`);
           }
           
-          if (vitals.temperature && vitals.temperature.value > 0) {
-            console.log(`Temperature data received: ${vitals.temperature.value}°C, trend: ${vitals.temperature.trend}`);
+          if (vitals.hemoglobin && vitals.hemoglobin > 0) {
+            console.log(`Hemoglobin data received: ${vitals.hemoglobin} g/dL`);
           }
         }
         
@@ -261,12 +260,11 @@ const Index = () => {
               onStartMeasurement={startMonitoring}
               onReset={stopMonitoring}
               arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
-              rawArrhythmiaData={vitalSigns.lastArrhythmiaData}
             />
           </div>
 
           <div className="absolute bottom-[200px] left-0 right-0 px-4 z-30">
-            <div className="grid grid-cols-9 gap-2">
+            <div className="grid grid-cols-7 gap-2">
               <VitalSign 
                 label="HEART RATE"
                 value={heartRate || "--"}
@@ -313,30 +311,18 @@ const Index = () => {
                 unit="g/dL"
                 isFinalReading={vitalSigns.hemoglobin && vitalSigns.hemoglobin > 0 && elapsedTime >= 15}
               />
-              <VitalSign 
-                label="CHOLESTEROL"
-                value={vitalSigns.cholesterol && vitalSigns.cholesterol.totalCholesterol > 0 ? 
-                  `${vitalSigns.cholesterol.totalCholesterol} mg/dL (HDL:${vitalSigns.cholesterol.hdl}/LDL:${vitalSigns.cholesterol.ldl})` : 'Calculando...'}
-                unit=""
-                isFinalReading={vitalSigns.cholesterol && vitalSigns.cholesterol.totalCholesterol > 0 && elapsedTime >= 15}
-              />
-              <VitalSign 
-                label="TEMPERATURE"
-                value={vitalSigns.temperature && vitalSigns.temperature.value > 0 ? 
-                  `${vitalSigns.temperature.value.toFixed(1)}°C (${vitalSigns.temperature.confidence}%)` : 'Calculando...'}
-                unit=""
-                isFinalReading={vitalSigns.temperature && vitalSigns.temperature.value > 0 && elapsedTime >= 15}
-              />
             </div>
           </div>
 
           {isMonitoring && (
             <div className="absolute bottom-[150px] left-0 right-0 text-center z-30 text-xs text-gray-400">
               <span>
-                Col: {vitalSigns.cholesterol && vitalSigns.cholesterol.totalCholesterol > 0 ? 
-                  `${vitalSigns.cholesterol.totalCholesterol} mg/dL (HDL:${vitalSigns.cholesterol.hdl}/LDL:${vitalSigns.cholesterol.ldl})` : 'Calculando...'} | 
-                Temp: {vitalSigns.temperature && vitalSigns.temperature.value > 0 ? 
-                  `${vitalSigns.temperature.value.toFixed(1)}°C (${vitalSigns.temperature.confidence}%)` : 'Calculando...'}
+                Resp Data: {vitalSigns.hasRespirationData ? 'Available' : 'Not available'} | 
+                Rate: {vitalSigns.respiration.rate} RPM | Depth: {vitalSigns.respiration.depth} | 
+                Glucose: {vitalSigns.glucose ? `${vitalSigns.glucose.value} mg/dL (${vitalSigns.glucose.trend || 'unknown'})` : 'Not available'} |
+                Hemoglobin: {vitalSigns.hemoglobin ? `${vitalSigns.hemoglobin} g/dL` : 'Not available'} |
+                ISO Compliant: {vitalSigns.isoCompliant ? 'Yes' : 'No'} |
+                Motion Score: {vitalSigns.motionScore || 0}
               </span>
             </div>
           )}
@@ -353,7 +339,7 @@ const Index = () => {
               className={`w-full h-full text-2xl font-bold text-white active:bg-gray-800 ${!permissionsGranted ? 'bg-gray-600' : 'bg-black/80'}`}
               disabled={!permissionsGranted}
             >
-              {!permissionsGranted ? 'PERMISOS REQUERIDOS' : 'INICIAR'}
+              {!permissionsGranted ? 'PERMISSIONS REQUIRED' : 'START'}
             </button>
             <button 
               onClick={stopMonitoring}
@@ -366,7 +352,7 @@ const Index = () => {
           {!permissionsGranted && (
             <div className="absolute bottom-20 left-0 right-0 text-center px-4 z-30">
               <span className="text-lg font-medium text-red-400">
-                La aplicación necesita permisos de cámara para funcionar correctamente
+                The application needs camera permissions to function correctly
               </span>
             </div>
           )}

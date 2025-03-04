@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Badge } from './ui/badge';
 import { Card } from './ui/card';
@@ -10,17 +11,6 @@ export interface VitalSignProps {
   isFinalReading?: boolean;
   secondaryValue?: string | number;
   secondaryUnit?: string;
-  secondaryLabel?: string;
-  statusText?: string;
-  statusColor?: string;
-  temperatureLocation?: string;
-  temperatureTrend?: 'rising' | 'falling' | 'stable';
-  cholesterolData?: {
-    totalCholesterol: number;
-    hdl: number;
-    ldl: number;
-    triglycerides?: number;
-  };
 }
 
 /**
@@ -34,13 +24,7 @@ const VitalSign: React.FC<VitalSignProps> = ({
   trend = 'stable',
   isFinalReading = false,
   secondaryValue,
-  secondaryUnit,
-  secondaryLabel,
-  statusText,
-  statusColor,
-  temperatureLocation,
-  temperatureTrend,
-  cholesterolData
+  secondaryUnit
 }) => {
   const getTrendIcon = () => {
     switch(trend) {
@@ -76,118 +60,31 @@ const VitalSign: React.FC<VitalSignProps> = ({
     }
   };
 
-  const getValueColor = () => {
-    if (label.toLowerCase().includes('cardíaca') || label.toLowerCase().includes('heart')) {
-      const bpm = typeof value === 'number' ? value : parseInt(value.toString());
-      if (bpm < 60) return 'text-blue-400';
-      if (bpm > 100) return 'text-orange-400';
-      return 'text-orange-400';
-    } 
-    else if (label.toLowerCase().includes('spo2')) {
-      const spo2 = typeof value === 'number' ? value : parseInt(value.toString());
-      if (spo2 < 95) return 'text-red-400';
-      return 'text-white';
-    }
-    else if (label.toLowerCase().includes('presión') || label.toLowerCase().includes('pressure')) {
-      return 'text-blue-400';
-    }
-    else if (label.toLowerCase().includes('respiración') || label.toLowerCase().includes('respiration')) {
-      return 'text-red-500';
-    }
-    else if (label.toLowerCase().includes('glucosa') || label.toLowerCase().includes('glucose')) {
-      return 'text-green-400';
-    }
-    else if (label.toLowerCase().includes('hemoglobina') || label.toLowerCase().includes('hemoglobin')) {
-      return 'text-purple-400';
-    }
-    else if (label.toLowerCase().includes('colesterol') || label.toLowerCase().includes('cholesterol')) {
-      return 'text-yellow-400';
-    }
-    else if (label.toLowerCase().includes('temperatura') || label.toLowerCase().includes('temperature')) {
-      return temperatureTrend === 'rising' ? 'text-red-500' : 
-             temperatureTrend === 'falling' ? 'text-blue-500' : 'text-yellow-500';
-    }
-    else if (label.toLowerCase().includes('arritmia') || label.toLowerCase().includes('arrhythmia')) {
-      return 'text-white';
-    }
-    
-    return 'text-white';
-  };
-
-  const getStatusText = () => {
-    if (statusText) return statusText;
-    
-    if (label.toLowerCase().includes('cardíaca') || label.toLowerCase().includes('heart')) {
-      const bpm = typeof value === 'number' ? value : parseInt(value.toString());
-      if (bpm < 60) return 'BRADICARDIA';
-      if (bpm > 100) return 'LEVE TAQUICARDIA';
-      return 'NORMAL';
-    }
-    else if (label.toLowerCase().includes('presión') || label.toLowerCase().includes('pressure')) {
-      return 'PRESIÓN NORMAL';
-    }
-    else if (label.toLowerCase().includes('respiración') || label.toLowerCase().includes('respiration')) {
-      return secondaryValue && parseInt(secondaryValue.toString()) > 40 ? 'TAQUIPNEA' : 'NORMAL';
-    }
-    else if (label.toLowerCase().includes('glucosa') || label.toLowerCase().includes('glucose')) {
-      const glucoseVal = typeof value === 'number' ? value : parseInt(value.toString());
-      if (glucoseVal < 70) return 'HIPOGLUCEMIA';
-      if (glucoseVal > 110) return 'HIPERGLUCEMIA';
-      return 'NORMAL';
-    }
-    else if (label.toLowerCase().includes('arritmia') || label.toLowerCase().includes('arrhythmia')) {
-      return value === 0 || value === '0' || value === '--' ? 'NO DETECTADA' : 'RIESGO MÍNIMO';
-    }
-    
-    return '';
-  };
-
   return (
-    <Card className="p-2 flex flex-row items-center bg-black/60 text-white border border-gray-800 rounded-md overflow-hidden relative h-16">
-      <div className="flex-shrink-0 mr-2">
-        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide truncate max-w-20">{label}</h3>
+    <Card className="p-4 flex flex-col space-y-2 h-full shadow-sm border-2 hover:border-blue-300 transition-colors">
+      <div className="flex justify-between items-start">
+        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">{label}</h3>
+        {trend && (
+          <Badge variant="outline" className={`text-xs px-2 py-0.5 ${getTrendColor()}`}>
+            {getTrendIcon()} {trend.replace('_', ' ')}
+          </Badge>
+        )}
       </div>
-      
-      {label.toLowerCase().includes('arritmia') || label.toLowerCase().includes('arrhythmia') ? (
-        <div className="flex items-center space-x-1 flex-grow">
-          <span className="text-lg font-bold tracking-tight text-white truncate">
-            {value === '--' ? 'NORMAL' : 'DETECTADA'}
-          </span>
-          {value !== '--' && value !== 0 && (
-            <span className="text-sm font-semibold">{value}</span>
-          )}
-        </div>
-      ) : (
-        <div className="flex items-center space-x-1 flex-grow">
-          <span className={`text-xl font-bold ${getValueColor()}`}>{value}</span>
-          <span className="text-xs text-gray-400">{unit}</span>
-          
-          {secondaryValue && secondaryUnit && (
-            <div className="flex items-center space-x-1 ml-2">
-              <span className={`text-sm font-medium ${label.toLowerCase().includes('respiración') ? 'text-red-400' : 'text-gray-300'}`}>
-                {secondaryValue}
-              </span>
-              <span className="text-xs text-gray-400">{secondaryUnit}</span>
-            </div>
-          )}
-          
-          {cholesterolData && (
-            <div className="flex items-center text-xs ml-2">
-              <span className="text-gray-400">H:<span className="text-yellow-300">{cholesterolData.hdl}</span> L:<span className="text-yellow-300">{cholesterolData.ldl}</span></span>
-            </div>
-          )}
-          
-          {temperatureLocation && (
-            <div className="text-xs ml-2">
-              <span className="text-gray-400">{temperatureLocation}</span>
-            </div>
-          )}
+      <div className="flex items-baseline space-x-1">
+        <span className="text-3xl font-bold tracking-tighter">{value}</span>
+        <span className="text-sm text-gray-600 dark:text-gray-400">{unit}</span>
+      </div>
+      {secondaryValue && secondaryUnit && (
+        <div className="flex items-baseline space-x-1 mt-1">
+          <span className="text-lg font-medium tracking-tighter">{secondaryValue}</span>
+          <span className="text-xs text-gray-600 dark:text-gray-400">{secondaryUnit}</span>
         </div>
       )}
-      
       {isFinalReading && (
-        <div className="absolute top-2 right-2">
-          <div className="h-2 w-2 rounded-full bg-green-500"></div>
+        <div className="mt-auto">
+          <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-xs">
+            Complete Measurement
+          </Badge>
         </div>
       )}
     </Card>

@@ -1,5 +1,26 @@
 
+// Definir un único conjunto de tipos para toda la aplicación
+export type VitalSignType = 
+  | "heartRate" 
+  | "bloodPressure" 
+  | "respiration" 
+  | "oxygenSaturation"
+  | "glucose"
+  | "arrhythmia"
+  | "hemoglobin";
+
+// Definir interfaces comunes
 export interface VitalSigns {
+  heartRate: number | null;
+  bloodPressure: { systolic: number; diastolic: number } | null;
+  respiration: number | null;
+  oxygenSaturation: number | null;
+  glucose: number | null;
+  arrhythmia?: string | null;
+  hemoglobin: number | null;
+} 
+
+export interface VitalSignsData {
   spo2: number;
   pressure: string;
   arrhythmiaStatus: string;
@@ -12,24 +33,11 @@ export interface VitalSigns {
   glucose: {
     value: number;
     trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
-  } | null;
+  };
   hemoglobin: number | null;
   lastArrhythmiaData: {
     timestamp: number;
     rmssd: number;
     rrVariation: number;
   } | null;
-  cholesterol: {
-    totalCholesterol: number;
-    hdl: number;
-    ldl: number;
-    triglycerides?: number;
-  } | null;
-  temperature: {
-    value: number;
-    trend: 'rising' | 'falling' | 'stable';
-    location: string;
-    confidence?: number;
-  } | null;
-  isoCompliant: boolean;
 }
