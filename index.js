@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -18,7 +19,8 @@ const Index = () => {
     arrhythmiaStatus: "--",
     respiration: { rate: 0, depth: 0, regularity: 0 },
     hasRespirationData: false,
-    glucose: null
+    glucose: null,
+    hemoglobin: { value: 0, confidence: 0, lastUpdated: 0 }
   });
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState("--");
@@ -121,7 +123,8 @@ const Index = () => {
       arrhythmiaStatus: "--",
       respiration: { rate: 0, depth: 0, regularity: 0 },
       hasRespirationData: false,
-      glucose: null
+      glucose: null,
+      hemoglobin: { value: 0, confidence: 0, lastUpdated: 0 }
     });
     setArrhythmiaCount("--");
     setSignalQuality(0);
@@ -190,6 +193,7 @@ const Index = () => {
             pressure: vitals.pressure,
             arrhythmia: vitals.arrhythmiaStatus,
             respiration: vitals.respiration,
+            hemoglobin: vitals.hemoglobin ? `${vitals.hemoglobin.value} g/dL (${vitals.hemoglobin.confidence}%)` : 'No data',
             glucose: vitals.glucose ? `${vitals.glucose.value} mg/dL (${vitals.glucose.trend})` : 'No data'
           });
           
@@ -198,6 +202,10 @@ const Index = () => {
           
           if (vitals.glucose && vitals.glucose.value > 0) {
             console.log(`Glucose data received: ${vitals.glucose.value} mg/dL, trend: ${vitals.glucose.trend}`);
+          }
+          
+          if (vitals.hemoglobin && vitals.hemoglobin.value > 0) {
+            console.log(`Hemoglobin data received: ${vitals.hemoglobin.value} g/dL, confidence: ${vitals.hemoglobin.confidence}%`);
           }
         }
         
@@ -243,11 +251,12 @@ const Index = () => {
               onStartMeasurement={startMonitoring}
               onReset={stopMonitoring}
               arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
+              rawArrhythmiaData={vitalSigns.lastArrhythmiaData}
             />
           </div>
 
           <div className="absolute bottom-[200px] left-0 right-0 px-4 z-30">
-            <div className="grid grid-cols-6 gap-2">
+            <div className="grid grid-cols-7 gap-2">
               <VitalSign 
                 label="FRECUENCIA CARDÍACA"
                 value={heartRate || "--"}
@@ -268,7 +277,7 @@ const Index = () => {
               />
               <VitalSign 
                 label="ARRITMIAS"
-                value={vitalSigns.arrhythmiaStatus}
+                value={vitalSigns.arrhythmiaStatus?.split('|')[0] || "--"}
                 isFinalReading={heartRate > 0 && elapsedTime >= 15}
               />
               <VitalSign 
@@ -286,15 +295,22 @@ const Index = () => {
                 trend={vitalSigns.glucose ? vitalSigns.glucose.trend : undefined}
                 isFinalReading={vitalSigns.glucose && vitalSigns.glucose.value > 0 && elapsedTime >= 15}
               />
+              <VitalSign 
+                label="HEMOGLOBINA"
+                value={vitalSigns.hemoglobin && vitalSigns.hemoglobin.value > 0 ? vitalSigns.hemoglobin.value.toFixed(1) : "--"}
+                unit="g/dL"
+                isFinalReading={vitalSigns.hemoglobin && vitalSigns.hemoglobin.value > 0 && elapsedTime >= 15}
+              />
             </div>
           </div>
 
           {isMonitoring && (
             <div className="absolute bottom-[150px] left-0 right-0 text-center z-30 text-xs text-gray-400">
               <span>
-                Resp Data: {vitalSigns.hasRespirationData ? 'Disponible' : 'No disponible'} | 
-                Rate: {vitalSigns.respiration.rate} RPM | Depth: {vitalSigns.respiration.depth} | 
-                Glucose: {vitalSigns.glucose ? `${vitalSigns.glucose.value} mg/dL (${vitalSigns.glucose.trend || 'unknown'})` : 'No disponible'}
+                Hemoglobina: {vitalSigns.hemoglobin && vitalSigns.hemoglobin.value > 0 ? 
+                  `${vitalSigns.hemoglobin.value.toFixed(1)} g/dL (${vitalSigns.hemoglobin.confidence}%)` : 'Calculando...'} | 
+                Resp: {vitalSigns.hasRespirationData ? `${vitalSigns.respiration.rate} RPM` : 'No disp.'} | 
+                Glucose: {vitalSigns.glucose ? `${vitalSigns.glucose.value} mg/dL` : 'No disp.'}
               </span>
             </div>
           )}
