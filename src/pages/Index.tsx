@@ -1,4 +1,4 @@
-<lov-code>
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -502,7 +502,7 @@ const Index = () => {
   useEffect(() => {
     if (!isMonitoring && isCameraOn) {
       try {
-        const tracks = navigator.mediaDevices
+        navigator.mediaDevices
           .getUserMedia({ video: true })
           .then(stream => {
             const videoTrack = stream.getVideoTracks()[0];
@@ -861,4 +861,14 @@ const Index = () => {
       </div>
       
       {!permissionsGranted && (
-        <div className="absolute
+        <div className="absolute bottom-20 left-0 right-0 text-center px-4 z-30">
+          <span className="text-lg font-medium text-red-400">
+            La aplicación necesita permisos de cámara para funcionar correctamente
+          </span>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default Index;
