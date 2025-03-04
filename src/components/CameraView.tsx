@@ -230,26 +230,31 @@ const CameraView = ({
   }, [stopCamera]);
 
   return (
-    <>
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        muted
-        className={`absolute top-0 left-0 min-w-full min-h-full w-auto h-auto z-0 object-cover ${!isMonitoring ? 'hidden' : ''}`}
-        style={{
-          transform: 'translateZ(0)',
-          WebkitBackfaceVisibility: 'hidden',
-          backfaceVisibility: 'hidden',
-          willChange: isAndroid ? 'transform' : 'auto',
-        }}
-      />
+    <div className="fixed inset-0 pt-16 pb-14 flex flex-col">
+      <div className="flex-1 relative overflow-hidden">
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          className={`absolute top-0 left-0 min-w-full min-h-full w-auto h-auto z-0 object-cover ${!isMonitoring ? 'hidden' : ''}`}
+          style={{
+            transform: 'translateZ(0)',
+            WebkitBackfaceVisibility: 'hidden',
+            backfaceVisibility: 'hidden',
+            willChange: isAndroid ? 'transform' : 'auto',
+          }}
+        />
+      </div>
       {error && (
         <div className="absolute top-0 left-0 z-50 bg-red-500/80 text-white p-2 text-sm font-medium rounded m-2">
           {error}
         </div>
       )}
-    </>
+      <div className="h-32 px-4 py-2 grid grid-cols-3 gap-4">
+        {/* Add your display components here */}
+      </div>
+    </div>
   );
 };
 
