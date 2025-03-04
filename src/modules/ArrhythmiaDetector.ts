@@ -1,3 +1,4 @@
+
 import { ArrhythmiaResult, ArrhythmiaType } from '../types/signal';
 
 export class ArrhythmiaDetector {
@@ -161,6 +162,11 @@ export class ArrhythmiaDetector {
 
   public getLastArrhythmia(): ArrhythmiaResult | null {
     return this.lastArrhythmiaResult;
+  }
+  
+  // NUEVO: Método detect para compatibilidad con interfaces anteriores
+  public detect(intervals: number[]): ArrhythmiaResult {
+    return this.processRRIntervals(intervals);
   }
   
   public analyzeRhythm(): ArrhythmiaResult {

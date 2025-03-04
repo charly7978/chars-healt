@@ -1,3 +1,4 @@
+
 import { applySMAFilter } from '../utils/signalProcessingUtils';
 import { SpO2Calculator } from './spo2';
 import { BloodPressureCalculator } from './BloodPressureCalculator';
@@ -70,6 +71,17 @@ export class VitalSignsProcessor {
     // Calcular presión arterial usando valores reales
     const bp = this.calculateRealBloodPressure(this.ppgValues.slice(-60));
     const pressure = `${bp.systolic}/${bp.diastolic}`;
+
+    // Process arrhythmia data if available
+    if (rrData && rrData.intervals && rrData.intervals.length > 0) {
+      // Use processRRIntervals method which is more robust
+      this.arrhythmiaDetector.processRRIntervals(rrData.intervals, rrData.amplitudes);
+      
+      // Set last peak time if available
+      if (rrData.lastPeakTime) {
+        this.arrhythmiaDetector.setLastPeakTime(rrData.lastPeakTime);
+      }
+    }
 
     return {
       spo2,

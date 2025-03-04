@@ -3,6 +3,7 @@ interface PPGDataPoint {
   time: number;
   value: number;
   isArrhythmia: boolean;
+  isWaveStart?: boolean; // Make this optional to handle old data
 }
 
 export class CircularBuffer {
