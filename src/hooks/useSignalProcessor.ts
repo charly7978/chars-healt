@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { PPGSignalProcessor } from '../modules/SignalProcessor';
 import { ProcessedSignal, ProcessingError } from '../types/signal';
@@ -21,7 +20,6 @@ export const useSignalProcessor = () => {
   const calibrationCounterRef = useRef<number>(0);
   const calibrationThresholdRef = useRef<number>(30); // 30 frames (~1s at 30fps)
   
-  // Use inicialización lazy para el procesador
   useEffect(() => {
     console.log("useSignalProcessor: Creando nueva instancia del procesador");
     processorRef.current = new PPGSignalProcessor();
@@ -50,12 +48,10 @@ export const useSignalProcessor = () => {
       console.log("useSignalProcessor: Limpiando y destruyendo procesador");
       if (processorRef.current) {
         processorRef.current.stop();
-        // Liberar referencias explícitamente
         processorRef.current.onSignalReady = null;
         processorRef.current.onError = null;
         processorRef.current = null;
       }
-      // Clear buffers
       signalBufferRef.current.clear();
       rawBufferRef.current = [];
       isCalibrationPhaseRef.current = true;
@@ -69,7 +65,6 @@ export const useSignalProcessor = () => {
       setIsProcessing(true);
       processorRef.current.start();
       
-      // Reset signal buffer
       signalBufferRef.current.clear();
       rawBufferRef.current = [];
       isCalibrationPhaseRef.current = true;
@@ -83,7 +78,6 @@ export const useSignalProcessor = () => {
       processorRef.current.stop();
     }
     setIsProcessing(false);
-    // Liberar memoria explícitamente
     setLastSignal(null);
     setError(null);
   }, []);
@@ -105,59 +99,47 @@ export const useSignalProcessor = () => {
 
   const processFrame = useCallback((imageData: ImageData) => {
     if (isProcessing && processorRef.current) {
-      // Frame rate limiting - process at most 30fps
       const now = performance.now();
-      if (now - lastFrameTimeRef.current < 33.33) { // 1000ms/30fps ≈ 33.33ms
-        return; // Skip this frame to maintain at most 30fps
+      if (now - lastFrameTimeRef.current < 33.33) {
+        return;
       }
       lastFrameTimeRef.current = now;
       
       try {
-        // Use the existing signal processor to extract raw PPG signal
         processorRef.current.processFrame(imageData);
         
-        // Extract key information from the last received signal
         if (lastSignal) {
-          // Add raw value to buffer
           rawBufferRef.current.push(lastSignal.rawValue);
-          if (rawBufferRef.current.length > 300) { // Keep buffer at manageable size
+          if (rawBufferRef.current.length > 300) {
             rawBufferRef.current = rawBufferRef.current.slice(-300);
           }
           
-          // Calibration phase
           if (isCalibrationPhaseRef.current) {
             calibrationCounterRef.current++;
             if (calibrationCounterRef.current >= calibrationThresholdRef.current) {
               isCalibrationPhaseRef.current = false;
               console.log("useSignalProcessor: Calibración automática completada");
             }
-            return; // During calibration, just collect data
+            return;
           }
           
-          // Apply our advanced signal processing
           const enhancedValue = conditionPPGSignal(rawBufferRef.current, lastSignal.rawValue);
           
-          // Add the processed point to our circular buffer
           const dataPoint = {
             time: lastSignal.timestamp,
             value: enhancedValue,
-            isArrhythmia: false // We'll detect this later
+            isArrhythmia: false
           };
           signalBufferRef.current.push(dataPoint);
           
-          // Get the buffer data and assess signal quality
           const signalValues = signalBufferRef.current.getPoints().map(p => p.value);
           
-          // Only proceed if we have enough data for meaningful analysis
           if (signalValues.length >= 30) {
-            // Detect peaks for enhanced signal quality assessment
             const peaks = enhancedPeakDetection(signalValues);
             const quality = peaks.signalQuality;
             
-            // Detect finger presence based on signal properties and quality
             const fingerDetected = quality > 20 && lastSignal.fingerDetected;
             
-            // Create an enhanced processed signal
             const enhancedSignal: ProcessedSignal = {
               timestamp: lastSignal.timestamp,
               rawValue: lastSignal.rawValue,
@@ -167,18 +149,14 @@ export const useSignalProcessor = () => {
               roi: lastSignal.roi
             };
             
-            // Update the lastSignal with our enhanced processing
             setLastSignal(enhancedSignal);
             
-            // If connected to the window object, also update that for wider use
             if (window.heartBeatProcessor) {
-              const enhancedBpmData = {
+              const heartBeatData = {
                 timestamp: now,
-                value: enhancedValue,
-                isPeak: false, // This will be determined by the heart beat processor
-                bpm: 0
+                value: enhancedValue
               };
-              window.heartBeatProcessor.processPoint(enhancedBpmData);
+              window.heartBeatProcessor.processSignal(enhancedValue);
             }
           }
         }
@@ -190,7 +168,6 @@ export const useSignalProcessor = () => {
     }
   }, [isProcessing, lastSignal]);
 
-  // Función para liberar memoria de forma más agresiva
   const cleanMemory = useCallback(() => {
     console.log("useSignalProcessor: Limpieza agresiva de memoria");
     if (processorRef.current) {
@@ -199,11 +176,9 @@ export const useSignalProcessor = () => {
     setLastSignal(null);
     setError(null);
     
-    // Clear buffers
     signalBufferRef.current.clear();
     rawBufferRef.current = [];
     
-    // Forzar limpieza del garbage collector si está disponible
     if (window.gc) {
       try {
         window.gc();

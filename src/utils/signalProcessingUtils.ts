@@ -73,6 +73,16 @@ export const applyAdaptiveSMAFilter = (values: number[], newValue: number): numb
 };
 
 /**
+ * Simple Moving Average filter with configurable window size
+ * This is a basic filter that takes the average of the last N samples
+ */
+export const applySMAFilter = (values: number[], newValue: number, windowSize: number = 3): number => {
+  const window = values.slice(-windowSize);
+  window.push(newValue);
+  return window.reduce((sum, val) => sum + val, 0) / window.length;
+};
+
+/**
  * Powerful state-of-the-art wavelet denoising for PPG signals
  * Inspired by research on continuous wavelet transform techniques for PPG
  * This is a simplified algorithm that mimics wavelet denoising's effects
