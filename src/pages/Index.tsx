@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -640,7 +639,8 @@ const Index = () => {
             if (vitals.spo2 > 0) {
               setVitalSigns(current => ({
                 ...current,
-                spo2: vitals.spo2
+                spo2: vitals.spo2,
+                lipids: current.lipids,
               }));
               allSpo2ValuesRef.current.push(vitals.spo2);
             }
@@ -648,7 +648,8 @@ const Index = () => {
             if (vitals.pressure !== "--/--" && vitals.pressure !== "0/0") {
               setVitalSigns(current => ({
                 ...current,
-                pressure: vitals.pressure
+                pressure: vitals.pressure,
+                lipids: current.lipids,
               }));
               
               const [systolic, diastolic] = vitals.pressure.split('/').map(Number);
@@ -660,7 +661,8 @@ const Index = () => {
             
             setVitalSigns(current => ({
               ...current,
-              arrhythmiaStatus: vitals.arrhythmiaStatus
+              arrhythmiaStatus: vitals.arrhythmiaStatus,
+              lipids: current.lipids,
             }));
             
             if (vitals.hasRespirationData && vitals.respiration) {
@@ -668,7 +670,8 @@ const Index = () => {
               setVitalSigns(current => ({
                 ...current,
                 respiration: vitals.respiration,
-                hasRespirationData: true
+                hasRespirationData: true,
+                lipids: current.lipids,
               }));
               
               if (vitals.respiration.rate > 0) {
@@ -688,7 +691,8 @@ const Index = () => {
               console.log("Actualizando UI con datos de glucosa:", vitals.glucose);
               setVitalSigns(current => ({
                 ...current,
-                glucose: vitals.glucose
+                glucose: vitals.glucose,
+                lipids: current.lipids,
               }));
               
               allGlucoseValuesRef.current.push(vitals.glucose.value);
@@ -719,7 +723,8 @@ const Index = () => {
               setLastArrhythmiaData(vitals.lastArrhythmiaData);
               setVitalSigns(current => ({
                 ...current,
-                lastArrhythmiaData: vitals.lastArrhythmiaData
+                lastArrhythmiaData: vitals.lastArrhythmiaData,
+                lipids: current.lipids,
               }));
               
               const [status, count] = vitals.arrhythmiaStatus.split('|');
@@ -861,33 +866,4 @@ const Index = () => {
             onClick={handleReset}
             className="w-full h-full text-xl font-bold text-white transition-colors duration-200"
             style={{ 
-              backgroundImage: 'linear-gradient(135deg, #64748b, #475569, #334155)',
-              textShadow: '0px 1px 3px rgba(0, 0, 0, 0.3)'
-            }}
-          >
-            RESET
-          </button>
-        </div>
-      </div>
-      
-      {!permissionsGranted && (
-        <div className="absolute z-50 top-1/2 left-0 right-0 text-center px-4 transform -translate-y-1/2">
-          <div className="bg-red-900/80 backdrop-blur-sm p-4 rounded-lg mx-auto max-w-md">
-            <h3 className="text-xl font-bold text-white mb-2">Permisos necesarios</h3>
-            <p className="text-white/90 mb-4">
-              Esta aplicación necesita acceso a la cámara para medir tus signos vitales.
-            </p>
-            <button 
-              onClick={() => window.location.reload()}
-              className="bg-white text-red-900 font-bold py-2 px-4 rounded"
-            >
-              Reintentar
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-export default Index;
+              backgroundImage: 'linear-gradient(135deg, #64
