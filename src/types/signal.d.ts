@@ -51,6 +51,40 @@ export interface HeartBeatResult {
   arrhythmiaCount: number;
   amplitude?: number;
   isLearningPhase?: boolean;
+  rrData?: {
+    intervals: number[];
+    lastPeakTime: number | null;
+  };
+}
+
+export interface HemoglobinData {
+  value: number;     // Valor de hemoglobina en g/dL
+  confidence: number; // Nivel de confianza de la medición (0-100)
+  lastUpdated: number; // Timestamp de la última actualización
+}
+
+export interface CholesterolData {
+  totalCholesterol: number; // mg/dL
+  hdl: number;             // mg/dL (high-density lipoprotein - "good" cholesterol)
+  ldl: number;             // mg/dL (low-density lipoprotein - "bad" cholesterol)
+  triglycerides: number;   // mg/dL
+}
+
+// Advanced PPG processing types
+export interface PPGPeakInfo {
+  index: number;      // Index in the signal array
+  timestamp: number;  // Timestamp of peak
+  amplitude: number;  // Peak height
+  confidence: number; // Confidence level (0-100)
+}
+
+export interface PPGProcessedResult {
+  filteredValue: number;
+  quality: number;
+  peaks: PPGPeakInfo[];
+  bpm: number;
+  signalToNoiseRatio: number;
+  fingerDetected: boolean;
 }
 
 declare global {
