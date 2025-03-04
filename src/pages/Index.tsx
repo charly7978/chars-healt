@@ -719,7 +719,7 @@ const Index = () => {
             }
             
             if (vitals.cholesterol && vitals.cholesterol.totalCholesterol > 0) {
-              console.log(`Cholesterol data received: ${vitals.cholesterol.totalCholesterol} mg/dL`);
+              console.log(`Cholesterol data received: ${vitals.cholesterol.totalCholesterol} mg/dL, HDL: ${vitals.cholesterol.hdl}, LDL: ${vitals.cholesterol.ldl}`);
               setVitalSigns(current => ({
                 ...current,
                 cholesterol: vitals.cholesterol
