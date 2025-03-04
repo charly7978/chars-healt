@@ -23,7 +23,8 @@ const Index = () => {
     hemoglobin: null,
     lastArrhythmiaData: null,
     cholesterol: null,
-    temperature: null
+    temperature: null,
+    isoCompliant: false
   });
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState("--");
@@ -130,7 +131,8 @@ const Index = () => {
       hemoglobin: null,
       lastArrhythmiaData: null,
       cholesterol: null,
-      temperature: null
+      temperature: null,
+      isoCompliant: false
     });
     setArrhythmiaCount("--");
     setSignalQuality(0);
@@ -200,7 +202,7 @@ const Index = () => {
             arrhythmia: vitals.arrhythmiaStatus,
             respiration: vitals.respiration,
             glucose: vitals.glucose ? `${vitals.glucose.value} mg/dL (${vitals.glucose.trend})` : 'No data',
-            hemoglobin: vitals.hemoglobin ? `${vitals.hemoglobin.value} g/dL` : 'No data',
+            hemoglobin: vitals.hemoglobin ? `${vitals.hemoglobin}` : 'No data',
             cholesterol: vitals.cholesterol ? `${vitals.cholesterol.totalCholesterol} mg/dL` : 'No data',
             temperature: vitals.temperature ? `${vitals.temperature.value}°C` : 'No data'
           });
@@ -311,20 +313,23 @@ const Index = () => {
                 label="HEMOGLOBIN"
                 value={vitalSigns.hemoglobin || "--"}
                 unit="g/dL"
-                isFinalReading={vitalSigns.hemoglobin && vitalSigns.hemoglobin > 0 && elapsedTime >= 15}
+                isFinalReading={vitalSigns.hemoglobin !== null && elapsedTime >= 15}
               />
               <VitalSign 
                 label="CHOLESTEROL"
                 value={vitalSigns.cholesterol && vitalSigns.cholesterol.totalCholesterol > 0 ? 
-                  `${vitalSigns.cholesterol.totalCholesterol} mg/dL (HDL:${vitalSigns.cholesterol.hdl}/LDL:${vitalSigns.cholesterol.ldl})` : 'Calculando...'}
-                unit=""
+                  `${vitalSigns.cholesterol.totalCholesterol}` : '--'}
+                unit="mg/dL"
+                cholesterolData={vitalSigns.cholesterol || undefined}
                 isFinalReading={vitalSigns.cholesterol && vitalSigns.cholesterol.totalCholesterol > 0 && elapsedTime >= 15}
               />
               <VitalSign 
                 label="TEMPERATURE"
                 value={vitalSigns.temperature && vitalSigns.temperature.value > 0 ? 
-                  `${vitalSigns.temperature.value.toFixed(1)}°C (${vitalSigns.temperature.confidence}%)` : 'Calculando...'}
-                unit=""
+                  vitalSigns.temperature.value : '--'}
+                unit="°C"
+                temperatureLocation={vitalSigns.temperature?.location}
+                temperatureTrend={vitalSigns.temperature?.trend}
                 isFinalReading={vitalSigns.temperature && vitalSigns.temperature.value > 0 && elapsedTime >= 15}
               />
             </div>
@@ -336,7 +341,7 @@ const Index = () => {
                 Col: {vitalSigns.cholesterol && vitalSigns.cholesterol.totalCholesterol > 0 ? 
                   `${vitalSigns.cholesterol.totalCholesterol} mg/dL (HDL:${vitalSigns.cholesterol.hdl}/LDL:${vitalSigns.cholesterol.ldl})` : 'Calculando...'} | 
                 Temp: {vitalSigns.temperature && vitalSigns.temperature.value > 0 ? 
-                  `${vitalSigns.temperature.value.toFixed(1)}°C (${vitalSigns.temperature.confidence}%)` : 'Calculando...'}
+                  `${vitalSigns.temperature.value.toFixed(1)}°C (${vitalSigns.temperature.confidence || 0}%)` : 'Calculando...'}
               </span>
             </div>
           )}

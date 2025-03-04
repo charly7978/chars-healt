@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Badge } from './ui/badge';
 import { Card } from './ui/card';
@@ -17,6 +16,7 @@ export interface VitalSignProps {
   temperatureLocation?: string;
   temperatureTrend?: 'rising' | 'falling' | 'stable';
   cholesterolData?: {
+    totalCholesterol: number;
     hdl: number;
     ldl: number;
     triglycerides?: number;
@@ -76,17 +76,14 @@ const VitalSign: React.FC<VitalSignProps> = ({
     }
   };
 
-  // Function to determine the color of the value based on the label and value
   const getValueColor = () => {
     if (label.toLowerCase().includes('cardíaca') || label.toLowerCase().includes('heart')) {
-      // For heart rate
       const bpm = typeof value === 'number' ? value : parseInt(value.toString());
       if (bpm < 60) return 'text-blue-400';
       if (bpm > 100) return 'text-orange-400';
       return 'text-orange-400';
     } 
     else if (label.toLowerCase().includes('spo2')) {
-      // For SpO2
       const spo2 = typeof value === 'number' ? value : parseInt(value.toString());
       if (spo2 < 95) return 'text-red-400';
       return 'text-white';
@@ -117,7 +114,6 @@ const VitalSign: React.FC<VitalSignProps> = ({
     return 'text-white';
   };
 
-  // Determine status text based on label and value
   const getStatusText = () => {
     if (statusText) return statusText;
     

@@ -13,11 +13,7 @@ export interface VitalSigns {
     value: number;
     trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
   } | null;
-  hemoglobin: {
-    value: number;
-    confidence: number;
-    lastUpdated: number;
-  } | null;
+  hemoglobin: number | null;
   lastArrhythmiaData: {
     timestamp: number;
     rmssd: number;
@@ -35,4 +31,5 @@ export interface VitalSigns {
     location: string;
     confidence?: number;
   } | null;
+  isoCompliant?: boolean;
 }
