@@ -1,4 +1,3 @@
-
 /**
  * Utility functions for signal processing
  */
@@ -224,9 +223,9 @@ export const calculateHemoglobin = (redSignal: number[], irSignal: number[]): nu
     const avgRatio = ratioSum / validPoints;
     
     // Coeficientes mejorados para la estimación de hemoglobina
-    const baseHemoglobin = 15.0;
-    const coefficientA = 3.5;
-    const coefficientB = 1.2;
+    const baseHemoglobin = 14.5;
+    const coefficientA = 2.7;
+    const coefficientB = 0.8;
     
     // Estimación basada en la correlación entre ratio y hemoglobina
     let hemoglobin = baseHemoglobin - (coefficientA * avgRatio) + coefficientB;
@@ -236,16 +235,11 @@ export const calculateHemoglobin = (redSignal: number[], irSignal: number[]): nu
     hemoglobin += variation;
     
     // Establecer límites razonables
-    hemoglobin = Math.max(11.0, Math.min(17.5, hemoglobin));
-    
-    // Aseguramos que siempre devuelva un valor válido
-    if (isNaN(hemoglobin) || !isFinite(hemoglobin)) {
-      hemoglobin = 14.0 + (Math.random() * 2) - 1; // Valor por defecto con variación
-    }
+    hemoglobin = Math.max(9.0, Math.min(18.0, hemoglobin));
     
     return Math.round(hemoglobin * 10) / 10; // Redondear a 1 decimal
   } catch (err) {
     console.error("Error calculando hemoglobina:", err);
-    return 14.0 + (Math.random() * 2) - 1; // En caso de error, un valor por defecto con variación
+    return 0;
   }
 };
