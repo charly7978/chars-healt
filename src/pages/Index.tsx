@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from "react";
 import VitalSign from "@/components/VitalSign";
 import CameraView from "@/components/CameraView";
@@ -22,7 +23,7 @@ interface VitalSigns {
   glucose: {
     value: number;
     trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
-  };
+  } | null;
   hemoglobin: number | null;
   lastArrhythmiaData: {
     timestamp: number;

@@ -610,6 +610,7 @@ export const useVitalSignsProcessor = () => {
       respiration: respirationResult,
       hasRespirationData: respirationProcessor.hasValidData(),
       glucose: glucoseData,
+      hemoglobin: result.hemoglobin,  // Make sure to include hemoglobin
       lastArrhythmiaData
     };
     
