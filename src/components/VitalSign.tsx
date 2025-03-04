@@ -70,60 +70,48 @@ const VitalSign: React.FC<VitalSignProps> = ({
   };
 
   return (
-    <Card className="p-2 flex flex-col space-y-1 h-[120px] shadow-sm border border-gray-200 hover:border-blue-300 transition-colors bg-black/40 backdrop-blur-sm">
+    <Card className="p-2 flex flex-col space-y-1 h-[100px] shadow-sm border border-blue-500/20 hover:border-blue-400/30 transition-colors bg-blue-950/40 backdrop-blur-sm">
       <div className="flex justify-between items-start">
-        <h3 className="text-[10px] font-semibold text-gray-300">{label}</h3>
-        {trend && (
+        <h3 className="text-[9px] font-semibold text-blue-300/90">{label}</h3>
+        {trend && trend !== 'stable' && (
           <Badge variant="outline" className={`text-[8px] px-1 py-0 ${getTrendColor()}`}>
             {getTrendIcon()} {trend.replace('_', ' ')}
           </Badge>
         )}
       </div>
       <div className="flex items-baseline space-x-1 justify-center flex-1">
-        <span className="text-xl font-bold tracking-tighter text-white">{value}</span>
-        <span className="text-[10px] text-gray-400">{unit}</span>
+        <span className="text-lg font-bold tracking-tighter text-white">{value}</span>
+        <span className="text-[9px] text-blue-300/70">{unit}</span>
       </div>
       {secondaryValue && secondaryUnit && (
         <div className="flex items-baseline space-x-1 justify-center">
-          <span className="text-sm font-medium tracking-tighter text-gray-300">{secondaryValue}</span>
-          <span className="text-[8px] text-gray-400">{secondaryUnit}</span>
+          <span className="text-xs font-medium tracking-tighter text-blue-200/90">{secondaryValue}</span>
+          <span className="text-[8px] text-blue-300/70">{secondaryUnit}</span>
         </div>
       )}
       {cholesterolData && (
-        <div className="flex flex-col mt-1 space-y-0.5">
+        <div className="flex flex-col mt-0.5 space-y-0.5">
           <div className="flex items-baseline justify-between">
-            <span className="text-[8px] text-gray-400">HDL:</span>
-            <span className="text-[8px] font-medium text-gray-300">{cholesterolData.hdl} mg/dL</span>
+            <span className="text-[8px] text-blue-300/70">HDL:</span>
+            <span className="text-[8px] font-medium text-blue-200/90">{cholesterolData.hdl}</span>
           </div>
           <div className="flex items-baseline justify-between">
-            <span className="text-[8px] text-gray-400">LDL:</span>
-            <span className="text-[8px] font-medium text-gray-300">{cholesterolData.ldl} mg/dL</span>
+            <span className="text-[8px] text-blue-300/70">LDL:</span>
+            <span className="text-[8px] font-medium text-blue-200/90">{cholesterolData.ldl}</span>
           </div>
           <div className="flex items-baseline justify-between">
-            <span className="text-[8px] text-gray-400">TG:</span>
-            <span className="text-[8px] font-medium text-gray-300">{cholesterolData.triglycerides} mg/dL</span>
+            <span className="text-[8px] text-blue-300/70">TG:</span>
+            <span className="text-[8px] font-medium text-blue-200/90">{cholesterolData.triglycerides}</span>
           </div>
         </div>
       )}
       {temperatureLocation && (
         <div className="flex items-baseline space-x-1 justify-center">
-          <span className="text-[8px] text-gray-400">
+          <span className="text-[8px] text-blue-300/70">
             {temperatureLocation === 'finger' ? 'Dedo' : 
              temperatureLocation === 'wrist' ? 'Muñeca' : 
              temperatureLocation === 'forehead' ? 'Frente' : 'Desconocido'}
           </span>
-          {temperatureTrend && (
-            <Badge variant="outline" className="text-[8px] px-1 py-0 bg-sky-100/10 text-sky-300">
-              {getTrendIcon()} {temperatureTrend.replace('_', ' ')}
-            </Badge>
-          )}
-        </div>
-      )}
-      {isFinalReading && (
-        <div className="mt-auto">
-          <Badge variant="outline" className="bg-emerald-950/50 text-emerald-400 border-emerald-800/50 text-[8px]">
-            Medición Final
-          </Badge>
         </div>
       )}
     </Card>

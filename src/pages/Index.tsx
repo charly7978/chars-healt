@@ -766,32 +766,34 @@ const Index = () => {
         />
       </div>
       
-      <div className="absolute z-20" style={{ bottom: '65px', left: 0, right: 0, padding: '0 10px' }}>
+      <div className="absolute z-20" style={{ bottom: '80px', left: 0, right: 0, padding: '0 10px' }}>
+        <div className="text-center mb-3">
+          <h1 className="text-xl font-bold">
+            <span className="text-white">Chars</span>
+            <span className="text-[#ea384c]">Healt</span>
+          </h1>
+        </div>
         <div className="p-1 rounded-lg">
-          <div className="grid grid-cols-3 gap-1.5" style={{ maxHeight: '45vh', overflow: 'auto' }}>
+          <div className="grid grid-cols-3 gap-1" style={{ maxHeight: '40vh', overflow: 'auto' }}>
             <VitalSign 
               label="HEART RATE"
               value={heartRate || "--"}
               unit="BPM"
-              isFinalReading={heartRate > 0 && elapsedTime >= 15}
             />
             <VitalSign 
               label="SPO2"
               value={vitalSigns.spo2 || "--"}
               unit="%"
-              isFinalReading={vitalSigns.spo2 > 0 && elapsedTime >= 15}
             />
             <VitalSign 
               label="BLOOD PRESSURE"
               value={vitalSigns.pressure}
               unit="mmHg"
-              isFinalReading={vitalSigns.pressure !== "--/--" && elapsedTime >= 15}
             />
             <VitalSign 
               label="ARRHYTHMIAS"
               value={vitalSigns.arrhythmiaStatus}
               unit=""
-              isFinalReading={heartRate > 0 && elapsedTime >= 15}
             />
             <VitalSign 
               label="RESPIRATION"
@@ -799,20 +801,16 @@ const Index = () => {
               unit="RPM"
               secondaryValue={vitalSigns.hasRespirationData ? vitalSigns.respiration.depth : "--"}
               secondaryUnit="Depth"
-              isFinalReading={vitalSigns.hasRespirationData && elapsedTime >= 15}
             />
             <VitalSign 
               label="GLUCOSE"
               value={vitalSigns.glucose ? vitalSigns.glucose.value : "--"}
               unit="mg/dL"
-              trend={vitalSigns.glucose ? vitalSigns.glucose.trend : undefined}
-              isFinalReading={vitalSigns.glucose && vitalSigns.glucose.value > 0 && elapsedTime >= 15}
             />
             <VitalSign 
               label="HEMOGLOBIN"
               value={vitalSigns.hemoglobin || "--"}
               unit="g/dL"
-              isFinalReading={vitalSigns.hemoglobin && vitalSigns.hemoglobin > 0 && elapsedTime >= 15}
             />
             <VitalSign 
               label="CHOLESTEROL"
@@ -823,15 +821,12 @@ const Index = () => {
                 ldl: vitalSigns.cholesterol.ldl,
                 triglycerides: vitalSigns.cholesterol.triglycerides
               } : undefined}
-              isFinalReading={vitalSigns.cholesterol && vitalSigns.cholesterol.totalCholesterol > 0 && elapsedTime >= 15}
             />
             <VitalSign 
               label="TEMPERATURE"
               value={vitalSigns.temperature ? vitalSigns.temperature.value || "--" : "--"}
               unit="°C"
               temperatureLocation={vitalSigns.temperature ? vitalSigns.temperature.location as 'finger' | 'wrist' | 'forehead' : 'finger'}
-              temperatureTrend={vitalSigns.temperature ? vitalSigns.temperature.trend as 'rising' | 'falling' | 'stable' : 'stable'}
-              isFinalReading={vitalSigns.temperature && vitalSigns.temperature.value > 0 && elapsedTime >= 15}
             />
           </div>
         </div>
