@@ -3,93 +3,110 @@
  */
 
 /**
- * Calculates the AC component (alternating current) of a PPG signal
- * @param values PPG signal values
- * @returns AC component value
+ * Calculate the AC component of a PPG signal
+ * @param signal The PPG signal array
+ * @returns The AC component value
  */
-export const calculateAC = (values: number[]): number => {
-  if (values.length < 2) return 0;
+export const calculateAC = (signal: number[]): number => {
+  if (signal.length === 0) return 0;
   
-  // AC is the peak-to-peak amplitude (max - min)
-  const max = Math.max(...values);
-  const min = Math.min(...values);
+  const min = Math.min(...signal);
+  const max = Math.max(...signal);
   return max - min;
 };
 
 /**
- * Calculates the DC component (direct current) of a PPG signal
- * @param values PPG signal values
- * @returns DC component value
+ * Calculate the DC component of a PPG signal
+ * @param signal The PPG signal array
+ * @returns The DC component value
  */
-export const calculateDC = (values: number[]): number => {
-  if (values.length === 0) return 0;
+export const calculateDC = (signal: number[]): number => {
+  if (signal.length === 0) return 0;
   
-  // DC is the mean value of the signal
-  const sum = values.reduce((acc, val) => acc + val, 0);
-  return sum / values.length;
+  const sum = signal.reduce((acc, val) => acc + val, 0);
+  return sum / signal.length;
 };
 
 /**
- * Calculates standard deviation of a signal
- * @param values Array of values
- * @returns Standard deviation value
+ * Calculate standard deviation of an array of numbers
+ * @param values Array of numeric values
+ * @returns Standard deviation
  */
 export const calculateStandardDeviation = (values: number[]): number => {
-  if (values.length <= 1) return 0;
+  if (values.length < 2) return 0;
   
-  const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
-  const squaredDiffs = values.map(val => Math.pow(val - mean, 2));
-  const variance = squaredDiffs.reduce((sum, val) => sum + val, 0) / values.length;
-  
-  return Math.sqrt(variance);
+  const avg = values.reduce((acc, val) => acc + val, 0) / values.length;
+  const squareDiffs = values.map(value => Math.pow(value - avg, 2));
+  const avgSquareDiff = squareDiffs.reduce((acc, val) => acc + val, 0) / squareDiffs.length;
+  return Math.sqrt(avgSquareDiff);
 };
 
 /**
- * Calculate RR intervals from peak indices
+ * Filter out spurious peaks based on minimum distance and height criteria
+ * @param signal Original signal
+ * @param peakIndices Array of potential peak indices
+ * @returns Filtered array of peak indices
  */
-export const calculateRRIntervals = (peakIndices: number[], sampleRate: number): number[] => {
-  const intervals: number[] = [];
+export const filterSpuriousPeaks = (signal: number[], peakIndices: number[]): number[] => {
+  if (peakIndices.length <= 1) return peakIndices;
+  
+  const filteredPeaks: number[] = [];
+  let lastValidPeak = peakIndices[0];
+  filteredPeaks.push(lastValidPeak);
+  
+  // Minimum distance between peaks (in samples) - adapt based on expected HR range
+  const minPeakDistance = 15; // At 30fps, this represents 120 BPM max
   
   for (let i = 1; i < peakIndices.length; i++) {
-    const samples = peakIndices[i] - peakIndices[i-1];
-    const msec = (samples / sampleRate) * 1000;
+    const currentPeak = peakIndices[i];
+    const distance = currentPeak - lastValidPeak;
     
-    // Only include physiologically plausible intervals (30-220 BPM)
-    if (msec >= 273 && msec <= 2000) {
-      intervals.push(msec);
-    }
-  }
-  
-  return intervals;
-};
-
-/**
- * Filter out physiologically impossible peaks
- * (e.g., peaks that would indicate a heart rate > 220 bpm)
- */
-export const filterSpuriousPeaks = (peakIndices: number[], signal: number[]): number[] => {
-  if (peakIndices.length < 2) return peakIndices;
-  
-  const filteredPeaks: number[] = [peakIndices[0]];
-  const minDistance = 8; // Minimum 8 samples between peaks (>220 BPM at 30Hz)
-  
-  for (let i = 1; i < peakIndices.length; i++) {
-    const distance = peakIndices[i] - filteredPeaks[filteredPeaks.length - 1];
-    
-    if (distance >= minDistance) {
-      filteredPeaks.push(peakIndices[i]);
+    if (distance >= minPeakDistance) {
+      filteredPeaks.push(currentPeak);
+      lastValidPeak = currentPeak;
     } else {
-      // If peaks are too close, keep only the highest one
-      const prevPeakHeight = signal[filteredPeaks[filteredPeaks.length - 1]];
-      const currentPeakHeight = signal[peakIndices[i]];
-      
-      if (currentPeakHeight > prevPeakHeight) {
-        // Replace previous peak with current higher peak
-        filteredPeaks.pop();
-        filteredPeaks.push(peakIndices[i]);
+      // If peaks are too close, keep the higher one
+      if (signal[currentPeak] > signal[lastValidPeak]) {
+        filteredPeaks.pop(); // Remove last peak
+        filteredPeaks.push(currentPeak); // Add current peak
+        lastValidPeak = currentPeak;
       }
     }
   }
   
   return filteredPeaks;
+};
+
+/**
+ * Calculate RR intervals and heart rate from peak indices
+ * @param peakIndices Array of peak indices
+ * @param signalLength Total length of the original signal
+ * @param samplingRate Sampling rate in Hz
+ * @returns Object with RR intervals and calculated heart rate
+ */
+export const calculateRRIntervals = (
+  peakIndices: number[],
+  signalLength: number,
+  samplingRate: number = 30
+): { intervals: number[], heartRate: number } => {
+  if (peakIndices.length < 2) {
+    return { intervals: [], heartRate: 0 };
+  }
+  
+  // Calculate intervals between consecutive peaks (in samples)
+  const intervals: number[] = [];
+  for (let i = 1; i < peakIndices.length; i++) {
+    intervals.push(peakIndices[i] - peakIndices[i - 1]);
+  }
+  
+  // Convert intervals from samples to seconds
+  const intervalsSec = intervals.map(interval => interval / samplingRate);
+  
+  // Calculate average interval in seconds
+  const avgIntervalSec = intervalsSec.reduce((sum, val) => sum + val, 0) / intervalsSec.length;
+  
+  // Calculate heart rate (beats per minute)
+  const heartRate = avgIntervalSec > 0 ? 60 / avgIntervalSec : 0;
+  
+  return { intervals, heartRate };
 };
