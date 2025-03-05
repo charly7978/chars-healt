@@ -1,10 +1,9 @@
 
 import React, { createContext, useContext, ReactNode } from 'react';
-import { PPGSignalProcessor } from '../modules/SignalProcessor';
 import { ProcessedSignal } from '../types/signal';
 
 interface SignalProcessorContextType {
-  processor: PPGSignalProcessor | null;
+  processor: any | null;
   lastSignal: ProcessedSignal | null;
   isProcessing: boolean;
   startProcessing: () => void;
