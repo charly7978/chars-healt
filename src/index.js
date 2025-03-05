@@ -18,7 +18,8 @@ const Index = () => {
     arrhythmiaStatus: "--",
     respiration: { rate: 0, depth: 0, regularity: 0 },
     hasRespirationData: false,
-    glucose: null
+    glucose: null,
+    hemoglobin: null // Initialize hemoglobin with null
   });
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState("--");
@@ -121,7 +122,8 @@ const Index = () => {
       arrhythmiaStatus: "--",
       respiration: { rate: 0, depth: 0, regularity: 0 },
       hasRespirationData: false,
-      glucose: null
+      glucose: null,
+      hemoglobin: null // Reset hemoglobin
     });
     setArrhythmiaCount("--");
     setSignalQuality(0);
@@ -190,7 +192,8 @@ const Index = () => {
             pressure: vitals.pressure,
             arrhythmia: vitals.arrhythmiaStatus,
             respiration: vitals.respiration,
-            glucose: vitals.glucose ? `${vitals.glucose.value} mg/dL (${vitals.glucose.trend})` : 'No data'
+            glucose: vitals.glucose ? `${vitals.glucose.value} mg/dL (${vitals.glucose.trend})` : 'No data',
+            hemoglobin: vitals.hemoglobin ? `${vitals.hemoglobin} g/dL` : 'No data'
           });
           
           setVitalSigns(vitals);
@@ -198,6 +201,10 @@ const Index = () => {
           
           if (vitals.glucose && vitals.glucose.value > 0) {
             console.log(`Glucose data received: ${vitals.glucose.value} mg/dL, trend: ${vitals.glucose.trend}`);
+          }
+          
+          if (vitals.hemoglobin && vitals.hemoglobin > 0) {
+            console.log(`Hemoglobin data received: ${vitals.hemoglobin} g/dL`);
           }
         }
         
@@ -247,7 +254,7 @@ const Index = () => {
           </div>
 
           <div className="absolute bottom-[200px] left-0 right-0 px-4 z-30">
-            <div className="grid grid-cols-6 gap-2">
+            <div className="grid grid-cols-7 gap-2">
               <VitalSign 
                 label="FRECUENCIA CARDÍACA"
                 value={heartRate || "--"}
@@ -286,6 +293,12 @@ const Index = () => {
                 trend={vitalSigns.glucose ? vitalSigns.glucose.trend : undefined}
                 isFinalReading={vitalSigns.glucose && vitalSigns.glucose.value > 0 && elapsedTime >= 15}
               />
+              <VitalSign 
+                label="HEMOGLOBINA"
+                value={vitalSigns.hemoglobin || "--"}
+                unit="g/dL"
+                isFinalReading={vitalSigns.hemoglobin && vitalSigns.hemoglobin > 0 && elapsedTime >= 15}
+              />
             </div>
           </div>
 
@@ -294,7 +307,8 @@ const Index = () => {
               <span>
                 Resp Data: {vitalSigns.hasRespirationData ? 'Disponible' : 'No disponible'} | 
                 Rate: {vitalSigns.respiration.rate} RPM | Depth: {vitalSigns.respiration.depth} | 
-                Glucose: {vitalSigns.glucose ? `${vitalSigns.glucose.value} mg/dL (${vitalSigns.glucose.trend || 'unknown'})` : 'No disponible'}
+                Glucose: {vitalSigns.glucose ? `${vitalSigns.glucose.value} mg/dL (${vitalSigns.glucose.trend || 'unknown'})` : 'No disponible'} |
+                Hemoglobin: {vitalSigns.hemoglobin ? `${vitalSigns.hemoglobin} g/dL` : 'No disponible'}
               </span>
             </div>
           )}

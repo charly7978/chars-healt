@@ -13,6 +13,12 @@ export interface ProcessedSignal {
     width: number;
     height: number;
   };
+  rawPixelData?: {
+    r: number;
+    g: number;
+    b: number;
+    ir?: number;
+  };
 }
 
 export interface ProcessingError {
@@ -30,9 +36,33 @@ export interface SignalProcessor {
   onError?: (error: ProcessingError) => void;
 }
 
+export interface RespirationData {
+  rate: number;      // Respiraciones por minuto
+  depth: number;     // Profundidad (0-100)
+  regularity: number; // Regularidad (0-100)
+}
+
+export interface GlucoseData {
+  value: number;     // Valor de glucosa en mg/dL
+  trend: 'stable' | 'rising' | 'falling' | 'rising_rapidly' | 'falling_rapidly' | 'unknown';
+  confidence: number; // Nivel de confianza de la medición (0-100)
+  timeOffset: number; // Tiempo desde la última calibración (minutos)
+}
+
+export interface HeartBeatResult {
+  bpm: number;
+  confidence: number;
+  isPeak: boolean;
+  filteredValue: number;
+  arrhythmiaCount: number;
+  amplitude?: number;
+  isLearningPhase?: boolean;
+}
+
 declare global {
   interface Window {
     heartBeatProcessor: HeartBeatProcessor;
+    vitalSignsProcessor: any; // Add this to make it available globally
     gc?: () => void; // Añadir definición para garbage collector
   }
 }

@@ -1,4 +1,3 @@
-
 import { ProcessedSignal, ProcessingError, SignalProcessor } from '../types/signal';
 
 // Class for Kalman filter - improves signal noise reduction
@@ -42,19 +41,18 @@ export class PPGSignalProcessor implements SignalProcessor {
   private kalmanFilter: KalmanFilter;
   private lastValues: number[] = [];
   
-  // Umbrales más estrictos para la configuración
+  // Configuration settings
   private readonly DEFAULT_CONFIG = {
     BUFFER_SIZE: 15,           // Buffer for signal analysis
-    MIN_RED_THRESHOLD: 45,     // Aumentado: Minimum threshold for red channel 
-    MAX_RED_THRESHOLD: 240,    // Reducido: Maximum threshold for red channel
+    MIN_RED_THRESHOLD: 40,     // Minimum threshold for red channel
+    MAX_RED_THRESHOLD: 250,    // Maximum threshold for red channel
     STABILITY_WINDOW: 6,       // Window for stability analysis
-    MIN_STABILITY_COUNT: 6,    // Aumentado: Increased from 5 to require more stable frames
-    HYSTERESIS: 4,             // Reduced hysteresis for more sensitivity
-    MIN_CONSECUTIVE_DETECTIONS: 5,  // Aumentado: Increased from 4 to require more consecutive detections
-    QUALITY_THRESHOLD_POOR: 35,    // Increased: threshold for poor quality
-    QUALITY_THRESHOLD_ACCEPTABLE: 55,  // Increased: threshold for acceptable quality 
-    QUALITY_THRESHOLD_GOOD: 70,     // Increased: threshold for good quality
-    QUALITY_THRESHOLD_EXCELLENT: 85 // New: threshold for excellent quality
+    MIN_STABILITY_COUNT: 5,    // Increased from 4 to require more stable frames
+    HYSTERESIS: 5,             // Hysteresis to avoid fluctuations
+    MIN_CONSECUTIVE_DETECTIONS: 4,  // Increased from 3 to require more consecutive detections
+    QUALITY_THRESHOLD_POOR: 30,    // New: threshold for poor quality
+    QUALITY_THRESHOLD_ACCEPTABLE: 50,  // New: threshold for acceptable quality
+    QUALITY_THRESHOLD_GOOD: 75     // New: threshold for good quality
   };
 
   private currentConfig: typeof this.DEFAULT_CONFIG;
@@ -162,8 +160,7 @@ export class PPGSignalProcessor implements SignalProcessor {
         filtered,
         isFingerDetected,
         quality,
-        stableFrames: this.stableFrameCount,
-        consecutiveDetections: this.consecutiveDetections
+        stableFrames: this.stableFrameCount
       });
 
       const processedSignal: ProcessedSignal = {
@@ -191,16 +188,14 @@ export class PPGSignalProcessor implements SignalProcessor {
     let redSum = 0;
     let greenSum = 0;
     let blueSum = 0;
-    let redVariance = 0;
     let count = 0;
     
-    // Usar una región central más pequeña para obtener mejor señal (central 20% en lugar de 25%)
-    const startX = Math.floor(imageData.width * 0.4);
-    const endX = Math.floor(imageData.width * 0.6);
-    const startY = Math.floor(imageData.height * 0.4);
-    const endY = Math.floor(imageData.height * 0.6);
+    // Use central region for better signal (central 25%)
+    const startX = Math.floor(imageData.width * 0.375);
+    const endX = Math.floor(imageData.width * 0.625);
+    const startY = Math.floor(imageData.height * 0.375);
+    const endY = Math.floor(imageData.height * 0.625);
     
-    // Primera pasada para calcular medias
     for (let y = startY; y < endY; y++) {
       for (let x = startX; x < endX; x++) {
         const i = (y * imageData.width + x) * 4;
@@ -215,19 +210,8 @@ export class PPGSignalProcessor implements SignalProcessor {
     const avgGreen = greenSum / count;
     const avgBlue = blueSum / count;
 
-    // Segunda pasada para calcular varianza del canal rojo (indicador de calidad)
-    for (let y = startY; y < endY; y++) {
-      for (let x = startX; x < endX; x++) {
-        const i = (y * imageData.width + x) * 4;
-        redVariance += Math.pow(data[i] - avgRed, 2);
-      }
-    }
-    
-    const redStdDev = Math.sqrt(redVariance / count);
-    
-    // Comprobación más estricta de dominancia de rojo
-    // Mayor diferencia requerida entre rojo y otros canales
-    const isRedDominant = avgRed > (avgGreen * 1.35) && avgRed > (avgBlue * 1.35) && redStdDev < 30;
+    // Check red channel dominance (characteristic of blood-containing tissue)
+    const isRedDominant = avgRed > (avgGreen * 1.25) && avgRed > (avgBlue * 1.25); // Increased from 1.2 to 1.25 for stronger red dominance requirement
     
     return isRedDominant ? avgRed : 0;
   }
@@ -239,7 +223,7 @@ export class PPGSignalProcessor implements SignalProcessor {
     const currentTime = Date.now();
     const timeSinceLastDetection = currentTime - this.lastDetectionTime;
     
-    // Verificación más estricta de rango con histéresis
+    // Check if value is within valid range with hysteresis
     const inRange = this.isCurrentlyDetected
       ? rawValue >= (this.currentConfig.MIN_RED_THRESHOLD - this.currentConfig.HYSTERESIS) &&
         rawValue <= (this.currentConfig.MAX_RED_THRESHOLD + this.currentConfig.HYSTERESIS)
@@ -247,34 +231,29 @@ export class PPGSignalProcessor implements SignalProcessor {
         rawValue <= this.currentConfig.MAX_RED_THRESHOLD;
 
     if (!inRange) {
-      this.consecutiveDetections = Math.max(0, this.consecutiveDetections - 1.5); // Disminución más rápida
-      this.stableFrameCount = Math.max(0, this.stableFrameCount - 1.5); // Disminución más rápida
+      this.consecutiveDetections = 0;
+      this.stableFrameCount = Math.max(0, this.stableFrameCount - 1);
       
-      if (timeSinceLastDetection > this.DETECTION_TIMEOUT || this.consecutiveDetections < 2) {
+      if (timeSinceLastDetection > this.DETECTION_TIMEOUT) {
         this.isCurrentlyDetected = false;
       }
       
       return { isFingerDetected: this.isCurrentlyDetected, quality: 0 };
     }
 
-    // Análisis más estricto de estabilidad de señal
+    // Analyze signal stability - scientifically validated measure
     const stability = this.calculateStability();
-    if (stability > 0.8) { // Aumentado de 0.75 a 0.8 para exigir mayor estabilidad
+    if (stability > 0.75) { // Increased from 0.7 to 0.75 for stricter stability requirement
       this.stableFrameCount = Math.min(
         this.stableFrameCount + 1,
         this.currentConfig.MIN_STABILITY_COUNT * 2
       );
-    } else if (stability > 0.6) { // Aumento gradual para estabilidad moderada
-      this.stableFrameCount = Math.min(
-        this.stableFrameCount + 0.5,
-        this.currentConfig.MIN_STABILITY_COUNT * 2
-      );
     } else {
-      // Disminución más rápida para señales inestables
-      this.stableFrameCount = Math.max(0, this.stableFrameCount - 1);
+      // More gradual decrease for stability - add a fractional decrease for smoother transition
+      this.stableFrameCount = Math.max(0, this.stableFrameCount - 0.5);
     }
 
-    // Actualización de estado de detección
+    // Update detection state
     const isStableNow = this.stableFrameCount >= this.currentConfig.MIN_STABILITY_COUNT;
 
     if (isStableNow) {
@@ -284,52 +263,31 @@ export class PPGSignalProcessor implements SignalProcessor {
         this.lastDetectionTime = currentTime;
       }
     } else {
-      // Disminución más rápida para detecciones inconsistentes
+      // More gradual decrease for consecutive detections - add fractional decrease
       this.consecutiveDetections = Math.max(0, this.consecutiveDetections - 1);
-      
-      // Si perdemos demasiada estabilidad, resetear detección
-      if (this.stableFrameCount < this.currentConfig.MIN_STABILITY_COUNT / 2) {
-        this.consecutiveDetections = Math.max(0, this.consecutiveDetections - 1);
-      }
     }
 
-    // Cálculo de calidad más exigente
-    // Dar más peso a la estabilidad y penalizar valores extremos
+    // Calculate signal quality based on photoplethysmography principles
     const stabilityScore = this.stableFrameCount / (this.currentConfig.MIN_STABILITY_COUNT * 2);
+    const intensityScore = Math.min((rawValue - this.currentConfig.MIN_RED_THRESHOLD) / 
+                                (this.currentConfig.MAX_RED_THRESHOLD - this.currentConfig.MIN_RED_THRESHOLD), 1);
     
-    // Penalizar valores cercanos a los extremos del rango
-    const optimalRedValue = (this.currentConfig.MIN_RED_THRESHOLD + this.currentConfig.MAX_RED_THRESHOLD) / 2;
-    const redDeviation = Math.abs(rawValue - optimalRedValue) / (this.currentConfig.MAX_RED_THRESHOLD - this.currentConfig.MIN_RED_THRESHOLD);
-    const intensityScore = Math.max(0, 1 - (redDeviation * 2));
+    // Improved quality calculation with smoother gradient between quality levels
+    let quality = Math.round((stabilityScore * 0.6 + intensityScore * 0.4) * 100);
     
-    // Calcular estabilidad de los últimos valores (variabilidad)
-    const recentValuesVariability = this.calculateRecentVariability();
-    const stabilityBonus = Math.max(0, 1 - recentValuesVariability);
-    
-    // Cálculo de calidad con mayor peso en estabilidad
-    let quality = Math.round((stabilityScore * 0.6 + intensityScore * 0.25 + stabilityBonus * 0.15) * 100);
-    
-    // Aplicar umbrales más estrictos con transiciones graduales
+    // Apply more gradual quality transitions with some hysteresis
     if (quality < this.currentConfig.QUALITY_THRESHOLD_POOR) {
-      quality = quality; // Mantener valores muy bajos como están
+      // Keep very low quality as is
+      quality = quality;
     } else if (quality < this.currentConfig.QUALITY_THRESHOLD_ACCEPTABLE) {
-      // Rango de calidad pobre pero detectable
+      // Poor but detectable quality range - make sure it's visible to user
       quality = Math.max(this.currentConfig.QUALITY_THRESHOLD_POOR + 5, quality);
     } else if (quality < this.currentConfig.QUALITY_THRESHOLD_GOOD) {
-      // Rango de calidad aceptable
+      // Acceptable quality range - ensure clear difference from poor
       quality = Math.max(this.currentConfig.QUALITY_THRESHOLD_ACCEPTABLE + 3, quality);
-    } else if (quality < this.currentConfig.QUALITY_THRESHOLD_EXCELLENT) {
-      // Rango de buena calidad
-      quality = Math.max(this.currentConfig.QUALITY_THRESHOLD_GOOD + 3, quality);
     } else {
-      // Rango de calidad excelente
-      quality = Math.max(this.currentConfig.QUALITY_THRESHOLD_EXCELLENT, quality);
-    }
-
-    // Si el valor es extremo (cerca de los límites), penalizar calidad
-    if (rawValue < this.currentConfig.MIN_RED_THRESHOLD + 10 || 
-        rawValue > this.currentConfig.MAX_RED_THRESHOLD - 10) {
-      quality = Math.max(10, quality - 15);
+      // Good quality range - keep as is
+      quality = quality;
     }
 
     return {
@@ -342,33 +300,15 @@ export class PPGSignalProcessor implements SignalProcessor {
    * Calculate signal stability
    */
   private calculateStability(): number {
-    if (this.lastValues.length < 3) return 0;
+    if (this.lastValues.length < 2) return 0;
     
-    // Cálculo mejorado de estabilidad basado en variaciones
+    // Stability calculation based on research
     const variations = this.lastValues.slice(1).map((val, i) => 
       Math.abs(val - this.lastValues[i])
     );
     
     const avgVariation = variations.reduce((sum, val) => sum + val, 0) / variations.length;
-    
-    // Penalizar más las variaciones grandes
-    return Math.max(0, Math.min(1, 1 - (avgVariation / 40)));
-  }
-  
-  /**
-   * Calculate recent values variability (new method)
-   */
-  private calculateRecentVariability(): number {
-    if (this.lastValues.length < 5) return 1;
-    
-    const recentValues = this.lastValues.slice(-5);
-    const avg = recentValues.reduce((sum, val) => sum + val, 0) / recentValues.length;
-    
-    const variance = recentValues.reduce((sum, val) => sum + Math.pow(val - avg, 2), 0) / recentValues.length;
-    const stdDev = Math.sqrt(variance);
-    
-    // Normalizar a una escala de 0-1, donde 0 es estable
-    return Math.min(1, stdDev / 40);
+    return Math.max(0, Math.min(1, 1 - (avgVariation / 50)));
   }
 
   /**

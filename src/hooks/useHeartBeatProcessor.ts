@@ -1,5 +1,7 @@
+
 import { useState, useRef, useCallback } from 'react';
 import { HeartBeatProcessor } from '../modules/HeartBeatProcessor';
+import { HeartBeatResult } from '../types/signal';
 
 export const useHeartBeatProcessor = () => {
   const [bpm, setBpm] = useState(0);
@@ -30,11 +32,20 @@ export const useHeartBeatProcessor = () => {
       // Get RR intervals for arrhythmia detection, including amplitudes if available
       const rrData = processor.getRRIntervals();
       
+      // Extract peak amplitudes for respiration analysis
+      if (result.isPeak && result.amplitude !== undefined) {
+        if (!rrData.amplitudes) {
+          rrData.amplitudes = [];
+        }
+        rrData.amplitudes.push(result.amplitude);
+      }
+      
       return {
         bpm: result.bpm,
         confidence: result.confidence,
         isPeak: result.isPeak,
-        rrData
+        rrData,
+        amplitude: result.amplitude
       };
     } catch (error) {
       console.error('Error processing signal:', error);
@@ -42,7 +53,8 @@ export const useHeartBeatProcessor = () => {
         bpm: 0,
         confidence: 0,
         isPeak: false,
-        rrData: { intervals: [], lastPeakTime: null }
+        rrData: { intervals: [], lastPeakTime: null },
+        amplitude: undefined
       };
     }
   }, [getProcessor]);

@@ -9,7 +9,6 @@ export const useSignalProcessor = () => {
   const [lastSignal, setLastSignal] = useState<ProcessedSignal | null>(null);
   const [error, setError] = useState<ProcessingError | null>(null);
   
-  // Usar inicialización lazy para el procesador
   useEffect(() => {
     console.log("useSignalProcessor: Creando nueva instancia del procesador");
     processorRef.current = new PPGSignalProcessor();
@@ -20,6 +19,20 @@ export const useSignalProcessor = () => {
         quality: signal.quality,
         filteredValue: signal.filteredValue
       });
+      
+      // Extract red and ir values from RGB components if available
+      // This is important for hemoglobin calculation
+      if (signal.rawPixelData) {
+        // Use the data for hemoglobin calculation in the VitalSignsProcessor
+        const vitalSignsProcessor = window.vitalSignsProcessor;
+        if (vitalSignsProcessor) {
+          const redValue = signal.rawPixelData.r || 0;
+          const irValue = signal.rawPixelData.ir || signal.rawPixelData.g || 0;
+          console.log(`Signal processor: Updating buffers - Red: ${redValue}, IR: ${irValue}`);
+          vitalSignsProcessor.updateSignalBuffers(redValue, irValue);
+        }
+      }
+      
       setLastSignal(signal);
       setError(null);
     };
@@ -38,7 +51,6 @@ export const useSignalProcessor = () => {
       console.log("useSignalProcessor: Limpiando y destruyendo procesador");
       if (processorRef.current) {
         processorRef.current.stop();
-        // Liberar referencias explícitamente
         processorRef.current.onSignalReady = null;
         processorRef.current.onError = null;
         processorRef.current = null;
@@ -60,7 +72,6 @@ export const useSignalProcessor = () => {
       processorRef.current.stop();
     }
     setIsProcessing(false);
-    // Liberar memoria explícitamente
     setLastSignal(null);
     setError(null);
   }, []);
@@ -89,7 +100,6 @@ export const useSignalProcessor = () => {
     }
   }, [isProcessing]);
 
-  // Función para liberar memoria de forma más agresiva
   const cleanMemory = useCallback(() => {
     console.log("useSignalProcessor: Limpieza agresiva de memoria");
     if (processorRef.current) {
@@ -98,7 +108,6 @@ export const useSignalProcessor = () => {
     setLastSignal(null);
     setError(null);
     
-    // Forzar limpieza del garbage collector si está disponible
     if (window.gc) {
       try {
         window.gc();
