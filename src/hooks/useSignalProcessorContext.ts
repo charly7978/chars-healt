@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, ReactNode, useState } from 'react';
+import { createContext, useContext, ReactNode, useState } from 'react';
 import { ProcessedSignal } from '../types/signal';
 
 // Define the context type
