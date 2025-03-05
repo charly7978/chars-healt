@@ -7,3 +7,5 @@ declare global {
     gc?: () => void;
   }
 }
+
+export {};

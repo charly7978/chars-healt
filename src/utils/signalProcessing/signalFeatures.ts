@@ -1,76 +1,29 @@
-/**
- * Utilities for extracting features from PPG signals
- */
 
 /**
- * Calculate the AC component of a PPG signal
- * @param signal The PPG signal array
- * @returns The AC component value
+ * Filter spurious peaks that are too close or too small
  */
-export const calculateAC = (signal: number[]): number => {
-  if (signal.length === 0) return 0;
+export const filterSpuriousPeaks = (signal: number[], potentialPeakIndices: number[]) => {
+  if (potentialPeakIndices.length <= 1) return potentialPeakIndices;
   
-  const min = Math.min(...signal);
-  const max = Math.max(...signal);
-  return max - min;
-};
-
-/**
- * Calculate the DC component of a PPG signal
- * @param signal The PPG signal array
- * @returns The DC component value
- */
-export const calculateDC = (signal: number[]): number => {
-  if (signal.length === 0) return 0;
+  // Minimum distance between peaks (in samples)
+  const minPeakDistance = 15; // Approximately 0.5 seconds at 30fps
   
-  const sum = signal.reduce((acc, val) => acc + val, 0);
-  return sum / signal.length;
-};
-
-/**
- * Calculate standard deviation of an array of numbers
- * @param values Array of numeric values
- * @returns Standard deviation
- */
-export const calculateStandardDeviation = (values: number[]): number => {
-  if (values.length < 2) return 0;
-  
-  const avg = values.reduce((acc, val) => acc + val, 0) / values.length;
-  const squareDiffs = values.map(value => Math.pow(value - avg, 2));
-  const avgSquareDiff = squareDiffs.reduce((acc, val) => acc + val, 0) / squareDiffs.length;
-  return Math.sqrt(avgSquareDiff);
-};
-
-/**
- * Filter out spurious peaks based on minimum distance and height criteria
- * @param signal Original signal
- * @param peakIndices Array of potential peak indices
- * @returns Filtered array of peak indices
- */
-export const filterSpuriousPeaks = (signal: number[], peakIndices: number[]): number[] => {
-  if (peakIndices.length <= 1) return peakIndices;
+  // Minimum amplitude threshold
+  const amplitudes = potentialPeakIndices.map(i => signal[i]);
+  const meanAmplitude = amplitudes.reduce((a, b) => a + b, 0) / amplitudes.length;
+  const minAmplitude = meanAmplitude * 0.5; // 50% of mean amplitude
   
   const filteredPeaks: number[] = [];
-  let lastValidPeak = peakIndices[0];
-  filteredPeaks.push(lastValidPeak);
+  let lastAddedPeak = -minPeakDistance * 2;
   
-  // Minimum distance between peaks (in samples) - adapt based on expected HR range
-  const minPeakDistance = 15; // At 30fps, this represents 120 BPM max
-  
-  for (let i = 1; i < peakIndices.length; i++) {
-    const currentPeak = peakIndices[i];
-    const distance = currentPeak - lastValidPeak;
+  for (let i = 0; i < potentialPeakIndices.length; i++) {
+    const currentPeak = potentialPeakIndices[i];
+    const currentAmplitude = signal[currentPeak];
     
-    if (distance >= minPeakDistance) {
+    // Check if peak is far enough from last added peak and has sufficient amplitude
+    if (currentPeak - lastAddedPeak >= minPeakDistance && currentAmplitude >= minAmplitude) {
       filteredPeaks.push(currentPeak);
-      lastValidPeak = currentPeak;
-    } else {
-      // If peaks are too close, keep the higher one
-      if (signal[currentPeak] > signal[lastValidPeak]) {
-        filteredPeaks.pop(); // Remove last peak
-        filteredPeaks.push(currentPeak); // Add current peak
-        lastValidPeak = currentPeak;
-      }
+      lastAddedPeak = currentPeak;
     }
   }
   
@@ -79,34 +32,89 @@ export const filterSpuriousPeaks = (signal: number[], peakIndices: number[]): nu
 
 /**
  * Calculate RR intervals and heart rate from peak indices
- * @param peakIndices Array of peak indices
- * @param signalLength Total length of the original signal
- * @param samplingRate Sampling rate in Hz
- * @returns Object with RR intervals and calculated heart rate
  */
-export const calculateRRIntervals = (
-  peakIndices: number[],
-  signalLength: number,
-  samplingRate: number = 30
-): { intervals: number[], heartRate: number } => {
+export const calculateRRIntervals = (peakIndices: number[], signalLength: number, fps: number = 30) => {
   if (peakIndices.length < 2) {
-    return { intervals: [], heartRate: 0 };
+    return {
+      intervals: [],
+      averageInterval: 0,
+      heartRate: 0
+    };
   }
   
-  // Calculate intervals between consecutive peaks (in samples)
+  // Calculate intervals between peaks (in samples)
   const intervals: number[] = [];
   for (let i = 1; i < peakIndices.length; i++) {
     intervals.push(peakIndices[i] - peakIndices[i - 1]);
   }
   
-  // Convert intervals from samples to seconds
-  const intervalsSec = intervals.map(interval => interval / samplingRate);
+  // Calculate average interval
+  const averageInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
   
-  // Calculate average interval in seconds
-  const avgIntervalSec = intervalsSec.reduce((sum, val) => sum + val, 0) / intervalsSec.length;
+  // Convert to heart rate in BPM
+  // HR = 60 * sampling_rate / average_interval_in_samples
+  const heartRate = Math.round(60 * fps / averageInterval);
   
-  // Calculate heart rate (beats per minute)
-  const heartRate = avgIntervalSec > 0 ? 60 / avgIntervalSec : 0;
+  return {
+    intervals,
+    averageInterval,
+    heartRate: heartRate >= 40 && heartRate <= 200 ? heartRate : 0
+  };
+};
+
+/**
+ * Calculate the signal quality based on various metrics
+ */
+export const calculateSignalQuality = (signal: number[], peakIndices: number[]) => {
+  if (signal.length < 30 || peakIndices.length < 2) return 0;
   
-  return { intervals, heartRate };
+  // Calculate metrics
+  const snr = calculateSNR(signal, peakIndices);
+  const peakConsistency = calculatePeakConsistency(peakIndices);
+  
+  // Combine metrics (with weights)
+  const quality = (snr * 0.6) + (peakConsistency * 0.4);
+  
+  // Map to 0-100 scale
+  return Math.max(0, Math.min(100, Math.round(quality * 100)));
+};
+
+/**
+ * Calculate signal-to-noise ratio
+ */
+const calculateSNR = (signal: number[], peakIndices: number[]) => {
+  // Simple SNR estimation
+  const peakValues = peakIndices.map(i => signal[i]);
+  const peakMean = peakValues.reduce((a, b) => a + b, 0) / peakValues.length;
+  
+  const nonPeakIndices = Array.from({length: signal.length}, (_, i) => i)
+    .filter(i => !peakIndices.includes(i));
+  
+  const nonPeakValues = nonPeakIndices.map(i => signal[i]);
+  const nonPeakMean = nonPeakValues.reduce((a, b) => a + b, 0) / nonPeakValues.length;
+  
+  const signalPower = peakMean * peakMean;
+  const noisePower = nonPeakMean * nonPeakMean;
+  
+  return signalPower / (noisePower + 0.0001); // Avoid division by zero
+};
+
+/**
+ * Calculate consistency of peak intervals
+ */
+const calculatePeakConsistency = (peakIndices: number[]) => {
+  if (peakIndices.length < 3) return 0;
+  
+  const intervals = [];
+  for (let i = 1; i < peakIndices.length; i++) {
+    intervals.push(peakIndices[i] - peakIndices[i - 1]);
+  }
+  
+  const mean = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+  const variance = intervals.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / intervals.length;
+  const stdDev = Math.sqrt(variance);
+  const cv = mean > 0 ? stdDev / mean : 1; // Coefficient of variation
+  
+  // Convert CV to a 0-1 quality score (inverse relationship)
+  return Math.max(0, Math.min(1, 1 - cv));
 };
