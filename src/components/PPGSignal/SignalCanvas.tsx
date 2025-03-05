@@ -5,6 +5,7 @@ import { smoothValue } from './utils/SignalCanvasUtils';
 import { useGridRenderer } from './GridRenderer';
 import { useSignalRenderer } from './SignalRenderer';
 import { CANVAS_DIMENSIONS, SIGNAL_PROCESSING, COLORS } from './constants/CanvasConstants';
+import { useCanvasRenderLoop } from './hooks/useCanvasRenderLoop';
 
 interface SignalCanvasProps {
   value: number;
@@ -29,13 +30,9 @@ const SignalCanvas: React.FC<SignalCanvasProps> = ({
   const dataBufferRef = useRef<CircularBuffer | null>(null);
   const baselineRef = useRef<number | null>(null);
   const lastValueRef = useRef<number | null>(null);
-  const animationFrameRef = useRef<number>();
-  const lastRenderTimeRef = useRef<number>(0);
-  const lastArrhythmiaTime = useRef<number>(0);
-  const arrhythmiaCountRef = useRef<number>(0);
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
   
-  const { BUFFER_SIZE, SMOOTHING_FACTOR, FRAME_TIME } = SIGNAL_PROCESSING;
+  const { BUFFER_SIZE, SMOOTHING_FACTOR } = SIGNAL_PROCESSING;
   const { VERTICAL_SCALE } = CANVAS_DIMENSIONS;
 
   // Initialize the circular buffer
@@ -59,21 +56,10 @@ const SignalCanvas: React.FC<SignalCanvasProps> = ({
   const renderGrid = useGridRenderer(ctxRef.current);
   const { renderSignalPath, renderPeaks } = useSignalRenderer(ctxRef.current, canvasRef.current);
 
-  // Main render function
-  const renderSignal = useCallback(() => {
-    if (!canvasRef.current || !dataBufferRef.current || !ctxRef.current) {
-      animationFrameRef.current = requestAnimationFrame(renderSignal);
-      return;
-    }
-
-    const currentTime = performance.now();
-    const timeSinceLastRender = currentTime - lastRenderTimeRef.current;
-
-    if (timeSinceLastRender < FRAME_TIME) {
-      animationFrameRef.current = requestAnimationFrame(renderSignal);
-      return;
-    }
-
+  // Process signal data and update buffer
+  const processSignalData = useCallback(() => {
+    if (!dataBufferRef.current) return null;
+    
     const now = Date.now();
     
     // Update baseline
@@ -98,8 +84,6 @@ const SignalCanvas: React.FC<SignalCanvasProps> = ({
         arrhythmiaStatus?.includes("ARRITMIA") && 
         now - rawArrhythmiaData.timestamp < 1000) {
       isArrhythmia = true;
-      lastArrhythmiaTime.current = now;
-      arrhythmiaCountRef.current++;
     }
 
     // Create data point and add to buffer
@@ -109,12 +93,23 @@ const SignalCanvas: React.FC<SignalCanvasProps> = ({
       isArrhythmia
     };
     dataBufferRef.current.push(dataPoint);
+    
+    return { now, points: dataBufferRef.current.getPoints() };
+  }, [value, isFingerDetected, arrhythmiaStatus, rawArrhythmiaData, VERTICAL_SCALE, SMOOTHING_FACTOR]);
 
+  // Render function that will be called in the animation loop
+  const renderFrame = useCallback(() => {
+    if (!ctxRef.current || !dataBufferRef.current) return;
+    
+    const processedData = processSignalData();
+    if (!processedData) return;
+    
+    const { now, points } = processedData;
+    
     // Draw the grid
     renderGrid();
 
     // Get visible points and render them
-    const points = dataBufferRef.current.getPoints();
     if (points.length > 1) {
       const visiblePoints = points.filter(
         point => (now - point.time) <= CANVAS_DIMENSIONS.WINDOW_WIDTH_MS
@@ -125,32 +120,10 @@ const SignalCanvas: React.FC<SignalCanvasProps> = ({
         renderPeaks(visiblePoints, now, rawArrhythmiaData);
       }
     }
+  }, [processSignalData, renderGrid, renderSignalPath, renderPeaks, rawArrhythmiaData]);
 
-    lastRenderTimeRef.current = performance.now();
-    animationFrameRef.current = requestAnimationFrame(renderSignal);
-  }, [
-    value, 
-    quality, 
-    isFingerDetected, 
-    rawArrhythmiaData, 
-    arrhythmiaStatus, 
-    renderGrid, 
-    renderSignalPath, 
-    renderPeaks, 
-    FRAME_TIME, 
-    SMOOTHING_FACTOR, 
-    VERTICAL_SCALE
-  ]);
-
-  // Start and cleanup animation frame
-  useEffect(() => {
-    renderSignal();
-    return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-    };
-  }, [renderSignal]);
+  // Use our custom animation loop hook
+  useCanvasRenderLoop(renderFrame);
 
   return (
     <div className="absolute inset-0 w-full" style={{ height: '65vh', top: 0 }}>

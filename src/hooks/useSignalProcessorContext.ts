@@ -1,48 +1,42 @@
 
-import { createContext, useContext, ReactNode, useState } from 'react';
+import React, { createContext, useContext, ReactNode } from 'react';
+import { PPGSignalProcessor } from '../modules/SignalProcessor';
 import { ProcessedSignal } from '../types/signal';
 
-// Define the context type
 interface SignalProcessorContextType {
-  lastProcessedSignal: ProcessedSignal | null;
-  updateSignal: (signal: ProcessedSignal) => void;
-  resetSignal: () => void;
+  processor: PPGSignalProcessor | null;
+  lastSignal: ProcessedSignal | null;
+  isProcessing: boolean;
+  startProcessing: () => void;
+  stopProcessing: () => void;
+  processFrame: (imageData: ImageData) => void;
 }
 
-// Create context with default values
-const SignalProcessorContext = createContext<SignalProcessorContextType>({
-  lastProcessedSignal: null,
-  updateSignal: () => {},
-  resetSignal: () => {},
-});
+const SignalProcessorContext = createContext<SignalProcessorContextType | null>(null);
 
-// Provider component
-export const SignalProcessorProvider = ({ children }: { children: ReactNode }) => {
-  const [lastProcessedSignal, setLastProcessedSignal] = useState<ProcessedSignal | null>(null);
+interface SignalProcessorProviderProps {
+  children: ReactNode;
+}
 
-  const updateSignal = (signal: ProcessedSignal) => {
-    setLastProcessedSignal(signal);
-  };
-
-  const resetSignal = () => {
-    setLastProcessedSignal(null);
+export const SignalProcessorProvider: React.FC<SignalProcessorProviderProps> = ({ children }) => {
+  // Create a simple initial context that will be properly initialized in useSignalProcessor
+  const contextValue: SignalProcessorContextType = {
+    processor: null,
+    lastSignal: null,
+    isProcessing: false,
+    startProcessing: () => console.log('Signal processor not initialized'),
+    stopProcessing: () => console.log('Signal processor not initialized'),
+    processFrame: () => console.log('Signal processor not initialized')
   };
 
   return (
-    <SignalProcessorContext.Provider
-      value={{
-        lastProcessedSignal,
-        updateSignal,
-        resetSignal,
-      }}
-    >
+    <SignalProcessorContext.Provider value={contextValue}>
       {children}
     </SignalProcessorContext.Provider>
   );
 };
 
-// Custom hook to use the context
-export const useSignalProcessorContext = () => {
+export const useSignalProcessorContext = (): SignalProcessorContextType => {
   const context = useContext(SignalProcessorContext);
   if (!context) {
     throw new Error('useSignalProcessorContext must be used within a SignalProcessorProvider');

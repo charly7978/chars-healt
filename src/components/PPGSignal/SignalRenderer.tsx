@@ -1,6 +1,6 @@
 
 import React, { useCallback } from 'react';
-import { COLORS, CANVAS_DIMENSIONS } from './constants/CanvasConstants';
+import { COLORS, CANVAS_DIMENSIONS, SIGNAL_PROCESSING } from './constants/CanvasConstants';
 import { findMaxPeakIndices } from './utils/SignalCanvasUtils';
 import { PPGDataPoint } from '../../utils/CircularBuffer';
 
@@ -15,13 +15,14 @@ interface SignalRendererProps {
   } | null;
 }
 
+// This component doesn't render anything to the DOM, it just provides rendering functions
 const SignalRenderer: React.FC<SignalRendererProps> = ({ 
   ctx, 
   visiblePoints, 
   now,
   rawArrhythmiaData
 }) => {
-  return null; // This component doesn't render anything
+  return null;
 };
 
 export default React.memo(SignalRenderer);

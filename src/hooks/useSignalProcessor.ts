@@ -7,22 +7,21 @@ import { useSignalProcessing } from './useSignalProcessing';
 import { useFrameRate } from './useFrameRate';
 
 /**
- * Hook principal para el procesamiento de señales PPG
- * Con optimizaciones agresivas de rendimiento
+ * Hook for PPG signal processing with performance optimizations
  */
 export const useSignalProcessor = () => {
   const processorRef = useRef<PPGSignalProcessor | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [lastSignal, setLastSignal] = useState<ProcessedSignal | null>(null);
   const [error, setError] = useState<ProcessingError | null>(null);
-  const processingThrottleRef = useRef<number>(0); // Throttle counter
+  const processingThrottleRef = useRef<number>(0);
   
-  // Hooks específicos con parámetros optimizados
-  const frameRate = useFrameRate(15); // Reduced from 30 to 15fps
+  // Specialized hooks with optimized parameters
+  const frameRate = useFrameRate(15);
   const signalProcessing = useSignalProcessing();
   const calibration = useCalibration(processorRef);
   
-  // Inicializar el procesador
+  // Initialize the processor
   useEffect(() => {
     console.log("useSignalProcessor: Creating new processor instance");
     processorRef.current = new PPGSignalProcessor();
@@ -52,7 +51,7 @@ export const useSignalProcessor = () => {
     };
   }, []);
 
-  // Función para limpiar el procesador
+  // Clean up processor resources
   const cleanupProcessor = useCallback(() => {
     if (processorRef.current) {
       processorRef.current.stop();
@@ -65,7 +64,7 @@ export const useSignalProcessor = () => {
     frameRate.resetFrameTimer();
   }, [signalProcessing, calibration, frameRate]);
 
-  // Iniciar el procesamiento
+  // Start processing
   const startProcessing = useCallback(() => {
     console.log("useSignalProcessor: Starting processing");
     if (processorRef.current) {
@@ -78,7 +77,7 @@ export const useSignalProcessor = () => {
     }
   }, [signalProcessing, calibration, frameRate]);
 
-  // Detener el procesamiento
+  // Stop processing
   const stopProcessing = useCallback(() => {
     console.log("useSignalProcessor: Stopping processing");
     if (processorRef.current) {
@@ -94,24 +93,24 @@ export const useSignalProcessor = () => {
     }, 300);
   }, []);
 
-  // Procesar un frame de la cámara
+  // Process a frame from the camera
   const processFrame = useCallback((imageData: ImageData) => {
     if (!isProcessing || !processorRef.current) {
       return;
     }
     
-    // Control de frame rate agresivo para mejor rendimiento
+    // Aggressive frame rate control for better performance
     if (!frameRate.shouldProcessFrame()) {
       return;
     }
     
     try {
-      // Procesar el frame con el PPGSignalProcessor
+      // Process frame with PPGSignalProcessor
       processorRef.current.processFrame(imageData);
       
-      // Si tenemos una señal, la procesamos adicionalmente
+      // If we have a signal, process it additionally
       if (lastSignal) {
-        // Verificar si estamos en fase de calibración
+        // Check if we're in calibration phase
         if (calibration.isCalibrationPhase()) {
           const calibrationComplete = calibration.updateCalibrationCounter();
           if (!calibrationComplete) {
@@ -119,14 +118,14 @@ export const useSignalProcessor = () => {
           }
         }
         
-        // Throttle processing for better performance - only process every other frame
+        // Throttle processing for better performance
         processingThrottleRef.current = (processingThrottleRef.current + 1) % 2;
         if (processingThrottleRef.current !== 0) return;
         
-        // Procesar la señal
+        // Process the signal
         const processedResult = signalProcessing.processSignal(lastSignal);
         if (processedResult) {
-          // Crear señal mejorada
+          // Create enhanced signal
           const enhancedSignal: ProcessedSignal = {
             timestamp: lastSignal.timestamp,
             rawValue: lastSignal.rawValue,
@@ -145,7 +144,7 @@ export const useSignalProcessor = () => {
     }
   }, [isProcessing, lastSignal, calibration, signalProcessing, frameRate]);
 
-  // Limpieza agresiva de memoria
+  // Aggressive memory cleanup
   const cleanMemory = useCallback(() => {
     console.log("useSignalProcessor: Aggressive memory cleanup");
     if (processorRef.current) {
@@ -162,9 +161,9 @@ export const useSignalProcessor = () => {
       clearTimeout(i);
     }
     
-    if (window.gc) {
+    if (typeof window !== 'undefined' && (window as any).gc) {
       try {
-        window.gc();
+        (window as any).gc();
         console.log("useSignalProcessor: Garbage collection requested");
       } catch (e) {
         console.log("useSignalProcessor: Garbage collection unavailable");
@@ -178,7 +177,6 @@ export const useSignalProcessor = () => {
     error,
     startProcessing,
     stopProcessing,
-    calibrate,
     processFrame,
     cleanMemory
   };
