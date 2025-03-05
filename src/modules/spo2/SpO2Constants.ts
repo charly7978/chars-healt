@@ -9,12 +9,12 @@ export const SPO2_CONSTANTS = {
   R_RATIO_B: 25,             // Range factor for natural physiological range
   BASELINE: 97,              // Normal healthy baseline
   MOVING_AVERAGE_ALPHA: 0.2, // Increased for faster response
-  BUFFER_SIZE: 10,           // Reduced buffer size for better performance
+  BUFFER_SIZE: 8,           // Reduced buffer size for better performance (was 10)
   
   // Simplified advanced algorithm constants
-  QUANTUM_FILTER_BANDS: 2,   // Reduced from 3 to 2
-  WAVELET_LEVELS: 2,         // Reduced from 4 to 2
-  ENSEMBLE_SIZE: 3,          // Reduced from 5 to 3
-  PATTERN_MEMORY: 15,        // Reduced from 30 to 15
-  ANOMALY_THRESHOLD: 4.0     // Increased for less aggressive filtering
+  QUANTUM_FILTER_BANDS: 1,   // Reduced from 2 to 1
+  WAVELET_LEVELS: 1,         // Reduced from 2 to 1
+  ENSEMBLE_SIZE: 2,          // Reduced from 3 to 2
+  PATTERN_MEMORY: 8,         // Reduced from 15 to 8
+  ANOMALY_THRESHOLD: 4.5     // Increased for less aggressive filtering
 };
