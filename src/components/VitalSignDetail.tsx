@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 
@@ -7,7 +6,7 @@ interface VitalSignDetailProps {
   value: string | number;
   unit?: string;
   riskLevel?: string;
-  type: 'heartRate' | 'spo2' | 'bloodPressure' | 'arrhythmia' | 'respiration' | 'glucose';
+  type: 'heartRate' | 'spo2' | 'bloodPressure' | 'arrhythmia' | 'respiration' | 'glucose' | 'lipids';
   onBack: () => void;
   secondaryValue?: string | number;
   secondaryUnit?: string;
@@ -36,7 +35,6 @@ const VitalSignDetail: React.FC<VitalSignDetailProps> = ({
   });
 
   useEffect(() => {
-    // Get relevant information based on the vital sign type and value
     setInfo(getVitalSignInfo(type, value, riskLevel, secondaryValue, trend));
   }, [type, value, riskLevel, secondaryValue, trend]);
 
@@ -114,7 +112,7 @@ const getRiskBadgeColor = (riskLevel: string): string => {
 };
 
 const getVitalSignInfo = (
-  type: 'heartRate' | 'spo2' | 'bloodPressure' | 'arrhythmia' | 'respiration' | 'glucose',
+  type: 'heartRate' | 'spo2' | 'bloodPressure' | 'arrhythmia' | 'respiration' | 'glucose' | 'lipids',
   value: string | number,
   riskLevel?: string,
   secondaryValue?: string | number,
@@ -312,6 +310,26 @@ const getVitalSignInfo = (
       } else {
         info.recommendation = 'Consulte a un médico para una evaluación completa. Podría ser necesario realizar análisis adicionales para determinar si tiene diabetes.';
       }
+    }
+  }
+  
+  else if (type === 'lipids') {
+    const cholesterol = typeof value === 'number' ? value : parseInt(value as string, 10);
+    
+    info.description = 'Los niveles de colesterol en la sangre son un indicador importante de la salud cardiovascular. Los niveles normales oscilan entre 150 y 200 mg/dL.';
+    
+    if (isNaN(cholesterol) || value === '--') {
+      info.interpretation = 'No se pudo obtener una medición válida.';
+      info.recommendation = 'Intente una nueva medición asegurándose de posicionar correctamente el dedo sobre la cámara.';
+    } else if (cholesterol < 150) {
+      info.interpretation = 'Su nivel de colesterol es normal (<150 mg/dL).';
+      info.recommendation = 'Continúe manteniendo hábitos saludables como una alimentación equilibrada, ejercicio regular y control del estrés.';
+    } else if (cholesterol >= 150 && cholesterol < 200) {
+      info.interpretation = 'Su nivel de colesterol está en el rango normal (150-199 mg/dL).';
+      info.recommendation = 'Considere reducir el consumo de grasas saturadas y trans, aumentar la actividad física y monitorear su nivel de colesterol regularmente.';
+    } else {
+      info.interpretation = 'Su nivel de colesterol está por encima del rango normal (≥200 mg/dL). Niveles altos de colesterol pueden aumentar el riesgo de enfermedades cardíacas.';
+      info.recommendation = 'Consulte a un médico para una evaluación completa. Puede requerir cambios en el estilo de vida y tratamiento médico.';
     }
   }
 
