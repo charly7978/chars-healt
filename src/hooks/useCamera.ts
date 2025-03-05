@@ -1,5 +1,5 @@
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef, useState, useEffect } from 'react';
 import { isAndroidDevice, createCameraConstraints, applyAndroidOptimizations, controlTorch } from '../utils/cameraUtils';
 
 interface UseCameraProps {
@@ -17,7 +17,9 @@ export const useCamera = ({ onStreamReady, isMonitoring }: UseCameraProps) => {
 
   // Check if device is Android
   const detectAndroid = useCallback(() => {
-    setIsAndroid(isAndroidDevice());
+    const detected = isAndroidDevice();
+    console.log("Camera: Detected Android:", detected);
+    setIsAndroid(detected);
   }, []);
 
   // Stop camera and release resources
@@ -148,6 +150,20 @@ export const useCamera = ({ onStreamReady, isMonitoring }: UseCameraProps) => {
       initializingRef.current = false;
     }
   }, [isMonitoring, onStreamReady, stopCamera, isAndroid]);
+
+  // Force-try to start camera with a delay (helps on some mobile browsers)
+  useEffect(() => {
+    if (isMonitoring) {
+      const retryTimeout = setTimeout(() => {
+        if (isMonitoring && !streamRef.current) {
+          console.log("CameraView: Retry starting camera");
+          startCamera();
+        }
+      }, 1000); // 1 second delay
+      
+      return () => clearTimeout(retryTimeout);
+    }
+  }, [isMonitoring, startCamera]);
 
   return {
     videoRef,

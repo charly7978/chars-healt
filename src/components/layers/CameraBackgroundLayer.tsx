@@ -28,11 +28,12 @@ const CameraBackgroundLayer: React.FC<CameraBackgroundLayerProps> = ({
         isFingerDetected={isMonitoring ? lastSignal?.fingerDetected : false}
         signalQuality={isMonitoring ? signalQuality : 0}
       />
+      {/* Reduced opacity to make sure we can see the camera feed */}
       <div 
         className="absolute inset-0" 
         style={{ 
-          backgroundColor: 'rgba(0, 0, 0, 0.8)', 
-          backdropFilter: 'blur(2px)' 
+          backgroundColor: 'rgba(0, 0, 0, 0.6)', 
+          backdropFilter: 'blur(1px)' 
         }} 
       />
     </div>

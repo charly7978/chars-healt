@@ -1,4 +1,5 @@
-import React from "react";
+
+import React, { useState, useEffect } from "react";
 import PermissionsHandler from "@/components/PermissionsHandler";
 import PermissionsMessage from "@/components/PermissionsMessage";
 import { useImmersiveMode } from "@/hooks/useImmersiveMode";
@@ -8,11 +9,14 @@ import CameraBackgroundLayer from "@/components/layers/CameraBackgroundLayer";
 import SignalDisplayLayer from "@/components/layers/SignalDisplayLayer";
 import VitalSignsLayer from "@/components/layers/VitalSignsLayer";
 import ControlsLayer from "@/components/layers/ControlsLayer";
+import { toast } from "@/components/ui/use-toast";
 
 /**
  * Main application page that coordinates all monitoring components
  */
 const Index = () => {
+  const [cameraInitialized, setCameraInitialized] = useState(false);
+  
   const {
     isMonitoring,
     isCameraOn,
@@ -33,6 +37,32 @@ const Index = () => {
 
   // Activate immersive mode
   useImmersiveMode();
+  
+  // Effect to show toast when camera is turned on
+  useEffect(() => {
+    if (isCameraOn && !cameraInitialized) {
+      setCameraInitialized(true);
+      toast({
+        title: "Cámara activada",
+        description: "Coloque su dedo sobre la cámara trasera.",
+      });
+    }
+  }, [isCameraOn, cameraInitialized]);
+
+  // Effect to handle permissions granted
+  useEffect(() => {
+    if (permissionsGranted && !cameraInitialized) {
+      // Small delay to ensure everything is ready
+      const timeout = setTimeout(() => {
+        if (!isCameraOn) {
+          console.log("Index: Auto-activating camera after permissions granted");
+          startMonitoring();
+        }
+      }, 1000);
+      
+      return () => clearTimeout(timeout);
+    }
+  }, [permissionsGranted, isCameraOn, startMonitoring]);
 
   return (
     <PageContainer>

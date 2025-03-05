@@ -14,7 +14,7 @@ const VideoDisplay: React.FC<VideoDisplayProps> = ({ videoRef, isMonitoring, isA
       autoPlay
       playsInline
       muted
-      className={`absolute top-0 left-0 min-w-full min-h-full w-auto h-auto z-0 object-cover ${!isMonitoring ? 'hidden' : ''}`}
+      className={`absolute top-0 left-0 min-w-full min-h-full w-auto h-auto z-10 object-cover ${!isMonitoring ? 'opacity-0' : 'opacity-100'}`}
       style={{
         transform: 'translateZ(0)', // Hardware acceleration
         WebkitBackfaceVisibility: 'hidden',
