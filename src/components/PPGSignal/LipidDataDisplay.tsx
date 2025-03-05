@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { memo } from 'react';
 
 interface LipidDataDisplayProps {
   lipidData?: {
@@ -10,7 +10,7 @@ interface LipidDataDisplayProps {
   } | null;
 }
 
-const LipidDataDisplay: React.FC<LipidDataDisplayProps> = ({ lipidData }) => {
+const LipidDataDisplay: React.FC<LipidDataDisplayProps> = memo(({ lipidData }) => {
   if (!lipidData) return null;
   
   return (
@@ -36,6 +36,8 @@ const LipidDataDisplay: React.FC<LipidDataDisplayProps> = ({ lipidData }) => {
       </div>
     </div>
   );
-};
+});
+
+LipidDataDisplay.displayName = 'LipidDataDisplay';
 
 export default LipidDataDisplay;

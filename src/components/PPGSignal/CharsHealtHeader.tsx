@@ -1,7 +1,7 @@
 
-import React from 'react';
+import React, { memo } from 'react';
 
-const CharsHealtHeader: React.FC = () => {
+const CharsHealtHeader: React.FC = memo(() => {
   return (
     <div 
       className="absolute" 
@@ -19,6 +19,8 @@ const CharsHealtHeader: React.FC = () => {
       </h1>
     </div>
   );
-};
+});
+
+CharsHealtHeader.displayName = 'CharsHealtHeader';
 
 export default CharsHealtHeader;

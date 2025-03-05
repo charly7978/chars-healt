@@ -1,9 +1,10 @@
 
-import React from 'react';
+import React, { memo } from 'react';
 import SignalQualityIndicator from './PPGSignal/SignalQualityIndicator';
 import LipidDataDisplay from './PPGSignal/LipidDataDisplay';
 import SignalCanvas from './PPGSignal/SignalCanvas';
 import CharsHealtHeader from './PPGSignal/CharsHealtHeader';
+import MeasurementControls from './PPGSignal/MeasurementControls';
 
 interface PPGSignalMeterProps {
   value: number;
@@ -25,7 +26,7 @@ interface PPGSignalMeterProps {
   } | null;
 }
 
-const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({ 
+const PPGSignalMeter: React.FC<PPGSignalMeterProps> = memo(({ 
   value, 
   quality, 
   isFingerDetected,
@@ -52,9 +53,17 @@ const PPGSignalMeter: React.FC<PPGSignalMeterProps> = ({
       
       <LipidDataDisplay lipidData={lipidData} />
       
+      <MeasurementControls
+        onStartMeasurement={onStartMeasurement}
+        onReset={onReset}
+        isFingerDetected={isFingerDetected}
+      />
+      
       <CharsHealtHeader />
     </>
   );
-};
+});
+
+PPGSignalMeter.displayName = 'PPGSignalMeter';
 
 export default PPGSignalMeter;
