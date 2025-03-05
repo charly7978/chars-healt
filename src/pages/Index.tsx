@@ -114,7 +114,6 @@ const Index = () => {
   const handlePermissionsDenied = () => {
     console.log("Permisos denegados - funcionalidad limitada");
     setPermissionsGranted(false);
-    
   };
 
   const calculateFinalValues = () => {
@@ -862,4 +861,32 @@ const Index = () => {
             className="w-full h-full text-xl font-bold text-white transition-colors duration-200"
             style={{ 
               backgroundImage: 'linear-gradient(135deg, #64748b, #475569, #334155)',
-              textShadow: '0px 1px 3px rgba(0, 0, 0, 0.
+              textShadow: '0px 1px 3px rgba(0, 0, 0, 0.3)'
+            }}
+          >
+            RESET
+          </button>
+        </div>
+      </div>
+      
+      {!permissionsGranted && (
+        <div className="absolute z-50 top-1/2 left-0 right-0 text-center px-4 transform -translate-y-1/2">
+          <div className="bg-red-900/80 backdrop-blur-sm p-4 rounded-lg mx-auto max-w-md">
+            <h3 className="text-xl font-bold text-white mb-2">Permisos necesarios</h3>
+            <p className="text-white/90 mb-4">
+              Esta aplicación necesita acceso a la cámara para medir tus signos vitales.
+            </p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="bg-white text-red-900 font-bold py-2 px-4 rounded"
+            >
+              Reintentar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default Index;
