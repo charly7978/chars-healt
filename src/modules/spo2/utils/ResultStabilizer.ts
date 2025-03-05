@@ -1,6 +1,7 @@
 
 /**
  * Specialized class for stabilizing SpO2 results
+ * Optimized for performance on mobile devices
  */
 import { calculateConsistencyWeight } from './SignalAnalysisUtils';
 
@@ -8,8 +9,10 @@ export class ResultStabilizer {
   private previousResults: number[];
   private resultIndex: number = 0;
   private stableValue: number = 0;
+  private lastCalculationTime: number = 0;
+  private calculationThrottleMs: number = 250; // Throttle calculations to once every 250ms
   
-  constructor(resultBufferSize: number = 5) {
+  constructor(resultBufferSize: number = 3) { // Reduced from 5 to 3 for better performance
     this.previousResults = new Array(resultBufferSize).fill(0);
   }
   
@@ -20,33 +23,51 @@ export class ResultStabilizer {
     this.previousResults.fill(0);
     this.resultIndex = 0;
     this.stableValue = 0;
+    this.lastCalculationTime = 0;
   }
   
   /**
    * Add a new result and get stabilized value
+   * With performance optimizations
    */
   stabilize(newValue: number): number {
+    // Skip processing if the value hasn't changed significantly
+    if (Math.abs(newValue - this.stableValue) < 0.5) {
+      return this.stableValue;
+    }
+    
+    // Performance throttling - only update at fixed intervals
+    const now = performance.now();
+    if (now - this.lastCalculationTime < this.calculationThrottleMs) {
+      return this.stableValue;
+    }
+    this.lastCalculationTime = now;
+    
     // Add to circular buffer
     this.previousResults[this.resultIndex] = newValue;
     this.resultIndex = (this.resultIndex + 1) % this.previousResults.length;
     
-    // Use quantum-inspired Bayesian weighting for final estimation
+    // Simple optimization: if we don't have enough data, just return the new value
+    let validValues = 0;
+    for (let i = 0; i < this.previousResults.length; i++) {
+      if (this.previousResults[i] > 0) validValues++;
+    }
+    
+    if (validValues < 2) {
+      this.stableValue = newValue;
+      return newValue;
+    }
+    
+    // Use simplified weighting algorithm for better performance
     let weightedSum = 0;
     let totalWeight = 0;
     
-    // Weight calculation with recency bias and consistency analysis
+    // Weight calculation with recency bias - simplified algorithm
     for (let i = 0; i < this.previousResults.length; i++) {
       const value = this.previousResults[(this.resultIndex + i) % this.previousResults.length];
       if (value > 0) {
-        // Calculate temporal decay weight (more recent values get higher weight)
-        const temporalWeight = i < 2 ? 3 : 1;
-        
-        // Calculate consistency weight (values closer to mean get higher weight)
-        const consistencyWeight = calculateConsistencyWeight(value, this.previousResults);
-        
-        // Combined weight with 70% temporal, 30% consistency
-        const weight = (temporalWeight * 0.7) + (consistencyWeight * 0.3);
-        
+        // Fixed weights based on position for performance (instead of dynamic calculation)
+        const weight = this.previousResults.length - i;
         weightedSum += value * weight;
         totalWeight += weight;
       }
@@ -56,7 +77,7 @@ export class ResultStabilizer {
                       Math.round(weightedSum / totalWeight) : 
                       newValue;
     
-    // Apply Bayesian stability update with higher threshold for significant changes
+    // Apply stability update with higher threshold for significant changes
     if (this.stableValue === 0 || Math.abs(finalSpO2 - this.stableValue) >= 1) {
       this.stableValue = finalSpO2;
     }

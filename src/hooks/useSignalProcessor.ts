@@ -8,15 +8,17 @@ import { useFrameRate } from './useFrameRate';
 
 /**
  * Hook principal para el procesamiento de señales PPG
+ * Con optimizaciones agresivas de rendimiento
  */
 export const useSignalProcessor = () => {
   const processorRef = useRef<PPGSignalProcessor | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [lastSignal, setLastSignal] = useState<ProcessedSignal | null>(null);
   const [error, setError] = useState<ProcessingError | null>(null);
+  const processingThrottleRef = useRef<number>(0); // Throttle counter
   
-  // Hooks específicos
-  const frameRate = useFrameRate(30); // 30fps target
+  // Hooks específicos con parámetros optimizados
+  const frameRate = useFrameRate(15); // Reduced from 30 to 15fps
   const signalProcessing = useSignalProcessing();
   const calibration = useCalibration(processorRef);
   
@@ -26,11 +28,10 @@ export const useSignalProcessor = () => {
     processorRef.current = new PPGSignalProcessor();
     
     processorRef.current.onSignalReady = (signal: ProcessedSignal) => {
-      console.log("useSignalProcessor: Signal received", {
-        timestamp: signal.timestamp,
-        quality: signal.quality,
-        filteredValue: signal.filteredValue
-      });
+      // Throttle update frequency for better performance
+      processingThrottleRef.current = (processingThrottleRef.current + 1) % 2;
+      if (processingThrottleRef.current !== 0) return;
+      
       setLastSignal(signal);
       setError(null);
     };
@@ -86,12 +87,12 @@ export const useSignalProcessor = () => {
     setIsProcessing(false);
     setLastSignal(null);
     setError(null);
+    
+    // Force garbage collection hint
+    setTimeout(() => {
+      cleanMemory();
+    }, 300);
   }, []);
-
-  // Calibrar el procesador
-  const calibrate = useCallback(async () => {
-    return await calibration.calibrate();
-  }, [calibration]);
 
   // Procesar un frame de la cámara
   const processFrame = useCallback((imageData: ImageData) => {
@@ -99,7 +100,7 @@ export const useSignalProcessor = () => {
       return;
     }
     
-    // Control de frame rate
+    // Control de frame rate agresivo para mejor rendimiento
     if (!frameRate.shouldProcessFrame()) {
       return;
     }
@@ -117,6 +118,10 @@ export const useSignalProcessor = () => {
             return;
           }
         }
+        
+        // Throttle processing for better performance - only process every other frame
+        processingThrottleRef.current = (processingThrottleRef.current + 1) % 2;
+        if (processingThrottleRef.current !== 0) return;
         
         // Procesar la señal
         const processedResult = signalProcessing.processSignal(lastSignal);
@@ -150,6 +155,12 @@ export const useSignalProcessor = () => {
     setError(null);
     
     signalProcessing.resetSignalBuffers();
+    
+    // Clear any pending timeouts or intervals
+    const highestTimeoutId = setTimeout(() => {}, 0);
+    for (let i = 0; i < highestTimeoutId; i++) {
+      clearTimeout(i);
+    }
     
     if (window.gc) {
       try {
