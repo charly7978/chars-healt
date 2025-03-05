@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import PermissionsHandler from "@/components/PermissionsHandler";
 import { useVitalMeasurement } from "@/hooks/useVitalMeasurement";
@@ -14,6 +14,7 @@ import MeasurementTimer from "@/components/MeasurementTimer";
 const Index = () => {
   const [permissionsGranted, setPermissionsGranted] = useState(false);
   
+  // Uso del hook optimizado de medición de signos vitales
   const {
     isMonitoring,
     isCameraOn,
@@ -36,19 +37,75 @@ const Index = () => {
   // Setup immersive mode
   useImmersiveMode();
   
-  const handlePermissionsGranted = () => {
+  const handlePermissionsGranted = useCallback(() => {
     console.log("Permisos concedidos correctamente");
     setPermissionsGranted(true);
-  };
+  }, []);
 
-  const handlePermissionsDenied = () => {
+  const handlePermissionsDenied = useCallback(() => {
     console.log("Permisos denegados - funcionalidad limitada");
     setPermissionsGranted(false);
-  };
+  }, []);
   
-  const onStreamReady = (stream: MediaStream) => {
+  const onStreamReady = useCallback((stream: MediaStream) => {
     handleStreamReady(stream, isMonitoring, processFrame);
-  };
+  }, [handleStreamReady, isMonitoring, processFrame]);
+
+  // Memoizamos los componentes para evitar re-renderizados innecesarios
+  const permissionsHandler = useMemo(() => (
+    <PermissionsHandler 
+      onPermissionsGranted={handlePermissionsGranted}
+      onPermissionsDenied={handlePermissionsDenied}
+    />
+  ), [handlePermissionsGranted, handlePermissionsDenied]);
+
+  const vitalSignsMonitor = useMemo(() => (
+    <VitalSignsMonitor
+      isMonitoring={isMonitoring}
+      isCameraOn={isCameraOn}
+      permissionsGranted={permissionsGranted}
+      signalQuality={signalQuality}
+      lastSignal={lastSignal}
+      onStreamReady={onStreamReady}
+    />
+  ), [isMonitoring, isCameraOn, permissionsGranted, signalQuality, lastSignal, onStreamReady]);
+
+  const ppgSignalMeter = useMemo(() => (
+    <PPGSignalMeter 
+      value={isMonitoring ? lastSignal?.filteredValue || 0 : 0}
+      quality={isMonitoring ? lastSignal?.quality || 0 : 0}
+      isFingerDetected={isMonitoring ? lastSignal?.fingerDetected || false : false}
+      onStartMeasurement={startMonitoring}
+      onReset={handleReset}
+      arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
+      rawArrhythmiaData={lastArrhythmiaData}
+    />
+  ), [isMonitoring, lastSignal, startMonitoring, handleReset, vitalSigns.arrhythmiaStatus, lastArrhythmiaData]);
+
+  const vitalSignsDisplay = useMemo(() => (
+    <VitalSignsDisplay
+      vitalSigns={vitalSigns}
+      heartRate={heartRate}
+      finalValues={finalValues}
+      measurementComplete={measurementComplete}
+    />
+  ), [vitalSigns, heartRate, finalValues, measurementComplete]);
+
+  const measurementTimer = useMemo(() => (
+    <MeasurementTimer 
+      isMonitoring={isMonitoring}
+      elapsedTime={elapsedTime}
+    />
+  ), [isMonitoring, elapsedTime]);
+
+  const controlButtons = useMemo(() => (
+    <ControlButtons
+      isMonitoring={isMonitoring}
+      permissionsGranted={permissionsGranted}
+      onStartMonitoring={startMonitoring}
+      onReset={handleReset}
+    />
+  ), [isMonitoring, permissionsGranted, startMonitoring, handleReset]);
 
   return (
     <div 
@@ -67,54 +124,23 @@ const Index = () => {
         paddingLeft: 'var(--sal)',
       }}
     >
-      <PermissionsHandler 
-        onPermissionsGranted={handlePermissionsGranted}
-        onPermissionsDenied={handlePermissionsDenied}
-      />
+      {permissionsHandler}
       
-      <VitalSignsMonitor
-        isMonitoring={isMonitoring}
-        isCameraOn={isCameraOn}
-        permissionsGranted={permissionsGranted}
-        signalQuality={signalQuality}
-        lastSignal={lastSignal}
-        onStreamReady={onStreamReady}
-      />
+      {vitalSignsMonitor}
 
       <div className="absolute inset-0 z-10">
-        <PPGSignalMeter 
-          value={isMonitoring ? lastSignal?.filteredValue || 0 : 0}
-          quality={isMonitoring ? lastSignal?.quality || 0 : 0}
-          isFingerDetected={isMonitoring ? lastSignal?.fingerDetected || false : false}
-          onStartMeasurement={startMonitoring}
-          onReset={handleReset}
-          arrhythmiaStatus={vitalSigns.arrhythmiaStatus}
-          rawArrhythmiaData={lastArrhythmiaData}
-        />
+        {ppgSignalMeter}
       </div>
       
-      <VitalSignsDisplay
-        vitalSigns={vitalSigns}
-        heartRate={heartRate}
-        finalValues={finalValues}
-        measurementComplete={measurementComplete}
-      />
+      {vitalSignsDisplay}
       
-      <MeasurementTimer 
-        isMonitoring={isMonitoring}
-        elapsedTime={elapsedTime}
-      />
+      {measurementTimer}
       
-      <ControlButtons
-        isMonitoring={isMonitoring}
-        permissionsGranted={permissionsGranted}
-        onStartMonitoring={startMonitoring}
-        onReset={handleReset}
-      />
+      {controlButtons}
       
       <PermissionsMessage permissionsGranted={permissionsGranted} />
     </div>
   );
 };
 
-export default Index;
+export default React.memo(Index);

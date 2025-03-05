@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { memo } from 'react';
 import VitalSign from './VitalSign';
 import { VitalSigns, FinalValues } from '@/hooks/useVitalMeasurement';
 
@@ -10,7 +10,8 @@ interface VitalSignsDisplayProps {
   measurementComplete: boolean;
 }
 
-const VitalSignsDisplay: React.FC<VitalSignsDisplayProps> = ({
+// Usar React.memo para evitar renderizados innecesarios
+const VitalSignsDisplay: React.FC<VitalSignsDisplayProps> = memo(({
   vitalSigns,
   heartRate,
   finalValues,
@@ -69,6 +70,6 @@ const VitalSignsDisplay: React.FC<VitalSignsDisplayProps> = ({
       </div>
     </div>
   );
-};
+});
 
 export default VitalSignsDisplay;
