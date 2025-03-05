@@ -8,12 +8,12 @@ interface CameraViewProps {
   signalQuality?: number;
 }
 
-const CameraView = ({
+const CameraView: React.FC<CameraViewProps> = ({
   onStreamReady,
   isMonitoring,
   isFingerDetected = false,
   signalQuality = 0,
-}: CameraViewProps) => {
+}) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const mountedRef = useRef(true);
@@ -21,40 +21,34 @@ const CameraView = ({
   const [error, setError] = useState<string | null>(null);
   const [isAndroid, setIsAndroid] = useState(false);
 
-  // Detectar si estamos en Android
+  // Detect if we're on Android
   useEffect(() => {
     const userAgent = navigator.userAgent.toLowerCase();
     setIsAndroid(/android/i.test(userAgent));
   }, []);
 
-  // Función para detener la cámara y liberar recursos
+  // Function to stop the camera and release resources
   const stopCamera = useCallback(() => {
-    console.log("CameraView: Deteniendo cámara");
+    console.log("CameraView: Stopping camera");
     
     if (streamRef.current) {
       const tracks = streamRef.current.getTracks();
       tracks.forEach(track => {
-        // Primero desactivar la linterna si está disponible
-        if (track.getCapabilities()?.torch) {
-          try {
-            console.log("CameraView: Desactivando linterna");
+        try {
+          // First turn off torch if available
+          if ('getCapabilities' in track && track.getCapabilities()?.torch) {
             track.applyConstraints({
               advanced: [{ torch: false }]
-            }).catch(err => console.error("Error desactivando linterna:", err));
-          } catch (err) {
-            console.error("Error desactivando linterna:", err);
+            }).catch(err => console.error("Error turning off torch:", err));
           }
+        } catch (err) {
+          console.error("Error with torch:", err);
         }
         
-        // Esperar un momento antes de detener la pista (ayuda con Android)
+        // Wait a moment before stopping the track (helps with Android)
         setTimeout(() => {
-          try {
-            if (track.readyState === 'live') {
-              console.log("CameraView: Deteniendo track de video");
-              track.stop();
-            }
-          } catch (err) {
-            console.error("Error deteniendo track:", err);
+          if (track.readyState === 'live') {
+            track.stop();
           }
         }, 50);
       });
@@ -62,41 +56,37 @@ const CameraView = ({
       streamRef.current = null;
     }
 
-    // Limpiar el video element
+    // Clean up video element
     if (videoRef.current) {
-      try {
-        videoRef.current.pause();
-        videoRef.current.srcObject = null;
-      } catch (err) {
-        console.error("Error limpiando video element:", err);
-      }
+      videoRef.current.pause();
+      videoRef.current.srcObject = null;
     }
   }, []);
 
-  // Función para iniciar la cámara
+  // Function to start the camera
   const startCamera = useCallback(async () => {
     if (!mountedRef.current || initializingRef.current) return;
     if (!isMonitoring) {
-      console.log("CameraView: No iniciando cámara porque isMonitoring es false");
+      console.log("CameraView: Not starting camera because isMonitoring is false");
       return;
     }
     
     initializingRef.current = true;
-    console.log("CameraView: Iniciando cámara");
+    console.log("CameraView: Starting camera");
     setError(null);
     
     try {
-      // Asegurarse de que cualquier stream previo está detenido
+      // Make sure any previous stream is stopped
       stopCamera();
       
-      // Esperar un momento para que los recursos se liberen (especialmente en Android)
+      // Wait a moment for resources to be released (especially on Android)
       await new Promise(resolve => setTimeout(resolve, isAndroid ? 300 : 50));
 
       if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error('La API getUserMedia no está disponible');
+        throw new Error('getUserMedia API is not available');
       }
 
-      // Configuración de la cámara optimizada para cada plataforma
+      // Camera configuration optimized for each platform
       const constraints: MediaStreamConstraints = {
         video: {
           facingMode: 'environment',
@@ -107,13 +97,13 @@ const CameraView = ({
         audio: false
       };
 
-      // Intentar obtener acceso a la cámara
-      console.log("CameraView: Solicitando acceso a la cámara con constraints:", constraints);
+      // Try to get camera access
+      console.log("CameraView: Requesting camera access with constraints:", constraints);
       const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-      console.log("CameraView: Acceso a la cámara concedido, tracks:", mediaStream.getTracks().length);
+      console.log("CameraView: Camera access granted, tracks:", mediaStream.getTracks().length);
       
       if (!mountedRef.current || !isMonitoring) {
-        console.log("CameraView: Componente desmontado o no monitorizando, liberando stream");
+        console.log("CameraView: Component unmounted or not monitoring, releasing stream");
         mediaStream.getTracks().forEach(track => track.stop());
         initializingRef.current = false;
         return;
@@ -121,13 +111,13 @@ const CameraView = ({
 
       streamRef.current = mediaStream;
 
-      // Configurar optimizaciones específicas para Android
+      // Set up optimizations specific to Android
       if (isAndroid) {
-        console.log("CameraView: Aplicando optimizaciones para Android");
+        console.log("CameraView: Applying Android optimizations");
         const videoTrack = mediaStream.getVideoTracks()[0];
-        if (videoTrack) {
+        if (videoTrack && 'getCapabilities' in videoTrack) {
           try {
-            // Optimizaciones para Android
+            // Android optimizations
             const capabilities = videoTrack.getCapabilities();
             const settings: MediaTrackConstraints = {};
             
@@ -145,19 +135,18 @@ const CameraView = ({
             
             if (Object.keys(settings).length > 0) {
               await videoTrack.applyConstraints(settings);
-              console.log("CameraView: Optimizaciones para Android aplicadas", settings);
             }
           } catch (err) {
-            console.error("Error aplicando optimizaciones para Android:", err);
+            console.error("Error applying Android optimizations:", err);
           }
         }
       }
 
-      // Configurar el elemento de video
+      // Set up video element
       if (videoRef.current) {
-        console.log("CameraView: Asignando stream al elemento video");
+        console.log("CameraView: Assigning stream to video element");
         
-        // Optimizaciones específicas para el elemento video en Android
+        // Android-specific optimizations for video element
         if (isAndroid) {
           videoRef.current.style.willChange = 'transform';
           videoRef.current.style.transform = 'translateZ(0)';
@@ -166,57 +155,57 @@ const CameraView = ({
         
         videoRef.current.srcObject = mediaStream;
         
-        // En Android, esperar a que las optimizaciones se apliquen antes de reproducir
+        // On Android, wait for optimizations to apply before playing
         await new Promise(resolve => setTimeout(resolve, isAndroid ? 100 : 0));
         
         await videoRef.current.play().catch(e => {
-          console.error("Error reproduciendo video:", e);
+          console.error("Error playing video:", e);
           throw e;
         });
-        console.log("CameraView: Video reproduciendo correctamente");
+        console.log("CameraView: Video playing correctly");
       } else {
-        console.error("CameraView: El elemento video no está disponible");
+        console.error("CameraView: Video element not available");
       }
 
-      // Esperar un momento antes de activar la linterna en Android
+      // Wait a moment before turning on the torch on Android
       await new Promise(resolve => setTimeout(resolve, isAndroid ? 200 : 0));
 
-      // Intentar activar la linterna si estamos monitorizando
+      // Try to turn on torch if we're monitoring
       const videoTrack = mediaStream.getVideoTracks()[0];
-      if (videoTrack && videoTrack.getCapabilities()?.torch) {
+      if (videoTrack && 'getCapabilities' in videoTrack && videoTrack.getCapabilities()?.torch) {
         try {
-          console.log("CameraView: Intentando activar linterna");
+          console.log("CameraView: Trying to activate torch");
           await videoTrack.applyConstraints({
             advanced: [{ torch: true }]
           });
-          console.log("CameraView: Linterna activada");
+          console.log("CameraView: Torch activated");
         } catch (e) {
-          console.error("Error configurando linterna:", e);
+          console.error("Error configuring torch:", e);
         }
       } else {
-        console.log("CameraView: Linterna no disponible");
+        console.log("CameraView: Torch not available");
       }
 
-      // Notificar que el stream está listo
+      // Notify that stream is ready
       if (onStreamReady && isMonitoring) {
-        console.log("CameraView: Notificando stream listo");
+        console.log("CameraView: Notifying stream ready");
         onStreamReady(mediaStream);
       }
     } catch (error) {
-      console.error('Error iniciando la cámara:', error);
-      setError(`Error iniciando la cámara: ${error instanceof Error ? error.message : String(error)}`);
+      console.error('Error starting camera:', error);
+      setError(`Error starting camera: ${error instanceof Error ? error.message : String(error)}`);
       stopCamera();
     } finally {
       initializingRef.current = false;
     }
   }, [isMonitoring, onStreamReady, stopCamera, isAndroid]);
 
-  // Efecto para iniciar/detener la cámara cuando cambia isMonitoring
+  // Effect to start/stop camera when isMonitoring changes
   useEffect(() => {
-    console.log("CameraView: isMonitoring cambió a:", isMonitoring);
+    console.log("CameraView: isMonitoring changed to:", isMonitoring);
     
     if (isMonitoring) {
-      // Usar un timeout más largo para Android
+      // Use a longer timeout for Android
       const timeoutId = setTimeout(() => {
         startCamera();
       }, isAndroid ? 500 : 100);
@@ -226,25 +215,25 @@ const CameraView = ({
     }
   }, [isMonitoring, startCamera, stopCamera, isAndroid]);
 
-  // Efecto de limpieza al montar/desmontar el componente
+  // Cleanup effect when mounting/unmounting component
   useEffect(() => {
     mountedRef.current = true;
-    console.log("CameraView: Componente montado");
+    console.log("CameraView: Component mounted");
 
-    // Asegurarse de que los permisos de la cámara estén disponibles
+    // Make sure camera permissions are available
     navigator.mediaDevices?.getUserMedia({ video: true, audio: false })
       .then(stream => {
-        // Solo comprobamos los permisos, detenemos el stream inmediatamente
+        // Just checking permissions, stop stream immediately
         stream.getTracks().forEach(track => track.stop());
-        console.log("CameraView: Permisos de cámara verificados");
+        console.log("CameraView: Camera permissions verified");
       })
       .catch(err => {
-        console.error("CameraView: Error verificando permisos de cámara:", err);
-        setError(`Error de permisos: ${err instanceof Error ? err.message : String(err)}`);
+        console.error("CameraView: Error verifying camera permissions:", err);
+        setError(`Permission error: ${err instanceof Error ? err.message : String(err)}`);
       });
 
     return () => {
-      console.log("CameraView: Componente desmontando");
+      console.log("CameraView: Component unmounting");
       mountedRef.current = false;
       stopCamera();
     };

@@ -1,7 +1,4 @@
 
-// If the file already exists, we need to add the HeartBeatResult interface if it doesn't exist.
-// Since we can't see the content of the read-only file, we're creating a new definition that will be merged with the existing one.
-
 export interface HeartBeatResult {
   bpm: number;
   confidence: number;

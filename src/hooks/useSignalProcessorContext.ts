@@ -1,13 +1,13 @@
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { useSignalProcessor } from './useSignalProcessor';
-import { ProcessedSignal } from '../types/signal';
+import { ProcessedSignal, ProcessingError } from '../types/signal';
 
 // Interface for the context state
 interface SignalProcessorContextType {
   isProcessing: boolean;
   lastSignal: ProcessedSignal | null;
-  error: any;
+  error: ProcessingError | null;
   startProcessing: () => void;
   stopProcessing: () => void;
   processFrame: (imageData: ImageData) => void;
@@ -18,7 +18,7 @@ interface SignalProcessorContextType {
 const SignalProcessorContext = createContext<SignalProcessorContextType | null>(null);
 
 // Context provider component
-export const SignalProcessorProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+export const SignalProcessorProvider = ({ children }: { children: ReactNode }) => {
   const {
     isProcessing, 
     lastSignal, 
