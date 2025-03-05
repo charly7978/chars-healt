@@ -1,59 +1,28 @@
 
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
-import { useSignalProcessor } from './useSignalProcessor';
-import { ProcessedSignal, ProcessingError } from '../types/signal';
+import { createContext, useContext, ReactNode, useState } from 'react';
+import { SignalProcessor } from '@/types/signal';
 
-// Interface for the context state
 interface SignalProcessorContextType {
-  isProcessing: boolean;
-  lastSignal: ProcessedSignal | null;
-  error: ProcessingError | null;
-  startProcessing: () => void;
-  stopProcessing: () => void;
-  processFrame: (imageData: ImageData) => void;
-  cleanMemory: () => void;
+  processor: SignalProcessor | null;
+  setProcessor: (processor: SignalProcessor | null) => void;
 }
 
-// Create the context with a default value
-const SignalProcessorContext = createContext<SignalProcessorContextType | null>(null);
+const SignalProcessorContext = createContext<SignalProcessorContextType | undefined>(undefined);
 
-// Context provider component
 export const SignalProcessorProvider = ({ children }: { children: ReactNode }) => {
-  const {
-    isProcessing, 
-    lastSignal, 
-    error,
-    startProcessing, 
-    stopProcessing, 
-    processFrame,
-    cleanMemory
-  } = useSignalProcessor();
+  const [processor, setProcessor] = useState<SignalProcessor | null>(null);
 
-  // Provide the context values to all children
   return (
-    <SignalProcessorContext.Provider
-      value={{
-        isProcessing,
-        lastSignal,
-        error,
-        startProcessing,
-        stopProcessing,
-        processFrame,
-        cleanMemory
-      }}
-    >
+    <SignalProcessorContext.Provider value={{ processor, setProcessor }}>
       {children}
     </SignalProcessorContext.Provider>
   );
 };
 
-// Custom hook to use the context
 export const useSignalProcessorContext = () => {
   const context = useContext(SignalProcessorContext);
-  
-  if (!context) {
+  if (context === undefined) {
     throw new Error('useSignalProcessorContext must be used within a SignalProcessorProvider');
   }
-  
   return context;
 };
