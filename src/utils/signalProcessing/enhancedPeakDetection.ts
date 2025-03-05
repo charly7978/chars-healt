@@ -59,7 +59,7 @@ export const enhancedPeakDetection = (signal: number[]) => {
     const mean = intervals.reduce((a, b) => a + b, 0) / intervals.length;
     const variance = intervals.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / intervals.length;
     const stdDev = Math.sqrt(variance);
-    const cv = stdDev / mean;
+    const cv = mean > 0 ? stdDev / mean : 1; // Prevent division by zero
     
     // Convert to a 0-100 quality score (inverted and scaled)
     signalQuality = Math.max(0, Math.min(100, 100 * (1 - cv)));

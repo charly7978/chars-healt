@@ -2,14 +2,17 @@
 import React from "react";
 import PermissionsHandler from "@/components/PermissionsHandler";
 import PermissionsMessage from "@/components/PermissionsMessage";
-import { useMonitoring } from "@/hooks/useMonitoring";
 import { useImmersiveMode } from "@/hooks/useImmersiveMode";
+import { useVitalSignsMonitoring } from "@/hooks/useVitalSignsMonitoring";
 import PageContainer from "@/components/layout/PageContainer";
 import CameraBackgroundLayer from "@/components/layers/CameraBackgroundLayer";
 import SignalDisplayLayer from "@/components/layers/SignalDisplayLayer";
 import VitalSignsLayer from "@/components/layers/VitalSignsLayer";
 import ControlsLayer from "@/components/layers/ControlsLayer";
 
+/**
+ * Main application page that coordinates all monitoring components
+ */
 const Index = () => {
   const {
     isMonitoring,
@@ -17,7 +20,6 @@ const Index = () => {
     signalQuality,
     vitalSigns,
     heartRate,
-    elapsedTime,
     lastArrhythmiaData,
     measurementComplete,
     finalValues,
@@ -28,9 +30,9 @@ const Index = () => {
     handleReset,
     handleStreamReady,
     lastSignal
-  } = useMonitoring();
+  } = useVitalSignsMonitoring();
 
-  // Activar modo inmersivo
+  // Activate immersive mode
   useImmersiveMode();
 
   return (
