@@ -49,6 +49,10 @@ export class HeartBeatProcessor {
   private peakCandidateIndex: number | null = null;
   private peakCandidateValue: number = 0;
 
+  // NUEVO: Almacenar amplitudes de los picos para mejorar la detección de arritmias
+  private peakAmplitudes: number[] = [];
+  private readonly MAX_AMPLITUDE_HISTORY = 20;
+
   constructor() {
     this.initAudio();
     this.startTime = Date.now();
@@ -163,15 +167,6 @@ export class HeartBeatProcessor {
     isPeak: boolean;
     filteredValue: number;
     arrhythmiaCount: number;
-    amplitude?: number;
-    perfusionIndex?: number;
-    pulsePressure?: number;
-    rrData?: {
-      intervals: number[];
-      lastPeakTime: number | null;
-      amplitudes?: number[];
-      advancedRRIntervals?: number[];
-    };
   } {
     // Filtros sucesivos para mejorar la señal
     const medVal = this.medianFilter(value);
@@ -183,28 +178,21 @@ export class HeartBeatProcessor {
       this.signalBuffer.shift();
     }
 
-    this.baseline = this.baseline * this.BASELINE_FACTOR + smoothed * (1 - this.BASELINE_FACTOR);
-    const normalizedValue = smoothed - this.baseline;
-    this.autoResetIfSignalIsLow(Math.abs(normalizedValue));
-
     if (this.signalBuffer.length < 30) {
       return {
         bpm: 0,
         confidence: 0,
         isPeak: false,
         filteredValue: smoothed,
-        arrhythmiaCount: 0,
-        amplitude: Math.abs(normalizedValue),
-        perfusionIndex: 0,
-        pulsePressure: 0,
-        rrData: {
-          intervals: [],
-          lastPeakTime: null,
-          amplitudes: [],
-          advancedRRIntervals: []
-        }
+        arrhythmiaCount: 0
       };
     }
+
+    this.baseline =
+      this.baseline * this.BASELINE_FACTOR + smoothed * (1 - this.BASELINE_FACTOR);
+
+    const normalizedValue = smoothed - this.baseline;
+    this.autoResetIfSignalIsLow(Math.abs(normalizedValue));
 
     this.values.push(smoothed);
     if (this.values.length > 3) {
@@ -223,26 +211,6 @@ export class HeartBeatProcessor {
     // Confirmación de picos más rigurosa
     const isConfirmedPeak = this.confirmPeak(isPeak, normalizedValue, confidence);
 
-    // Calculate perfusion index and pulse pressure
-    const perfusionIndex = Math.abs(normalizedValue) / (this.baseline || 1);
-    const pulsePressure = Math.abs(normalizedValue) * 2;
-
-    // Calculate advanced RR intervals
-    let advancedRRIntervals: number[] = [];
-    if (this.signalBuffer.length >= 30) {
-      const peaks = this.signalBuffer.map((val, idx) => {
-        const prev = this.signalBuffer[idx - 1] || val;
-        const next = this.signalBuffer[idx + 1] || val;
-        return val > prev && val > next ? idx : -1;
-      }).filter(idx => idx !== -1);
-
-      if (peaks.length >= 2) {
-        advancedRRIntervals = peaks.slice(1).map((peak, idx) => {
-          return (peak - peaks[idx]) * (1000 / this.SAMPLE_RATE);
-        });
-      }
-    }
-
     if (isConfirmedPeak && !this.isInWarmup()) {
       const now = Date.now();
       const timeSinceLastPeak = this.lastPeakTime
@@ -252,7 +220,15 @@ export class HeartBeatProcessor {
       if (timeSinceLastPeak >= this.MIN_PEAK_TIME_MS) {
         this.previousPeakTime = this.lastPeakTime;
         this.lastPeakTime = now;
-        this.playBeep(0.12);
+        this.playBeep(0.12); // Suena beep cuando se confirma pico
+        
+        // NUEVO: Almacenar amplitud del pico - CRUCIAL para detección de arritmias
+        // La amplitud es importante para identificar latidos prematuros (que suelen tener menor amplitud)
+        this.peakAmplitudes.push(Math.abs(normalizedValue));
+        if (this.peakAmplitudes.length > this.MAX_AMPLITUDE_HISTORY) {
+          this.peakAmplitudes.shift();
+        }
+        
         this.updateBPM();
       }
     }
@@ -262,16 +238,7 @@ export class HeartBeatProcessor {
       confidence,
       isPeak: isConfirmedPeak && !this.isInWarmup(),
       filteredValue: smoothed,
-      arrhythmiaCount: 0,
-      amplitude: Math.abs(normalizedValue),
-      perfusionIndex,
-      pulsePressure,
-      rrData: {
-        intervals: this.getRRIntervals().intervals,
-        lastPeakTime: this.lastPeakTime,
-        amplitudes: [Math.abs(normalizedValue)],
-        advancedRRIntervals
-      }
+      arrhythmiaCount: 0
     };
   }
 
@@ -294,6 +261,8 @@ export class HeartBeatProcessor {
     this.peakCandidateValue = 0;
     this.peakConfirmationBuffer = [];
     this.values = [];
+    // NUEVO: Limpiar también historial de amplitudes
+    this.peakAmplitudes = [];
     console.log("HeartBeatProcessor: auto-reset detection states (low signal).");
   }
 
@@ -429,20 +398,16 @@ export class HeartBeatProcessor {
     this.peakCandidateIndex = null;
     this.peakCandidateValue = 0;
     this.lowSignalCount = 0;
+    // NUEVO: Limpiar también historial de amplitudes
+    this.peakAmplitudes = [];
   }
 
   public getRRIntervals(): { intervals: number[]; lastPeakTime: number | null; amplitudes?: number[] } {
-    // Critical fix: Pass amplitude data derived from RR intervals
-    // This ensures arrhythmia detection has amplitude data to work with
-    const amplitudes = this.bpmHistory.map(bpm => {
-      // Higher BPM (shorter RR) typically means lower amplitude for premature beats
-      return 100 / (bpm || 800) * (this.calculateCurrentBPM() / 100);
-    });
-    
+    // CRUCIAL: Pasar los datos de amplitud REALES en lugar de estimados
     return {
-      intervals: [...this.bpmHistory],
+      intervals: this.bpmHistory.map(bpm => Math.round(60000 / bpm)), // Convertir BPM a intervalos RR en ms
       lastPeakTime: this.lastPeakTime,
-      amplitudes: amplitudes
+      amplitudes: this.peakAmplitudes  // Pasar amplitudes reales de los picos
     };
   }
 }

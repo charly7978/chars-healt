@@ -6,7 +6,6 @@ import { useHeartBeatProcessor } from "@/hooks/useHeartBeatProcessor";
 import { useVitalSignsProcessor } from "@/hooks/useVitalSignsProcessor";
 import PPGSignalMeter from "@/components/PPGSignalMeter";
 import PermissionsHandler from "@/components/PermissionsHandler";
-import { toast } from "sonner";
 
 const Index = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -15,10 +14,7 @@ const Index = () => {
   const [vitalSigns, setVitalSigns] = useState({ 
     spo2: 0, 
     pressure: "--/--",
-    arrhythmiaStatus: "--",
-    respiration: { rate: 0, depth: 0, regularity: 0 },
-    hasRespirationData: false,
-    glucose: null
+    arrhythmiaStatus: "--" 
   });
   const [heartRate, setHeartRate] = useState(0);
   const [arrhythmiaCount, setArrhythmiaCount] = useState("--");
@@ -118,10 +114,7 @@ const Index = () => {
     setVitalSigns({ 
       spo2: 0, 
       pressure: "--/--",
-      arrhythmiaStatus: "--",
-      respiration: { rate: 0, depth: 0, regularity: 0 },
-      hasRespirationData: false,
-      glucose: null
+      arrhythmiaStatus: "--" 
     });
     setArrhythmiaCount("--");
     setSignalQuality(0);
@@ -168,7 +161,7 @@ const Index = () => {
       } catch (error) {
         console.error("Error capturando frame:", error);
         if (isMonitoring) {
-          setTimeout(() => requestAnimationFrame(processImage), 100); // Con un pequeño retardo para recuperarse
+          requestAnimationFrame(processImage);
         }
       }
     };
@@ -178,33 +171,16 @@ const Index = () => {
 
   useEffect(() => {
     if (lastSignal && lastSignal.fingerDetected && isMonitoring) {
-      try {
-        const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
-        setHeartRate(heartBeatResult.bpm);
-        
-        const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
-        
-        if (vitals) {
-          console.log("Vital signs data details:", {
-            spo2: vitals.spo2,
-            pressure: vitals.pressure,
-            arrhythmia: vitals.arrhythmiaStatus,
-            respiration: vitals.respiration,
-            glucose: vitals.glucose ? `${vitals.glucose.value} mg/dL (${vitals.glucose.trend})` : 'No data'
-          });
-          
-          setVitalSigns(vitals);
-          setArrhythmiaCount(vitals.arrhythmiaStatus.split('|')[1] || "--");
-          
-          if (vitals.glucose && vitals.glucose.value > 0) {
-            console.log(`Glucose data received: ${vitals.glucose.value} mg/dL, trend: ${vitals.glucose.trend}`);
-          }
-        }
-        
-        setSignalQuality(lastSignal.quality);
-      } catch (error) {
-        console.error("Error processing signal:", error);
+      const heartBeatResult = processHeartBeat(lastSignal.filteredValue);
+      setHeartRate(heartBeatResult.bpm);
+      
+      const vitals = processVitalSigns(lastSignal.filteredValue, heartBeatResult.rrData);
+      if (vitals) {
+        setVitalSigns(vitals);
+        setArrhythmiaCount(vitals.arrhythmiaStatus.split('|')[1] || "--");
       }
+      
+      setSignalQuality(lastSignal.quality);
     }
   }, [lastSignal, isMonitoring, processHeartBeat, processVitalSigns]);
 
@@ -247,57 +223,28 @@ const Index = () => {
           </div>
 
           <div className="absolute bottom-[200px] left-0 right-0 px-4 z-30">
-            <div className="grid grid-cols-6 gap-2">
+            <div className="grid grid-cols-4 gap-2">
               <VitalSign 
                 label="FRECUENCIA CARDÍACA"
                 value={heartRate || "--"}
                 unit="BPM"
-                isFinalReading={heartRate > 0 && elapsedTime >= 15}
               />
               <VitalSign 
                 label="SPO2"
                 value={vitalSigns.spo2 || "--"}
                 unit="%"
-                isFinalReading={vitalSigns.spo2 > 0 && elapsedTime >= 15}
               />
               <VitalSign 
                 label="PRESIÓN ARTERIAL"
                 value={vitalSigns.pressure}
                 unit="mmHg"
-                isFinalReading={vitalSigns.pressure !== "--/--" && elapsedTime >= 15}
               />
               <VitalSign 
                 label="ARRITMIAS"
                 value={vitalSigns.arrhythmiaStatus}
-                isFinalReading={heartRate > 0 && elapsedTime >= 15}
-              />
-              <VitalSign 
-                label="RESPIRACIÓN"
-                value={vitalSigns.hasRespirationData ? vitalSigns.respiration.rate : "--"}
-                unit="RPM"
-                secondaryValue={vitalSigns.hasRespirationData ? vitalSigns.respiration.depth : "--"}
-                secondaryUnit="Prof."
-                isFinalReading={vitalSigns.hasRespirationData && elapsedTime >= 15}
-              />
-              <VitalSign 
-                label="GLUCOSA"
-                value={vitalSigns.glucose ? vitalSigns.glucose.value : "--"}
-                unit="mg/dL"
-                trend={vitalSigns.glucose ? vitalSigns.glucose.trend : undefined}
-                isFinalReading={vitalSigns.glucose && vitalSigns.glucose.value > 0 && elapsedTime >= 15}
               />
             </div>
           </div>
-
-          {isMonitoring && (
-            <div className="absolute bottom-[150px] left-0 right-0 text-center z-30 text-xs text-gray-400">
-              <span>
-                Resp Data: {vitalSigns.hasRespirationData ? 'Disponible' : 'No disponible'} | 
-                Rate: {vitalSigns.respiration.rate} RPM | Depth: {vitalSigns.respiration.depth} | 
-                Glucose: {vitalSigns.glucose ? `${vitalSigns.glucose.value} mg/dL (${vitalSigns.glucose.trend || 'unknown'})` : 'No disponible'}
-              </span>
-            </div>
-          )}
 
           {isMonitoring && (
             <div className="absolute bottom-40 left-0 right-0 text-center z-30">

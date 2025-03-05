@@ -1,4 +1,4 @@
-import { calculateStandardDeviation, enhancedPeakDetection } from '../utils/signalProcessing';
+import { calculateStandardDeviation, enhancedPeakDetection } from '../utils/signalProcessingUtils';
 
 export class BloodPressureCalculator {
   // Constants for blood pressure calculation

@@ -1,13 +1,5 @@
 
-export interface HeartBeatResult {
-  bpm: number;
-  confidence: number;
-  isPeak: boolean;
-  rrData?: {
-    intervals: number[];
-    lastPeakTime: number | null;
-  };
-}
+import { HeartBeatProcessor } from '../modules/HeartBeatProcessor';
 
 export interface ProcessedSignal {
   timestamp: number;
@@ -15,13 +7,12 @@ export interface ProcessedSignal {
   filteredValue: number;
   quality: number;
   fingerDetected: boolean;
-  roi?: {
+  roi: {
     x: number;
     y: number;
     width: number;
     height: number;
   };
-  isPeak?: boolean;
 }
 
 export interface ProcessingError {
@@ -31,11 +22,17 @@ export interface ProcessingError {
 }
 
 export interface SignalProcessor {
+  initialize: () => Promise<void>;
+  start: () => void;
+  stop: () => void;
+  calibrate: () => Promise<boolean>;
   onSignalReady?: (signal: ProcessedSignal) => void;
   onError?: (error: ProcessingError) => void;
-  initialize(): Promise<void>;
-  start(): void;
-  stop(): void;
-  calibrate(): Promise<boolean>;
-  processFrame(imageData: ImageData): void;
+}
+
+declare global {
+  interface Window {
+    heartBeatProcessor: HeartBeatProcessor;
+    gc?: () => void; // Añadir definición para garbage collector
+  }
 }
