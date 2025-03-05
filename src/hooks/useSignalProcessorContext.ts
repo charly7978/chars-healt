@@ -1,34 +1,50 @@
 
-import { createContext, useContext, ReactNode, useState, useEffect } from 'react';
-import { useSignalProcessor } from './useSignalProcessor';
-import { ProcessedSignal, ProcessingError } from '../types/signal';
+import React, { createContext, useContext, ReactNode, useState } from 'react';
+import { ProcessedSignal } from '../types/signal';
 
-type SignalProcessorContextType = {
-  isProcessing: boolean;
-  lastSignal: ProcessedSignal | null;
-  error: ProcessingError | null;
-  startProcessing: () => void;
-  stopProcessing: () => void;
-  calibrate: () => Promise<boolean>;
-  processFrame: (imageData: ImageData) => void;
-  cleanMemory: () => void;
-};
+// Define the context type
+interface SignalProcessorContextType {
+  lastProcessedSignal: ProcessedSignal | null;
+  updateSignal: (signal: ProcessedSignal) => void;
+  resetSignal: () => void;
+}
 
-const SignalProcessorContext = createContext<SignalProcessorContextType | null>(null);
+// Create context with default values
+const SignalProcessorContext = createContext<SignalProcessorContextType>({
+  lastProcessedSignal: null,
+  updateSignal: () => {},
+  resetSignal: () => {},
+});
 
-export const SignalProcessorProvider = ({ children }: { children: ReactNode }) => {
-  const signalProcessor = useSignalProcessor();
-  
+// Provider component
+export const SignalProcessorProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [lastProcessedSignal, setLastProcessedSignal] = useState<ProcessedSignal | null>(null);
+
+  const updateSignal = (signal: ProcessedSignal) => {
+    setLastProcessedSignal(signal);
+  };
+
+  const resetSignal = () => {
+    setLastProcessedSignal(null);
+  };
+
   return (
-    <SignalProcessorContext.Provider value={signalProcessor}>
+    <SignalProcessorContext.Provider
+      value={{
+        lastProcessedSignal,
+        updateSignal,
+        resetSignal,
+      }}
+    >
       {children}
     </SignalProcessorContext.Provider>
   );
 };
 
+// Custom hook to use the context
 export const useSignalProcessorContext = () => {
   const context = useContext(SignalProcessorContext);
-  if (context === null) {
+  if (!context) {
     throw new Error('useSignalProcessorContext must be used within a SignalProcessorProvider');
   }
   return context;
