@@ -13,31 +13,20 @@ interface SignalProcessorContextType {
 
 const SignalProcessorContext = createContext<SignalProcessorContextType | null>(null);
 
-interface SignalProcessorProviderProps {
+export const SignalProcessorProvider: React.FC<{
   children: ReactNode;
-}
-
-export const SignalProcessorProvider: React.FC<SignalProcessorProviderProps> = ({ children }) => {
-  // Create a simple initial context that will be properly initialized in useSignalProcessor
-  const contextValue: SignalProcessorContextType = {
-    processor: null,
-    lastSignal: null,
-    isProcessing: false,
-    startProcessing: () => console.log('Signal processor not initialized'),
-    stopProcessing: () => console.log('Signal processor not initialized'),
-    processFrame: () => console.log('Signal processor not initialized')
-  };
-
+  value: SignalProcessorContextType;
+}> = ({ children, value }) => {
   return (
-    <SignalProcessorContext.Provider value={contextValue}>
+    <SignalProcessorContext.Provider value={value}>
       {children}
     </SignalProcessorContext.Provider>
   );
 };
 
-export const useSignalProcessorContext = (): SignalProcessorContextType => {
+export const useSignalProcessorContext = () => {
   const context = useContext(SignalProcessorContext);
-  if (!context) {
+  if (context === null) {
     throw new Error('useSignalProcessorContext must be used within a SignalProcessorProvider');
   }
   return context;
