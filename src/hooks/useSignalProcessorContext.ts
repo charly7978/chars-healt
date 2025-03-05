@@ -17,7 +17,7 @@ const SignalProcessorContext = createContext<SignalProcessorContextType>({
 });
 
 // Provider component
-export const SignalProcessorProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+export const SignalProcessorProvider = ({ children }: { children: ReactNode }) => {
   const [lastProcessedSignal, setLastProcessedSignal] = useState<ProcessedSignal | null>(null);
 
   const updateSignal = (signal: ProcessedSignal) => {
