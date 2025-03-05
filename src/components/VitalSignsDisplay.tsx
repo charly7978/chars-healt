@@ -53,9 +53,9 @@ const VitalSignsDisplay: React.FC<VitalSignsDisplayProps> = ({
           />
           <VitalSign 
             label="GLUCOSA"
-            value={finalValues ? finalValues.glucose.value : (vitalSigns.glucose ? vitalSigns.glucose.value : "--")}
+            value={finalValues ? finalValues.glucose?.value : (vitalSigns.glucose ? vitalSigns.glucose.value : "--")}
             unit="mg/dL"
-            trend={finalValues ? finalValues.glucose.trend : (vitalSigns.glucose ? vitalSigns.glucose.trend : "unknown")}
+            trend={finalValues ? finalValues.glucose?.trend : (vitalSigns.glucose ? vitalSigns.glucose.trend : "unknown")}
             isFinalReading={measurementComplete}
             glucose={null}
           />
