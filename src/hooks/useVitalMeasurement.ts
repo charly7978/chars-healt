@@ -1,4 +1,3 @@
-
 // Importar el método cleanMemory de cada uno de los hooks correspondientes
 import { useEffect, useCallback, useState, useRef } from 'react';
 import { useSignalProcessor } from './useSignalProcessor';
@@ -197,11 +196,11 @@ export const useVitalMeasurement = () => {
       // Solo procesamos si hay un dedo detectado con calidad suficiente
       if (signal.fingerDetected && signal.quality > 30) {
         // Procesar el pulso cardíaco
-        const heartBeatResult = heartBeatProcessor.process(signal.filteredValue);
+        const heartBeatResult = heartBeatProcessor.processSignal(signal.filteredValue);
         
         if (heartBeatResult) {
-          if (heartBeatResult.heartRate > 0) {
-            setHeartRate(heartBeatResult.heartRate);
+          if (heartBeatResult.bpm > 0) {
+            setHeartRate(heartBeatResult.bpm);
           }
           
           // Procesar los signos vitales con los datos de R-R
