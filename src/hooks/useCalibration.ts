@@ -1,5 +1,5 @@
 
-import { useCallback, useRef, useMemo } from 'react';
+import { useCallback, useRef } from 'react';
 import { PPGSignalProcessor } from '../modules/SignalProcessor';
 
 /**
@@ -27,30 +27,40 @@ export const useCalibration = (processorRef: React.MutableRefObject<PPGSignalPro
 
   /**
    * Realiza la calibración del procesador con prevención de llamadas redundantes
+   * y cooldown de 3 segundos entre intentos
    */
   const calibrate = useCallback(async () => {
     try {
       // Prevent redundant calibration calls
       const now = Date.now();
       if (calibrationAttemptRef.current.inProgress) {
-        console.log("useCalibration: Calibration already in progress, skipping");
         return false;
       }
       
-      // Throttle calibration attempts to prevent excessive calls
-      if (now - calibrationAttemptRef.current.lastAttempt < 2000) { // 2 second cooldown
-        console.log("useCalibration: Calibration attempted too recently, skipping");
+      // Increase cooldown to 3 seconds to prevent excessive calibration attempts
+      if (now - calibrationAttemptRef.current.lastAttempt < 3000) {
         return false;
       }
       
       calibrationAttemptRef.current.inProgress = true;
       calibrationAttemptRef.current.lastAttempt = now;
       
-      console.log("useCalibration: Starting calibration");
+      // Reduce logging frequency
+      if (calibrationAttemptRef.current.successCount === 0) {
+        console.log("useCalibration: Starting calibration");
+      }
+      
       if (processorRef.current) {
         await processorRef.current.calibrate();
-        console.log("useCalibration: Calibration successful");
+        
+        // Only log on first success or after failures
+        if (calibrationAttemptRef.current.successCount === 0 || 
+            calibrationAttemptRef.current.failCount > 0) {
+          console.log("useCalibration: Calibration successful");
+        }
+        
         calibrationAttemptRef.current.successCount++;
+        calibrationAttemptRef.current.failCount = 0;
         calibrationAttemptRef.current.inProgress = false;
         return true;
       }
@@ -81,6 +91,7 @@ export const useCalibration = (processorRef: React.MutableRefObject<PPGSignalPro
 
   /**
    * Actualiza el contador de calibración con memoria para evitar cambios de estado innecesarios
+   * Optimizado para menos operaciones de memoria
    */
   const updateCalibrationCounter = useCallback(() => {
     // Skip this function if calibration is already completed
@@ -92,6 +103,7 @@ export const useCalibration = (processorRef: React.MutableRefObject<PPGSignalPro
     
     if (calibrationCounterRef.current >= calibrationThresholdRef.current) {
       isCalibrationPhaseRef.current = false;
+      // Only log when phase completes
       console.log("useCalibration: Automatic calibration completed");
       return true;
     }

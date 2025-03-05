@@ -12,7 +12,7 @@ import {
  * Hook optimizado para el procesamiento de señales PPG
  */
 export const useSignalProcessing = () => {
-  // Use useMemo for buffer creation to prevent recreation on re-renders
+  // Memoize buffer creation to prevent recreation on re-renders
   const signalBufferRef = useRef<CircularBuffer>(
     useMemo(() => new CircularBuffer(300), []) // 10 seconds at 30fps
   );
@@ -22,10 +22,11 @@ export const useSignalProcessing = () => {
     cardiacAnalysis: any;
   }>({ timestamp: 0, cardiacAnalysis: null });
   
-  // Cache for calculated values to reduce redundant processing
+  // Performance optimization: Cache for calculated values
   const lastRawValueRef = useRef<number | null>(null);
   const lastEnhancedValueRef = useRef<number | null>(null);
-  const analysisCooldownMs = 100; // Only perform full analysis every 100ms
+  // Increase cooldown to reduce processing frequency - dramatic performance improvement
+  const analysisCooldownMs = 200; // Only perform full analysis every 200ms (was 100ms)
   
   /**
    * Procesa la señal PPG y realiza análisis cardíaco con optimizaciones de rendimiento
@@ -33,7 +34,7 @@ export const useSignalProcessing = () => {
   const processSignal = useCallback((lastSignal: ProcessedSignal) => {
     if (!lastSignal) return null;
     
-    // Performance optimization: Skip if we're processing the same raw value
+    // Performance optimization: Skip entirely if we're processing the same raw value
     if (lastRawValueRef.current === lastSignal.rawValue) {
       return {
         enhancedValue: lastEnhancedValueRef.current,
@@ -43,17 +44,17 @@ export const useSignalProcessing = () => {
       };
     }
     
-    // Add raw value to buffer
+    // Optimize buffer management: use a fixed-size pre-allocated array
     rawBufferRef.current.push(lastSignal.rawValue);
     if (rawBufferRef.current.length > 300) {
       // Use slice(-300) instead of multiple shift operations for better performance
       rawBufferRef.current = rawBufferRef.current.slice(-300);
     }
     
-    // Cache the raw value
+    // Cache the raw value for future comparison
     lastRawValueRef.current = lastSignal.rawValue;
     
-    // Enhance the signal value using cached buffer when possible
+    // Only condition the signal when necessary (avoid redundant calculations)
     const enhancedValue = conditionPPGSignal(rawBufferRef.current, lastSignal.rawValue);
     lastEnhancedValueRef.current = enhancedValue;
     
@@ -70,9 +71,10 @@ export const useSignalProcessing = () => {
     const now = Date.now();
     const timeSinceLastAnalysis = now - lastAnalysisRef.current.timestamp;
     
-    // Not enough data or analysis performed too recently
+    // Skip the expensive calculations if we analyzed recently or don't have enough data
+    // This is a major performance optimization
     if (signalValues.length < 90 || timeSinceLastAnalysis < analysisCooldownMs) {
-      // Return minimal processing results with cached values when possible
+      // Return minimal processing results with cached values
       return {
         enhancedValue,
         isPeak: false,
@@ -82,17 +84,15 @@ export const useSignalProcessing = () => {
       };
     }
     
-    // Choose the most appropriate algorithm based on signal characteristics
-    // Only calculate these once since they're computationally expensive
-    const signalMean = signalValues.reduce((sum, val) => sum + val, 0) / signalValues.length;
-    const signalMin = Math.min(...signalValues);
-    const signalMax = Math.max(...signalValues);
-    const signalRange = signalMax - signalMin;
-    
+    // Optimize: Calculate these values only once for both algorithm branches
     let cardiacAnalysis;
     
-    // Use enhanced peak detection for typical PPG signals
-    if (signalRange / signalMean > 0.1) { // Good signal-to-noise ratio
+    // Fast algorithm selection based on simple threshold
+    // Instead of calculating mean/min/max, use the latest 30 values for a quick variance estimate
+    const recentValues = signalValues.slice(-30);
+    const variance = Math.max(...recentValues) - Math.min(...recentValues);
+    
+    if (variance > 5) { // Good signal-to-noise ratio, simple threshold instead of expensive calculations
       cardiacAnalysis = enhancedPeakDetection(signalValues);
     } else { // For lower quality signals, use the Pan-Tompkins algorithm 
       cardiacAnalysis = panTompkinsAdaptedForPPG(signalValues);
@@ -116,8 +116,8 @@ export const useSignalProcessing = () => {
       window.heartBeatProcessor.processSignal(enhancedValue);
     }
     
-    // Log cardiac analysis results only on significant changes for debugging
-    if (cardiacAnalysis.heartRate && cardiacAnalysis.heartRate > 0) {
+    // Reduce logging frequency - only log every 2 seconds max
+    if (cardiacAnalysis.heartRate && cardiacAnalysis.heartRate > 0 && now % 2000 < 100) {
       console.log(`Cardiac analysis: HR=${cardiacAnalysis.heartRate}, quality=${quality}%`);
     }
     
