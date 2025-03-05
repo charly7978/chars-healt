@@ -10,7 +10,7 @@ import { useHeartRateAnalysis } from './heartRate/useHeartRateAnalysis';
  */
 export const useHeartBeatProcessor = () => {
   const heartRateProcessor = useHeartRateProcessor();
-  const { reset: resetHeartRateState, getFinalBPM } = useHeartRateState();
+  const { reset: resetHeartRateState, getFinalBPM: getHeartRateFinalBPM } = useHeartRateState();
   const { getFinalAnalysis } = useHeartRateAnalysis();
   
   /**
@@ -31,8 +31,8 @@ export const useHeartBeatProcessor = () => {
    * Get the final BPM result with high confidence
    */
   const getFinalBPM = useCallback(() => {
-    return getFinalBPM();
-  }, [getFinalBPM]);
+    return getHeartRateFinalBPM();
+  }, [getHeartRateFinalBPM]);
   
   /**
    * Clean up memory and resources

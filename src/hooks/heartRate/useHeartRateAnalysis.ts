@@ -1,6 +1,6 @@
 
 import { useCallback } from 'react';
-import { enhancedPeakDetection } from '../../utils/signalProcessingUtils';
+import { enhancedPeakDetection } from '../../utils/signalProcessing/enhancedPeakDetection';
 
 /**
  * Hook for advanced heart rate signal analysis

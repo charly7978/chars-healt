@@ -1,83 +1,80 @@
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { PPGSignalProcessor } from '../modules/SignalProcessor';
-import { ProcessedSignal } from '../types/signal';
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { SignalProcessor } from '../modules/SignalProcessor';
 
-// Define context type
+// Define the shape of the context
 interface SignalProcessorContextType {
-  processor: PPGSignalProcessor | null;
-  lastSignal: ProcessedSignal | null;
-  isProcessing: boolean;
-  startProcessing: () => void;
-  stopProcessing: () => void;
+  processor: SignalProcessor | null;
+  isInitialized: boolean;
+  initializeProcessor: () => void;
+  resetProcessor: () => void;
 }
 
-// Create context with default values
+// Create the context with a default value
 const SignalProcessorContext = createContext<SignalProcessorContextType>({
   processor: null,
-  lastSignal: null,
-  isProcessing: false,
-  startProcessing: () => {},
-  stopProcessing: () => {},
+  isInitialized: false,
+  initializeProcessor: () => {},
+  resetProcessor: () => {}
 });
 
-// Provider props type
-interface SignalProcessorProviderProps {
-  children: ReactNode;
-}
-
 // Provider component
-export const SignalProcessorProvider: React.FC<SignalProcessorProviderProps> = ({ children }) => {
-  const [processor, setProcessor] = useState<PPGSignalProcessor | null>(null);
-  const [lastSignal, setLastSignal] = useState<ProcessedSignal | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
+export const SignalProcessorProvider = ({ children }: { children: ReactNode }) => {
+  const [processor, setProcessor] = useState<SignalProcessor | null>(null);
+  const [isInitialized, setIsInitialized] = useState(false);
 
-  // Initialize signal processor on mount
+  // Initialize the processor
+  const initializeProcessor = () => {
+    if (!processor) {
+      try {
+        console.log('Initializing SignalProcessor...');
+        const newProcessor = new SignalProcessor();
+        setProcessor(newProcessor);
+        setIsInitialized(true);
+        console.log('SignalProcessor initialized successfully');
+      } catch (error) {
+        console.error('Failed to initialize SignalProcessor:', error);
+      }
+    } else {
+      console.log('SignalProcessor already initialized');
+    }
+  };
+
+  // Reset the processor
+  const resetProcessor = () => {
+    if (processor) {
+      try {
+        processor.reset();
+        console.log('SignalProcessor reset successfully');
+      } catch (error) {
+        console.error('Failed to reset SignalProcessor:', error);
+      }
+    }
+  };
+
+  // Clean up on unmount
   useEffect(() => {
-    const newProcessor = new PPGSignalProcessor();
-    
-    newProcessor.onSignalReady = (signal: ProcessedSignal) => {
-      setLastSignal(signal);
-    };
-    
-    newProcessor.initialize().catch(error => {
-      console.error("Error initializing signal processor:", error);
-    });
-    
-    setProcessor(newProcessor);
-    
     return () => {
-      if (newProcessor) {
-        newProcessor.stop();
-        newProcessor.onSignalReady = null;
+      if (processor) {
+        try {
+          console.log('Cleaning up SignalProcessor resources');
+          processor.reset();
+          setProcessor(null);
+          setIsInitialized(false);
+        } catch (error) {
+          console.error('Error during SignalProcessor cleanup:', error);
+        }
       }
     };
-  }, []);
-
-  // Actions
-  const startProcessing = () => {
-    if (processor) {
-      processor.start();
-      setIsProcessing(true);
-    }
-  };
-
-  const stopProcessing = () => {
-    if (processor) {
-      processor.stop();
-      setIsProcessing(false);
-      setLastSignal(null);
-    }
-  };
+  }, [processor]);
 
   return (
-    <SignalProcessorContext.Provider 
-      value={{ 
-        processor, 
-        lastSignal, 
-        isProcessing, 
-        startProcessing, 
-        stopProcessing 
+    <SignalProcessorContext.Provider
+      value={{
+        processor,
+        isInitialized,
+        initializeProcessor,
+        resetProcessor
       }}
     >
       {children}
@@ -85,13 +82,11 @@ export const SignalProcessorProvider: React.FC<SignalProcessorProviderProps> = (
   );
 };
 
-// Custom hook for using the context
+// Custom hook to use the signal processor context
 export const useSignalProcessorContext = () => {
   const context = useContext(SignalProcessorContext);
-  
-  if (!context) {
+  if (context === undefined) {
     throw new Error('useSignalProcessorContext must be used within a SignalProcessorProvider');
   }
-  
   return context;
 };

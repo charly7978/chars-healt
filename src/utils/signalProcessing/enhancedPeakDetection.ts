@@ -13,7 +13,8 @@ export const enhancedPeakDetection = (signal: number[]) => {
     return { 
       peakIndices: [], 
       heartRate: 0, 
-      signalQuality: 0 
+      signalQuality: 0,
+      buffer: signal
     };
   }
 
@@ -68,9 +69,20 @@ export const enhancedPeakDetection = (signal: number[]) => {
   // Calculate heart rate based on average interval
   const { heartRate } = calculateRRIntervals(filteredPeaks, signal.length, 30); // Assuming 30fps
 
+  // Calculate perfusion index if possible 
+  const maxAmplitude = Math.max(...signal);
+  const minAmplitude = Math.min(...signal);
+  const perfusionIndex = (maxAmplitude - minAmplitude) / ((maxAmplitude + minAmplitude) / 2) * 100;
+
+  // Estimate pulse pressure (very simplified estimation)
+  const pulsePressure = (maxAmplitude - minAmplitude) * 2;
+
   return {
     peakIndices: filteredPeaks,
     heartRate,
-    signalQuality
+    signalQuality,
+    buffer: signal,
+    perfusionIndex,
+    pulsePressure
   };
 };
