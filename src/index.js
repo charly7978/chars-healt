@@ -303,17 +303,6 @@ const Index = () => {
           </div>
 
           {isMonitoring && (
-            <div className="absolute bottom-[150px] left-0 right-0 text-center z-30 text-xs text-gray-400">
-              <span>
-                Resp Data: {vitalSigns.hasRespirationData ? 'Disponible' : 'No disponible'} | 
-                Rate: {vitalSigns.respiration.rate} RPM | Depth: {vitalSigns.respiration.depth} | 
-                Glucose: {vitalSigns.glucose ? `${vitalSigns.glucose.value} mg/dL (${vitalSigns.glucose.trend || 'unknown'})` : 'No disponible'} |
-                Hemoglobin: {vitalSigns.hemoglobin ? `${vitalSigns.hemoglobin} g/dL` : 'No disponible'}
-              </span>
-            </div>
-          )}
-
-          {isMonitoring && (
             <div className="absolute bottom-40 left-0 right-0 text-center z-30">
               <span className="text-xl font-medium text-gray-300">{elapsedTime}s / 30s</span>
             </div>
