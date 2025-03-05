@@ -53,15 +53,15 @@ const VitalSignsDisplay: React.FC<VitalSignsDisplayProps> = ({
           />
           <VitalSign 
             label="GLUCOSA"
-            value={finalValues ? finalValues.glucose?.value : (vitalSigns.glucose ? vitalSigns.glucose.value : "--")}
+            value={finalValues?.glucose?.value || (vitalSigns.glucose?.value || "--")}
             unit="mg/dL"
-            trend={finalValues ? finalValues.glucose?.trend : (vitalSigns.glucose ? vitalSigns.glucose.trend : "unknown")}
+            trend={finalValues?.glucose?.trend || (vitalSigns.glucose?.trend || "unknown")}
             isFinalReading={measurementComplete}
             glucose={null}
           />
           <VitalSign 
             label="HEMOGLOBINA"
-            value={finalValues ? finalValues.hemoglobin : vitalSigns.hemoglobin || "--"}
+            value={finalValues?.hemoglobin || vitalSigns.hemoglobin || "--"}
             unit="g/dL"
             isFinalReading={measurementComplete}
           />
