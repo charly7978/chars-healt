@@ -1,4 +1,3 @@
-
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { VitalSignsProcessor } from '../modules/VitalSignsProcessor';
 import { useArrhythmiaAnalyzer } from './useArrhythmiaAnalyzer';
@@ -602,7 +601,7 @@ export const useVitalSignsProcessor = () => {
       }
     }
     
-    // Always return the same object structure with lastArrhythmiaData (which may be null)
+    // Always return the same object structure with lastArrhythmiaData and hemoglobin (which may be null)
     const vitalsData = {
       spo2: result.spo2,
       pressure: stabilizedBP,
@@ -610,7 +609,8 @@ export const useVitalSignsProcessor = () => {
       respiration: respirationResult,
       hasRespirationData: respirationProcessor.hasValidData(),
       glucose: glucoseData,
-      lastArrhythmiaData
+      lastArrhythmiaData,
+      hemoglobin: result.hemoglobin
     };
     
     // Log the full vitals data for debugging

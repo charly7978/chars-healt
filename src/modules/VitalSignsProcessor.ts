@@ -1,37 +1,36 @@
-import { applySMAFilter } from '../utils/signalProcessingUtils';
+
 import { SpO2Calculator } from './spo2';
-import { BloodPressureCalculator } from './BloodPressureCalculator';
+import { BloodPressureProcessor } from './BloodPressureProcessor';
 import { ArrhythmiaDetector } from './ArrhythmiaDetector';
 import { GlucoseProcessor } from './GlucoseProcessor';
-import { calculateHemoglobin } from '../utils/signalProcessingUtils';
+import { HemoglobinCalculator } from './HemoglobinCalculator';
+import { BPMSmoother } from './BPMSmoother';
+import { SignalFilter } from './SignalFilter';
 
 export class VitalSignsProcessor {
   private readonly WINDOW_SIZE = 300;
   private ppgValues: number[] = [];
-  private readonly SMA_WINDOW = 3;
-  private readonly BPM_SMOOTHING_ALPHA = 0.25; // Incrementado para mayor suavizado de BPM
-  private lastBPM: number = 0;
+  private signalQuality: number = 0;
+  private measurementCount: number = 0;
   
+  // Component modules
   private spO2Calculator: SpO2Calculator;
-  private bpCalculator: BloodPressureCalculator;
+  private bpProcessor: BloodPressureProcessor;
   private arrhythmiaDetector: ArrhythmiaDetector;
   private glucoseProcessor: GlucoseProcessor;
-  
-  private lastSystolic: number = 120;
-  private lastDiastolic: number = 80;
-  private measurementCount: number = 0;
-  private signalQuality: number = 0;
-  
-  private redSignalBuffer: number[] = [];
-  private irSignalBuffer: number[] = [];
-  private lastHemoglobinValue: number = 0;
+  private hemoglobinCalculator: HemoglobinCalculator;
+  private bpmSmoother: BPMSmoother;
+  private signalFilter: SignalFilter;
 
   constructor() {
     this.spO2Calculator = new SpO2Calculator();
-    this.bpCalculator = new BloodPressureCalculator();
+    this.bpProcessor = new BloodPressureProcessor();
     this.arrhythmiaDetector = new ArrhythmiaDetector();
     this.glucoseProcessor = new GlucoseProcessor();
-    console.log("VitalSignsProcessor initialized with GlucoseProcessor");
+    this.hemoglobinCalculator = new HemoglobinCalculator();
+    this.bpmSmoother = new BPMSmoother();
+    this.signalFilter = new SignalFilter();
+    console.log("VitalSignsProcessor initialized with all submodules");
   }
 
   /**
@@ -44,6 +43,7 @@ export class VitalSignsProcessor {
     const currentTime = Date.now();
     this.signalQuality = Math.min(100, Math.max(0, Math.abs(ppgValue) * 20));
 
+    // Process arrhythmia data if available
     if (rrData?.intervals && rrData.intervals.length > 0) {
       const validIntervals = rrData.intervals.filter(interval => {
         return interval >= 380 && interval <= 1700; // Valid for 35-158 BPM
@@ -58,12 +58,14 @@ export class VitalSignsProcessor {
       }
     }
 
-    const filtered = this.applySMAFilter(ppgValue);
+    // Apply signal filtering
+    const filtered = this.signalFilter.applySMAFilter(this.ppgValues, ppgValue);
     this.ppgValues.push(filtered);
     if (this.ppgValues.length > this.WINDOW_SIZE) {
       this.ppgValues.shift();
     }
 
+    // Learning phase check for SpO2 calibration
     const isLearning = this.arrhythmiaDetector.isInLearningPhase();
     
     if (isLearning) {
@@ -77,14 +79,13 @@ export class VitalSignsProcessor {
       this.spO2Calculator.calibrate();
     }
 
+    // Get results from various processors
     const arrhythmiaResult = this.arrhythmiaDetector.detect();
-
     const spo2 = this.spO2Calculator.calculate(this.ppgValues.slice(-60));
-    
-    const bp = this.calculateRealBloodPressure(this.ppgValues.slice(-60));
+    const bp = this.bpProcessor.calculate(this.ppgValues.slice(-60));
     const pressure = `${bp.systolic}/${bp.diastolic}`;
 
-    // Calculate glucose and log results
+    // Calculate glucose
     const glucose = this.glucoseProcessor.calculateGlucose(
       this.ppgValues, 
       this.signalQuality
@@ -96,21 +97,10 @@ export class VitalSignsProcessor {
       console.log(`VitalSignsProcessor: No glucose value available yet`);
     }
 
-    // Calculate hemoglobin if we have enough data
-    let hemoglobin = null;
-    if (this.redSignalBuffer.length > 50 && this.irSignalBuffer.length > 50) {
-      hemoglobin = calculateHemoglobin(this.redSignalBuffer, this.irSignalBuffer);
-      if (hemoglobin > 0) {
-        this.lastHemoglobinValue = hemoglobin;
-        console.log(`Calculated hemoglobin: ${hemoglobin} g/dL`);
-      } else if (this.lastHemoglobinValue > 0) {
-        // Use last valid value if current calculation failed
-        hemoglobin = this.lastHemoglobinValue;
-      }
-    } else {
-      console.log(`Not enough data for hemoglobin calculation. Red buffer: ${this.redSignalBuffer.length}, IR buffer: ${this.irSignalBuffer.length}`);
-    }
+    // Calculate hemoglobin
+    const hemoglobin = this.hemoglobinCalculator.calculate();
 
+    // Prepare arrhythmia data
     const lastArrhythmiaData = arrhythmiaResult.detected ? {
       timestamp: currentTime,
       rmssd: arrhythmiaResult.data?.rmssd || 0,
@@ -127,113 +117,34 @@ export class VitalSignsProcessor {
     };
   }
 
-  private calculateRealBloodPressure(values: number[]): { systolic: number; diastolic: number } {
-    this.measurementCount++;
-    
-    const rawBP = this.bpCalculator.calculate(values);
-    
-    if (rawBP.systolic > 0 && rawBP.diastolic > 0) {
-      const systolicAdjustment = Math.min(5, Math.max(-5, (rawBP.systolic - this.lastSystolic) / 2));
-      const diastolicAdjustment = Math.min(3, Math.max(-3, (rawBP.diastolic - this.lastDiastolic) / 2));
-      
-      const finalSystolic = Math.round(this.lastSystolic + systolicAdjustment);
-      const finalDiastolic = Math.round(this.lastDiastolic + diastolicAdjustment);
-      
-      this.lastSystolic = finalSystolic;
-      this.lastDiastolic = finalDiastolic;
-      
-      return {
-        systolic: Math.max(90, Math.min(180, finalSystolic)),
-        diastolic: Math.max(60, Math.min(110, Math.min(finalSystolic - 30, finalDiastolic)))
-      };
-    }
-    
-    if (this.lastSystolic === 0 || this.lastDiastolic === 0) {
-      const systolic = 120 + Math.floor(Math.random() * 8) - 4;
-      const diastolic = 80 + Math.floor(Math.random() * 6) - 3;
-      
-      this.lastSystolic = systolic;
-      this.lastDiastolic = diastolic;
-      
-      return { systolic, diastolic };
-    }
-    
-    const signalQuality = Math.min(1.0, Math.max(0.1, 
-      values.length > 30 ? 
-      (values.reduce((sum, v) => sum + Math.abs(v), 0) / values.length) / 100 : 
-      0.5
-    ));
-    
-    const variationFactor = (1.1 - signalQuality) * 4;
-    const systolicVariation = Math.floor(Math.random() * variationFactor) - Math.floor(variationFactor/2);
-    const diastolicVariation = Math.floor(Math.random() * (variationFactor * 0.6)) - Math.floor((variationFactor * 0.6)/2);
-    
-    const systolic = Math.max(90, Math.min(180, this.lastSystolic + systolicVariation));
-    const diastolic = Math.max(60, Math.min(110, Math.min(systolic - 30, this.lastDiastolic + diastolicVariation)));
-    
-    this.lastSystolic = systolic;
-    this.lastDiastolic = diastolic;
-    
-    return { systolic, diastolic };
-  }
-
+  /**
+   * Smooth BPM values for display
+   */
   public smoothBPM(rawBPM: number): number {
-    if (rawBPM <= 0) return 0;
-    
-    if (this.lastBPM <= 0) {
-      this.lastBPM = rawBPM;
-      return rawBPM;
-    }
-    
-    const smoothed = Math.round(
-      this.BPM_SMOOTHING_ALPHA * rawBPM + 
-      (1 - this.BPM_SMOOTHING_ALPHA) * this.lastBPM
-    );
-    
-    this.lastBPM = smoothed;
-    return smoothed;
+    return this.bpmSmoother.smooth(rawBPM);
   }
 
+  /**
+   * Update signal buffers for hemoglobin calculation
+   */
   public updateSignalBuffers(redValue: number, irValue: number): void {
-    // Only add non-zero values to avoid skewing the calculation
-    if (redValue > 0 && irValue > 0) {
-      this.redSignalBuffer.push(redValue);
-      this.irSignalBuffer.push(irValue);
-      
-      // Keep the buffers at a reasonable size
-      if (this.redSignalBuffer.length > 500) {
-        this.redSignalBuffer.shift();
-      }
-      if (this.irSignalBuffer.length > 500) {
-        this.irSignalBuffer.shift();
-      }
-      
-      // Log buffer sizes occasionally for debugging
-      if (this.redSignalBuffer.length % 50 === 0) {
-        console.log(`Signal buffers size - Red: ${this.redSignalBuffer.length}, IR: ${this.irSignalBuffer.length}`);
-      }
-    }
+    this.hemoglobinCalculator.updateSignalBuffers(redValue, irValue);
   }
 
+  /**
+   * Reset all processors and state
+   */
   public reset(): void {
     console.log("VitalSignsProcessor: Resetting all processors");
     this.ppgValues = [];
-    this.lastBPM = 0;
     this.spO2Calculator.reset();
-    this.bpCalculator.reset();
+    this.bpProcessor.reset();
     this.arrhythmiaDetector.reset();
     this.glucoseProcessor.reset();
+    this.hemoglobinCalculator.reset();
+    this.bpmSmoother.reset();
     
-    this.lastSystolic = 120;
-    this.lastDiastolic = 80;
     this.measurementCount = 0;
     this.signalQuality = 0;
-    this.redSignalBuffer = [];
-    this.irSignalBuffer = [];
-    this.lastHemoglobinValue = 0;
-  }
-
-  private applySMAFilter(value: number): number {
-    return applySMAFilter(this.ppgValues, value, this.SMA_WINDOW);
   }
 }
