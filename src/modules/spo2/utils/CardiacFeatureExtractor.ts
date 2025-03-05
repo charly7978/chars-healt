@@ -2,7 +2,7 @@
 /**
  * Specialized class for extracting cardiac features from SpO2 signals
  */
-import { calculateAC, calculateDC, enhancedPeakDetection } from '../../../utils/signalProcessingUtils';
+import { calculateAC, calculateDC, enhancedPeakDetection } from '../../../utils/signalProcessing';
 import { SPO2_CONSTANTS } from '../SpO2Constants';
 
 export class CardiacFeatureExtractor {

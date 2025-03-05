@@ -4,7 +4,7 @@ import {
   conditionPPGSignal, 
   enhancedPeakDetection, 
   panTompkinsAdaptedForPPG
-} from '../../utils/signalProcessingUtils';
+} from '../../utils/signalProcessing';
 
 /**
  * Hook for analyzing signal data and performing cardiac analysis
